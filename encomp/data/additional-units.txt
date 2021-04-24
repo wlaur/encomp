@@ -1,0 +1,4 @@
+# additional units defined when importing encomp.units
+meter_H2O = cmH2O * 100 = m_H2O = mH2O
+Kv = m**3 / hour / bar**0.5 = K_v
+Cv = gallon / minute / psi**0.5 = C_v

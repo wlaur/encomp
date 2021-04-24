@@ -1,0 +1,17 @@
+name: encomp-env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.8
+  - pydantic
+  - pytest
+  - scipy
+  - jupyter
+  - CoolProp
+  - wntr
+  - pint
+  - fluids
+  - thermo
+  - fire
+  - networkx
