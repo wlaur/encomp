@@ -2,9 +2,8 @@
 Contains type definitions for :py:class:`encomp.units.Quantity` objects.
 Import using ``from encomp.utypes import *`` to import the types.
 
-If ``encomp.settings.SETTINGS.type_checking``, this module will install
-the ``@typeguard.typechecked`` decorator on all classes and functions
-imported after this module.
+If ``encomp.settings.SETTINGS.dimensionality_checking`` is ``True``,
+these types will be enforced everywhere.
 """
 
 from typing import Union, TypeVar, List, Generic
