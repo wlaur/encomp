@@ -230,8 +230,9 @@ def _quantity_factory(dim=None):
 
             * Fixes some common misspellings
             * Removes "(abs)" or "(a)" and similar suffixes from pressure units
-            *  Adds ``**`` between the unit and the exponent if it's missing, for example ``kg/m3 → kg/m**3``.
-            * Replaces ``h`` with ``hr`` (hour), since ``pint`` interprets ``h`` as the Planck constant. Use ``planck_constant`` to get this value if necessary.
+            * Adds ``**`` between the unit and the exponent if it's missing, for example ``kg/m3 → kg/m**3``.
+            * Replaces ``h`` with ``hr`` (hour), since ``pint`` interprets ``h`` as the Planck constant
+              Use ``planck_constant`` to get this value if necessary.
 
             Parameters
             ----------
