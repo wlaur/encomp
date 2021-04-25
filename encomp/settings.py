@@ -10,12 +10,13 @@ class Settings(BaseSettings):
     Settings class.
 
     .. todo::
-        How to use environment variables etc...?
+        * How to use environment variables etc...?
+        * Maybe use the conventional way of type checking instead (what is this?)
     """
 
     data_directory: Path = ENCOMP_BASE / 'data'
     additional_units: Path = data_directory / 'additional-units.txt'
-    dimensionality_checking: bool = True
+    type_checking: bool = True
 
 
 SETTINGS = Settings()

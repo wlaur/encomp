@@ -2,24 +2,23 @@
 Contains type definitions for :py:class:`encomp.units.Quantity` objects.
 Import using ``from encomp.utypes import *`` to import the types.
 
-If ``encomp.settings.SETTINGS.dimensionality_checking`` is ``True``,
+If ``encomp.settings.SETTINGS.type_checking`` is ``True``,
 these types will be enforced everywhere.
+
+The dimensionalities defined in this module can be combined with ``*`` and ``/``.
+Some commonly used derived dimensionalities (like density) are defined for convenience.
 """
 
-from typing import Union, TypeVar, List, Generic
+from typing import Union, TypeVar, List, Mapping, Generic
 from decimal import Decimal
 import numpy as np
 
 import pint
 from pint.unit import UnitsContainer
 
-
 # type alias for the inputs to Quantity
 Magnitude = Union[float, int, Decimal, np.ndarray, List[float]]
 Unit = Union[str, pint.unit.Unit, pint.unit.UnitsContainer]
-
-TypedQuantityVar = TypeVar('TypedQuantityVar')
-TypedQuantity = Generic[TypedQuantityVar]
 
 # base dimensionalities
 DimensionlessDim = UnitsContainer()
@@ -32,20 +31,20 @@ CurrentDim = UnitsContainer({'[current]': 1})
 LuminosityDim = UnitsContainer({'[luminosity]': 1})
 
 # derived dimensionalities
-AreaDim = LengthDim ** 2
-VolumeDim = LengthDim ** 3
-PressureDim = MassDim / LengthDim / TimeDim ** 2
+AreaDim = LengthDim**2
+VolumeDim = LengthDim**3
+PressureDim = MassDim / LengthDim / TimeDim**2
 MassFlowDim = MassDim / TimeDim
 VolumeFlowDim = VolumeDim / TimeDim
 DensityDim = MassDim / VolumeDim
-EnergyDim = MassDim * LengthDim ** 2 / TimeDim ** 2
+EnergyDim = MassDim * LengthDim**2 / TimeDim**2
 PowerDim = EnergyDim / TimeDim
 VelocityDim = LengthDim / TimeDim
 DynamicViscosityDim = MassDim / LengthDim / TimeDim
-KinematicViscosityDim = LengthDim ** 2 / TimeDim
+KinematicViscosityDim = LengthDim**2 / TimeDim
 FrequencyDim = 1 / TimeDim
 
-_DIMENSIONALITIES = {
+_DIMENSIONALITIES: Mapping[UnitsContainer, str] = {
     DimensionlessDim: 'Dimensionless',
     LengthDim: 'Length',
     MassDim: 'Mass',

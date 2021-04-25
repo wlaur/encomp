@@ -2,7 +2,7 @@ __version__ = '0.1.0'
 
 from encomp.settings import SETTINGS
 
-if SETTINGS.dimensionality_checking:
+if SETTINGS.type_checking:
 
     from typeguard.importhook import install_import_hook
 

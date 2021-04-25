@@ -16,18 +16,17 @@ that the dimensionality of the unit is correct.
 """
 
 import re
-from typing import Union, Any
+from typing import Union, Any, TypeVar, Type, _GenericAlias
 from contextlib import contextmanager
 from functools import lru_cache
+from typeguard import check_type
 
 import pint
 from pint.unit import UnitsContainer
 
 from encomp.settings import SETTINGS
-from encomp.utypes import *
-from encomp.utypes import (_DIMENSIONALITIES,
-                           _DIMENSIONALITIES_REV,
-                           get_dimensionality_name)
+from encomp.utypes import Magnitude, Unit
+from encomp.utypes import _DIMENSIONALITIES_REV, get_dimensionality_name
 
 # always use pint.get_application_registry() to get the UnitRegistry instance
 # there should only be one registry at a time, pint raises ValueError
@@ -52,223 +51,227 @@ with open(SETTINGS.additional_units, 'r', encoding='utf-8') as f:
 ureg.default_format = '~P'  # compact format
 
 
-@lru_cache
-def _quantity_factory(dim=None):
+class Quantity(pint.quantity.Quantity):
 
-    if dim is not None:
-        dim_name = get_dimensionality_name(dim)
-    else:
-        dim_name = 'None'
+    _REGISTRY = ureg
+    default_format = _REGISTRY.default_format
 
-    class Quantity(pint.quantity.Quantity, TypedQuantity):
+    # used to validate dimensionality using type checking,
+    # if None the dimensionality is not checked
+    # subclasses of Quantity have this class attribute set, which
+    # will restrict the dimensionality when creating the object
+    _expected_dimensionality = None
 
-        _REGISTRY = ureg
-        default_format = _REGISTRY.default_format
+    # compact, Latex, HTML, Latex/siunitx formatting
+    FORMATTING_SPECS = ('~P', '~L', '~H', '~Lx')
 
-        # this name is used when calling type(), also in the typeguard TypeError messages
-        __qualname__ = f'Quantity[{dim_name}]'
+    # common unit names not supported by pint, also some misspellings
+    UNIT_CORRECTIONS = {
+        'kpa': 'kPa',
+        'mpa': 'MPa',
+        'pa': 'Pa',
+        'F': 'degF',
+        'C': 'degC',
+        '°C': 'degC',
+        '°F': 'degF',
+        'h': 'hour',
+        'km/h': 'km/hour',
+        'kmh': 'km/hour',
+        'mh2o': 'meter_H2O',
+        'mH20': 'meter_H2O',
+        'mH2O': 'meter_H2O',
+        'm H2O': 'meter_H2O',
+        'm h2o': 'meter_H2O',
+        'meter water': 'meter_H2O',
+        'm water': 'meter_H2O',
+        'm_water': 'meter_H2O',
+        'meter_water': 'meter_H2O',
+        'feet_water': 'feet_H2O',
+        'foot_water': 'feet_H2O',
+        'ft_H2O': 'feet_H2O',
+        'ft_water': 'feet_H2O'}
 
-        # used to validate dimensionality using type checking,
-        # if None the dimensionality is not checked
-        _expected_dimensionality = dim
+    @lru_cache
+    def _get_subclass_with_dimensions(dim: UnitsContainer) -> Type['Quantity']:
 
-        # compact, Latex, HTML, Latex/siunitx formatting
-        FORMATTING_SPECS = ('~P', '~L', '~H', '~Lx')
+        if dim is not None:
+            dim_name = get_dimensionality_name(dim)
+        else:
+            dim_name = 'None'
 
-        # common unit names not supported by pint,
-        # also some misspellings
-        UNIT_CORRECTIONS = {
-            'kpa': 'kPa',
-            'mpa': 'MPa',
-            'pa': 'Pa',
-            'bar(a)': 'bar',
-            'bara': 'bar',
-            'bar-a': 'bar',
-            'kPa(a)': 'kPa',
-            'kPaa': 'kPa',
-            'kPa-a': 'kPa',
-            'psi(a)': 'psi',
-            'psia': 'psi',
-            'psi-a': 'psi',
-            'h': 'hour',
-            'km/h': 'km/hour',
-            'kmh': 'km/hour',
-            'mh2o': 'meter_H2O',
-            'mH20': 'meter_H2O',
-            'mH2O': 'meter_H2O',
-            'm H2O': 'meter_H2O',
-            'm h2o': 'meter_H2O',
-            'meter water': 'meter_H2O',
-            'm water': 'meter_H2O',
-            'm_water': 'meter_H2O',
-            'meter_water': 'meter_H2O',
-            'feet_water': 'feet_H2O',
-            'foot_water': 'feet_H2O',
-            'ft_H2O': 'feet_H2O',
-            'ft_water': 'feet_H2O',
-            'F': 'degF',
-            'C': 'degC',
-            '°C': 'degC',
-            '°F': 'degF'}
+        # return a new subclass definition that restricts the dimensionality
+        # the parent class is always Quantity
+        DimensionQuantity = type(f'Quantity[{dim_name}]',
+                                 (Quantity,),
+                                 {'_expected_dimensionality': dim})
 
-        def __class_getitem__(cls, dim: Union[UnitsContainer, str, 'Quantity', TypeVar, Any]):
+        return DimensionQuantity
 
-            # use same dimensionality as another Quantity
-            if hasattr(dim, 'dimensionality'):
-                dim = dim.dimensionality
+    def __class_getitem__(cls, dim: Union[UnitsContainer, str, 'Quantity', TypeVar]) -> Type['Quantity']:
 
-            if isinstance(dim, str):
+        # use same dimensionality as another Quantity
+        if hasattr(dim, 'dimensionality'):
+            dim = dim.dimensionality
 
-                dim = dim.replace('[', '').replace(']', '')
+        if isinstance(dim, str):
 
-                if dim.title() in _DIMENSIONALITIES_REV:
-                    dim = _DIMENSIONALITIES_REV[dim.title()]
+            dim = dim.replace('[', '').replace(']', '')
 
-            if not isinstance(dim, UnitsContainer):
-                raise ValueError('Quantity type annotation must be a dimensionality, '
-                                 f'passed "{dim}" ({type(dim)})')
+            if dim.title() in _DIMENSIONALITIES_REV:
+                dim = _DIMENSIONALITIES_REV[dim.title()]
 
-            # return a new class definition that restricts the dimensionality
-            # these are changed, the class for each dimensionality is only created once
-            return _quantity_factory(dim=dim)
+        if not isinstance(dim, UnitsContainer):
+            raise ValueError('Quantity type annotation must be a dimensionality, '
+                             f'passed "{dim}" ({type(dim)})')
 
-        def __new__(cls,
-                    val: Union[Magnitude, 'Quantity', Any],
-                    unit: Union[Unit, 'Quantity', Any]):  # return type is not known
+        return cls._get_subclass_with_dimensions(dim)
 
-            if isinstance(val, Quantity):
-                return val.to(unit)
+    def __new__(cls,
+                val: Union[Magnitude, 'Quantity'],
+                unit: Union[Unit, 'Quantity']):
 
-            if isinstance(unit, Quantity):
-                unit = unit.u
+        # compatibility with the internal pint api (__gt__, __lt__, etc...)
+        # TODO: clarify the difference between the Unit and UnitsContainer classes
+        if isinstance(unit, UnitsContainer):
+            unit = cls._REGISTRY.parse_units(str(unit))
 
-            if isinstance(val, str):
-                val = float(val.strip())
+        if isinstance(val, Quantity):
+            return val.to(unit)
 
-            if isinstance(unit, str):
-                unit = Quantity.correct_unit(unit)
+        if isinstance(unit, Quantity):
+            unit = unit.u
 
-            qty = super().__new__(cls, val, units=unit)
+        if isinstance(val, str):
+            val = float(val.strip())
 
-            # check the dimensionality in case it is specified
-            if cls._expected_dimensionality is not None:
+        if isinstance(unit, str):
+            unit = cls._REGISTRY.parse_units(Quantity.correct_unit(unit))
 
-                expected_dimensionality = cls._expected_dimensionality
+        # check the dimensionality in case it is specified
+        if cls._expected_dimensionality is not None:
 
-                if qty.dimensionality != expected_dimensionality:
+            expected_dimensionality = cls._expected_dimensionality
 
-                    dim_name = get_dimensionality_name(qty.dimensionality)
-                    expected_dim_name = get_dimensionality_name(
-                        expected_dimensionality)
+            if unit.dimensionality != expected_dimensionality:
 
-                    raise ValueError(f'Quantity {qty} has incorrect '
-                                     f'dimensionality {dim_name}, '
-                                     f'expected {expected_dim_name}')
+                dim_name = get_dimensionality_name(unit.dimensionality)
+                expected_dim_name = get_dimensionality_name(
+                    expected_dimensionality)
 
-                return qty
+                raise ValueError(f'Quantity with unit {unit} has incorrect '
+                                 f'dimensionality {dim_name}, '
+                                 f'expected {expected_dim_name}')
 
-            # in case this Quantity was initialized without specifying
-            # the dimensionality, check the dimensionality and return an
-            # instance of the class with correct dimensionality
-            return _quantity_factory(dim=qty.dimensionality)(val, unit)
+            # at this point the value and dimensionality are verified to be correct
+            # pass the inputs to pint to actually construct the Quantity
+            return super().__new__(cls, val, units=unit)
 
-        def to(self, unit: Unit):
+        # in case this Quantity was initialized without specifying
+        # the dimensionality, check the dimensionality and return an
+        # instance of the subclass with correct dimensionality
+        return cls[unit.dimensionality](val, unit)
 
-            if isinstance(unit, str):
-                unit = Quantity.correct_unit(unit)
+    def _to_unit(self, unit: Union[Unit, 'Quantity']) -> Unit:
 
-            return super().to(unit)
+        if isinstance(unit, Quantity):
+            unit = unit.u
 
-        def ito(self, unit: Unit) -> None:
+        if isinstance(unit, str):
+            unit = self._REGISTRY.parse_units(Quantity.correct_unit(unit))
 
-            if isinstance(unit, str):
-                unit = Quantity.correct_unit(unit)
+        return unit
 
-            return super().ito(unit)
+    def to(self, unit: Union[Unit, 'Quantity']) -> 'Quantity':
 
-        def __format__(self, format_type: str) -> str:
-            """
-            Overloads the ``__format__`` method for Quantities:
-            Ensure that the default formatting spec is used for fixed
-            precision formatting (":.2f", ":.2g") when no explicit
-            format is specified.
+        unit = self._to_unit(unit)
+        m = self._convert_magnitude(unit)
 
-            Parameters
-            ----------
-            format_type : str
-                Value format specifier
+        return self.__class__(m, unit)
 
-            Returns
-            -------
-            str
-                Formatted output
-            """
+    def ito(self, unit: Union[Unit, 'Quantity']) -> None:
 
-            if not format_type.endswith(Quantity.FORMATTING_SPECS):
-                format_type = f'{format_type}{Quantity.default_format}'
+        unit = self._to_unit(unit)
 
-            return super().__format__(format_type)
+        return super().ito(unit)
 
-        def to_json(self) -> list:
-            """
-            JSON serialization for a Quantity: 2-element list
-            with magnitude and unit (as str).
-            The first list element might be a sequence (list or ``np.array``).
+    def __format__(self, format_type: str) -> str:
+        """
+        Overloads the ``__format__`` method for Quantities:
+        Ensure that the default formatting spec is used for fixed
+        precision formatting (":.2f", ":.2g") when no explicit
+        format is specified.
 
-            Returns
-            -------
-            dict
-                JSON representation, 2-element list with ``[val, unit]``
-            """
+        Parameters
+        ----------
+        format_type : str
+            Value format specifier
 
-            return [self.m, str(self.u)]
+        Returns
+        -------
+        str
+            Formatted output
+        """
 
-        @staticmethod
-        def correct_unit(unit: str) -> str:
-            """
-            Corrects the unit name to make it compatible with pint.
+        if not format_type.endswith(Quantity.FORMATTING_SPECS):
+            format_type = f'{format_type}{Quantity.default_format}'
 
-            * Fixes some common misspellings
-            * Removes "(abs)" or "(a)" and similar suffixes from pressure units
-            * Adds ``**`` between the unit and the exponent if it's missing, for example ``kg/m3 → kg/m**3``.
-            * Replaces ``h`` with ``hr`` (hour), since ``pint`` interprets ``h`` as the Planck constant
-              Use ``planck_constant`` to get this value if necessary.
+        return super().__format__(format_type)
 
-            Parameters
-            ----------
-            unit : str
-                The input unit name, potentially not correct for use with ``pint``
+    def to_json(self) -> list:
+        """
+        JSON serialization for a Quantity: 2-element list
+        with magnitude and unit (as str).
+        The first list element might be a sequence (list or ``np.array``).
 
-            Returns
-            -------
-            str
-                The corrected unit name, used by `pint`
-            """
+        Returns
+        -------
+        dict
+            JSON representation, 2-element list with ``[val, unit]``
+        """
 
-            unit = str(unit).strip()
+        return [self.m, str(self.u)]
 
-            # replace h with hr, pint interprets h as Planck constant
-            # h is the SI symbol for hour, should be supported
-            # use planck_constant to get the value for this constant
-            unit = re.sub(r'(\bh\b)', 'hr', unit)
+    @staticmethod
+    def correct_unit(unit: str) -> str:
+        """
+        Corrects the unit name to make it compatible with pint.
 
-            # replace unicode Δ°C or Δ°F with delta_degC or delta_degF
-            unit = re.sub(r'\bΔ\s*°(C|F)\b', r'delta_deg\g<1>', unit)
+        * Fixes some common misspellings
+        * Removes "(abs)" or "(a)" and similar suffixes from pressure units
+        * Adds ``**`` between the unit and the exponent if it's missing, for example ``kg/m3 → kg/m**3``.
+        * Replaces ``h`` with ``hr`` (hour), since ``pint`` interprets ``h`` as the Planck constant
+            Use ``planck_constant`` to get this value if necessary.
 
-            # add ** between letters and numbers if they
-            # are right next to each other and if the number is at a word boundary
-            unit = re.sub(r'([A-Za-z])(\d+)\b', r'\1**\2', unit)
+        Parameters
+        ----------
+        unit : str
+            The input unit name, potentially not correct for use with ``pint``
 
-            if unit in Quantity.UNIT_CORRECTIONS:
-                unit = Quantity.UNIT_CORRECTIONS[unit]
+        Returns
+        -------
+        str
+            The corrected unit name, used by `pint`
+        """
 
-            return unit
+        unit = str(unit).strip()
 
-    return Quantity
+        # replace h with hr, pint interprets h as Planck constant
+        # h is the SI symbol for hour, should be supported
+        # use planck_constant to get the value for this constant
+        unit = re.sub(r'(\bh\b)', 'hr', unit)
 
+        # replace unicode Δ°C or Δ°F with delta_degC or delta_degF
+        unit = re.sub(r'\bΔ\s*°(C|F)\b', r'delta_deg\g<1>', unit)
 
-# this is a Quantity class that does not restrict the dimensionality
-Quantity = _quantity_factory()
+        # add ** between letters and numbers if they
+        # are right next to each other and if the number is at a word boundary
+        unit = re.sub(r'([A-Za-z])(\d+)\b', r'\1**\2', unit)
+
+        if unit in Quantity.UNIT_CORRECTIONS:
+            unit = Quantity.UNIT_CORRECTIONS[unit]
+
+        return unit
+
 
 # override the implementation of the Quantity class for the current registry
 # this ensures that all Quantity objects created with this registry
@@ -333,3 +336,30 @@ def quantity_format(fmt: str = 'compact'):
         yield
     finally:
         set_quantity_format(old_fmt)
+
+
+def is_qty(obj: Any,
+           expected: _GenericAlias) -> bool:
+    """
+    Checks if the input object is a Quantity, Magnitude or Unit.
+    Magnitude and Unit support different types (float, list for Magnitude and str for Unit).
+
+    Parameters
+    ----------
+    obj : Any
+        Object to check
+    expected : _GenericAlias
+        Expected type, ``encomp.utypes.Magnitude``, ``Unit`` or ``encomp.units.Quantity``.
+
+    Returns
+    -------
+    bool
+        Whether the input object matches the expected type
+    """
+
+    try:
+        check_type('obj', obj, expected)
+        return True
+
+    except TypeError:
+        return False
