@@ -227,7 +227,8 @@ class Quantity(pint.quantity.Quantity):
         """
         JSON serialization for a Quantity: 2-element list
         with magnitude and unit (as str).
-        The first list element might be a sequence (list or ``np.array``).
+        The first list element might be a sequence (list or ``np.ndarray``),
+        ``np.ndarray`` will be converted to list.
 
         Returns
         -------
@@ -248,7 +249,6 @@ class Quantity(pint.quantity.Quantity):
         Corrects the unit name to make it compatible with pint.
 
         * Fixes some common misspellings
-        * Removes "(abs)" or "(a)" and similar suffixes from pressure units
         * Adds ``**`` between the unit and the exponent if it's missing, for example ``kg/m3 → kg/m**3``.
         * Replaces ``h`` with ``hr`` (hour), since ``pint`` interprets ``h`` as the Planck constant
             Use ``planck_constant`` to get this value if necessary.
@@ -268,7 +268,7 @@ class Quantity(pint.quantity.Quantity):
 
         # replace h with hr, pint interprets h as Planck constant
         # h is the SI symbol for hour, should be supported
-        # use planck_constant to get the value for this constant
+        # use "planck_constant" to get the value for this constant
         unit = re.sub(r'(\bh\b)', 'hr', unit)
 
         # replace unicode Δ°C or Δ°F with delta_degC or delta_degF
