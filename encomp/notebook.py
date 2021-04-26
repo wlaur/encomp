@@ -1,4 +1,4 @@
 """
-This module imports commonly used functions and
+Module that imports commonly used functions and
 sets up the ``encomp`` Jupyter Notebook environment.
 """

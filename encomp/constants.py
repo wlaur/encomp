@@ -1,6 +1,11 @@
+"""
+Contains constants used elsewhere in the library.
+"""
+
 from pydantic import BaseModel
 
 from encomp.units import Q
+
 
 class Constants(BaseModel):
     """

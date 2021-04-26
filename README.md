@@ -23,7 +23,7 @@ from encomp.notebook import *
 The ``api`` module contains all public functions and classes:
 
 ```python
-from encomp.api import Quantity
+from encomp.api import ...
 ```
 
 

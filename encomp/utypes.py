@@ -1,7 +1,5 @@
 """
 Contains type definitions for :py:class:`encomp.units.Quantity` objects.
-Import using ``from encomp.utypes import *`` to import the types.
-
 If ``encomp.settings.SETTINGS.type_checking`` is ``True``,
 these types will be enforced everywhere.
 
@@ -9,7 +7,7 @@ The dimensionalities defined in this module can be combined with ``*`` and ``/``
 Some commonly used derived dimensionalities (like density) are defined for convenience.
 """
 
-from typing import Union, TypeVar, List, Mapping, Generic
+from typing import Union, TypeVar, List, Mapping
 from decimal import Decimal
 import numpy as np
 

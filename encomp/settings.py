@@ -1,3 +1,7 @@
+"""
+Contains settings used elsewhere in the library.
+"""
+
 from pathlib import Path
 from pydantic import BaseSettings
 

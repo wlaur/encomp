@@ -20,6 +20,7 @@ from typing import Union, Any, TypeVar, Type, _GenericAlias
 from contextlib import contextmanager
 from functools import lru_cache
 from typeguard import check_type
+import numpy as np
 
 import pint
 from pint.unit import UnitsContainer
@@ -27,6 +28,11 @@ from pint.unit import UnitsContainer
 from encomp.settings import SETTINGS
 from encomp.utypes import Magnitude, Unit
 from encomp.utypes import _DIMENSIONALITIES_REV, get_dimensionality_name
+
+
+class QuantityError(ValueError):
+    pass
+
 
 # always use pint.get_application_registry() to get the UnitRegistry instance
 # there should only be one registry at a time, pint raises ValueError
@@ -158,9 +164,9 @@ class Quantity(pint.quantity.Quantity):
                 expected_dim_name = get_dimensionality_name(
                     expected_dimensionality)
 
-                raise ValueError(f'Quantity with unit {unit} has incorrect '
-                                 f'dimensionality {dim_name}, '
-                                 f'expected {expected_dim_name}')
+                raise QuantityError(f'Quantity with unit {unit} has incorrect '
+                                    f'dimensionality {dim_name}, '
+                                    f'expected {expected_dim_name}')
 
             # at this point the value and dimensionality are verified to be correct
             # pass the inputs to pint to actually construct the Quantity
@@ -196,7 +202,7 @@ class Quantity(pint.quantity.Quantity):
 
     def __format__(self, format_type: str) -> str:
         """
-        Overloads the ``__format__`` method for Quantities:
+        Overloads the ``__format__`` method for Quantity:
         Ensure that the default formatting spec is used for fixed
         precision formatting (":.2f", ":.2g") when no explicit
         format is specified.
@@ -229,7 +235,12 @@ class Quantity(pint.quantity.Quantity):
             JSON representation, 2-element list with ``[val, unit]``
         """
 
-        return [self.m, str(self.u)]
+        m = self.m
+
+        if isinstance(m, np.ndarray):
+            m = m.tolist()
+
+        return [m, str(self.u)]
 
     @staticmethod
     def correct_unit(unit: str) -> str:
@@ -338,11 +349,13 @@ def quantity_format(fmt: str = 'compact'):
         set_quantity_format(old_fmt)
 
 
-def is_qty(obj: Any,
-           expected: _GenericAlias) -> bool:
+def isinstance_qty(obj: Any,
+                   expected: _GenericAlias) -> bool:
     """
     Checks if the input object is a Quantity, Magnitude or Unit.
     Magnitude and Unit support different types (float, list for Magnitude and str for Unit).
+    Cannot use builtin :func:`isinstance`, since this does not support
+    type aliases.
 
     Parameters
     ----------

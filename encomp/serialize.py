@@ -1,27 +1,34 @@
 """
-Functions related to serializing and deserializing custom
+Functions related to serializing and decoding (deserializing)
 objects to/from JSON.
 """
 
-from typing import Any, Union, Dict, List
+from typing import Any, Union, List, Dict
 import json
 from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from encomp.units import Q, Magnitude, Unit, check_quantity
+from encomp.structures import flatten
+from encomp.units import Q, Magnitude, Unit, isinstance_qty
 
+# type alias for objects that can be serialized using json.dumps()
+JSONBase = Union[dict,
+                 list,
+                 float,
+                 int,
+                 str,
+                 bool,
+                 None]
 
-JSON = Union[
-    Dict[str, Any],
-    List[dict, Any],
-    float, int, str, bool, None
-]
+JSON = Union[JSONBase,
+             List[JSONBase],
+             Dict[str, JSONBase]]
 
 
 def is_serializable(x: Any) -> bool:
     """
-    Checks if x is serializable to JSON:
+    Checks if x is serializable to JSON,
     tries to execute ``json.dumps(x)``.
 
     Parameters
@@ -43,7 +50,7 @@ def is_serializable(x: Any) -> bool:
         return False
 
 
-def make_serializable(obj: Any) -> JSON:
+def serialize(obj: Any) -> JSON:
     """
     Converts the input to a serializable object that can be rendered as JSON.
     Assumes that all non-iterable objects are serializable,
@@ -52,7 +59,7 @@ def make_serializable(obj: Any) -> JSON:
     Uses recursion to handle nested structures, this will raise RecursionError in
     case a dict contains cyclical references.
 
-    Custom objects are serialized with :py:func:`encomp.serialize.custom_json_serializer`.
+    Custom objects are serialized with :py:func:`encomp.serialize.custom_serializer`.
 
     Parameters
     ----------
@@ -81,7 +88,7 @@ def make_serializable(obj: Any) -> JSON:
         lst = []
 
         for n in obj:
-            lst.append(make_serializable(n))
+            lst.append(serialize(n))
 
         return lst
 
@@ -95,14 +102,92 @@ def make_serializable(obj: Any) -> JSON:
                 raise TypeError('Tuples cannot be used as dictionary keys when '
                                 f'serializing to JSON: {key}')
 
-            dct[key] = make_serializable(obj[key])
+            dct[key] = serialize(obj[key])
 
         return dct
 
-    return custom_json_serializer(obj)
+    return custom_serializer(obj)
 
 
-def custom_json_serializer(obj: Any) -> JSON:
+def decode(inp: JSON) -> Any:
+    """
+    Decodes objects that were serialized
+    with :py:func:`encomp.serialize.custom_serializer`.
+
+    .. note::
+        Dictionary keys are always str in JSON, this function
+        cannot determine if the key "1" or "2.0" was originally a string or integer.
+        String keys can be converted to float/int afterwards if necessary.
+
+    Parameters
+    ----------
+    inp : JSON
+        Serialized representation of some object
+
+    Returns
+    -------
+    Any
+        The actual object
+    """
+
+    if isinstance(inp, list) and len(inp) == 2:
+
+        val, unit = inp
+
+        # check if this list has types that matches a serialized Quantity
+        if isinstance_qty(val, Magnitude) and isinstance_qty(unit, Unit):
+
+            if unit == '':
+                unit = 'dimensionless'
+
+            try:
+                # handle custom np.array objects
+                m = decode(val)
+                return Q(m, unit)
+
+            except Exception:
+                pass
+
+    # nested list (cannot be tuple)
+    if isinstance(inp, list):
+        return [decode(n) for n in inp]
+
+    if isinstance(inp, dict):
+
+        # serialized pint.Quantity with array as magnitude
+        if {'_units', '_magnitude'} <= set(inp):
+
+            m = decode(inp['_magnitude'])
+            return Q(m, inp['_units'])
+
+        # check if this dict is output from custom_serializer
+        # it might also be a regular dict that just happens to
+        # have the key "type", in this case it will be decoded normally
+        if 'type' in inp:
+
+            if inp['type'] == 'Path':
+                return Path(inp['data'])
+
+            if inp['type'] == 'DataFrame':
+
+                df_dict = decode(json.loads(inp['data']))
+                return pd.DataFrame.from_dict(df_dict)
+
+            if inp['type'] == 'ndarray':
+                return np.array(inp['data'])
+
+        # not possible to have a custom object as key,
+        # JSON allows only str (float and int are converted to str)
+        # not possible to determine if string "1" was originally an int,
+        # so this function will not convert numeric str to int
+        # to avoid issues with this, avoid using integer / float keys
+        return {a: decode(b)
+                for a, b in inp.items()}
+
+    return inp
+
+
+def custom_serializer(obj: Any) -> JSON:
     """
     Serializes objects that are not JSON-serializable by default.
     Fallback is ``obj.__dict__``, if this does not exist
@@ -127,7 +212,7 @@ def custom_json_serializer(obj: Any) -> JSON:
 
         obj = CustomClass()
 
-        custom_json_serializer(obj)
+        custom_serializer(obj)
         # {'type': 'CustomClass', 'data': {'A': 1, 'B': 2}}
 
     Numpy arrays and pandas DataFrames are handled separately.
@@ -154,7 +239,7 @@ def custom_json_serializer(obj: Any) -> JSON:
 
         return {
             'type': 'DataFrame',
-            'data': obj.to_json(default_handler=custom_json_serializer)
+            'data': obj.to_json(default_handler=custom_serializer)
         }
 
     if isinstance(obj, np.ndarray):
@@ -178,74 +263,3 @@ def custom_json_serializer(obj: Any) -> JSON:
 
     # fallback, this can usually not be deserialized
     return str(obj)
-
-
-def custom_json_decoder(inp: JSON) -> Any:
-    """
-    Decodes objects that were serialized
-    with :py:func:`encomp.serialize.custom_json_serializer`
-
-    Parameters
-    ----------
-    inp : JSON
-        Serialized representation of some object
-
-    Returns
-    -------
-    Any
-        The actual object
-    """
-
-    if isinstance(inp, list) and len(inp) == 2:
-
-        # might be a Quantity with a float/int/list/array magnitude
-        if isinstance(inp[1], Unit):
-
-            unit = inp[1]
-
-            if not unit:
-                unit = 'dimensionless'
-
-            try:
-                m = custom_json_decoder(inp[0])
-                return Quantity(m, unit)
-            except Exception:
-                pass
-
-        # if this is a nested list with length 2
-        if len(inp) < len(list(flatten(inp))):
-            return [custom_json_decoder(n) for n in inp]
-
-    # nested list (cannot be tuple)
-    if isinstance(inp, list):
-        return [custom_json_decoder(n) for n in inp]
-
-    if isinstance(inp, dict):
-
-        # serialized pint.Quantity with array as magnitude
-        if '_units' in inp and '_magnitude' in inp:
-            m = custom_json_decoder(inp['_magnitude'])
-            return Quantity(m, inp['_units'])
-
-        # check if a dict is a serialized dataframe or other custom object
-        if 'type' in inp:
-
-            if inp['type'] == 'Path':
-                return Path(inp['data']).absolute()
-
-            if inp['type'] == 'DataFrame':
-
-                df_dict = custom_json_decoder(json.loads(inp['data']))
-                df = pd.DataFrame.from_dict(df_dict)
-
-                return df
-
-            if inp['type'] == 'ndarray':
-                return np.array(inp['data'])
-
-        # not possible to have a custom object as key,
-        # JSON allows only str (float and int are converted to str)
-        return {a: custom_json_decoder(b)
-                for a, b in inp.items()}
-
-    return inp
