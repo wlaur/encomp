@@ -9,7 +9,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from encomp.structures import flatten
 from encomp.units import Q, Magnitude, Unit, isinstance_qty
 
 # type alias for objects that can be serialized using json.dumps()
@@ -135,7 +134,8 @@ def decode(inp: JSON) -> Any:
         val, unit = inp
 
         # check if this list has types that matches a serialized Quantity
-        if isinstance_qty(val, Magnitude) and isinstance_qty(unit, Unit):
+        if (isinstance_qty(val, Magnitude) and
+                isinstance_qty(unit, Union[Unit, str])):
 
             if unit == '':
                 unit = 'dimensionless'

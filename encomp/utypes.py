@@ -11,12 +11,10 @@ from typing import Union, TypeVar, List, Mapping
 from decimal import Decimal
 import numpy as np
 
-import pint
 from pint.unit import UnitsContainer
 
-# type alias for the inputs to Quantity
-Magnitude = Union[float, int, Decimal, np.ndarray, List[float]]
-Unit = Union[str, pint.unit.Unit, pint.unit.UnitsContainer]
+# type alias for the magnitude input to Quantity
+Magnitude = Union[float, int, Decimal, np.ndarray, List[float], List[int]]
 
 # base dimensionalities
 DimensionlessDim = UnitsContainer()

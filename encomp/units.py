@@ -23,11 +23,12 @@ from typeguard import check_type
 import numpy as np
 
 import pint
-from pint.unit import UnitsContainer
+from pint.unit import UnitsContainer, Unit
 
 from encomp.settings import SETTINGS
-from encomp.utypes import Magnitude, Unit
-from encomp.utypes import _DIMENSIONALITIES_REV, get_dimensionality_name
+from encomp.utypes import (Magnitude,
+                           _DIMENSIONALITIES_REV,
+                           get_dimensionality_name)
 
 
 class QuantityError(ValueError):
@@ -106,17 +107,23 @@ class Quantity(pint.quantity.Quantity):
             dim_name = 'None'
 
         # return a new subclass definition that restricts the dimensionality
-        # the parent class is always Quantity
-        DimensionQuantity = type(f'Quantity[{dim_name}]',
-                                 (Quantity,),
-                                 {'_expected_dimensionality': dim})
+        # the parent class is Quantity (this class does not restrict dimensionality)
+        DimensionalQuantity = type(f'Quantity[{dim_name}]',
+                                   (Quantity,),
+                                   {'_expected_dimensionality': dim})
 
-        return DimensionQuantity
+        return DimensionalQuantity
 
-    def __class_getitem__(cls, dim: Union[UnitsContainer, str, 'Quantity', TypeVar]) -> Type['Quantity']:
+    def __class_getitem__(cls,
+                          dim: Union[UnitsContainer, str, 'Quantity', TypeVar]) -> Type['Quantity']:
 
         # use same dimensionality as another Quantity
-        if hasattr(dim, 'dimensionality'):
+        if isinstance(dim, Quantity):
+            dim = dim.dimensionality
+
+        # custom TypeVar objects with a "dimensionality" attribute
+        # TODO: this could be improved with the typing.Annotated class (Python 3.9+)
+        if isinstance(dim, TypeVar) and hasattr(dim, 'dimensionality'):
             dim = dim.dimensionality
 
         if isinstance(dim, str):
@@ -134,15 +141,15 @@ class Quantity(pint.quantity.Quantity):
 
     def __new__(cls,
                 val: Union[Magnitude, 'Quantity'],
-                unit: Union[Unit, 'Quantity']):
-
-        # compatibility with the internal pint api (__gt__, __lt__, etc...)
-        # TODO: clarify the difference between the Unit and UnitsContainer classes
-        if isinstance(unit, UnitsContainer):
-            unit = cls._REGISTRY.parse_units(str(unit))
+                unit: Union[Unit, UnitsContainer, str, 'Quantity']) -> 'Quantity':
 
         if isinstance(val, Quantity):
             return val.to(unit)
+
+        # pint.Quantity.to_root_units calls __class__(magnitude, other)
+        # where other is a UnitsContainer
+        if isinstance(unit, UnitsContainer):
+            unit = cls._REGISTRY.parse_units(str(unit))
 
         if isinstance(unit, Quantity):
             unit = unit.u
@@ -153,48 +160,46 @@ class Quantity(pint.quantity.Quantity):
         if isinstance(unit, str):
             unit = cls._REGISTRY.parse_units(Quantity.correct_unit(unit))
 
-        # check the dimensionality in case it is specified
-        if cls._expected_dimensionality is not None:
+        if cls._expected_dimensionality is None:
 
-            expected_dimensionality = cls._expected_dimensionality
+            # in case this Quantity was initialized without specifying
+            # the dimensionality, check the dimensionality and return an
+            # instance of the subclass with correct dimensionality
+            return cls[unit.dimensionality](val, unit)
 
-            if unit.dimensionality != expected_dimensionality:
+        expected_dimensionality = cls._expected_dimensionality
 
-                dim_name = get_dimensionality_name(unit.dimensionality)
-                expected_dim_name = get_dimensionality_name(
-                    expected_dimensionality)
+        if unit.dimensionality != expected_dimensionality:
 
-                raise QuantityError(f'Quantity with unit {unit} has incorrect '
-                                    f'dimensionality {dim_name}, '
-                                    f'expected {expected_dim_name}')
+            dim_name = get_dimensionality_name(unit.dimensionality)
+            expected_name = get_dimensionality_name(expected_dimensionality)
 
-            # at this point the value and dimensionality are verified to be correct
-            # pass the inputs to pint to actually construct the Quantity
-            return super().__new__(cls, val, units=unit)
+            raise QuantityError(f'Quantity with unit "{unit}" has incorrect '
+                                f'dimensionality {dim_name}, '
+                                f'expected {expected_name}')
 
-        # in case this Quantity was initialized without specifying
-        # the dimensionality, check the dimensionality and return an
-        # instance of the subclass with correct dimensionality
-        return cls[unit.dimensionality](val, unit)
+        # at this point the value and dimensionality are verified to be correct
+        # pass the inputs to pint to actually construct the Quantity
+        return super().__new__(cls, val, units=unit)
 
-    def _to_unit(self, unit: Union[Unit, 'Quantity']) -> Unit:
-
-        if isinstance(unit, Quantity):
-            unit = unit.u
+    def _to_unit(self, unit: Union[Unit, str, 'Quantity']) -> Unit:
 
         if isinstance(unit, str):
             unit = self._REGISTRY.parse_units(Quantity.correct_unit(unit))
 
+        if isinstance(unit, Quantity):
+            unit = unit.u
+
         return unit
 
-    def to(self, unit: Union[Unit, 'Quantity']) -> 'Quantity':
+    def to(self, unit: Union[Unit, str, 'Quantity']) -> 'Quantity':
 
         unit = self._to_unit(unit)
         m = self._convert_magnitude(unit)
 
         return self.__class__(m, unit)
 
-    def ito(self, unit: Union[Unit, 'Quantity']) -> None:
+    def ito(self, unit: Union[Unit, str, 'Quantity']) -> None:
 
         unit = self._to_unit(unit)
 
@@ -319,7 +324,7 @@ def set_quantity_format(fmt: str = 'compact') -> None:
         fmt = fmt_aliases[fmt]
 
     if fmt not in Quantity.formatting_specs:
-        raise ValueError(f'Cannot set default format to {fmt}, '
+        raise ValueError(f'Cannot set default format to "{fmt}", '
                          f'fmt is one of {Quantity.FORMATTING_SPECS} '
                          'or alias siunitx: ~L, compact: ~P')
 
