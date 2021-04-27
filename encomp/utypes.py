@@ -140,7 +140,7 @@ def get_dimensionality_name(dim: UnitsContainer) -> str:
     Returns
     -------
     str
-        readable name, or str representation of the input
+        Readable name, or str representation of the input
     """
 
     if dim in _DIMENSIONALITIES:
