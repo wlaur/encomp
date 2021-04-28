@@ -98,6 +98,10 @@ class Quantity(pint.quantity.Quantity):
         'ft_H2O': 'feet_H2O',
         'ft_water': 'feet_H2O'}
 
+    @classmethod
+    def get_unit(cls, unit_name: str) -> Unit:
+        return cls._REGISTRY.parse_units(unit_name)
+
     @lru_cache
     def _get_subclass_with_dimensions(dim: UnitsContainer) -> Type['Quantity']:
 
@@ -153,9 +157,6 @@ class Quantity(pint.quantity.Quantity):
 
         if isinstance(unit, Quantity):
             unit = unit.u
-
-        if isinstance(val, str):
-            val = float(val.strip())
 
         if isinstance(unit, str):
             unit = cls._REGISTRY.parse_units(Quantity.correct_unit(unit))
@@ -244,7 +245,12 @@ class Quantity(pint.quantity.Quantity):
         m = self.m
 
         if isinstance(m, np.ndarray):
-            m = m.tolist()
+
+            # compatibility with encomp.serialize.custom_serializer
+            m = {
+                'type': 'ndarray',
+                'data': m.tolist()
+            }
 
         return [m, str(self.u)]
 

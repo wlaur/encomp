@@ -133,6 +133,9 @@ def decode(inp: JSON) -> Any:
 
         val, unit = inp
 
+        # decode custom np.array objects
+        val = decode(val)
+
         # check if this list has types that matches a serialized Quantity
         if (isinstance_qty(val, Magnitude) and
                 isinstance_qty(unit, Union[Unit, str])):
@@ -141,9 +144,7 @@ def decode(inp: JSON) -> Any:
                 unit = 'dimensionless'
 
             try:
-                # handle custom np.array objects
-                m = decode(val)
-                return Q(m, unit)
+                return Q(val, unit)
 
             except Exception:
                 pass

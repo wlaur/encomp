@@ -23,3 +23,15 @@ def test_serialize():
         d_ = decode(json.loads(json_str))
 
         assert d == d_
+
+    d = Q(np.linspace(0, 1), 'kg/s')
+
+    s = serialize(d)
+
+    assert is_serializable(s)
+
+    json_str = json.dumps(s)
+    d_ = decode(json.loads(json_str))
+
+    assert np.array_equal(d_.m, d.m)
+    assert d_.dimensionality == d.dimensionality
