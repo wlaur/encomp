@@ -3,8 +3,7 @@ Classes and functions relating to fluid properties.
 Uses CoolProp as backend.
 """
 
-from typing import Mapping, Union, Tuple, List
-from functools import lru_cache
+from typing import Mapping, Tuple, List
 
 from CoolProp.CoolProp import PropsSI
 from CoolProp.HumidAirProp import HAPropsSI
@@ -16,7 +15,7 @@ from encomp.units import Quantity, Unit
 CProperty = str
 
 
-class BaseFluid:
+class CoolPropFluid:
 
     PHASES: Mapping[float, str] = {
         0.0: 'Liquid',
@@ -95,38 +94,9 @@ class BaseFluid:
         ('Z', ):                                        ('dimensionless', 'Compressibility factor')
     }
 
-    # unit and description for properties in function HAPropsSI
-    PROPERTY_MAP_HUMID_AIR: Mapping[Tuple[str], Tuple[str]] = {
-
-        ('B', 'Twb', 'T_wb', 'WetBulb'):  ('K', 'Wet-Bulb Temperature'),
-        ('C', 'cp'):                      ('J/kg/K', 'Mixture specific heat per unit dry air'),
-        ('Cha', 'cp_ha'):                 ('J/kg/K', 'Mixture specific heat per unit humid air'),
-        ('CV', ):                         ('J/kg/K', 'Mixture specific heat at constant volume per unit dry air'),
-        ('CVha', 'cv_ha'):                ('J/kg/K', 'Mixture specific heat at constant volume per unit humid air'),
-        ('D', 'Tdp', 'DewPoint', 'T_dp'): ('K', 'Dew-Point Temperature'),
-        ('H', 'Hda', 'Enthalpy'):         ('J/kg', 'Mixture enthalpy per dry air'),
-        ('Hha', ):                        ('J/kg', 'Mixture enthalpy per humid air'),
-        ('K', 'k', 'Conductivity'):       ('W/m/K', 'Mixture thermal conductivity'),
-        ('M', 'Visc', 'mu'):              ('Pa*s', 'Mixture viscosity'),
-        ('psi_w', 'Y'):                   ('dimensionless', 'Water mole fraction'),
-        ('P', ):                          ('Pa', 'Pressure'),
-        ('P_w', ):                        ('Pa', 'Partial pressure of water vapor'),
-        ('R', 'RH', 'RelHum'):            ('dimensionless', 'Relative humidity in [0, 1]'),
-        ('S', 'Sda', 'Entropy'):          ('J/kg/K', 'Mixture entropy per unit dry air'),
-        ('Sha', ):                        ('J/kg/K', 'Mixture entropy per unit humid air'),
-        ('T', 'Tdb', 'T_db'):             ('K', 'Dry-Bulb Temperature'),
-        ('V', 'Vda'):                     ('m³/kg', 'Mixture volume per unit dry air'),
-        ('Vha', ):                        ('m³/kg', 'Mixture volume per unit humid air'),
-        ('W', 'Omega', 'HumRat'):         ('dimensionless', 'Humidity Rat mass water per mass dry air'),
-        ('Z', ):                          ('dimensionless', 'Compressibility factor')
-    }
-
-    ALL_PROPERTIES = set(flatten(PROPERTY_MAP)) | set(
-        flatten(PROPERTY_MAP_HUMID_AIR))
-
-    MAPPINGS = (PROPERTY_MAP, PROPERTY_MAP_HUMID_AIR)
-
-    REPR_PROPERTIES = ('P', 'T', 'D', 'V')
+    ALL_PROPERTIES = set(flatten(PROPERTY_MAP))
+    REPR_PROPERTIES = (('P', '.0f'), ('T', '.1f'),
+                       ('D', '.1f'), ('V', '.2g'))
 
     # preferred return units
     # key is the first name in the tuple used in PROPERTY_MAP etc...
@@ -272,41 +242,44 @@ class BaseFluid:
 
         self.name = name
 
-    @lru_cache
-    def get_prop_key(prop: CProperty) -> Tuple[str]:
+    @classmethod
+    def get_prop_key(cls, prop: CProperty) -> Tuple[str, ...]:
 
-        if prop not in BaseFluid.ALL_PROPERTIES:
+        if prop not in cls.ALL_PROPERTIES:
             raise ValueError(
                 f'Property "{prop}" is not a valid CoolProp property name')
 
-        for mapping in BaseFluid.MAPPINGS:
-            for names in mapping:
-                if prop in names:
-                    return names
+        for names in cls.PROPERTY_MAP:
+            if prop in names:
+                return names
 
-    @lru_cache
-    def get_coolprop_unit(prop: CProperty) -> Unit:
+    @classmethod
+    def get_coolprop_unit(cls, prop: CProperty) -> Unit:
 
-        key = BaseFluid.get_prop_key(prop)
+        key = cls.get_prop_key(prop)
 
-        for mapping in BaseFluid.MAPPINGS:
-            if key in mapping:
-                unit_str = mapping[key][0]
-                return Quantity.get_unit(unit_str)
+        if key in cls.PROPERTY_MAP:
+            unit_str = cls.PROPERTY_MAP[key][0]
+            return Quantity.get_unit(unit_str)
 
-    @staticmethod
-    def describe(prop: CProperty) -> str:
+    @classmethod
+    def describe(cls, prop: CProperty) -> str:
 
-        key = BaseFluid.get_prop_key(prop)
+        key = cls.get_prop_key(prop)
 
-        for mapping in BaseFluid.MAPPINGS:
-            if key in mapping:
-                unit_str, description = mapping[key]
-                unit = Quantity.get_unit(unit_str)
-                return f'{", ".join(key)}: {description} [{unit:~P}]'
+        if key in cls.PROPERTY_MAP:
 
-    @staticmethod
-    def search(inp: str) -> List[str]:
+            unit_str, description = cls.PROPERTY_MAP[key]
+            unit = Quantity.get_unit(unit_str)
+            unit_repr = f'{unit:~P}'
+
+            if not unit_repr:
+                unit_repr = 'dimensionless'
+
+            return f'{", ".join(key)}: {description} [{unit_repr}]'
+
+    @classmethod
+    def search(cls, inp: str) -> List[str]:
         """
         Returns a list of CoolProp properties that matches the search input.
 
@@ -324,11 +297,10 @@ class BaseFluid:
 
         matches = []
 
-        for mapping in BaseFluid.MAPPINGS:
-            for key in mapping:
-                description = BaseFluid.describe(key[0])
-                if inp.lower() in description.lower():
-                    matches.append(description)
+        for key in cls.PROPERTY_MAP:
+            description = cls.describe(key[0])
+            if inp.lower() in description.lower():
+                matches.append(description)
 
         return matches
 
@@ -358,9 +330,9 @@ class BaseFluid:
         prop_1, qty_1 = point_1
         prop_2, qty_2 = point_2
 
-        unit_1 = BaseFluid.get_coolprop_unit(prop_1)
-        unit_2 = BaseFluid.get_coolprop_unit(prop_2)
-        unit_output = BaseFluid.get_coolprop_unit(output)
+        unit_1 = self.get_coolprop_unit(prop_1)
+        unit_2 = self.get_coolprop_unit(prop_2)
+        unit_output = self.get_coolprop_unit(output)
 
         val_1 = qty_1.to(unit_1).m
         val_2 = qty_2.to(unit_2).m
@@ -372,16 +344,16 @@ class BaseFluid:
 
         qty = Quantity(val, unit_output)
 
-        key = BaseFluid.get_prop_key(output)
+        key = self.get_prop_key(output)
 
-        if key[0] in BaseFluid.RETURN_UNITS:
-            ret_unit = BaseFluid.RETURN_UNITS[key[0]]
+        if key[0] in self.RETURN_UNITS:
+            ret_unit = self.RETURN_UNITS[key[0]]
             qty.ito(ret_unit)
 
         return qty
 
 
-class Fluid(BaseFluid):
+class Fluid(CoolPropFluid):
 
     def __init__(self, name: str, **kwargs: Quantity):
         """
@@ -393,7 +365,7 @@ class Fluid(BaseFluid):
         name : str
             Name of the fluid
         kwargs: Quantity
-            Value for the two fixed points. The name of the keyword argument is the
+            Values for the two fixed points. The name of the keyword argument is the
             CoolProp property name.
         """
 
@@ -411,7 +383,7 @@ class Fluid(BaseFluid):
     def get(self, output: CProperty) -> Quantity:
         """
         Uses the constant fixed points to call´
-        :py:meth:`encomp.fluids.Fluid.get`.
+        :py:meth:`encomp.fluids.CoolPropFluid.get`.
 
         Parameters
         ----------
@@ -428,6 +400,10 @@ class Fluid(BaseFluid):
                            self.point_1,
                            self.point_2)
 
+    @property
+    def phase(self) -> str:
+        return self.PHASES[self.get('PHASE')]
+
     def __getattr__(self, attr):
 
         # this is called in case attr does not exist
@@ -435,9 +411,145 @@ class Fluid(BaseFluid):
 
     def __repr__(self) -> str:
 
-        props_str = ', '.join(f'{p}={self.get(p):.0f}'
-                              for p in self.REPR_PROPERTIES)
+        repr_properties = self.REPR_PROPERTIES
+
+        # show the vapor quality in the repr in case of saturated steam
+        vapor_quality = self.Q
+
+        if vapor_quality > 0 and vapor_quality < 1:
+            repr_properties = list(repr_properties) + [('Q', '.2f')]
+
+        props_str = ', '.join(f'{p}={self.get(p):{fmt}}'
+                              for p, fmt in repr_properties)
 
         s = f'<{self.__class__.__name__} "{self.name}", {props_str}>'
+
+        return s
+
+
+class HumidAir(Fluid):
+
+    # unit and description for properties in function HAPropsSI
+    PROPERTY_MAP: Mapping[Tuple[str], Tuple[str]] = {
+
+        ('B', 'Twb', 'T_wb', 'WetBulb'):  ('K', 'Wet-Bulb Temperature'),
+        ('C', 'cp'):                      ('J/kg/K', 'Mixture specific heat per unit dry air'),
+        ('Cha', 'cp_ha'):                 ('J/kg/K', 'Mixture specific heat per unit humid air'),
+        ('CV', ):                         ('J/kg/K', 'Mixture specific heat at constant volume per unit dry air'),
+        ('CVha', 'cv_ha'):                ('J/kg/K', 'Mixture specific heat at constant volume per unit humid air'),
+        ('D', 'Tdp', 'DewPoint', 'T_dp'): ('K', 'Dew-Point Temperature'),
+        ('H', 'Hda', 'Enthalpy'):         ('J/kg', 'Mixture enthalpy per dry air'),
+        ('Hha', ):                        ('J/kg', 'Mixture enthalpy per humid air'),
+        ('K', 'k', 'Conductivity'):       ('W/m/K', 'Mixture thermal conductivity'),
+        ('M', 'Visc', 'mu'):              ('Pa*s', 'Mixture viscosity'),
+        ('psi_w', 'Y'):                   ('dimensionless', 'Water mole fraction'),
+        ('P', ):                          ('Pa', 'Pressure'),
+        ('P_w', ):                        ('Pa', 'Partial pressure of water vapor'),
+        ('R', 'RH', 'RelHum'):            ('dimensionless', 'Relative humidity in [0, 1]'),
+        ('S', 'Sda', 'Entropy'):          ('J/kg/K', 'Mixture entropy per unit dry air'),
+        ('Sha', ):                        ('J/kg/K', 'Mixture entropy per unit humid air'),
+        ('T', 'Tdb', 'T_db'):             ('K', 'Dry-Bulb Temperature'),
+        ('V', 'Vda'):                     ('m³/kg', 'Mixture volume per unit dry air'),
+        ('Vha', ):                        ('m³/kg', 'Mixture volume per unit humid air'),
+        ('W', 'Omega', 'HumRat'):         ('dimensionless', 'Humidity Rat mass water per mass dry air'),
+        ('Z', ):                          ('dimensionless', 'Compressibility factor')
+    }
+
+    ALL_PROPERTIES = set(flatten(PROPERTY_MAP))
+
+    # HAPropsSI has different parameter names
+    # density is not defined, need to use either Vda (volume per dry air)
+    # or Vha (per humid air)
+    RETURN_UNITS = {
+        'P': 'kPa',
+        'P_w': 'kPa',
+        'M': 'cP',
+        'T': '°C',
+        'D': '°C',
+        'B': '°C',
+    }
+
+    REPR_PROPERTIES = (('P', '.0f'), ('T', '.1f'), ('R', '.2f'),
+                       ('Vda', '.1f'), ('Vha', '.1f'), ('M', '.2g'))
+
+    def __init__(self, **kwargs: Quantity):
+        """
+        Interface to the CoolProp function for humid air, ``CoolProp.CoolProp.HAPropsSI``.
+        Needs three fixed points instead of two.
+
+        Parameters
+        ----------
+        kwargs: Quantity
+            Values for the three fixed points. The name of the keyword argument is the
+            CoolProp property name.
+        """
+
+        self.name = 'Humid air'
+
+        if len(kwargs) != 3:
+            raise ValueError(
+                f'Exactly three fixed points are required, passed {list(kwargs)}')
+
+        kwargs = list(kwargs.items())
+
+        self.point_1 = kwargs[0]
+        self.point_2 = kwargs[1]
+        self.point_3 = kwargs[2]
+
+    def get(self, output: CProperty) -> Quantity:
+        """
+        Uses the constant fixed points to call ``CoolProp.CoolProp.HAPropsSI``.
+
+        Parameters
+        ----------
+        output : CProperty
+            Name of the output property
+
+        Returns
+        -------
+        Quantity
+            Value (and unit) of the output property
+        """
+
+        prop_1, qty_1 = self.point_1
+        prop_2, qty_2 = self.point_2
+        prop_3, qty_3 = self.point_3
+
+        unit_1 = self.get_coolprop_unit(prop_1)
+        unit_2 = self.get_coolprop_unit(prop_2)
+        unit_3 = self.get_coolprop_unit(prop_3)
+
+        unit_output = self.get_coolprop_unit(output)
+
+        val_1 = qty_1.to(unit_1).m
+        val_2 = qty_2.to(unit_2).m
+        val_3 = qty_3.to(unit_3).m
+
+        val = HAPropsSI(output,
+                        prop_1, val_1,
+                        prop_2, val_2,
+                        prop_3, val_3)
+
+        qty = Quantity(val, unit_output)
+
+        key = self.get_prop_key(output)
+
+        if key[0] in self.RETURN_UNITS:
+            ret_unit = self.RETURN_UNITS[key[0]]
+            qty.ito(ret_unit)
+
+        return qty
+
+    def __getattr__(self, attr):
+
+        # this is called in case attr does not exist
+        return self.get(attr)
+
+    def __repr__(self) -> str:
+
+        props_str = ', '.join(f'{p}={self.get(p):{fmt}}'
+                              for p, fmt in self.REPR_PROPERTIES)
+
+        s = f'<{self.__class__.__name__}, {props_str}>'
 
         return s

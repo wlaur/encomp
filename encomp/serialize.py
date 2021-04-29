@@ -8,8 +8,11 @@ import json
 from pathlib import Path
 import numpy as np
 import pandas as pd
+from decimal import Decimal
+from uncertainties import ufloat
+from uncertainties.core import AffineScalarFunc
 
-from encomp.units import Q, Magnitude, Unit, isinstance_qty
+from encomp.units import Quantity, Magnitude, Unit, isinstance_qty
 
 # type alias for objects that can be serialized using json.dumps()
 JSONBase = Union[dict,
@@ -129,26 +132,6 @@ def decode(inp: JSON) -> Any:
         The actual object
     """
 
-    if isinstance(inp, list) and len(inp) == 2:
-
-        val, unit = inp
-
-        # decode custom np.array objects
-        val = decode(val)
-
-        # check if this list has types that matches a serialized Quantity
-        if (isinstance_qty(val, Magnitude) and
-                isinstance_qty(unit, Union[Unit, str])):
-
-            if unit == '':
-                unit = 'dimensionless'
-
-            try:
-                return Q(val, unit)
-
-            except Exception:
-                pass
-
     # nested list (cannot be tuple)
     if isinstance(inp, list):
         return [decode(n) for n in inp]
@@ -159,12 +142,32 @@ def decode(inp: JSON) -> Any:
         if {'_units', '_magnitude'} <= set(inp):
 
             m = decode(inp['_magnitude'])
-            return Q(m, inp['_units'])
+            return Quantity(m, inp['_units'])
 
         # check if this dict is output from custom_serializer
         # it might also be a regular dict that just happens to
         # have the key "type", in this case it will be decoded normally
         if 'type' in inp:
+
+            if inp['type'] == 'Quantity':
+
+                val, unit = inp['data']
+
+                # decode custom np.array objects
+                val = decode(val)
+
+                # check if this list has types that matches a serialized Quantity
+                if (isinstance_qty(val, Magnitude) and
+                        isinstance_qty(unit, Union[Unit, str])):
+
+                    if unit == '':
+                        unit = 'dimensionless'
+
+                    try:
+                        return Quantity(val, unit)
+
+                    except Exception:
+                        pass
 
             if inp['type'] == 'Path':
                 return Path(inp['data'])
@@ -175,7 +178,15 @@ def decode(inp: JSON) -> Any:
                 return pd.DataFrame.from_dict(df_dict)
 
             if inp['type'] == 'ndarray':
-                return np.array(inp['data'])
+
+                data = [decode(x) for x in inp['data']]
+                return np.array(data)
+
+            if inp['type'] == 'Decimal':
+                return Decimal(inp['data'])
+
+            if inp['type'] == 'AffineScalarFunc':
+                return ufloat(*inp['data'])
 
         # not possible to have a custom object as key,
         # JSON allows only str (float and int are converted to str)
@@ -236,6 +247,13 @@ def custom_serializer(obj: Any) -> JSON:
             'data': str(obj.absolute())
         }
 
+    if isinstance(obj, Quantity):
+
+        return {
+            'type': 'Quantity',
+            'data': [serialize(obj.m), str(obj.u)]
+        }
+
     if isinstance(obj, pd.DataFrame):
 
         return {
@@ -247,7 +265,21 @@ def custom_serializer(obj: Any) -> JSON:
 
         return {
             'type': 'ndarray',
-            'data': obj.tolist()
+            'data': [serialize(x) for x in obj.tolist()]
+        }
+
+    if isinstance(obj, Decimal):
+
+        return {
+            'type': 'Decimal',
+            'data': str(obj)
+        }
+
+    if isinstance(obj, AffineScalarFunc):
+
+        return {
+            'type': 'AffineScalarFunc',
+            'data': [obj.nominal_value, obj.std_dev]
         }
 
     if hasattr(obj, 'to_json'):
@@ -262,5 +294,5 @@ def custom_serializer(obj: Any) -> JSON:
     if is_serializable(obj):
         return obj
 
-    # fallback, this can usually not be deserialized
+    # fallback, this cannot be deserialized
     return str(obj)

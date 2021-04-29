@@ -20,7 +20,6 @@ from typing import Union, Any, TypeVar, Type, _GenericAlias
 from contextlib import contextmanager
 from functools import lru_cache
 from typeguard import check_type
-import numpy as np
 
 import pint
 from pint.unit import UnitsContainer, Unit
@@ -228,31 +227,6 @@ class Quantity(pint.quantity.Quantity):
             format_type = f'{format_type}{Quantity.default_format}'
 
         return super().__format__(format_type)
-
-    def to_json(self) -> list:
-        """
-        JSON serialization for a Quantity: 2-element list
-        with magnitude and unit (as str).
-        The first list element might be a sequence (list or ``np.ndarray``),
-        ``np.ndarray`` will be converted to list.
-
-        Returns
-        -------
-        dict
-            JSON representation, 2-element list with ``[val, unit]``
-        """
-
-        m = self.m
-
-        if isinstance(m, np.ndarray):
-
-            # compatibility with encomp.serialize.custom_serializer
-            m = {
-                'type': 'ndarray',
-                'data': m.tolist()
-            }
-
-        return [m, str(self.u)]
 
     @staticmethod
     def correct_unit(unit: str) -> str:

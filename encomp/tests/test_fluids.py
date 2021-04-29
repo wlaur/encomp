@@ -1,5 +1,5 @@
 from encomp.units import Q
-from encomp.fluids import Fluid
+from encomp.fluids import Fluid, HumidAir
 
 
 def test_Fluid():
@@ -12,3 +12,5 @@ def test_Fluid():
     water = Fluid('water', P=Q(2, 'bar'), T=Q(25, '°C'))
     assert water.T.u == Q.get_unit('degC')
     assert water.T.m == 25
+
+    HumidAir(T=Q(25, 'degC'), P=Q(125, 'kPa'), R=Q(0.2, 'dimensionless'))

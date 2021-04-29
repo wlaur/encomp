@@ -11,10 +11,13 @@ from typing import Union, TypeVar, List, Mapping
 from decimal import Decimal
 import numpy as np
 
+from uncertainties.core import AffineScalarFunc
 from pint.unit import UnitsContainer
 
 # type alias for the magnitude input to Quantity
-Magnitude = Union[float, int, Decimal, np.ndarray, List[float], List[int]]
+# also accept Decimal and AffineScalarFunc (from uncertainties package)
+Magnitude = Union[float, int, Decimal, np.ndarray, AffineScalarFunc,
+                  List[float], List[int], List[Decimal], List[AffineScalarFunc]]
 
 # base dimensionalities
 DimensionlessDim = UnitsContainer()
