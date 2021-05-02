@@ -2,12 +2,13 @@
 Contains constants used elsewhere in the library.
 """
 
-from pydantic import BaseModel
+from pydantic.dataclasses import dataclass
 
 from encomp.units import Q
 
 
-class Constants(BaseModel):
+@dataclass
+class Constants:
     """
     Collection of constants.
     Use a single instance of this class to refer to these constants.

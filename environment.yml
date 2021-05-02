@@ -4,6 +4,7 @@ channels:
   - defaults
 dependencies:
   - python=3.8
+  - pip
   - pydantic
   - pytest
   - scipy
@@ -16,3 +17,8 @@ dependencies:
   - fire
   - networkx
   - uncertainties
+  - sympy
+  - autopep8
+  - typeguard
+  - pip:
+      - -r file:requirements.txt

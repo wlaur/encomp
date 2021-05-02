@@ -12,7 +12,8 @@ from decimal import Decimal
 from uncertainties import ufloat
 from uncertainties.core import AffineScalarFunc
 
-from encomp.units import Quantity, Magnitude, Unit, isinstance_qty
+from encomp.units import Quantity, Magnitude, Unit
+from encomp.misc import isinstance_types
 
 # type alias for objects that can be serialized using json.dumps()
 JSONBase = Union[dict,
@@ -157,8 +158,8 @@ def decode(inp: JSON) -> Any:
                 val = decode(val)
 
                 # check if this list has types that matches a serialized Quantity
-                if (isinstance_qty(val, Magnitude) and
-                        isinstance_qty(unit, Union[Unit, str])):
+                if (isinstance_types(val, Magnitude) and
+                        isinstance_types(unit, Union[Unit, str])):
 
                     if unit == '':
                         unit = 'dimensionless'

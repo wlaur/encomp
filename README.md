@@ -36,11 +36,20 @@ conda env create -f environment.yml
 ```
 
 
+### Removing ``conda`` environments
+
+To completely remove the ``conda`` environment for ``encomp``:
+
+```
+conda remove -y --name encomp-env --all
+```
+
+
 
 ## TODO
 
 
-> GOAL: combine EPANET for pressure / flow simulation with energy systems simulations (omeof). Make a web interface to draw circuits and visualize results.
+> GOAL: combine EPANET for pressure / flow simulation with energy systems simulations (omeof). Make a web interface to draw circuits (using a JS node-graph editor) and visualize results.
 
 Ensure compatibility with
 

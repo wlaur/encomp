@@ -7,17 +7,19 @@ The dimensionalities defined in this module can be combined with ``*`` and ``/``
 Some commonly used derived dimensionalities (like density) are defined for convenience.
 """
 
-from typing import Union, TypeVar, List, Mapping
+from typing import Union, List, Mapping
+from typing_extensions import Annotated
+
 from decimal import Decimal
-import numpy as np
+import numpy.typing as npt
 
 from uncertainties.core import AffineScalarFunc
 from pint.unit import UnitsContainer
 
 # type alias for the magnitude input to Quantity
 # also accept Decimal and AffineScalarFunc (from uncertainties package)
-Magnitude = Union[float, int, Decimal, np.ndarray, AffineScalarFunc,
-                  List[float], List[int], List[Decimal], List[AffineScalarFunc]]
+MagnitudeValue = Union[float, int, Decimal, AffineScalarFunc]
+Magnitude = Union[MagnitudeValue, List[MagnitudeValue], npt.ArrayLike]
 
 # base dimensionalities
 DimensionlessDim = UnitsContainer()
@@ -42,6 +44,9 @@ VelocityDim = LengthDim / TimeDim
 DynamicViscosityDim = MassDim / LengthDim / TimeDim
 KinematicViscosityDim = LengthDim**2 / TimeDim
 FrequencyDim = 1 / TimeDim
+HeatCapacityDim = EnergyDim / MassDim / TemperatureDim
+SpecificEnthalpyDim = EnergyDim / MassDim
+
 
 _DIMENSIONALITIES: Mapping[UnitsContainer, str] = {
     DimensionlessDim: 'Dimensionless',
@@ -63,72 +68,38 @@ _DIMENSIONALITIES: Mapping[UnitsContainer, str] = {
     VelocityDim: 'Velocity',
     DynamicViscosityDim: 'DynamicViscosity',
     KinematicViscosityDim: 'KinematicViscosity',
-    FrequencyDim: 'Frequency'
+    FrequencyDim: 'Frequency',
+    HeatCapacityDim: 'HeatCapacity',
+    SpecificEnthalpyDim: 'SpecificEnthalpy'
 }
 
 _DIMENSIONALITIES_REV = {
     b: a for a, b in _DIMENSIONALITIES.items()}
 
 
-Dimensionless = TypeVar('Dimensionless')
-Dimensionless.dimensionality = DimensionlessDim
-
-Length = TypeVar('Length')
-Length.dimensionality = LengthDim
-
-Mass = TypeVar('Mass')
-Mass.dimensionality = MassDim
-
-Time = TypeVar('Time')
-Time.dimensionality = TimeDim
-
-Temperature = TypeVar('Temperature')
-Temperature.dimensionality = TemperatureDim
-
-Substance = TypeVar('Substance')
-Substance.dimensionality = SubstanceDim
-
-Current = TypeVar('Current')
-Current.dimensionality = CurrentDim
-
-Luminosity = TypeVar('Luminosity')
-Luminosity.dimensionality = LuminosityDim
-
-Area = TypeVar('Area')
-Area.dimensionality = AreaDim
-
-Volume = TypeVar('Volume')
-Volume.dimensionality = VolumeDim
-
-Pressure = TypeVar('Pressure')
-Pressure.dimensionality = PressureDim
-
-MassFlow = TypeVar('MassFlow')
-MassFlow.dimensionality = MassFlowDim
-
-VolumeFlow = TypeVar('VolumeFlow')
-VolumeFlow.dimensionality = VolumeFlowDim
-
-Density = TypeVar('Density')
-Density.dimensionality = DensityDim
-
-Energy = TypeVar('Energy')
-Energy.dimensionality = EnergyDim
-
-Power = TypeVar('Power')
-Power.dimensionality = PowerDim
-
-Velocity = TypeVar('Velocity')
-Velocity.dimensionality = VelocityDim
-
-DynamicViscosity = TypeVar('DynamicViscosity')
-DynamicViscosity.dimensionality = DynamicViscosityDim
-
-KinematicViscosity = TypeVar('KinematicViscosity')
-KinematicViscosity.dimensionality = KinematicViscosityDim
-
-Frequency = TypeVar('Frequency')
-Frequency.dimensionality = FrequencyDim
+# annotated types that contain a reference to the expected dimensionality
+Dimensionless = Annotated[UnitsContainer, DimensionlessDim]
+Length = Annotated[UnitsContainer, LengthDim]
+Mass = Annotated[UnitsContainer, MassDim]
+Time = Annotated[UnitsContainer, TimeDim]
+Temperature = Annotated[UnitsContainer, TemperatureDim]
+Substance = Annotated[UnitsContainer, SubstanceDim]
+Current = Annotated[UnitsContainer, CurrentDim]
+Luminosity = Annotated[UnitsContainer, LuminosityDim]
+Area = Annotated[UnitsContainer, AreaDim]
+Volume = Annotated[UnitsContainer, VolumeDim]
+Pressure = Annotated[UnitsContainer, PressureDim]
+MassFlow = Annotated[UnitsContainer, MassFlowDim]
+VolumeFlow = Annotated[UnitsContainer, VolumeFlowDim]
+Density = Annotated[UnitsContainer, DensityDim]
+Energy = Annotated[UnitsContainer, EnergyDim]
+Power = Annotated[UnitsContainer, PowerDim]
+Velocity = Annotated[UnitsContainer, VelocityDim]
+DynamicViscosity = Annotated[UnitsContainer, DynamicViscosityDim]
+KinematicViscosity = Annotated[UnitsContainer, KinematicViscosityDim]
+Frequency = Annotated[UnitsContainer, FrequencyDim]
+HeatCapacity = Annotated[UnitsContainer, HeatCapacityDim]
+SpecificEnthalpy = Annotated[UnitsContainer, SpecificEnthalpyDim]
 
 
 def get_dimensionality_name(dim: UnitsContainer) -> str:

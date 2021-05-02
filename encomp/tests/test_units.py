@@ -71,7 +71,6 @@ def test_Q():
         Q(Q(2, 'feet_water'), Q(321321, 'kg')).to(Q(123123, 'feet_water'))
 
     # the UnitContainer objects can be used to construct new dimensionalities
-    # TODO: possible to make __mul__ and __div__ work with TypeVars as well?
     Q[LengthDim * LengthDim * LengthDim / TemperatureDim](1, 'm³/K')
 
     with pytest.raises(Exception):

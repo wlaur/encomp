@@ -8,7 +8,7 @@ that the dimensionality of the unit is correct.
 
 .. todo::
     When/if pint implements a typing system (there is an open PR for this),
-    this module will have to be rewritten.
+    this module will have to be rewritten to be compatible with that.
 
 .. note::
     This module will modify the default pint registry -- do not import
@@ -16,10 +16,10 @@ that the dimensionality of the unit is correct.
 """
 
 import re
-from typing import Union, Any, TypeVar, Type, _GenericAlias
+from typing import Union, Type
+from typing_extensions import _AnnotatedAlias
 from contextlib import contextmanager
 from functools import lru_cache
-from typeguard import check_type
 
 import pint
 from pint.unit import UnitsContainer, Unit
@@ -30,7 +30,7 @@ from encomp.utypes import (Magnitude,
                            get_dimensionality_name)
 
 
-class QuantityError(ValueError):
+class DimensionalityError(ValueError):
     pass
 
 
@@ -111,30 +111,38 @@ class Quantity(pint.quantity.Quantity):
 
         # return a new subclass definition that restricts the dimensionality
         # the parent class is Quantity (this class does not restrict dimensionality)
+        # also override the __class__ attribute so that the internal pint API (__mul__, __div___, etc...)
+        # returns a Quantity object that does not restrict the dimensionality (since it will change
+        # when dividing or multiplying quantities with each other)
+        # the created Quantity will later be converted to the correct dimensional subclass
+        # when __new__() is evaluated
         DimensionalQuantity = type(f'Quantity[{dim_name}]',
                                    (Quantity,),
-                                   {'_expected_dimensionality': dim})
+                                   {'_expected_dimensionality': dim,
+                                    '__class__': Quantity})
 
         return DimensionalQuantity
 
     def __class_getitem__(cls,
-                          dim: Union[UnitsContainer, str, 'Quantity', TypeVar]) -> Type['Quantity']:
+                          dim: Union[UnitsContainer, str, 'Quantity', _AnnotatedAlias]) -> Type['Quantity']:
 
         # use same dimensionality as another Quantity
         if isinstance(dim, Quantity):
             dim = dim.dimensionality
 
-        # custom TypeVar objects with a "dimensionality" attribute
-        # TODO: this could be improved with the typing.Annotated class (Python 3.9+)
-        if isinstance(dim, TypeVar) and hasattr(dim, 'dimensionality'):
-            dim = dim.dimensionality
+        # annotated types with the dimensionality as metadata
+        if isinstance(dim, _AnnotatedAlias) and hasattr(dim, '__metadata__'):
+            dim = dim.__metadata__[0]
 
         if isinstance(dim, str):
 
             dim = dim.replace('[', '').replace(']', '')
 
-            if dim.title() in _DIMENSIONALITIES_REV:
-                dim = _DIMENSIONALITIES_REV[dim.title()]
+            # this is case-sensitive
+            if dim in _DIMENSIONALITIES_REV:
+                dim = _DIMENSIONALITIES_REV[dim]
+            else:
+                raise ValueError(f'Dimension {dim} is not defined')
 
         if not isinstance(dim, UnitsContainer):
             raise ValueError('Quantity type annotation must be a dimensionality, '
@@ -147,7 +155,9 @@ class Quantity(pint.quantity.Quantity):
                 unit: Union[Unit, UnitsContainer, str, 'Quantity']) -> 'Quantity':
 
         if isinstance(val, Quantity):
-            return val.to(unit)
+            # don't return val.to(unit) directly, since we want to make this
+            # the correct dimensional subclass as well
+            val = val._convert_magnitude(unit)
 
         # pint.Quantity.to_root_units calls __class__(magnitude, other)
         # where other is a UnitsContainer
@@ -174,15 +184,18 @@ class Quantity(pint.quantity.Quantity):
             dim_name = get_dimensionality_name(unit.dimensionality)
             expected_name = get_dimensionality_name(expected_dimensionality)
 
-            raise QuantityError(f'Quantity with unit "{unit}" has incorrect '
-                                f'dimensionality {dim_name}, '
-                                f'expected {expected_name}')
+            raise DimensionalityError(f'Quantity with unit "{unit}" has incorrect '
+                                      f'dimensionality {dim_name}, '
+                                      f'expected {expected_name}')
 
         # at this point the value and dimensionality are verified to be correct
         # pass the inputs to pint to actually construct the Quantity
         return super().__new__(cls, val, units=unit)
 
-    def _to_unit(self, unit: Union[Unit, str, 'Quantity']) -> Unit:
+    def _to_unit(self, unit: Union[Unit, UnitsContainer, str, 'Quantity']) -> Unit:
+
+        if isinstance(unit, UnitsContainer):
+            unit = self._REGISTRY.parse_units(str(unit))
 
         if isinstance(unit, str):
             unit = self._REGISTRY.parse_units(Quantity.correct_unit(unit))
@@ -192,14 +205,14 @@ class Quantity(pint.quantity.Quantity):
 
         return unit
 
-    def to(self, unit: Union[Unit, str, 'Quantity']) -> 'Quantity':
+    def to(self, unit: Union[Unit, UnitsContainer, str, 'Quantity']) -> 'Quantity':
 
         unit = self._to_unit(unit)
         m = self._convert_magnitude(unit)
 
         return self.__class__(m, unit)
 
-    def ito(self, unit: Union[Unit, str, 'Quantity']) -> None:
+    def ito(self, unit: Union[Unit, UnitsContainer, str, 'Quantity']) -> None:
 
         unit = self._to_unit(unit)
 
@@ -332,32 +345,3 @@ def quantity_format(fmt: str = 'compact'):
         yield
     finally:
         set_quantity_format(old_fmt)
-
-
-def isinstance_qty(obj: Any,
-                   expected: _GenericAlias) -> bool:
-    """
-    Checks if the input object is a Quantity, Magnitude or Unit.
-    Magnitude and Unit support different types (float, list for Magnitude and str for Unit).
-    Cannot use builtin :func:`isinstance`, since this does not support
-    type aliases.
-
-    Parameters
-    ----------
-    obj : Any
-        Object to check
-    expected : _GenericAlias
-        Expected type, ``encomp.utypes.Magnitude``, ``Unit`` or ``encomp.units.Quantity``.
-
-    Returns
-    -------
-    bool
-        Whether the input object matches the expected type
-    """
-
-    try:
-        check_type('obj', obj, expected)
-        return True
-
-    except TypeError:
-        return False

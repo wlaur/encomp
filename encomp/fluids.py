@@ -3,7 +3,8 @@ Classes and functions relating to fluid properties.
 Uses CoolProp as backend.
 """
 
-from typing import Mapping, Tuple, List
+from typing import Mapping, Tuple, List, Set
+from typing_extensions import Annotated
 
 from CoolProp.CoolProp import PropsSI
 from CoolProp.HumidAirProp import HAPropsSI
@@ -12,7 +13,7 @@ from encomp.structures import flatten
 from encomp.units import Quantity, Unit
 
 # type alias for a CoolProp property name
-CProperty = str
+CProperty = Annotated[str, 'CoolProp property name']
 
 
 class CoolPropFluid:
@@ -94,13 +95,13 @@ class CoolPropFluid:
         ('Z', ):                                        ('dimensionless', 'Compressibility factor')
     }
 
-    ALL_PROPERTIES = set(flatten(PROPERTY_MAP))
-    REPR_PROPERTIES = (('P', '.0f'), ('T', '.1f'),
-                       ('D', '.1f'), ('V', '.2g'))
+    ALL_PROPERTIES: Set[str] = set(flatten(PROPERTY_MAP))
+    REPR_PROPERTIES: Tuple[Tuple[str, str]] = (('P', '.0f'), ('T', '.1f'),
+                                               ('D', '.1f'), ('V', '.2g'))
 
     # preferred return units
     # key is the first name in the tuple used in PROPERTY_MAP etc...
-    RETURN_UNITS = {
+    RETURN_UNITS: Mapping[str, str] = {
         'P': 'kPa',
         'T': '°C',
         'TMAX': '°C',
@@ -411,16 +412,8 @@ class Fluid(CoolPropFluid):
 
     def __repr__(self) -> str:
 
-        repr_properties = self.REPR_PROPERTIES
-
-        # show the vapor quality in the repr in case of saturated steam
-        vapor_quality = self.Q
-
-        if vapor_quality > 0 and vapor_quality < 1:
-            repr_properties = list(repr_properties) + [('Q', '.2f')]
-
         props_str = ', '.join(f'{p}={self.get(p):{fmt}}'
-                              for p, fmt in repr_properties)
+                              for p, fmt in self.REPR_PROPERTIES)
 
         s = f'<{self.__class__.__name__} "{self.name}", {props_str}>'
 
@@ -455,12 +448,12 @@ class HumidAir(Fluid):
         ('Z', ):                          ('dimensionless', 'Compressibility factor')
     }
 
-    ALL_PROPERTIES = set(flatten(PROPERTY_MAP))
+    ALL_PROPERTIES: Set[str] = set(flatten(PROPERTY_MAP))
 
     # HAPropsSI has different parameter names
     # density is not defined, need to use either Vda (volume per dry air)
     # or Vha (per humid air)
-    RETURN_UNITS = {
+    RETURN_UNITS: Mapping[str, str] = {
         'P': 'kPa',
         'P_w': 'kPa',
         'M': 'cP',
@@ -469,8 +462,9 @@ class HumidAir(Fluid):
         'B': '°C',
     }
 
-    REPR_PROPERTIES = (('P', '.0f'), ('T', '.1f'), ('R', '.2f'),
-                       ('Vda', '.1f'), ('Vha', '.1f'), ('M', '.2g'))
+    REPR_PROPERTIES: Tuple[Tuple[str, str]] = (('P', '.0f'), ('T', '.1f'),
+                                               ('R', '.2f'), ('Vda', '.1f'),
+                                               ('Vha', '.1f'), ('M', '.2g'))
 
     def __init__(self, **kwargs: Quantity):
         """
@@ -551,5 +545,57 @@ class HumidAir(Fluid):
                               for p, fmt in self.REPR_PROPERTIES)
 
         s = f'<{self.__class__.__name__}, {props_str}>'
+
+        return s
+
+
+class Water(Fluid):
+
+    REPR_PROPERTIES: Tuple[Tuple[str, str]] = (('P', '.0f'), ('T', '.1f'),
+                                               ('D', '.1f'), ('V', '.1f'))
+
+    def __init__(self, **kwargs: Quantity):
+        """
+        Convenience class to access water and steam properties via CoolProp.
+
+        Parameters
+        ----------
+        kwargs: Quantity
+            Values for the two fixed points. The name of the keyword argument is the
+            CoolProp property name.
+        """
+
+        self.name = 'Water'
+
+        if len(kwargs) != 2:
+
+            if set(kwargs) == {'P', 'T', 'Q'}:
+
+                raise ValueError(
+                    'Cannot set both P, T and vapor quality Q. Remove one of P, T to '
+                    'get properties of saturated steam.')
+
+            raise ValueError(
+                f'Exactly two fixed points are required, passed {list(kwargs)}')
+
+        kwargs = list(kwargs.items())
+
+        self.point_1 = kwargs[0]
+        self.point_2 = kwargs[1]
+
+    def __repr__(self) -> str:
+
+        repr_properties = self.REPR_PROPERTIES
+
+        # show the vapor quality in the repr in case of saturated steam
+        vapor_quality = self.Q
+
+        if vapor_quality > 0 and vapor_quality < 1:
+            repr_properties = list(repr_properties) + [('Q', '.2f')]
+
+        props_str = ', '.join(f'{p}={self.get(p):{fmt}}'
+                              for p, fmt in repr_properties)
+
+        s = f'<{self.__class__.__name__} ({self.phase}), {props_str}>'
 
         return s
