@@ -205,10 +205,12 @@ def circle_line_intersection(A: Union[Tuple[float, float], geometry.Point2D],
                              y0: float,
                              r: float) -> Optional[List[Tuple[float, float]]]:
     """
-    Returns the intersection point(s) between:
+    Finds the intersection point(s) between:
 
     * Circle with center :math:`x_0, y_0` and radius :math:`r`
     * Line between two points :math:`A \\rightarrow B`.
+
+    Returns None in case the line does not intersect the circle.
 
     Parameters
     ----------
@@ -226,7 +228,8 @@ def circle_line_intersection(A: Union[Tuple[float, float], geometry.Point2D],
     Returns
     -------
     Optional[List[Tuple[float, float]]]
-        One or two intersection points between the circle and the line
+        One or two intersection points between the circle and the line,
+        or None in case the line and circle do no intersect.
     """
 
     if isinstance_types(A, Tuple[float, float]):

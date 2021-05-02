@@ -57,7 +57,7 @@ class CoolPropFluid:
         ('GAS_CONSTANT', 'gas_constant'):               ('J/mol/K', 'Molar gas constant'),
         ('GMOLAR_RESIDUAL', 'Gmolar_residual'):         ('J/mol/K', 'Residual molar Gibbs energy'),
         ('GMOLAR', 'Gmolar'):                           ('J/mol', 'Molar specific Gibbs energy'),
-        ('G', 'GMASS', 'Gmass'):                        ('J/kg', 'Mass specific Gibbs energy'),
+        ('G', 'GAMES', 'Gmass'):                        ('J/kg', 'Mass specific Gibbs energy'),
         ('HELMHOLTZMASS', 'Helmholtzmass'):             ('J/kg', 'Mass specific Helmholtz energy'),
         ('HELMHOLTZMOLAR', 'Helmholtzmolar'):           ('J/mol', 'Molar specific Helmholtz energy'),
         ('HMOLAR_RESIDUAL', 'Hmolar_residual'):         ('J/mol/K', 'Residual molar enthalpy'),

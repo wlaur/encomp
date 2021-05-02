@@ -70,8 +70,22 @@ def test_Q():
         # incorrect dimensionalities should raise Exception
         Q(Q(2, 'feet_water'), Q(321321, 'kg')).to(Q(123123, 'feet_water'))
 
-    # the UnitContainer objects can be used to construct new dimensionalities
-    Q[LengthDim * LengthDim * LengthDim / TemperatureDim](1, 'm³/K')
+    # the UnitsContainer objects can be used to construct new dimensionalities
+    Q[Length * Length * Length / Temperature](1, 'm³/K')
 
     with pytest.raises(Exception):
-        Q[PressureDim / AreaDim](1, 'bar/m')
+        Q[Pressure / Area](1, 'bar/m')
+
+    # # test the optional intervals for Quantity classes
+    # TODO: improve this
+    # LimitedPressure = Q[Pressure, Q(2, 'bar'), Q(2.5, 'bar')]
+    # LimitedPressure(230, 'kPa')
+
+    # with pytest.raises(Exception):
+    #     LimitedPressure(5, 'bar')
+
+    # HighPressure = Q['Pressure', Q(10, 'bar')]
+    # HighPressure(25, 'kPa')
+
+    # with pytest.raises(Exception):
+    #     HighPressure(5, 'bar')

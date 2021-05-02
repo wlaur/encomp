@@ -23,8 +23,8 @@ Ratio = Annotated[float, 'Ratio, > 0']
 
 @dataclass
 class Pump:
-
-    d: Quantity['Temperature']
+    pass
+    # d: Quantity['Temperature']
 
 
 class CentrifugalPump(Pump):

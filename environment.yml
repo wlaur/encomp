@@ -20,5 +20,8 @@ dependencies:
   - sympy
   - autopep8
   - typeguard
+  - xlsxwriter
+  - openpyxl
+  - seaborn
   - pip:
       - -r file:requirements.txt

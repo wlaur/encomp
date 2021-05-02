@@ -3,14 +3,13 @@ Contains settings used elsewhere in the library.
 """
 
 from pathlib import Path
-from pydantic.dataclasses import dataclass
+from pydantic import BaseSettings
 
 
 ENCOMP_BASE = Path(__file__).parent.resolve()
 
 
-@dataclass
-class Settings:
+class Settings(BaseSettings):
     """
     Settings class.
 
