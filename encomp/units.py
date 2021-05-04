@@ -1,23 +1,22 @@
 """
-Imports and extends the pint library for physical units.
+Imports and extends the ``pint`` library for physical units.
 Always import this module when working with ``encomp`` (most other modules
 will import this one).
 
-Implements a type-aware system on top of pint that verifies
+Implements a type-aware system on top of ``pint`` that verifies
 that the dimensionality of the unit is correct.
 
 .. todo::
-    When/if pint implements a typing system (there is an open PR for this),
+    When/if ``pint`` implements a typing system (there is an open PR for this),
     this module will have to be rewritten to be compatible with that.
 
 .. note::
-    This module will modify the default pint registry -- do not import
+    This module will modify the default ``pint`` registry -- do not import
     in case the default behavior of the unit registry is expected.
 """
 
 import re
-from typing import Union, Type, Tuple, Optional
-from contextlib import contextmanager
+from typing import Union, Type
 from functools import lru_cache
 
 import pint
@@ -324,26 +323,3 @@ def set_quantity_format(fmt: str = 'compact') -> None:
                          'or alias siunitx: ~L, compact: ~P')
 
     ureg.default_format = fmt
-
-
-@contextmanager
-def quantity_format(fmt: str = 'compact'):
-    """
-    Context manager version of :py:func:`encomp.units.set_quantity_format`
-    that resets to the previous value afterwards.
-
-    Parameters
-    ----------
-    fmt : str
-        Unit format string: one of ``'~P', '~L', '~H', '~Lx'``.
-        Also accepts aliases: ``'compact': '~P'`` and ``'siunitx': '~Lx'``.
-    """
-
-    old_fmt = ureg.default_format
-
-    set_quantity_format(fmt)
-
-    try:
-        yield
-    finally:
-        set_quantity_format(old_fmt)

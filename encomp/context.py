@@ -10,6 +10,9 @@ import tempfile
 from typing import Union
 
 
+from encomp.units import set_quantity_format, ureg
+
+
 @contextmanager
 def working_dir(path: Union[Path, str]) -> None:
     """
@@ -69,3 +72,26 @@ def silence_stdout() -> None:
             yield
     finally:
         sys.stdout = old_target
+
+
+@contextmanager
+def quantity_format(fmt: str = 'compact'):
+    """
+    Context manager version of :py:func:`encomp.units.set_quantity_format`
+    that resets to the previous value afterwards.
+
+    Parameters
+    ----------
+    fmt : str
+        Unit format string: one of ``'~P', '~L', '~H', '~Lx'``.
+        Also accepts aliases: ``'compact': '~P'`` and ``'siunitx': '~Lx'``.
+    """
+
+    old_fmt = ureg.default_format
+
+    set_quantity_format(fmt)
+
+    try:
+        yield
+    finally:
+        set_quantity_format(old_fmt)
