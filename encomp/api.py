@@ -6,8 +6,13 @@ them directly from the corresponding module.
 """
 
 from encomp.units import Quantity, Q
+from encomp.fluids import Fluid, HumidAir, Water
+from encomp.pumps import CentrifugalPump
+from encomp.thermo import heat_balance, intermediate_temperatures
 
 __all__ = [
-    'Quantity',
-    'Q'
+    'Quantity', 'Q',
+    'Fluid', 'HumidAir', 'Water',
+    'CentrifugalPump',
+    'heat_balance', 'intermediate_temperatures'
 ]

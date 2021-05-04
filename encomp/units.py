@@ -67,9 +67,6 @@ class Quantity(pint.quantity.Quantity):
     # will restrict the dimensionality when creating the object
     _expected_dimensionality = None
 
-    # valid range for this Quantity, this can be passed with the Annotated type
-    _interval = (None, None)
-
     # compact, Latex, HTML, Latex/siunitx formatting
     FORMATTING_SPECS = ('~P', '~L', '~H', '~Lx')
 
@@ -104,9 +101,7 @@ class Quantity(pint.quantity.Quantity):
         return cls._REGISTRY.parse_units(unit_name)
 
     @lru_cache
-    def _get_subclass_with_dimensions(dim: UnitsContainer,
-                                      interval: Tuple[Optional['Quantity'],
-                                                      Optional['Quantity']]) -> Type['Quantity']:
+    def _get_subclass_with_dimensions(dim: UnitsContainer) -> Type['Quantity']:
 
         if dim is not None:
             dim_name = get_dimensionality_name(dim)
@@ -127,35 +122,7 @@ class Quantity(pint.quantity.Quantity):
 
         return DimensionalQuantity
 
-    def __class_getitem__(cls,
-                          dim: Union[UnitsContainer,
-                                     Unit, str, 'Quantity', tuple]) -> Type['Quantity']:
-
-        # possible to restrict the values to an interval with
-        # Q[Dim, lower] or
-        # Q[Dim, lower, upper]
-        # TODO: this does not work with type checking, since it creates a new subclass
-        # at the moment it can only be used to check inputs when constructing Quantities
-        # might have to use Annotated somehow to get typeguard to check this correctly
-        if isinstance(dim, tuple):
-
-            dim, *interval = dim
-
-            if len(interval) == 1:
-                interval = (interval[0], None)
-
-            else:
-                interval = tuple(interval[:2])
-
-                if interval[1] < interval[0]:
-                    raise ValueError(f'Upper limit {interval[1]} cannot be below '
-                                     f'lower limit {interval[0]}')
-
-            raise NotImplementedError(
-                'TODO: implement intervals for Quantity classes')
-
-        else:
-            interval = (None, None)
+    def __class_getitem__(cls, dim: Union[UnitsContainer, Unit, str, 'Quantity']) -> Type['Quantity']:
 
         # use same dimensionality as another Quantity or Unit
         if isinstance(dim, (Quantity, Unit)):
@@ -177,7 +144,7 @@ class Quantity(pint.quantity.Quantity):
             raise ValueError('Quantity type annotation must be a dimensionality, '
                              f'passed "{dim}" ({type(dim)})')
 
-        return cls._get_subclass_with_dimensions(dim, interval)
+        return cls._get_subclass_with_dimensions(dim)
 
     def __new__(cls,
                 val: Union[Magnitude, 'Quantity'],
@@ -204,8 +171,7 @@ class Quantity(pint.quantity.Quantity):
             # in case this Quantity was initialized without specifying
             # the dimensionality, check the dimensionality and return the
             # subclass with correct dimensionality
-            DimensionalQuantity = cls._get_subclass_with_dimensions(unit.dimensionality,
-                                                                    cls._interval)
+            DimensionalQuantity = cls._get_subclass_with_dimensions(unit.dimensionality)
 
             # __new__ will return an instance of this subclass
             return DimensionalQuantity(val, unit)
@@ -224,20 +190,6 @@ class Quantity(pint.quantity.Quantity):
         # at this point the value and dimensionality are verified to be correct
         # pass the inputs to pint to actually construct the Quantity
         qty = super().__new__(cls, val, units=unit)
-
-        # in case the interval was specified, check it after constructing the Quantity
-        # the limits must be specified with the correct units
-        lower, upper = cls._interval
-
-        if lower is not None:
-            if qty < lower:
-                raise ValueError(
-                    f'{qty} is below the specified lower limit {lower}')
-
-        if upper is not None:
-            if qty > upper:
-                raise ValueError(
-                    f'{qty} is above the specified upper limit {upper}')
 
         return qty
 

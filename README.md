@@ -3,20 +3,61 @@
 
 > General-purpose library for *en*gineering *comp*utations, with focus on clean and consistent interfaces.
 
+## Features
+
+* Consistent interfaces to commonly used tools
+    * ``pint`` for physical units
+    * ``CoolProp`` for fluid properties
+    * ``fluids`` and ``thermo`` for process engineering calculations
+    * EPANET for piping network simulations
+    * The rest of the Python scientific stack
+* Strong type system that integrates physical units and their dimensionalities
+    * Leverages the standard library ``typing`` module, ``pint`` and ``typeguard`` to ensure that inputs and outputs to functions and classes match the specified dimensionalities
+    * Uses ``pydantic`` to create self-validating objects
+* Seamless integration with Excel and JSON formats
+
+
+> This library is under work: all features are not yet implemented.
+
+
+## Installation
+
+Start a terminal session and navigate to the root directory of this repository (the same directory as this ``.md``-file).
+
+First, setup an environment using ``conda``:
+
+```
+conda env create -f environment.yml
+```
+
+This will install the necessary dependencies into a new ``conda`` environment named ``encomp-env``.
+Some dependencies are installed with ``pip``.
+
+
+Then, install ``encomp`` into this environment:
+
+```
+conda activate encomp-env
+pip install .
+```
+
+
+### Removing the ``conda`` environment
+
+To completely remove the ``conda`` environment for ``encomp``:
+
+```
+conda remove -y --name encomp-env --all
+```
+
+
 ## Getting started
 
-Install ``encomp`` using ``pip``:
-
-
-```
-pip install encomp
-```
-
-To use ``encomp`` from a Jupyter Notebook, import the ``notebook`` module:
+To use ``encomp`` from a Jupyter Notebook, import the ``encomp.notebook`` module:
 
 
 ```python
-# imports commonly used functions, registers jupyter magics
+# imports commonly used functions, registers Notebook magics
 from encomp.notebook import *
 ```
 
@@ -26,41 +67,52 @@ The ``api`` module contains all public functions and classes:
 from encomp.api import ...
 ```
 
+### The ``Quantity`` class
 
-## Development
 
-First, setup a development environment using ``conda``:
+The main part of ``encomp`` is the ``encomp.Quantity`` class, which is an extension of ``pint.Quantity``.
+This class is used to construct objects with a *magnitude* and *unit*.
+It can also be used to restrict function and class attribute types.
+Each *dimensionality* (for example *pressure*, *length*, *time*) is represented by a subclass of ``Quantity``.
 
+To restrict the dimensionalities of a function's parameters and return value, use type annotations.
+This is more concise than writing explicit checks inside the function itself.
+The ``typeguard.typechecked`` decorator is automatically applied to all functions and methods inside the main ``encomp`` library.
+To use it on custom functions, apply the decorator explicitly.
+
+
+```python
+from typeguard import typechecked
+from encomp.api import Quantity
+
+@typechecked
+def some_func(T: Quantity['Temperature']) -> Quantity['Length']:
+    return T * Quantity(12.4, 'm/K')
+
+some_func(Q(12, 'delta_degC'))  # the dimensionalities check out
+some_func(Q(26, 'kW'))  # raises an exception
+# TypeError: type of argument "T" must be encomp.units.Quantity[Temperature]; got encomp.units.Quantity[Power] instead
 ```
-conda env create -f environment.yml
-```
 
-
-### Removing ``conda`` environments
-
-To completely remove the ``conda`` environment for ``encomp``:
-
-```
-conda remove -y --name encomp-env --all
-```
-
+The dimensionalities are listed the dict ``encomp.utypes._DIMENSIONALITIES``.
+To create a new dimensionality (for example temperature difference per length), use the ``pint.UnitsContainer`` objects defined in ``encomp.utypes``.
 
 
 ## TODO
 
 
-> GOAL: combine EPANET for pressure / flow simulation with energy systems simulations (omeof). Make a web interface to draw circuits (using a JS node-graph editor) and visualize results.
+* Combine EPANET for pressure / flow simulation with energy systems simulations (``omeof``)
+* Make a web interface to draw circuits (using a JS node-graph editor) and visualize results.
 
 Ensure compatibility with
 
 * numpy
 * pandas
-* Excel (via df.to_excel, both with openpyxl and xlsxwriter. also read from CSV, XLS, XLSX, XLSM)
+* Excel (via df.to_excel, both with ``openpyxl`` and ``xlsxwriter``
     * parse units from Excel (header name like "Pressure [bar]" etc...)
 * nbconvert (HTML and Latex/PDF output)
     * figure out how to typeset using SIUNITX
-* CoolProp
-
+    * look into JupyterBook and similar projects
 
 
 * http://www.thermocycle.net/

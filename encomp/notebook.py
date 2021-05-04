@@ -15,6 +15,7 @@ if not __INTERACTIVE__:
 
 import os
 import json
+import inspect
 from pathlib import Path
 from pprint import pprint
 from typing import Union, List, Tuple
@@ -24,19 +25,9 @@ import pandas as pd
 import matplotlib
 from matplotlib import pyplot as plt
 import seaborn as sns
-
 from uncertainties import ufloat
-from IPython.core.magic import Magics, magics_class, cell_magic, line_magic, needs_local_scope
-from IPython.core.magic_arguments import argument, magic_arguments, parse_argstring
-
-
-from encomp.misc import grid_dimensions
-from encomp.units import Q, Quantity
-
 
 from IPython.core.pylabtools import print_figure
-from IPython.core.getipython import get_ipython
-
 from IPython.display import (display,
                              Markdown,
                              HTML,
@@ -44,8 +35,14 @@ from IPython.display import (display,
                              Javascript,
                              Math,
                              IFrame,
-                             set_matplotlib_formats,
-                             DisplayHandle)
+                             set_matplotlib_formats)
+
+from encomp.misc import grid_dimensions
+from encomp.units import Q, Quantity
+
+# loads Jupyter Notebook magics: %%markdown, %%output, %%write and %read
+import encomp.magics
+
 
 plt.style.use('seaborn-notebook')
 matplotlib.rcParams['font.sans-serif'] = 'Arial'

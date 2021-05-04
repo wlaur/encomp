@@ -2,7 +2,10 @@
 Miscellaneous functions that do not fit anywhere else.
 """
 
-from typing import Any, _GenericAlias, Union, Type, Tuple
+import ast
+import asttokens
+
+from typing import Any, _GenericAlias, Union, Type, Tuple, List
 from typeguard import check_type
 
 
@@ -93,3 +96,36 @@ def grid_dimensions(N: int, nrows: int, ncols: int) -> Tuple[int, int]:
                 f'{N} items cannot be placed in a {nrows} × {ncols} grid')
 
     return nrows, ncols
+
+
+def name_assignments(src: str) -> List[Tuple[str, str]]:
+    """
+    Finds all names that are assigned in the input Python source code.
+
+    Parameters
+    ----------
+    src : str
+        Python source code
+
+    Returns
+    -------
+    List[Tuple[str, str]]
+        List of names and the assignment statements
+    """
+
+    assigned_names = []
+
+    atok = asttokens.ASTTokens(src, parse=True)
+
+    for node in ast.walk(atok.tree):
+        if hasattr(node, 'lineno'):
+            if isinstance(node, ast.Assign):
+                if isinstance(node.targets[0], ast.Name):
+
+                    start = node.first_token.startpos
+                    end = node.last_token.endpos
+                    assignment_src = atok.text[start:end]
+
+                    assigned_names.append((node.targets[0].id, assignment_src))
+
+    return assigned_names

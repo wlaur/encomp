@@ -23,5 +23,6 @@ dependencies:
   - xlsxwriter
   - openpyxl
   - seaborn
+  - asttokens
   - pip:
       - -r file:requirements.txt

@@ -3,7 +3,8 @@ Functions related to serializing and decoding (deserializing)
 objects to/from JSON.
 """
 
-from typing import Any, Union, List, Dict
+from typing import Any, Union, List, Dict, Callable
+import inspect
 import json
 from pathlib import Path
 import numpy as np
@@ -297,3 +298,68 @@ def custom_serializer(obj: Any) -> JSON:
 
     # fallback, this cannot be deserialized
     return str(obj)
+
+
+def save(names: Dict[str, Any],
+         path: Union[str, Path] = 'variables.json') -> None:
+    """
+    Saves variables from a Jupyter Notebook session as JSON.
+
+    Parameters
+    ----------
+    names : Dict[str, Any]
+        Names and their corresponding objects, for example output from ``locals()``
+    path : Union[str, Path]
+        File path or name of a JSON file, by default 'variables.json'
+    """
+
+    skip = [
+        'In',
+        'Out',
+        'ipython',
+        'get_ipython',
+        'exit',
+        'quit',
+        'getsizeof',
+        'SNS_BLUE',
+        'SNS_PALETTE'
+    ]
+
+    names = {
+        a: b for a, b in names.items() if
+        not a.startswith('_') and
+        not inspect.ismodule(b) and
+        not isinstance(b, Callable) and
+        a not in skip
+    }
+
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(json.dumps(names,
+                           default=serialize,
+                           indent=4))
+
+
+def load(path: Union[str, Path] = 'variables.json') -> Dict[str, Any]:
+    """
+    Load variables from a JSON file.
+
+    Parameters
+    ----------
+    path : Union[str, Path]
+        File path or name of a JSON file, by default 'variables.json'
+
+    Returns
+    -------
+    Dict[str, Any]
+        Dictionary with names and their corresponding objects
+    """
+
+    with open(path, 'r', encoding='utf-8') as f:
+        names = json.loads(f.read())
+
+    names_decoded = {}
+
+    for key, serialized in names.items():
+        names_decoded[key] = decode(serialized)
+
+    return names_decoded

@@ -75,17 +75,3 @@ def test_Q():
 
     with pytest.raises(Exception):
         Q[Pressure / Area](1, 'bar/m')
-
-    # # test the optional intervals for Quantity classes
-    # TODO: improve this
-    # LimitedPressure = Q[Pressure, Q(2, 'bar'), Q(2.5, 'bar')]
-    # LimitedPressure(230, 'kPa')
-
-    # with pytest.raises(Exception):
-    #     LimitedPressure(5, 'bar')
-
-    # HighPressure = Q['Pressure', Q(10, 'bar')]
-    # HighPressure(25, 'kPa')
-
-    # with pytest.raises(Exception):
-    #     HighPressure(5, 'bar')
