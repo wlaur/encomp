@@ -22,8 +22,7 @@
 
 ## Installation
 
-Start a terminal session and navigate to the root directory of this repository (the same directory as this ``.md``-file).
-
+Open a terminal and navigate to the root directory of this repository.
 First, setup an environment using ``conda``:
 
 ```
@@ -75,10 +74,9 @@ This class is used to construct objects with a *magnitude* and *unit*.
 It can also be used to restrict function and class attribute types.
 Each *dimensionality* (for example *pressure*, *length*, *time*) is represented by a subclass of ``Quantity``.
 
-To restrict the dimensionalities of a function's parameters and return value, use type annotations.
-This is more concise than writing explicit checks inside the function itself.
+Use type annotations to restrict the dimensionalities of a function's parameters and return value.
 The ``typeguard.typechecked`` decorator is automatically applied to all functions and methods inside the main ``encomp`` library.
-To use it on custom functions, apply the decorator explicitly.
+To use it on your own functions, apply the decorator explicitly.
 
 
 ```python
@@ -91,7 +89,7 @@ def some_func(T: Quantity['Temperature']) -> Quantity['Length']:
 
 some_func(Q(12, 'delta_degC'))  # the dimensionalities check out
 some_func(Q(26, 'kW'))  # raises an exception
-# TypeError: type of argument "T" must be encomp.units.Quantity[Temperature]; got encomp.units.Quantity[Power] instead
+# TypeError: type of argument "T" must be Quantity[Temperature]; got Quantity[Power] instead
 ```
 
 The dimensionalities are listed the dict ``encomp.utypes._DIMENSIONALITIES``.

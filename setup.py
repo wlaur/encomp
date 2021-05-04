@@ -5,7 +5,7 @@ from encomp import __version__
 setup(
     name='encomp',
     version=__version__,
-    description='General toolkit for engineering computations',
+    description='General-purpose library for engineering computations',
     license='MIT',
     author='William Laurén',
     author_email='lauren.william.a@gmail.com',
