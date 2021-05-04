@@ -109,7 +109,7 @@ class CoolPropFluid:
         'TTRIPLE': '°C',
         'T_FREEZE': '°C',
         'V': 'cP',
-        'H': 'kJ/kg/K',
+        'H': 'kJ/kg',
         'C': 'kJ/kg/K'
     }
 
