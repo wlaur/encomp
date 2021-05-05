@@ -89,7 +89,7 @@ def heat_balance(*args: Union[Quantity[Mass],
 
     # convert the temperature to a delta_T unit
     if 'dT' in vals:
-        vals['dT'].ito('delta_degC')
+        vals['dT'] = vals['dT'].to('delta_degC')
 
     # whether the calculation is per unit time or amount of mass / energy
     per_time = any(isinstance_types(
@@ -194,7 +194,7 @@ def intermediate_temperatures(T_b: Quantity[Temperature],
         T1, T2 = x
 
         eq1 = k / d * (T1 - T2) - h_out * (T2 - T_s) - \
-            epsilon * SIGMA * (T2**4 - T_s**4)
+            epsilon * SIGMA.m * (T2**4 - T_s**4)
 
         eq2 = k / d * (T1 - T2) - h_in * (T_b - T1)
 

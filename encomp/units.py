@@ -16,7 +16,7 @@ that the dimensionality of the unit is correct.
 """
 
 import re
-from typing import Union, Type
+from typing import Union, Type, Optional
 from functools import lru_cache
 
 import pint
@@ -25,6 +25,11 @@ from pint.unit import UnitsContainer, Unit
 from encomp.settings import SETTINGS
 from encomp.utypes import (Magnitude,
                            _DIMENSIONALITIES_REV,
+                           Density,
+                           Mass,
+                           MassFlow,
+                           Volume,
+                           VolumeFlow,
                            get_dimensionality_name)
 
 
@@ -170,7 +175,8 @@ class Quantity(pint.quantity.Quantity):
             # in case this Quantity was initialized without specifying
             # the dimensionality, check the dimensionality and return the
             # subclass with correct dimensionality
-            DimensionalQuantity = cls._get_subclass_with_dimensions(unit.dimensionality)
+            DimensionalQuantity = cls._get_subclass_with_dimensions(
+                unit.dimensionality)
 
             # __new__ will return an instance of this subclass
             return DimensionalQuantity(val, unit)
@@ -323,3 +329,37 @@ def set_quantity_format(fmt: str = 'compact') -> None:
                          'or alias siunitx: ~L, compact: ~P')
 
     ureg.default_format = fmt
+
+
+def convert_volume_mass(inp: Union[Quantity[Mass],
+                                   Quantity[MassFlow],
+                                   Quantity[Volume],
+                                   Quantity[VolumeFlow]],
+                        rho: Optional[Quantity[Density]] = None) -> Union[Quantity[Mass],
+                                                                          Quantity[MassFlow],
+                                                                          Quantity[Volume],
+                                                                          Quantity[VolumeFlow]]:
+    """
+    Converts mass to volume or vice versa.
+
+    Parameters
+    ----------
+    inp : Union[Quantity[Mass], Quantity[MassFlow], Quantity[Volume], Quantity[VolumeFlow]]
+        Input mass or volume
+    rho : Quantity[Density], optional
+        Density, by default 997 kg/m³
+
+    Returns
+    -------
+    Union[Quantity[Mass], Quantity[MassFlow], Quantity[Volume], Quantity[VolumeFlow]]
+        The input converted to mass or volume
+    """
+
+    if rho is None:
+        rho = Q(997, 'kg/m³')
+
+    if inp.dimensionality in (Mass, MassFlow):
+        return (inp / rho).to_reduced_units()
+
+    else:
+        return (inp * rho).to_reduced_units()

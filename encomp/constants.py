@@ -17,10 +17,10 @@ class Constants:
         Should some of these be changeable?
     """
 
-    R: float = 8.3144598  # kg * m² / K / mol / s²
-    SIGMA: float = 5.670374419e-8  # W / m**2 / K**4
+    R = Q(8.3144598, 'kg*m²/K/mol/s²')
+    SIGMA = Q(5.670374419e-8, 'W/m**2/K**4')
 
-    default_density: float = 997
+    default_density = Q(997, 'kg/m³')
 
     normal_conditions_pressure = Q(1, 'atm')
     normal_conditions_temperature = Q(0, '°C')
