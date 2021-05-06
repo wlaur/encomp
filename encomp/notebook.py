@@ -39,6 +39,7 @@ from IPython.display import (display,
 
 from encomp.misc import grid_dimensions
 from encomp.units import Q, Quantity
+from encomp.fluids import Fluid, Water, HumidAir
 
 # loads Jupyter Notebook magics: %%markdown, %%output, %%write and %read
 import encomp.magics

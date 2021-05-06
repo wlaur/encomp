@@ -100,7 +100,7 @@ class CoolPropFluid:
                                                ('D', '.1f'), ('V', '.2g'))
 
     # preferred return units
-    # key is the first name in the tuple used in PROPERTY_MAP etc...
+    # key is the first name in the tuple used in PROPERTY_MAP
     RETURN_UNITS: Mapping[str, str] = {
         'P': 'kPa',
         'T': '°C',
@@ -112,6 +112,12 @@ class CoolPropFluid:
         'H': 'kJ/kg',
         'C': 'kJ/kg/K'
     }
+
+    # numerical accuracy, determines if return values are zero
+    _EPS: float = 1e-9
+
+    # skip checking for zero for these properties
+    _SKIP_ZERO_CHECK: Tuple[str, ...] = ('PHASE', )
 
     def __init__(self, name: str):
         """
@@ -345,6 +351,13 @@ class CoolPropFluid:
 
         qty = Quantity(val, unit_output)
 
+        # value with dimensions cannot be zero
+        # CoolProp uses 0.0 for missing data, change this to NaN
+        # the values are not exactly 0, use the _EPS class attribute to check this
+        # skip this check for some properties
+        if output not in self._SKIP_ZERO_CHECK and not qty.dimensionless and val < self._EPS:
+            qty = Quantity(float('NaN'), unit_output)
+
         key = self.get_prop_key(output)
 
         if key[0] in self.RETURN_UNITS:
@@ -525,6 +538,9 @@ class HumidAir(Fluid):
                         prop_3, val_3)
 
         qty = Quantity(val, unit_output)
+
+        if output not in self._SKIP_ZERO_CHECK and not qty.dimensionless and val < self._EPS:
+            qty = Quantity(float('NaN'), unit_output)
 
         key = self.get_prop_key(output)
 
