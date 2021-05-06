@@ -22,8 +22,9 @@
 
 ## Installation
 
+Install Miniconda or Anconda if not already installed.
 Open a terminal and navigate to the root directory of this repository.
-First, setup an environment using ``conda``:
+Setup an environment using ``conda``:
 
 ```
 conda env create -f environment.yml
@@ -69,14 +70,14 @@ from encomp.api import ...
 ### The ``Quantity`` class
 
 
-The main part of ``encomp`` is the ``encomp.Quantity`` class, which is an extension of ``pint.Quantity``.
+The main part of ``encomp`` is the ``encomp.units.Quantity`` class, which is an extension of ``pint.Quantity``.
 This class is used to construct objects with a *magnitude* and *unit*.
 It can also be used to restrict function and class attribute types.
 Each *dimensionality* (for example *pressure*, *length*, *time*) is represented by a subclass of ``Quantity``.
 
 Use type annotations to restrict the dimensionalities of a function's parameters and return value.
 The ``typeguard.typechecked`` decorator is automatically applied to all functions and methods inside the main ``encomp`` library.
-To use it on your own functions, apply the decorator explicitly.
+To use it on your own functions, apply the decorator explicitly:
 
 
 ```python
@@ -92,8 +93,19 @@ some_func(Q(26, 'kW'))  # raises an exception
 # TypeError: type of argument "T" must be Quantity[Temperature]; got Quantity[Power] instead
 ```
 
-The dimensionalities are listed the dict ``encomp.utypes._DIMENSIONALITIES``.
-To create a new dimensionality (for example temperature difference per length), use the ``pint.UnitsContainer`` objects defined in ``encomp.utypes``.
+The dimensionality of a quantity can be specified with string values like ``'Temperature'`` or ``pint.UnitsContainer`` objects.
+To create a new dimensionality (for example temperature difference per length), combine the ``pint.UnitsContainer`` objects defined in ``encomp.utypes`` using ``*`` and ``/``:
+
+
+```python
+from encomp.api import Quantity
+from encomp.utypes import Temperature, Length
+
+qty = Quantity[Temperature / Length](1, 'delta_degC / km')
+
+# raises an exception since liter is Length**3 and the Quantity expects Length**2
+another_qty = Quantity[Temperature / Length**2](1, 'delta_degC / liter')
+```
 
 
 ## TODO
