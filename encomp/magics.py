@@ -170,7 +170,7 @@ cell._metadata = {{...cell._metadata, ...added_metadata}};
     @line_magic
     @needs_local_scope
     @magic_arguments()
-    @argument('-i', '--input', help='Input JSON')
+    @argument('input', type=str, help='Input JSON')
     def read(self, line, local_ns):
         """
         Line magic that reads variables stored with
@@ -181,7 +181,7 @@ cell._metadata = {{...cell._metadata, ...added_metadata}};
         args = parse_argstring(self.read, line)
         fpath = self._get_json_path(args.input)
 
-        if not fpath.is_file():
+        if not Path(fpath).is_file():
             raise FileNotFoundError(
                 f'Input JSON {fpath.name} does not exist')
 
@@ -191,7 +191,7 @@ cell._metadata = {{...cell._metadata, ...added_metadata}};
     @cell_magic
     @needs_local_scope
     @magic_arguments()
-    @argument('-o', '--output', help='Output JSON')
+    @argument('output', type=str, help='Output JSON')
     def write(self, line, cell, local_ns):
         """
         Cell magic that writes variables defined inside the cell
@@ -199,11 +199,7 @@ cell._metadata = {{...cell._metadata, ...added_metadata}};
         """
 
         args = parse_argstring(self.write, line)
-
-        if args.output is None:
-            fpath = 'variables.json'
-        else:
-            fpath = self._get_json_path(args.output)
+        fpath = self._get_json_path(args.output)
 
         exec(cell, globals(), local_ns)
 

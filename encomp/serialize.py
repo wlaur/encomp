@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import numpy as np
 import pandas as pd
+import sympy as sp
 from decimal import Decimal
 from uncertainties import ufloat
 from uncertainties.core import AffineScalarFunc
@@ -190,6 +191,9 @@ def decode(inp: JSON) -> Any:
             if inp['type'] == 'AffineScalarFunc':
                 return ufloat(*inp['data'])
 
+            if inp['type'] == 'Sympy':
+                return sp.sympify(inp['data'])
+
         # not possible to have a custom object as key,
         # JSON allows only str (float and int are converted to str)
         # not possible to determine if string "1" was originally an int,
@@ -282,6 +286,13 @@ def custom_serializer(obj: Any) -> JSON:
         return {
             'type': 'AffineScalarFunc',
             'data': [obj.nominal_value, obj.std_dev]
+        }
+
+    if isinstance(obj, sp.Basic):
+
+        return {
+            'type': 'Sympy',
+            'data': sp.srepr(obj)
         }
 
     if hasattr(obj, 'to_json'):
