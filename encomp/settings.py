@@ -22,5 +22,8 @@ class Settings(BaseSettings):
     additional_units: Path = data_directory / 'additional-units.txt'
     type_checking: bool = True
 
+    # whether to typeset sub- and superscripts for sympy symbols
+    typeset_symbol_scripts: bool = True
+
 
 SETTINGS = Settings()

@@ -79,9 +79,9 @@ def convert_gas_volume(V1: Union[Quantity[Volume], Quantity[VolumeFlow]],
     ----------
     V1 : Union[Quantity[Volume], Quantity[VolumeFlow]]
         Volume or volume flow :math:`V_1` at condition 1
-    condition_1 : Union[Tuple[Quantity[Pressure], Quantity[Temperature]], Literal[, optional
+    condition_1 : Union[Tuple[Quantity[Pressure], Quantity[Temperature]], Literal['N', 'S']], optional
         Pressure and temperature at condition 1, by default 'N'
-    condition_2 : Union[Tuple[Quantity[Pressure], Quantity[Temperature]], Literal[, optional
+    condition_2 : Union[Tuple[Quantity[Pressure], Quantity[Temperature]], Literal['N', 'S']], optional
         Pressure and temperature at condition 2, by default 'N'
     fluid_name : str, optional
         CoolProp name of the fluid, by default 'Air'

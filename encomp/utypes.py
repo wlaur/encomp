@@ -7,7 +7,7 @@ The dimensionalities defined in this module can be combined with ``*`` and ``/``
 Some commonly used derived dimensionalities (like density) are defined for convenience.
 """
 
-from typing import Union, List, Mapping
+from typing import Union, List, Mapping, Tuple
 
 from decimal import Decimal
 import numpy.typing as npt
@@ -70,6 +70,9 @@ _DIMENSIONALITIES: Mapping[UnitsContainer, str] = {
 
 _DIMENSIONALITIES_REV = {
     b: a for a, b in _DIMENSIONALITIES.items()}
+
+
+_BASE_SI_UNITS: Tuple[str, ...] = ('m', 'kg', 's', 'K', 'mol', 'A', 'cd')
 
 
 def get_dimensionality_name(dim: UnitsContainer) -> str:

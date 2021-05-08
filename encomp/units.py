@@ -16,8 +16,9 @@ that the dimensionality of the unit is correct.
 """
 
 import re
-from typing import Union, Type, Optional
+from typing import Union, Type, Optional, Dict
 from functools import lru_cache
+import sympy as sp
 
 import pint
 from pint.unit import UnitsContainer, Unit
@@ -25,6 +26,7 @@ from pint.unit import UnitsContainer, Unit
 from encomp.settings import SETTINGS
 from encomp.utypes import (Magnitude,
                            _DIMENSIONALITIES_REV,
+                           _BASE_SI_UNITS,
                            Density,
                            Mass,
                            MassFlow,
@@ -287,6 +289,62 @@ class Quantity(pint.quantity.Quantity):
             unit = Quantity.UNIT_CORRECTIONS[unit]
 
         return unit
+
+    def _sympy_(self):
+        """
+        Compatibility with ``sympy``.
+        Converts the unit dimensions to symbols and multiplies with the magnitude.
+        Need to use base units, compound units will not cancel out otherwise.
+        """
+
+        base_qty = self.to_base_units()
+
+        # use compact notation, a single symbol per dimension
+        # TODO: use \text{} for unit symbols
+        unit_repr = f'{base_qty.u:~}'
+
+        return sp.sympify(f'{base_qty.m} * {unit_repr}')
+
+    @classmethod
+    def get_dimension_symbol_map(cls) -> Dict[sp.Basic, Unit]:
+
+        if hasattr(cls, '_dimension_symbol_map') and cls._dimension_symbol_map is not None:
+            return cls._dimension_symbol_map
+
+        cls._dimension_symbol_map = {sp.sympify(n): Quantity.get_unit(n)
+                                     for n in _BASE_SI_UNITS}
+
+        return cls._dimension_symbol_map
+
+    @classmethod
+    def from_expr(cls, expr: sp.Basic) -> 'Quantity':
+        """
+        Converts a Sympy expression with unit symbols
+        into a Quantity. This only works in case expression
+        *only* contains base SI unit symbols.
+        """
+
+        _dimension_symbol_map = cls.get_dimension_symbol_map()
+
+        expr = expr.simplify()
+        args = expr.args
+
+        magnitude = float(args[0])
+
+        dimensions = args[1:]
+
+        unit = cls.get_unit('')
+
+        for d in dimensions:
+
+            unit_i = cls.get_unit('')
+
+            for symbol, power in d.as_powers_dict().items():
+                unit_i *= _dimension_symbol_map[symbol]**power
+
+            unit *= unit_i
+
+        return cls(magnitude, unit).to_base_units()
 
 
 # override the implementation of the Quantity class for the current registry

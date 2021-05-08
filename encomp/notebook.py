@@ -38,6 +38,7 @@ from IPython.display import (display,
                              set_matplotlib_formats)
 
 from encomp.misc import grid_dimensions
+from encomp.sympy import sp
 from encomp.units import Q, Quantity
 from encomp.fluids import Fluid, Water, HumidAir
 

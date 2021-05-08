@@ -14,6 +14,7 @@ from encomp.units import Quantity, Unit
 
 # type alias for a CoolProp property name
 CProperty = Annotated[str, 'CoolProp property name']
+CName = Annotated[str, 'CoolProp fluid name']
 
 
 class CoolPropFluid:
@@ -119,7 +120,7 @@ class CoolPropFluid:
     # skip checking for zero for these properties
     _SKIP_ZERO_CHECK: Tuple[str, ...] = ('PHASE', )
 
-    def __init__(self, name: str):
+    def __init__(self, name: CName):
         """
         Base class that represents a fluid (pure or mixture, gas or liquid).
         Uses *CoolProp* as backend to determine fluid properties.
@@ -236,7 +237,7 @@ class CoolPropFluid:
 
         Parameters
         ----------
-        name : str
+        name : CName
             The name of the fluid, same name as is used by CoolProp.
             Include the ``INCOMP::`` prefix and potential mixing ratio for incompressible mixtures.
 
@@ -269,6 +270,8 @@ class CoolPropFluid:
             unit_str = cls.PROPERTY_MAP[key][0]
             return Quantity.get_unit(unit_str)
 
+        raise ValueError(f'Key {key} does not exist')
+
     @classmethod
     def describe(cls, prop: CProperty) -> str:
 
@@ -284,6 +287,8 @@ class CoolPropFluid:
                 unit_repr = 'dimensionless'
 
             return f'{", ".join(key)}: {description} [{unit_repr}]'
+
+        raise ValueError(f'Key {key} does not exist')
 
     @classmethod
     def search(cls, inp: str) -> List[str]:
@@ -369,14 +374,14 @@ class CoolPropFluid:
 
 class Fluid(CoolPropFluid):
 
-    def __init__(self, name: str, **kwargs: Quantity):
+    def __init__(self, name: CName, **kwargs: Quantity):
         """
         Represents a fluid at a fixed state, for example at a
         specific temperature and pressure.
 
         Parameters
         ----------
-        name : str
+        name : CName
             Name of the fluid
         kwargs: Quantity
             Values for the two fixed points. The name of the keyword argument is the
