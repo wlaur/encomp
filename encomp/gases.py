@@ -52,9 +52,6 @@ def ideal_gas_density(T: Quantity[Temperature],
         Density of the ideal gas at the specified temperature and pressure
     """
 
-    # make sure to use an absolute temperature, pint raises an error otherwise
-    T = T.to('K')
-
     # directly from ideal gas law
     rho = (P * M) / (R * T)
 
@@ -105,10 +102,6 @@ def convert_gas_volume(V1: Union[Quantity[Volume], Quantity[VolumeFlow]],
 
     P1, T1 = condition_1
     P2, T2 = condition_2
-
-    # use absolute temperatures when dividing etc...
-    T1 = T1.to('K')
-    T2 = T2.to('K')
 
     Z1 = Fluid(fluid_name, T=T1, P=P1).Z
     Z2 = Fluid(fluid_name, T=T2, P=P2).Z

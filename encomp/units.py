@@ -17,11 +17,12 @@ that the dimensionality of the unit is correct.
 
 import re
 from typing import Union, Type, Optional, Dict
-from functools import lru_cache
+from functools import lru_cache, partial
 import sympy as sp
 
 import pint
-from pint.unit import UnitsContainer, Unit
+from pint.unit import UnitsContainer, Unit, UnitDefinition
+from pint.converters import ScaleConverter
 
 from encomp.settings import SETTINGS
 from encomp.utypes import (Magnitude,
@@ -43,6 +44,30 @@ class DimensionalityError(ValueError):
 # there should only be one registry at a time, pint raises ValueError
 # in case quantities from different registries interact
 ureg = pint.get_application_registry()
+
+
+# keep track of user-created dimensions
+_CUSTOM_DIMENSIONS = []
+
+# TODO: move the preprocessing from the Quantity class here instead
+ureg.preprocessors = [
+    lambda x: x.replace('%', 'percent')
+]
+
+# set to True, otherwise degC must be explicitly converted to K when multiplying
+ureg.autoconvert_offset_to_baseunit = True
+
+# enable support for matplotlib axis ticklabels etc...
+ureg.setup_matplotlib()
+
+
+try:
+    # define percent as 1 / 100
+    ureg.define(UnitDefinition('percent', '%',
+                (), ScaleConverter(1 / 100.0)))
+except pint.errors.RedefinitionError:
+    pass
+
 
 with open(SETTINGS.additional_units, 'r', encoding='utf-8') as f:
 
@@ -299,11 +324,27 @@ class Quantity(pint.quantity.Quantity):
 
         base_qty = self.to_base_units()
 
-        # use compact notation, a single symbol per dimension
-        # TODO: use \text{} for unit symbols
-        unit_repr = f'{base_qty.u:~}'
+        unit_parts = []
+        symbols = []
 
-        return sp.sympify(f'{base_qty.m} * {unit_repr}')
+        for unit_name, power in base_qty.u._units.items():
+            unit_symbol = self._REGISTRY.get_symbol(unit_name)
+            unit_parts.append(f'{unit_symbol}**{power}')
+            symbols.append(unit_symbol)
+
+        unit_repr = ' * '.join(unit_parts)
+
+        # use \text{symbol} to make sure that the unit symbols
+        # do not clash with commonly used symbols like "m" or "s"
+        expr = sp.sympify(f'{base_qty.m} * {unit_repr}').subs(
+            {n: self.get_unit_symbol(n)
+             for n in symbols})
+
+        return expr
+
+    @staticmethod
+    def get_unit_symbol(s: str) -> sp.Symbol:
+        return sp.Symbol('\\text{' + s + '}', nonzero=True, positive=True)
 
     @classmethod
     def get_dimension_symbol_map(cls) -> Dict[sp.Basic, Unit]:
@@ -311,8 +352,9 @@ class Quantity(pint.quantity.Quantity):
         if hasattr(cls, '_dimension_symbol_map') and cls._dimension_symbol_map is not None:
             return cls._dimension_symbol_map
 
-        cls._dimension_symbol_map = {sp.sympify(n): Quantity.get_unit(n)
-                                     for n in _BASE_SI_UNITS}
+        # also consider custom dimensions defined with encomp.units.define_dimensionality
+        cls._dimension_symbol_map = {cls.get_unit_symbol(n): cls.get_unit(n)
+                                     for n in list(_BASE_SI_UNITS) + _CUSTOM_DIMENSIONS}
 
         return cls._dimension_symbol_map
 
@@ -329,7 +371,11 @@ class Quantity(pint.quantity.Quantity):
         expr = expr.simplify()
         args = expr.args
 
-        magnitude = float(args[0])
+        try:
+            magnitude = float(args[0])
+        except TypeError as e:
+            raise ValueError(
+                f'Expression {expr} contains inconsistent units') from e
 
         dimensions = args[1:]
 
@@ -354,6 +400,46 @@ ureg.Quantity = Quantity
 
 # shorthand for the Quantity class
 Q = Quantity
+
+# shorthand for the @wraps(ret, args, strict=True|False) decorator
+wraps = ureg.wraps
+
+
+def define_dimensionality(name: str, symbol: str = None) -> None:
+    """
+    Defines a new dimensionality that can be combined with existing
+    dimensionalities. In case the dimensionality is already defined,
+    an error will be raised.
+
+    This can be used to define a new dimensionality for an amount
+    of some specific substance. For instance, if the dimensionalities
+    "air" and "fuel" are defined, the unit ``(kg air) / (kg fuel)`` has
+    the simplified dimensionality of ``[air] / [fuel]``.
+
+    .. note::
+        Make sure to only define new custom dimensions using this function,
+        since the unit needs to be appended to the ``_CUSTOM_DIMENSIONS`` list as well.
+
+    Parameters
+    ----------
+    name : str
+        Name of the dimensionality
+    symbol : str, optional
+        Optional (short) symbol, by default None
+    """
+
+    if name in _CUSTOM_DIMENSIONS:
+        raise ValueError('Cannot define new dimensionality with '
+                         f'name: {name}, a dimensionality with this name was already defined')
+
+    definition_str = f'{name} = [{name}]'
+
+    if symbol is not None:
+        definition_str = f'{definition_str} = {symbol}'
+
+    ureg.define(definition_str)
+
+    _CUSTOM_DIMENSIONS.append(name)
 
 
 def set_quantity_format(fmt: str = 'compact') -> None:

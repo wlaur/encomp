@@ -1,7 +1,7 @@
 import pytest
 from pytest import approx
 
-from encomp.units import Q
+from encomp.units import Q, wraps
 from encomp.utypes import *
 
 
@@ -75,3 +75,23 @@ def test_Q():
 
     with pytest.raises(Exception):
         Q[Pressure / Area](1, 'bar/m')
+
+    # percent or %
+    Q(1.124124e-3, '').to('%').to('percent')
+
+
+def test_wraps():
+
+    # @wraps(ret, args, strict=True|False) is a convenience
+    # decorator for making the input/output of a function into Quantity
+    # however, it does not enforce the return value
+
+    @wraps('kg', ('m', 'kg'), strict=True)
+    def func(a, b):
+
+        # this is incorrect, cannot add 1 to a dimensional Quantity
+        return a * b**2 + 1
+
+    assert isinstance(func(Q(1, 'yd'), Q(20, 'lbs')), Q['Mass'])
+
+    assert Q(1, 'bar').check(Pressure)
