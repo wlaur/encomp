@@ -90,8 +90,11 @@ def typeset(x: Optional[str]) -> Optional[str]:
         if ' ' in p or '\\' in p:
             continue
 
+        alpha_str = ''.join(n for n in p if n.isalpha())
+
         # typeset everything except 1-letter lower case as text
-        typeset_text = len(p) >= 2 or len(p) == 1 and p.isupper()
+        typeset_text = len(alpha_str) >= 2 or len(p) == 1 and p.isupper()
+
         if typeset_text:
 
             # handle chemical compounds
