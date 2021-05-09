@@ -322,6 +322,9 @@ class Quantity(pint.quantity.Quantity):
         Need to use base units, compound units will not cancel out otherwise.
         """
 
+        if self.dimensionless:
+            return sp.sympify(self.m)
+
         base_qty = self.to_base_units()
 
         unit_parts = []
@@ -333,6 +336,9 @@ class Quantity(pint.quantity.Quantity):
             symbols.append(unit_symbol)
 
         unit_repr = ' * '.join(unit_parts)
+
+        if not unit_repr.strip():
+            unit_repr = '1'
 
         # use \text{symbol} to make sure that the unit symbols
         # do not clash with commonly used symbols like "m" or "s"
