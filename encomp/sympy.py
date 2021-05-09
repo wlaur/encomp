@@ -3,9 +3,36 @@ Imports and extends the ``sympy`` library for symbolic mathematics.
 """
 
 from typing import Optional, Union, Literal
+import re
 import sympy as sp
 
 from encomp.settings import SETTINGS
+
+
+def typeset_chemical(s: str) -> str:
+
+    # TODO: improve this function
+
+    parts = []
+
+    for n in re.sub('[A-Z]_\d', '|\g<0>|', s).split('|'):
+
+        if re.match('[A-Z]_\d', n):
+            parts.extend([f'{n[:-2]}', '}',  f'_{n[-1]}', '\\text{'])
+        else:
+            parts.append(n)
+
+    parts = ['\\text{'] + [n for n in parts if n]
+
+    if parts[-1] == '\\text{':
+        parts = parts[:-1]
+
+    ret = ''.join(parts)
+
+    if ret.count('{') == ret.count('}') + 1:
+        ret += '}'
+
+    return ret
 
 
 def typeset(x: Optional[str]) -> Optional[str]:
@@ -64,8 +91,15 @@ def typeset(x: Optional[str]) -> Optional[str]:
             continue
 
         # typeset everything except 1-letter lower case as text
-        if len(p) >= 2 or len(p) == 1 and p.isupper():
-            parts[i] = '\\text{' + p + '}'
+        typeset_text = len(p) >= 2 or len(p) == 1 and p.isupper()
+        if typeset_text:
+
+            # handle chemical compounds
+            if re.match('[A-Z]', p):
+                p = typeset_chemical(p)
+                parts[i] = p
+            else:
+                parts[i] = '\\text{' + p + '}'
 
     return ','.join(parts)
 
