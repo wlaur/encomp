@@ -3,15 +3,16 @@ Classes that represent and model the behavior of different types of pumps.
 """
 
 
-from typing import Optional
+from typing import Optional, Tuple, Union
 from typing_extensions import Annotated
 import copy
-from pydantic.dataclasses import dataclass
+from pydantic import validator, BaseModel
 import numpy as np
 import numpy.typing as npt
 
-from encomp.units import Quantity
 from encomp.math import interpolate
+from encomp.units import Quantity
+from encomp.misc import isinstance_types
 
 
 # TODO: find a suitable solution to type hint np.ndarray (certain shape etc.)
@@ -21,13 +22,44 @@ PumpData = np.ndarray
 Ratio = Annotated[float, 'Ratio, > 0']
 
 
-@dataclass
-class Pump:
-    pass
-    # d: Quantity['Temperature']
+class Pump(BaseModel):
+
+    class Config:
+        arbitrary_types_allowed = True
 
 
 class CentrifugalPump(Pump):
+
+    data: PumpData
+    units: Union[Tuple[str, str], Tuple[str, str, str]]
+
+    @validator('data')
+    def check_data(cls, v):
+
+        if v.shape[1] not in (2, 3):
+            raise ValueError('Pump data must be an array with '
+                             f'2 or 3 columns, passed shape: {v.shape}')
+
+        return v
+
+    @validator('units')
+    def check_units(cls, v):
+
+        if not isinstance_types(Quantity(1, v[0]),
+                                Union[Quantity['MassFlow'],
+                                      Quantity['VolumeFlow']]):
+            raise ValueError('First unit is mass or volume flow, '
+                             f'passed "{v[0]}"')
+
+        if not isinstance_types(Quantity(1, v[1]), Quantity['Pressure']):
+            raise ValueError('Second unit is head (pressure), '
+                             f'passed "{v[1]}"')
+
+        if len(v) == 3 and not isinstance_types(Quantity(1, v[2]), Quantity['Power']):
+            raise ValueError('Third unit is power, '
+                             f'passed "{v[2]}"')
+
+        return v
 
     def flow(self, head):
         pass
@@ -100,14 +132,18 @@ class CentrifugalPump(Pump):
         return copy.deepcopy(self)
 
     @staticmethod
-    def grid_interpolation(x: npt.ArrayLike, arr: npt.ArrayLike, idx: int) -> np.ndarray:
+    def grid_interpolation(x: npt.ArrayLike,
+                           arr: npt.ArrayLike,
+                           idx: int) -> np.ndarray:
 
         x = np.array(x)
-        arr_interp = np.zeros((len(x), arr.shape[1]))
+        K = arr.shape[1]
+
+        arr_interp = np.zeros((len(x), K))
 
         arr_interp[:, idx] += x
 
-        for i in range(arr.shape[1]):
+        for i in range(K):
 
             # this dimension should not be interpolated
             # since it is the basis for interpolation

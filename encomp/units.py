@@ -401,6 +401,14 @@ class Quantity(pint.quantity.Quantity):
 
         return cls(magnitude, unit).to_base_units()
 
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, qty: 'Quantity') -> 'Quantity':
+        return cls(qty.m, qty.u)
+
 
 # override the implementation of the Quantity class for the current registry
 # this ensures that all Quantity objects created with this registry
