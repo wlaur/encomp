@@ -257,3 +257,48 @@ sp.Symbol.__ = lambda s, x: s.append(x, where='sup')
 
 # shorthand to add Delta before a symbol
 sp.Symbol.delta = lambda s: s.decorate(prefix='\\Delta')
+
+
+def simplify_exponents(expr: sp.Basic) -> sp.Basic:
+    """
+    Simplifies an expression by combining float and int exponents.
+    This is not done automatically by Sympy.
+
+    Adapted from
+    https://stackoverflow.com/questions/54243832/sympy-wont-simplify-or-expand-exponential-with-decimals.
+
+    Parameters
+    ----------
+    expr : sp.Basic
+        A Sympy expression, potentially containing mixed float and int exponents
+
+    Returns
+    -------
+    sp.Basic
+        Simplified expression with float and int exponents combined
+    """
+
+    def rewrite(expr, new_args):
+
+        new_args = list(new_args)
+        pow_val = new_args[1]
+        pow_val_int = int(new_args[1])
+
+        if pow_val.epsilon_eq(pow_val_int):
+            new_args[1] = sp.Integer(pow_val_int)
+
+        return type(expr)(*new_args)
+
+    def isfloatpow(expr):
+        return expr.is_Pow and expr.args[1].is_Float
+
+    if not expr.args:
+        return expr
+
+    else:
+        new_args = tuple(simplify_exponents(a) for a in expr.args)
+
+        if isfloatpow(expr):
+            return rewrite(expr, new_args)
+        else:
+            return type(expr)(*new_args)

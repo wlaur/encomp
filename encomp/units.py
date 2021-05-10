@@ -377,6 +377,9 @@ class Quantity(pint.quantity.Quantity):
         expr = expr.simplify()
         args = expr.args
 
+        if not args:
+            return cls(float(expr), 'dimensionless')
+
         try:
             magnitude = float(args[0])
         except TypeError as e:
