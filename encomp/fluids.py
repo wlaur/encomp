@@ -3,8 +3,7 @@ Classes and functions relating to fluid properties.
 Uses CoolProp as backend.
 """
 
-from typing import Mapping, Tuple, List, Set
-from typing_extensions import Annotated
+from typing import Mapping, Tuple, List, Set, Annotated
 
 from CoolProp.CoolProp import PropsSI
 from CoolProp.HumidAirProp import HAPropsSI

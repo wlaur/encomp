@@ -3,14 +3,13 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.8
+  - python=3.9
   - pip
   - pydantic
   - pytest
   - scipy
   - jupyter
   - CoolProp
-  - wntr
   - pint
   - fluids
   - thermo
@@ -24,5 +23,6 @@ dependencies:
   - openpyxl
   - seaborn
   - asttokens
+  # - wntr / no Python 3.9 support
   - pip:
       - -r file:requirements.txt

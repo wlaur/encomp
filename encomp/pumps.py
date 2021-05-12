@@ -3,8 +3,7 @@ Classes that represent and model the behavior of different types of pumps.
 """
 
 
-from typing import Optional, Tuple, Union
-from typing_extensions import Annotated
+from typing import Optional, Tuple, Union, Annotated
 import copy
 from pydantic import validator, BaseModel
 import numpy as np
