@@ -7,7 +7,7 @@ The dimensionalities defined in this module can be combined with ``*`` and ``/``
 Some commonly used derived dimensionalities (like density) are defined for convenience.
 """
 
-from typing import Union, List, Mapping, Tuple
+from typing import Union
 
 from decimal import Decimal
 import numpy.typing as npt
@@ -18,7 +18,7 @@ from pint.unit import UnitsContainer
 # type alias for the magnitude input to Quantity
 # also accept Decimal and AffineScalarFunc (from uncertainties package)
 MagnitudeValue = Union[float, int, Decimal, AffineScalarFunc]
-Magnitude = Union[MagnitudeValue, List[MagnitudeValue], npt.ArrayLike]
+Magnitude = Union[MagnitudeValue, list[MagnitudeValue], npt.ArrayLike]
 
 # base dimensionalities: the 7 base dimensions in the SI system and dimensionless
 Dimensionless = UnitsContainer()
@@ -45,7 +45,7 @@ KinematicViscosity = Length**2 / Time
 Frequency = 1 / Time
 
 
-_DIMENSIONALITIES: Mapping[UnitsContainer, str] = {
+_DIMENSIONALITIES: dict[UnitsContainer, str] = {
     Dimensionless: 'Dimensionless',
     Length: 'Length',
     Mass: 'Mass',
@@ -72,7 +72,7 @@ _DIMENSIONALITIES_REV = {
     b: a for a, b in _DIMENSIONALITIES.items()}
 
 
-_BASE_SI_UNITS: Tuple[str, ...] = ('m', 'kg', 's', 'K', 'mol', 'A', 'cd')
+_BASE_SI_UNITS: tuple[str, ...] = ('m', 'kg', 's', 'K', 'mol', 'A', 'cd')
 
 
 def get_dimensionality_name(dim: UnitsContainer) -> str:

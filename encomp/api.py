@@ -11,8 +11,12 @@ from encomp.pumps import CentrifugalPump
 from encomp.thermo import heat_balance, intermediate_temperatures
 
 __all__ = [
-    'Quantity', 'Q',
-    'Fluid', 'HumidAir', 'Water',
+    'Quantity',
+    'Q',
+    'Fluid',
+    'HumidAir',
+    'Water',
     'CentrifugalPump',
-    'heat_balance', 'intermediate_temperatures'
+    'heat_balance',
+    'intermediate_temperatures'
 ]

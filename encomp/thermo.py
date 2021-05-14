@@ -2,7 +2,7 @@
 Functions relating to thermodynamics.
 """
 
-from typing import Union, Tuple
+from typing import Union
 from scipy.optimize import fsolve
 
 from encomp.misc import isinstance_types
@@ -131,7 +131,7 @@ def intermediate_temperatures(T_b: Quantity[Temperature],
                               h_in: Quantity[HeatTransferCoefficient],
                               h_out: Quantity[HeatTransferCoefficient],
                               epsilon: float,
-                              tol: float = 1e-6) -> Tuple[Quantity[Temperature],
+                              tol: float = 1e-6) -> tuple[Quantity[Temperature],
                                                           Quantity[Temperature]]:
     """
     Solves a nonlinear system of equations to find intermediate
@@ -170,7 +170,7 @@ def intermediate_temperatures(T_b: Quantity[Temperature],
 
     Returns
     -------
-    Tuple[Quantity[Temperature], Quantity[Temperature]]
+    tuple[Quantity[Temperature], Quantity[Temperature]]
         The intermediate temperatures :math:`T_1` and :math:`T_2`:
         the surface temperatures of the inside and outside of the barrier
     """

@@ -18,7 +18,7 @@ import json
 import inspect
 from pathlib import Path
 from pprint import pprint
-from typing import Union, List, Tuple
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -74,7 +74,7 @@ class Graphic:
     IMAGE_EXTENSIONS = ('.png', '.jpg', 'jpeg', '.svg')
 
     def __init__(self,
-                 inp:  Union[GraphicInput, List[GraphicInput], Tuple[GraphicInput, ...]],
+                 inp:  Union[GraphicInput, list[GraphicInput], tuple[GraphicInput, ...]],
                  width: int = 600,
                  height: int = 400,
                  nrows: int = -1,
@@ -93,7 +93,7 @@ class Graphic:
 
         Parameters
         ----------
-        inp : Union[GraphicInput, List[GraphicInput], Tuple[GraphicInput, ...]]
+        inp : Union[GraphicInput, list[GraphicInput], tuple[GraphicInput, ...]]
             File path to and image file (PDF, SVG, PNG, JPEG, JPG) as string or ``pathlib.Path``,
             a Matplotlib figure, raw SVG markup, or a list or tuple of these.
         width : int, optional

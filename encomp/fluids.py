@@ -3,7 +3,7 @@ Classes and functions relating to fluid properties.
 Uses CoolProp as backend.
 """
 
-from typing import Mapping, Tuple, List, Set, Annotated
+from typing import Annotated
 
 from CoolProp.CoolProp import PropsSI
 from CoolProp.HumidAirProp import HAPropsSI
@@ -18,7 +18,7 @@ CName = Annotated[str, 'CoolProp fluid name']
 
 class CoolPropFluid:
 
-    PHASES: Mapping[float, str] = {
+    PHASES: dict[float, str] = {
         0.0: 'Liquid',
         5.0: 'Gas',
         6.0: 'Two-phase',
@@ -31,7 +31,7 @@ class CoolPropFluid:
     # unit and description for properties in function PropsSI
     # (name1, name2, ...): (unit, description)
     # names are case-sensitive
-    PROPERTY_MAP: Mapping[Tuple[str], Tuple[str]] = {
+    PROPERTY_MAP: dict[tuple[str, ...], tuple[str, str]] = {
         ('DELTA', 'Delta'):                             ('dimensionless', 'Reduced density (rho/rhoc)'),
         ('DMOLAR', 'Dmolar'):                           ('mol/m³', 'Molar density'),
         ('D', 'DMASS', 'Dmass'):                        ('kg/m³', 'Mass density'),
@@ -95,13 +95,13 @@ class CoolPropFluid:
         ('Z', ):                                        ('dimensionless', 'Compressibility factor')
     }
 
-    ALL_PROPERTIES: Set[str] = set(flatten(PROPERTY_MAP))
-    REPR_PROPERTIES: Tuple[Tuple[str, str]] = (('P', '.0f'), ('T', '.1f'),
+    ALL_PROPERTIES: set[str] = set(flatten(PROPERTY_MAP))
+    REPR_PROPERTIES: tuple[tuple[str, str]] = (('P', '.0f'), ('T', '.1f'),
                                                ('D', '.1f'), ('V', '.2g'))
 
     # preferred return units
     # key is the first name in the tuple used in PROPERTY_MAP
-    RETURN_UNITS: Mapping[str, str] = {
+    RETURN_UNITS: dict[str, str] = {
         'P': 'kPa',
         'T': '°C',
         'TMAX': '°C',
@@ -117,7 +117,7 @@ class CoolPropFluid:
     _EPS: float = 1e-9
 
     # skip checking for zero for these properties
-    _SKIP_ZERO_CHECK: Tuple[str, ...] = ('PHASE', )
+    _SKIP_ZERO_CHECK: tuple[str, ...] = ('PHASE', )
 
     def __init__(self, name: CName):
         """
@@ -250,7 +250,7 @@ class CoolPropFluid:
         self.name = name
 
     @classmethod
-    def get_prop_key(cls, prop: CProperty) -> Tuple[str, ...]:
+    def get_prop_key(cls, prop: CProperty) -> tuple[str, ...]:
 
         if prop not in cls.ALL_PROPERTIES:
             raise ValueError(
@@ -290,7 +290,7 @@ class CoolPropFluid:
         raise ValueError(f'Key {key} does not exist')
 
     @classmethod
-    def search(cls, inp: str) -> List[str]:
+    def search(cls, inp: str) -> list[str]:
         """
         Returns a list of CoolProp properties that matches the search input.
 
@@ -302,8 +302,8 @@ class CoolPropFluid:
 
         Returns
         -------
-        List[str]
-            List of CoolProp properties (with descriptions) that matches the search string.
+        list[str]
+            list of CoolProp properties (with descriptions) that matches the search string.
         """
 
         matches = []
@@ -317,8 +317,8 @@ class CoolPropFluid:
 
     def get(self,
             output: CProperty,
-            point_1: Tuple[CProperty, Quantity],
-            point_2: Tuple[CProperty, Quantity]) -> Quantity:
+            point_1: tuple[CProperty, Quantity],
+            point_2: tuple[CProperty, Quantity]) -> Quantity:
         """
         Wraps the function ``CoolProp.CoolProp.PropsSI``, handles input
         and output with :py:class:`encomp.units.Quantity` objects.
@@ -327,9 +327,9 @@ class CoolPropFluid:
         ----------
         output : CProperty
             Name of the output property
-        point_1 : Tuple[str, Quantity]
+        point_1 : tuple[str, Quantity]
             First fixed state variable: name and value of the property
-        point_2 : Tuple[str, Quantity]
+        point_2 : tuple[str, Quantity]
             Second fixed state variable: name and value of the property
 
         Returns
@@ -440,7 +440,7 @@ class Fluid(CoolPropFluid):
 class HumidAir(Fluid):
 
     # unit and description for properties in function HAPropsSI
-    PROPERTY_MAP: Mapping[Tuple[str], Tuple[str]] = {
+    PROPERTY_MAP: dict[tuple[str, ...], tuple[str, str]] = {
 
         ('B', 'Twb', 'T_wb', 'WetBulb'):  ('K', 'Wet-Bulb Temperature'),
         ('C', 'cp'):                      ('J/kg/K', 'Mixture specific heat per unit dry air'),
@@ -465,12 +465,12 @@ class HumidAir(Fluid):
         ('Z', ):                          ('dimensionless', 'Compressibility factor')
     }
 
-    ALL_PROPERTIES: Set[str] = set(flatten(PROPERTY_MAP))
+    ALL_PROPERTIES: set[str] = set(flatten(PROPERTY_MAP))
 
     # HAPropsSI has different parameter names
     # density is not defined, need to use either Vda (volume per dry air)
     # or Vha (per humid air)
-    RETURN_UNITS: Mapping[str, str] = {
+    RETURN_UNITS: dict[str, str] = {
         'P': 'kPa',
         'P_w': 'kPa',
         'M': 'cP',
@@ -479,7 +479,7 @@ class HumidAir(Fluid):
         'B': '°C',
     }
 
-    REPR_PROPERTIES: Tuple[Tuple[str, str]] = (('P', '.0f'), ('T', '.1f'),
+    REPR_PROPERTIES: tuple[tuple[str, str]] = (('P', '.0f'), ('T', '.1f'),
                                                ('R', '.2f'), ('Vda', '.1f'),
                                                ('Vha', '.1f'), ('M', '.2g'))
 
@@ -571,7 +571,7 @@ class HumidAir(Fluid):
 
 class Water(Fluid):
 
-    REPR_PROPERTIES: Tuple[Tuple[str, str]] = (('P', '.0f'), ('T', '.1f'),
+    REPR_PROPERTIES: tuple[tuple[str, str]] = (('P', '.0f'), ('T', '.1f'),
                                                ('D', '.1f'), ('V', '.1f'))
 
     def __init__(self, **kwargs: Quantity):

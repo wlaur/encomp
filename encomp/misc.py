@@ -5,7 +5,7 @@ Miscellaneous functions that do not fit anywhere else.
 import ast
 import asttokens
 
-from typing import Any, _GenericAlias, Union, Type, Tuple, List
+from typing import Any, _GenericAlias, Union, Type
 from typeguard import check_type
 
 
@@ -43,7 +43,7 @@ def isinstance_types(obj: Any,
         return False
 
 
-def grid_dimensions(N: int, nrows: int, ncols: int) -> Tuple[int, int]:
+def grid_dimensions(N: int, nrows: int, ncols: int) -> tuple[int, int]:
     """
     Returns image grid dimensions (rows and columns) based
     on the total number of items ``N``.
@@ -59,7 +59,7 @@ def grid_dimensions(N: int, nrows: int, ncols: int) -> Tuple[int, int]:
 
     Returns
     -------
-    Tuple[int, int]
+    tuple[int, int]
         Number of rows and columns for a grid that fits all items
     """
 
@@ -98,7 +98,7 @@ def grid_dimensions(N: int, nrows: int, ncols: int) -> Tuple[int, int]:
     return nrows, ncols
 
 
-def name_assignments(src: str) -> List[Tuple[str, str]]:
+def name_assignments(src: str) -> list[tuple[str, str]]:
     """
     Finds all names that are assigned in the input Python source code.
 
@@ -109,7 +109,7 @@ def name_assignments(src: str) -> List[Tuple[str, str]]:
 
     Returns
     -------
-    List[Tuple[str, str]]
+    list[tuple[str, str]]
         List of names and the assignment statements
     """
 

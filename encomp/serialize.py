@@ -3,7 +3,7 @@ Functions related to serializing and decoding (deserializing)
 objects to/from JSON.
 """
 
-from typing import Any, Union, List, Dict, Callable
+from typing import Any, Union, Callable
 import inspect
 import json
 from pathlib import Path
@@ -27,8 +27,8 @@ JSONBase = Union[dict,
                  None]
 
 JSON = Union[JSONBase,
-             List[JSONBase],
-             Dict[str, JSONBase]]
+             list[JSONBase],
+             dict[str, JSONBase]]  # don't use int/float dict keys
 
 
 def is_serializable(x: Any) -> bool:
@@ -311,14 +311,14 @@ def custom_serializer(obj: Any) -> JSON:
     return str(obj)
 
 
-def save(names: Dict[str, Any],
+def save(names: dict[str, Any],
          path: Union[str, Path] = 'variables.json') -> None:
     """
     Saves variables from a Jupyter Notebook session as JSON.
 
     Parameters
     ----------
-    names : Dict[str, Any]
+    names : dict[str, Any]
         Names and their corresponding objects, for example output from ``locals()``
     path : Union[str, Path]
         File path or name of a JSON file, by default 'variables.json'
@@ -350,7 +350,7 @@ def save(names: Dict[str, Any],
                            indent=4))
 
 
-def load(path: Union[str, Path] = 'variables.json') -> Dict[str, Any]:
+def load(path: Union[str, Path] = 'variables.json') -> dict[str, Any]:
     """
     Load variables from a JSON file.
 
@@ -361,7 +361,7 @@ def load(path: Union[str, Path] = 'variables.json') -> Dict[str, Any]:
 
     Returns
     -------
-    Dict[str, Any]
+    dict[str, Any]
         Dictionary with names and their corresponding objects
     """
 

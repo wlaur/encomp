@@ -16,7 +16,7 @@ that the dimensionality of the unit is correct.
 """
 
 import re
-from typing import Union, Type, Optional, Dict
+from typing import Union, Type, Optional
 from functools import lru_cache, partial
 import sympy as sp
 
@@ -353,7 +353,7 @@ class Quantity(pint.quantity.Quantity):
         return sp.Symbol('\\text{' + s + '}', nonzero=True, positive=True)
 
     @classmethod
-    def get_dimension_symbol_map(cls) -> Dict[sp.Basic, Unit]:
+    def get_dimension_symbol_map(cls) -> dict[sp.Basic, Unit]:
 
         if hasattr(cls, '_dimension_symbol_map') and cls._dimension_symbol_map is not None:
             return cls._dimension_symbol_map

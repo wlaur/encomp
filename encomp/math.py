@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Union, Callable, Tuple, Optional, List
+from typing import Union, Callable, Optional
 from scipy.interpolate import interp1d
 from sympy import geometry
 import numpy.typing as npt
@@ -9,7 +9,7 @@ from encomp.misc import isinstance_types
 
 def interpolate(x: npt.ArrayLike,
                 y: npt.ArrayLike,
-                fill_value: Union[str, Tuple[float, float]] = 'nan') -> Callable[[float], float]:
+                fill_value: Union[str, tuple[float, float]] = 'nan') -> Callable[[float], float]:
     """
     Wrapper around ``scipy.interpolate.interp1d``
     that returns function for interpolating :math:`x` vs :math:`x`.
@@ -199,11 +199,11 @@ def r_squared(y_pred: npt.ArrayLike,
     return R2
 
 
-def circle_line_intersection(A: Union[Tuple[float, float], geometry.Point2D],
-                             B: Union[Tuple[float, float], geometry.Point2D],
+def circle_line_intersection(A: Union[tuple[float, float], geometry.Point2D],
+                             B: Union[tuple[float, float], geometry.Point2D],
                              x0: float,
                              y0: float,
-                             r: float) -> Optional[List[Tuple[float, float]]]:
+                             r: float) -> Optional[list[tuple[float, float]]]:
     """
     Finds the intersection point(s) between:
 
@@ -214,9 +214,9 @@ def circle_line_intersection(A: Union[Tuple[float, float], geometry.Point2D],
 
     Parameters
     ----------
-    A : Union[Tuple[float], geometry.Point2D]
+    A : Union[tuple[float], geometry.Point2D]
         start of the line
-    B : Union[Tuple[float], geometry.Point2D]
+    B : Union[tuple[float], geometry.Point2D]
         end of the line
     x0 : float
         x-coordinate for circle center
@@ -227,15 +227,15 @@ def circle_line_intersection(A: Union[Tuple[float, float], geometry.Point2D],
 
     Returns
     -------
-    Optional[List[Tuple[float, float]]]
+    Optional[list[tuple[float, float]]]
         One or two intersection points between the circle and the line,
         or None in case the line and circle do no intersect.
     """
 
-    if isinstance_types(A, Tuple[float, float]):
+    if isinstance_types(A, tuple[float, float]):
         A = geometry.Point2D(A[0], A[1])
 
-    if isinstance_types(B, Tuple[float, float]):
+    if isinstance_types(B, tuple[float, float]):
         B = geometry.Point2D(B[0], B[1])
 
     circle = geometry.Circle((x0, y0), r)

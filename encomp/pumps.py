@@ -3,7 +3,7 @@ Classes that represent and model the behavior of different types of pumps.
 """
 
 
-from typing import Optional, Tuple, Union, Annotated
+from typing import Optional, Union, Annotated
 import copy
 from pydantic import validator, BaseModel
 import numpy as np
@@ -30,7 +30,7 @@ class Pump(BaseModel):
 class CentrifugalPump(Pump):
 
     data: PumpData
-    units: Union[Tuple[str, str], Tuple[str, str, str]]
+    units: Union[tuple[str, str], tuple[str, str, str]]
 
     @validator('data')
     def check_data(cls, v):
