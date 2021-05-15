@@ -16,8 +16,7 @@ from encomp.misc import isinstance_types
 
 # TODO: find a suitable solution to type hint np.ndarray (certain shape etc.)
 # maybe Annotated[numpy.typing.ArrayLike, shape] will work?
-PumpData = np.ndarray
-
+PumpData = Annotated[np.ndarray, '2D or 3D array']
 Ratio = Annotated[float, 'Ratio, > 0']
 
 
@@ -38,6 +37,17 @@ class CentrifugalPump(Pump):
         if v.shape[1] not in (2, 3):
             raise ValueError('Pump data must be an array with '
                              f'2 or 3 columns, passed shape: {v.shape}')
+
+        return v
+
+    @validator('units', pre=True)
+    def check_units_type(cls, v):
+
+        # pydantic will cast set to tuple, cannot do this
+        # here since the order of the elements matters
+        if isinstance(v, set):
+            raise TypeError(
+                f'Do not pass units as a set, use list or tuple instead: {v}')
 
         return v
 

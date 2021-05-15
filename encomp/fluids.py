@@ -127,10 +127,7 @@ class CoolPropFluid:
         This class should not be used directly, since it does not contain a fixed
         point to determine fluid properties (temperature, pressure, enthalpy, entropy, ...).
 
-        Fluid names
-        -----------
-
-        Fluid names for pure fluids are not case-sensitive, however the mixture names are.
+        Fluid names for pure fluids are not case-sensitive, but the mixture names are.
         The following fluid names are recognized by CoolProp:
 
         **Pure**
@@ -217,13 +214,11 @@ class CoolPropFluid:
 
         Refer to the CoolProp documentation for more information:
 
-        - http://www.coolprop.org/fluid_properties/PurePseudoPure.html#list-of-fluids
-        - http://www.coolprop.org/fluid_properties/Mixtures.html#binary-pairs
-        - http://www.coolprop.org/fluid_properties/Incompressibles.html#id180
-        #table-of-string-inputs-to-propssi-function
-        - http://www.coolprop.org/coolprop/HighLevelAPI.html
-        #table-of-inputs-outputs-to-hapropssi
-        - http://www.coolprop.org/fluid_properties/HumidAir.html
+        * http://www.coolprop.org/fluid_properties/PurePseudoPure.html#list-of-fluids
+        * http://www.coolprop.org/fluid_properties/Mixtures.html#binary-pairs
+        * http://www.coolprop.org/fluid_properties/Incompressibles.html#the-different-fluids
+        * http://www.coolprop.org/coolprop/HighLevelAPI.html#table-of-inputs-outputs-to-hapropssi
+        * http://www.coolprop.org/fluid_properties/HumidAir.html
 
         The names ``Water`` and ``HEOS::Water`` uses the formulation defined by IAPWS-95.
         Use the name ``IF97::Water`` to instead use the slightly faster
@@ -231,7 +226,6 @@ class CoolPropFluid:
         In most cases, the difference between IAPWS-95 and IAPWS-97 is negligible.
         Read CoolProp's `introduction
         <http://www.coolprop.org/fluid_properties/IF97.html>`_ about water properties for more information.
-
 
 
         Parameters

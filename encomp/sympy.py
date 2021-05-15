@@ -137,8 +137,7 @@ def decorate(self,
     is introduced. To keep things simple, make sure that the input symbol
     is a simple symbol.
 
-    Use the ``append`` method (with ``where='sub'|'sup'`) to append
-    to an existing sub- or superscript in the suffix.
+    Use the ``append`` method to append to an existing sub- or superscript in the suffix.
 
     Parameters
     ----------
@@ -232,9 +231,7 @@ def append(self, s: Union[str, int],
         base_symbol = ''.join(base_symbol)
 
         # assume that the input Latex symbol is correct, don't deal with unbalanced braces
-        # this is a builtin str method in Python 3.9+
-        if existing_suffix.startswith('{') and existing_suffix.endswith('}'):
-            existing_suffix = existing_suffix[1:-1]
+        existing_suffix = existing_suffix.removeprefix('{').removesuffix('}')
 
         existing_suffix += str(s)
 

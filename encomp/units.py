@@ -88,6 +88,10 @@ ureg.default_format = '~P'  # compact format
 
 
 class Quantity(pint.quantity.Quantity):
+    """
+    Subclass of ``pint.quantity.Quantity`` with additional functionality
+    and integration with other libraries.
+    """
 
     _REGISTRY = ureg
     default_format = _REGISTRY.default_format

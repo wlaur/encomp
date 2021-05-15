@@ -1,1 +1,6 @@
 asttokens
+Sphinx
+nbsphinx
+pydata-sphinx-theme
+sphinx-gallery
+sphinx-autodoc-typehints
