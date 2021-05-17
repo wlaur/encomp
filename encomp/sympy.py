@@ -48,7 +48,8 @@ def to_identifier(s: Union[sp.Symbol, str]) -> str:
     s = s.replace('^', '__')
     s = s.replace("'", 'prime')
 
-    remove = ['\\', '{', '}', '.', ';', '"']
+    # TODO: just remove all non-alphanumeric?
+    remove = ['\\', '{', '}', '.', ';', '"', '*', '+', '-', '/']
 
     for n in remove:
         s = s.replace(n, '')
@@ -386,9 +387,9 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
                 secondary_equations: Optional[list[sp.Equality]] = None,
                 units: bool = False) -> Callable:
     """
-    Returns a function that maps a set of :math:`x`-values to a set of :math:`x`-values.
+    Returns a function that maps a set of :math:`x`-values to a set of :math:`y`-values.
     The function will have input parameters corresponding to the symbols in ``x_symbols``,
-    and returns a tuple of values for each symbol in ``y_symbols``.
+    and returns a dict with values for each symbol in ``y_symbols``.
     The list ``y_solution`` contains an explicit solution for all the specified :math:`y`-values
     in terms of :math:`x`-values.
     :math:`x`-values that are not part of ``x_symbols`` (i.e. mapping parameters) will have
@@ -417,9 +418,10 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
     Returns
     -------
     Callable
-        Mapping function that takes :math:`M` inputs (as dict) and
-        returns :math:`N` outputs (as dict). In case ``units=True`` the inputs
-        and outputs are Quantity, otherwise they are float.
+        Mapping function that takes :math:`M` inputs (dict) and
+        returns :math:`N` outputs (dict). In case ``units=True`` the
+        outputs are Quantity, otherwise they are float. The inputs are always Quantity,
+        if ``units=False`` they are converted to float with ``to_base_unit()``.
     """
 
     if isinstance(y_symbols, sp.Symbol):
@@ -513,7 +515,7 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
     # all x-values are either known, dimensionality symbols (kg, m, K) or mapping parameters
 
     # these functions can be constructed beforehand, calling
-    # the mapping function will only evaluated them
+    # the mapping function will only evaluate them
     fns = [(yi, get_function(e, units=units)) for yi, e in y_solution
            if isinstance(e, sp.Basic)]
 
