@@ -48,6 +48,7 @@ def to_identifier(s: Union[sp.Symbol, str]) -> str:
     s = s.replace(',', '_')
     s = s.replace('^', '__')
     s = s.replace("'", 'prime')
+    s = s.replace('lambda', 'lambda_')
 
     # TODO: just remove all non-alphanumeric?
     remove = ['\\', '{', '}', '.', ';', '"', '*', '+', '-', '/']
