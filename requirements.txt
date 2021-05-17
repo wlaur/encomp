@@ -1,4 +1,5 @@
 asttokens
+symbolic_equation
 Sphinx
 nbsphinx
 pydata-sphinx-theme

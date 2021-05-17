@@ -11,6 +11,7 @@ from sympy.utilities.lambdify import lambdify, lambdastr
 from sympy import default_sort_key
 from functools import lru_cache
 import numpy.typing as npt
+from symbolic_equation import Eq as Eq_symbolic
 
 
 from encomp.settings import SETTINGS
@@ -847,3 +848,27 @@ def simplify_exponents(expr: sp.Basic) -> sp.Basic:
             return rewrite(expr, new_args)
         else:
             return type(expr)(*new_args)
+
+
+def display_equation(eqn: sp.Equality,
+                     tag: Optional[str] = None, **kwargs) -> None:
+    """
+    Displays a Sympy equation (``sp.Equality``) using
+    the package ``symbolic_equation``, which displays
+    multi-line equations.
+    ``kwargs`` are passed to ``symbolic_equation.Eq``.
+    Calls ``IPython.display.display``.
+
+    Parameters
+    ----------
+    eqn : sp.Equality
+        Equation to display
+    tag : Optional[str], optional
+        Equation tag displayed on the right side inside parens, by default None
+    """
+    from IPython.display import display
+
+    eqn = Eq_symbolic(lhs=eqn.lhs,
+                      rhs=eqn.rhs,
+                      tag=tag, **kwargs)
+    display(eqn)
