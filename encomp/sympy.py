@@ -6,6 +6,7 @@ Contains helper functions for converting a Sympy expression to a lambda function
 
 from typing import Callable, Optional, Union, Literal
 import re
+import json
 import sympy as sp
 from sympy.utilities.lambdify import lambdify, lambdastr
 from sympy import default_sort_key
@@ -635,7 +636,7 @@ def mapping_repr(y_solution: list[tuple[sp.Symbol, tuple[str, list[str]]]],
     mapping_name : str, optional
         Name of the mapping function, by default 'mapping'
     units : bool, optional
-        Whether to keep the units, if False Quantity is converted
+        Whether to keep the units in the mapping return dict, if False Quantity is converted
         to float (after calling ``to_base_units()``), by default False
 
     Returns
@@ -643,17 +644,27 @@ def mapping_repr(y_solution: list[tuple[sp.Symbol, tuple[str, list[str]]]],
     str
         Python source code that defines the mapping function. Contains
         module-level definitions and a function definition.
+        The mapping function takes a singe dict as parameter. Keys are
+        symbols or string representations of symbols
+        (output from :py:func:`encomp.sympy.to_identifier`). The mapping
+        returns a dict with symbols as keys and float or Quantity as values.
     """
 
     value_map_id = {to_identifier(a): b
                     for a, b in value_map.items()}
 
+    # used to raise an exception in case an unknown key is passed to the mapping
     expected_x_symbols = {to_identifier(a) for a in x_symbols}
 
+    # hard-code the value map dict into the generated module source code
+    # the values in this map can be overwritten by the params dict that is passed to the mapping
+    value_map_str = json.dumps(serialize(value_map_id))
+
     s_glob = [
+        'import json',
         'from encomp.sympy import get_lambda_kwargs, to_identifier',
         'from encomp.serialize import decode',
-        f'value_map = decode({serialize(value_map_id)})',
+        f'value_map = decode(json.loads({value_map_str}))',
         f'expected_x_symbols = {expected_x_symbols}'
     ]
 
