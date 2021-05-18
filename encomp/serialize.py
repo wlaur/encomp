@@ -257,7 +257,7 @@ def custom_serializer(obj: Any) -> JSON:
 
         return {
             'type': 'Quantity',
-            'data': [serialize(obj.m), str(obj.u)]
+            'data': [serialize(obj.m), str(obj.u._units)]
         }
 
     if isinstance(obj, pd.DataFrame):

@@ -17,6 +17,7 @@ from symbolic_equation import Eq as Eq_symbolic
 from encomp.settings import SETTINGS
 from encomp.units import Quantity
 from encomp.structures import flatten
+from encomp.serialize import serialize
 
 
 # functions that don't take mutable inputs (list, dict) are
@@ -42,8 +43,11 @@ def to_identifier(s: Union[sp.Symbol, str]) -> str:
         Valid Python identifier created from the input symbol
     """
 
-    if isinstance(s, sp.Basic):
-        s = s.name
+    # assume that input strings are already identifiers
+    if isinstance(s, str):
+        return s
+
+    s = s.name
 
     s = s.replace(',', '_')
     s = s.replace('^', '__')
@@ -404,7 +408,9 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
                 y_solution: list[Union[list[sp.Basic], tuple[sp.Symbol, sp.Basic]]],
                 value_map: dict[sp.Symbol, Union[Quantity, npt.ArrayLike]], *,
                 secondary_equations: Optional[list[sp.Equality]] = None,
-                units: bool = False) -> Callable:
+                units: bool = False,
+                to_str: bool = False,
+                mapping_name: str = 'mapping') -> Union[Callable, str]:
     """
     Returns a function that maps a set of :math:`x`-values to a set of :math:`y`-values.
     The function will have input parameters corresponding to the symbols in ``x_symbols``,
@@ -433,14 +439,19 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
     units : bool, optional
         Whether to keep the units, if False Quantity is converted
         to float (after calling ``to_base_units()``), by default False
+    to_str : bool, optional
+        Whether to return the string representation of the mapping function, by default False
+    mapping_name : str, optional
+        Name of the mapping function if ``to_str=True``, by default 'mapping'
 
     Returns
     -------
-    Callable
+    Union[Callable, str]
         Mapping function that takes :math:`M` inputs (dict) and
         returns :math:`N` outputs (dict). In case ``units=True`` the
         outputs are Quantity, otherwise they are float. The inputs are always Quantity,
         if ``units=False`` they are converted to float with ``to_base_unit()``.
+        If ``to_str=True``, returns a string representation of the mapping function.
     """
 
     if isinstance(y_symbols, sp.Symbol):
@@ -519,9 +530,16 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
                     f'Symbol {yi} could not be isolated based on the specified equations. '
                     'Define the secondary equations so that unknown symbols are on the LHS.')
 
-            # this function can only be evaluated after the known
-            # y-symbols have been evaluated
-            y_solution_.append((yi, get_function(yi_expr, units=units)))
+            if to_str:
+                # indicate that the lambda function for this expression
+                # must be evaluted after the main y-variables are evaluated
+                n = (yi_expr, 'post')
+            else:
+                # this function can only be evaluated after the known
+                # y-symbols have been evaluated
+                n = get_function(yi_expr, units=units)
+
+            y_solution_.append((yi, n))
 
         else:
             yi_expr = yi_expr[0]
@@ -532,6 +550,28 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
     # at this point, the y_solution list contains explicit expressions
     # for all the required y-symbols
     # all x-values are either known, dimensionality symbols (kg, m, K) or mapping parameters
+
+    # return a string representation of the mapping function
+    if to_str:
+
+        y_solution_str = []
+        y_solution_str_post = []
+
+        for a, b in y_solution:
+
+            if isinstance(b, tuple) and b[1] == 'post':
+                y_solution_str_post.append((a, get_lambda(b[0], to_str=True)))
+            else:
+                y_solution_str.append((a, get_lambda(b, to_str=True)))
+
+        # make sure the _post y-variables are solved after the main ones
+        y_solution_str += y_solution_str_post
+
+        # use exec() on this string to define the function, this does not
+        # depend upon in-memory objects
+        # the parameter and return values are identical to the object version
+        return mapping_repr(y_solution_str, value_map, x_symbols,
+                            mapping_name=mapping_name, units=units)
 
     # these functions can be constructed beforehand, calling
     # the mapping function will only evaluate them
@@ -545,7 +585,7 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
         if params is None:
             params = {}
 
-        if set(params) != x_symbols_set:
+        if set(params) - x_symbols_set:
             raise ValueError(f'Expected parameters\n{x_symbols_set}\n'
                              f'passed\n{set(params)}')
 
@@ -558,11 +598,94 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
                 ret[yi] = fn(params | ret)
 
         # sort the output in the same order as the list of y-symbols
-        ret = dict(sorted(ret.items(), key=lambda x: y_symbols.index(x[0])))
+        ret = dict(
+            sorted(ret.items(), key=lambda x: y_symbols.index(x[0])))
 
         return ret
 
     return mapping
+
+
+def mapping_repr(y_solution: list[tuple[sp.Symbol, tuple[str, list[str]]]],
+                 value_map: dict[sp.Symbol, Union[Quantity, npt.ArrayLike]],
+                 x_symbols: list[sp.Symbol],
+                 mapping_name: str = 'mapping',
+                 units: bool = False) -> str:
+    """
+    Constructs a string of Python source code that can be executed
+    to define a mapping function.
+    This function does not depend on any other objects, however it
+    will import the ``encomp`` module and define a dict with the
+    contents of ``value_map`` before the function is defined.
+
+    Write the output from this function to a ``.py``-file and import
+    it to use this mapping function. Alternatively, use ``exec()``.
+
+    Parameters
+    ----------
+    y_solution : list[tuple[sp.Symbol, tuple[str, list[str]]]]
+        String representation of the lambda function for each :math:`y`-symbol
+    value_map : dict[sp.Symbol, Union[Quantity, npt.ArrayLike]]
+        Mapping for symbol to known value
+    x_symbols : list[sp.Symbol]
+        :math:`x`-symbols for this mapping, in case the input to the mapping
+        function contains keys except these ones, an error is raised.
+        In case the input to the mapping does not contain one or more of
+        these symbols, the value is taken from ``value_map`` instead
+    mapping_name : str, optional
+        Name of the mapping function, by default 'mapping'
+    units : bool, optional
+        Whether to keep the units, if False Quantity is converted
+        to float (after calling ``to_base_units()``), by default False
+
+    Returns
+    -------
+    str
+        Python source code that defines the mapping function. Contains
+        module-level definitions and a function definition.
+    """
+
+    value_map_id = {to_identifier(a): b
+                    for a, b in value_map.items()}
+
+    expected_x_symbols = {to_identifier(a) for a in x_symbols}
+
+    s_glob = [
+        'import encomp',
+        'get_lambda_kwargs = encomp.sympy.get_lambda_kwargs',
+        'Q = encomp.units.Quantity',
+        'decode = encomp.serialize.decode',
+        'to_identifier = encomp.sympy.to_identifier',
+        f'value_map = decode({serialize(value_map_id)})',
+        f'expected_x_symbols = {expected_x_symbols}'
+    ]
+
+    s = [
+        f'def {mapping_name}(params=None):',
+        'if params is None: params = {}',
+        'params = {to_identifier(a): b for a, b in params.items()}',
+        'if set(params) - expected_x_symbols: '
+        'raise ValueError(f"Expected parameters\\n{expected_x_symbols}\\npassed\\n{set(params)}")',
+        'ret = {}'
+    ]
+
+    for n, b in y_solution:
+
+        lambda_str, args = b
+        n_id = to_identifier(n)
+
+        s.extend([
+            f'{n_id}_func = {lambda_str}',
+            f'args = {args}',
+            f'{n_id} = {n_id}_func(**get_lambda_kwargs(value_map | params | ret, args, units={units}))',
+            f'ret["{n_id}"] = {n_id}',
+            '\n'
+        ])
+
+    s.append('return ret')
+
+    indent = ' ' * 4
+    return '\n'.join(s_glob) + '\n\n' + f'\n{indent}'.join(s)
 
 
 def typeset_chemical(s: str) -> str:

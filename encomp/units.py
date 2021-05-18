@@ -17,7 +17,7 @@ that the dimensionality of the unit is correct.
 
 import re
 from typing import Union, Type, Optional
-from functools import lru_cache, partial
+from functools import lru_cache
 import sympy as sp
 
 import pint
