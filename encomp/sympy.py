@@ -664,7 +664,7 @@ def mapping_repr(y_solution: list[tuple[sp.Symbol, tuple[str, list[str]]]],
         'import json',
         'from encomp.sympy import get_lambda_kwargs, to_identifier',
         'from encomp.serialize import decode',
-        f'value_map = decode(json.loads("{value_map_str}"))',
+        f"value_map = decode(json.loads('{value_map_str}'))",
         f'expected_x_symbols = {expected_x_symbols}'
     ]
 
