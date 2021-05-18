@@ -34,9 +34,11 @@ from IPython.display import (display,
                              SVG,
                              Javascript,
                              Math,
-                             IFrame,
-                             set_matplotlib_formats)
+                             IFrame)
 
+from matplotlib_inline.backend_inline import set_matplotlib_formats
+
+from encomp.settings import SETTINGS
 from encomp.misc import grid_dimensions
 from encomp.sympy import sp
 from encomp.units import Q, Quantity, wraps
@@ -49,7 +51,7 @@ import encomp.magics
 plt.style.use('seaborn-notebook')
 matplotlib.rcParams['font.sans-serif'] = 'Arial'
 matplotlib.rcParams['font.family'] = 'sans-serif'
-set_matplotlib_formats('svg')
+set_matplotlib_formats(SETTINGS.matplotlib_notebook_format)
 
 # this is required to get table output in PDF
 pd.options.display.latex.repr = True

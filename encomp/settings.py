@@ -2,6 +2,7 @@
 Contains settings used elsewhere in the library.
 """
 
+from typing import Literal
 from pathlib import Path
 from pydantic import BaseSettings
 
@@ -24,6 +25,8 @@ class Settings(BaseSettings):
 
     # whether to typeset sub- and superscripts for sympy symbols
     typeset_symbol_scripts: bool = True
+
+    matplotlib_notebook_format: Literal['retina', 'png', 'svg'] = 'retina'
 
 
 SETTINGS = Settings()

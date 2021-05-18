@@ -28,6 +28,9 @@ def main(task=None):
     elif task == 'docs':
         build_docs()
 
+    elif task == 'install':
+        pip_install()
+
     else:
         raise ValueError(f'Unknown task: {task}')
 
