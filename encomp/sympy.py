@@ -653,7 +653,6 @@ def mapping_repr(y_solution: list[tuple[sp.Symbol, tuple[str, list[str]]]],
     s_glob = [
         'import encomp',
         'get_lambda_kwargs = encomp.sympy.get_lambda_kwargs',
-        'Q = encomp.units.Quantity',
         'decode = encomp.serialize.decode',
         'to_identifier = encomp.sympy.to_identifier',
         f'value_map = decode({serialize(value_map_id)})',
