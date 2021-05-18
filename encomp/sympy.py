@@ -615,7 +615,7 @@ def mapping_repr(y_solution: list[tuple[sp.Symbol, tuple[str, list[str]]]],
     Constructs a string of Python source code that can be executed
     to define a mapping function.
     This function does not depend on any other objects, however it
-    will import the ``encomp`` module and define a dict with the
+    will import the ``encomp`` package and define a dict with the
     contents of ``value_map`` before the function is defined.
 
     Write the output from this function to a ``.py``-file and import
@@ -651,10 +651,8 @@ def mapping_repr(y_solution: list[tuple[sp.Symbol, tuple[str, list[str]]]],
     expected_x_symbols = {to_identifier(a) for a in x_symbols}
 
     s_glob = [
-        'import encomp',
-        'get_lambda_kwargs = encomp.sympy.get_lambda_kwargs',
-        'decode = encomp.serialize.decode',
-        'to_identifier = encomp.sympy.to_identifier',
+        'from encomp.sympy import get_lambda_kwargs, to_identifier',
+        'from encomp.serialize import decode',
         f'value_map = decode({serialize(value_map_id)})',
         f'expected_x_symbols = {expected_x_symbols}'
     ]
