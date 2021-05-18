@@ -48,7 +48,9 @@ def to_identifier(s: Union[sp.Symbol, str]) -> str:
     s = s.replace(',', '_')
     s = s.replace('^', '__')
     s = s.replace("'", 'prime')
-    s = s.replace('lambda', 'lambda_')
+
+    # the substring "lambda" cannot exist in the identifier
+    s = s.replace('lambda', 'lam')
 
     # TODO: just remove all non-alphanumeric?
     remove = ['\\', '{', '}', '.', ';', '"', '*', '+', '-', '/']
@@ -124,7 +126,8 @@ def recursive_subs(e: sp.Basic,
 
 
 def get_sol_expr(eqns: Union[sp.Equality, list[sp.Equality]],
-                 symbol: sp.Symbol) -> Optional[sp.Basic]:
+                 symbol: sp.Symbol,
+                 avoid: Optional[set[sp.Symbol]] = None) -> Optional[sp.Basic]:
     """
     Wrapper around ``sp.solve`` that returns the solution expression
     for a *single* symbol, or None in case Sympy could not solve for the specified symbol.
@@ -137,6 +140,8 @@ def get_sol_expr(eqns: Union[sp.Equality, list[sp.Equality]],
         List of equations or a single equation
     symbol : sp.Symbol
         Symbol to solve for (isolate)
+    avoid : Optional[set[sp.Symbol]], optional
+        Set of symbols to avoid in the substitution expressions, by default None
 
     Returns
     -------
@@ -145,29 +150,36 @@ def get_sol_expr(eqns: Union[sp.Equality, list[sp.Equality]],
         equation(s) could not be solved
     """
 
+    if avoid is None:
+        avoid = set()
+
     if isinstance(eqns, sp.Equality):
         eqns = [eqns]
-
-    all_eqns = eqns
 
     # only include unique equations that actually contains the symbol
     # this might leave multiple equations, there's no guarantee
     # that the equations can be solved
-    # use default_sort_key to make sure that this is consistent
-    eqns = sorted(set(filter(lambda eqn: symbol in eqn.free_symbols, eqns)),
-                  key=default_sort_key)
+    # sort by the number of symbols on the RHS, use default_sort_key as
+    # secondary sort key to make sure that the order is consistent
+    def eqn_simplicity(eqn):
+        return len(eqn.rhs.free_symbols), default_sort_key(eqn)
 
-    # in case there are multiple equations, first check if any of the
-    # equations directly contain the requested symbol on the LHS
-    if len(all_eqns) > 1:
-        for eqn in all_eqns:
+    eqns = sorted(set(filter(lambda eqn: symbol in eqn.free_symbols, eqns)),
+                  key=eqn_simplicity)
+
+    # in case there are multiple equations containing the requested symbol,
+    # first check if any of the equations directly contain the symbol on the LHS
+    if len(eqns) > 1:
+        for eqn in eqns:
             if symbol in eqn.lhs.free_symbols:
+
                 ret = get_sol_expr(eqn, symbol)
-                if ret is not None:
+
+                if ret is not None and not (avoid & ret.free_symbols):
                     return ret
 
     # if the symbol could not be solved directly from the LHS,
-    # try to solve all equations instead, this will likely not work
+    # try to solve all relevant equations instead, this will likely not work
     # use dict=True to avoid inconsistent return types
     sol = sp.solve(eqns, symbol, dict=True)
 
@@ -175,10 +187,10 @@ def get_sol_expr(eqns: Union[sp.Equality, list[sp.Equality]],
         return None
 
     # sp.solve() returns a list of dict, there should only be one element
-    # since solved for a single variable
+    # since we solved for a single variable
     sol = sol[0]
 
-    # there should only be a single solution expression
+    # there should only be a single key in this dict
     # sort with default_sort_key to keep the output consistent
     # sympy might otherwise order expressions randomly
     return sorted(sol.values(),
@@ -323,8 +335,8 @@ def evaluate(e: sp.Basic,
 
 def substitute_unknowns(e: sp.Basic,
                         knowns: set[sp.Symbol],
-                        avoid: set[sp.Symbol],
-                        eqns: list[sp.Equality]) -> sp.Basic:
+                        eqns: list[sp.Equality],
+                        avoid: Optional[set[sp.Symbol]] = None) -> sp.Basic:
     """
     Uses the equations ``eqns`` to substitute the unknown symbols
     in the input expression. Uses recursion to deal with nested substitutions.
@@ -335,10 +347,10 @@ def substitute_unknowns(e: sp.Basic,
         Input expression that potentially contains unknown symbols
     knowns : set[sp.Symbol]
         Set of known symbols
-    avoid : set[sp.Symbol]
-        Set of symbols to avoid in the substitution expressions
     eqns : list[sp.Equality]
         List of equations that define the unknown symbols in terms of known ones
+    avoid : Optional[set[sp.Symbol]], optional
+        Set of symbols to avoid in the substitution expressions, by default None
 
     Returns
     -------
@@ -346,17 +358,22 @@ def substitute_unknowns(e: sp.Basic,
         The substituted expression without any unknown symbols
     """
 
+    if avoid is None:
+        avoid = set()
+
     replacements = []
 
     def _get_unknowns(expr):
         all_symbols = sorted(expr.free_symbols, key=default_sort_key)
+        already_replaced = [m[0] for m in replacements]
+
         return [n for n in all_symbols if n not in (knowns | avoid) and
-                n not in [m[0] for m in replacements]]
+                n not in already_replaced]
 
     unknowns_list = _get_unknowns(e)
 
     for n in unknowns_list:
-        n_expr = get_sol_expr(eqns, n)
+        n_expr = get_sol_expr(eqns, n, avoid=avoid)
 
         if n_expr is None:
             raise ValueError(
@@ -478,8 +495,8 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
         for lhs, rhs in y_solution:
             y_solution_.append((lhs, substitute_unknowns(rhs,
                                                          known_x_symbols,
-                                                         set(y_symbols),
-                                                         secondary_equations)))
+                                                         secondary_equations,
+                                                         avoid=set(y_symbols))))
 
         y_solution = y_solution_
 
