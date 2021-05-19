@@ -55,8 +55,6 @@ set_matplotlib_formats(SETTINGS.matplotlib_notebook_format)
 
 # this is required to get table output in PDF
 pd.options.display.latex.repr = True
-pd.options.display.max_colwidth = 0
-
 
 SNS_PALETTE = sns.color_palette()
 SNS_BLUE = SNS_PALETTE[0]
