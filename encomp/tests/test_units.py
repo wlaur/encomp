@@ -50,6 +50,9 @@ def test_Q():
 
     assert P3.m == approx(100, rel=1e-12)
 
+    a = Q([1, 2, 3], 'bar')
+    a.ito('kPa')
+
     # conversion to new object
     P4 = Q(1, 'bar')
     P4_b = P4.to('kPa')

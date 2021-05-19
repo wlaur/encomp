@@ -19,6 +19,7 @@ import re
 from typing import Union, Type, Optional
 from functools import lru_cache
 import sympy as sp
+import numpy as np
 
 import pint
 from pint.unit import UnitsContainer, Unit, UnitDefinition
@@ -186,6 +187,10 @@ class Quantity(pint.quantity.Quantity):
                 unit: Union[Unit, UnitsContainer, str, 'Quantity']) -> 'Quantity':
 
         if isinstance(val, Quantity):
+
+            if isinstance(val, np.ndarray):
+                val = val.copy()
+
             # don't return val.to(unit) directly, since we want to make this
             # the correct dimensional subclass as well
             val = val._convert_magnitude(unit)
@@ -223,9 +228,22 @@ class Quantity(pint.quantity.Quantity):
                                       f'dimensionality {dim_name}, '
                                       f'expected {expected_name}')
 
+        # numpy array magnitudes must be copied, otherwise they will
+        # be changed for the original object as well
+        # list input to pint.Quantity.__new__ will be convert to
+        # np.ndarray, so there's no danger of modifying lists that are input to Quantity
+        if isinstance(val, np.ndarray):
+            val = val.copy()
+
         # at this point the value and dimensionality are verified to be correct
         # pass the inputs to pint to actually construct the Quantity
         qty = super().__new__(cls, val, units=unit)
+
+        # avoid casting issues with numpy, use float64 instead of int32
+        # it's always possible for the user to change the dtype of the _magnitude attribute
+        # in case int32 or similar is necessary (unlikely, fast calculations should not use pint at all)
+        if isinstance(qty._magnitude, np.ndarray) and qty._magnitude.dtype == np.int32:
+            qty._magnitude = qty._magnitude.astype(np.float64)
 
         return qty
 
@@ -246,7 +264,7 @@ class Quantity(pint.quantity.Quantity):
     def to(self, unit: Union[Unit, UnitsContainer, str, 'Quantity']) -> 'Quantity':
 
         unit = self._to_unit(unit)
-        m = self._convert_magnitude(unit)
+        m = self._convert_magnitude_not_inplace(unit)
 
         return self.__class__(m, unit)
 
