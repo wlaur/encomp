@@ -4,7 +4,7 @@ Uses CoolProp as backend.
 """
 
 from typing import Annotated
-
+import numpy as np
 from CoolProp.CoolProp import PropsSI
 from CoolProp.HumidAirProp import HAPropsSI
 
@@ -353,7 +353,8 @@ class CoolPropFluid:
         # CoolProp uses 0.0 for missing data, change this to NaN
         # the values are not exactly 0, use the _EPS class attribute to check this
         # skip this check for some properties
-        if output not in self._SKIP_ZERO_CHECK and not qty.dimensionless and val < self._EPS:
+        if (not isinstance(qty.m, np.ndarray) and output not in self._SKIP_ZERO_CHECK and
+                not qty.dimensionless and val < self._EPS):
             qty = Quantity(float('NaN'), unit_output)
 
         key = self.get_prop_key(output)
@@ -537,7 +538,8 @@ class HumidAir(Fluid):
 
         qty = Quantity(val, unit_output)
 
-        if output not in self._SKIP_ZERO_CHECK and not qty.dimensionless and val < self._EPS:
+        if (not isinstance(qty.m, np.ndarray) and output not in self._SKIP_ZERO_CHECK and
+                not qty.dimensionless and val < self._EPS):
             qty = Quantity(float('NaN'), unit_output)
 
         key = self.get_prop_key(output)
