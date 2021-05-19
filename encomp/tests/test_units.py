@@ -43,6 +43,7 @@ def test_Q():
         Q[Mass](1, P)
 
     # in-place conversion
+    # NOTE: don't use this for objects that are passed in by the user
     P3 = Q(1, 'bar')
     P3.ito('kPa')
     P3.ito(Q(123123, 'kPa'))

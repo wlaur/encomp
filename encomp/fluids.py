@@ -361,7 +361,7 @@ class CoolPropFluid:
 
         if key[0] in self.RETURN_UNITS:
             ret_unit = self.RETURN_UNITS[key[0]]
-            qty.ito(ret_unit)
+            qty = qty.to(ret_unit)
 
         return qty
 
@@ -546,7 +546,7 @@ class HumidAir(Fluid):
 
         if key[0] in self.RETURN_UNITS:
             ret_unit = self.RETURN_UNITS[key[0]]
-            qty.ito(ret_unit)
+            qty = qty.to(ret_unit)
 
         return qty
 
