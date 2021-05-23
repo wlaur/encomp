@@ -194,6 +194,14 @@ def decode(inp: JSON) -> Any:
             if inp['type'] == 'Sympy':
                 return sp.sympify(inp['data'])
 
+            if inp['type'] == 'Balance':
+                from encomp.balances import Balance
+                return Balance.from_dict(inp['data'])
+
+            if inp['type'] == 'BalancedSystem':
+                from encomp.balances import BalancedSystem
+                return BalancedSystem.from_dict(inp['data'])
+
         # not possible to have a custom object as key,
         # JSON allows only str (float and int are converted to str)
         # not possible to determine if string "1" was originally an int,

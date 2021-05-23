@@ -20,6 +20,14 @@ encomp.api module
    :undoc-members:
    :show-inheritance:
 
+encomp.balances module
+----------------------
+
+.. automodule:: encomp.balances
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 encomp.constants module
 -----------------------
 

@@ -133,6 +133,51 @@ def recursive_subs(e: sp.Basic,
     return new_e
 
 
+def simplify_exponents(e: sp.Basic) -> sp.Basic:
+    """
+    Simplifies an expression by combining float and int exponents.
+    This is not done automatically by Sympy.
+
+    Adapted from
+    https://stackoverflow.com/questions/54243832/sympy-wont-simplify-or-expand-exponential-with-decimals
+
+    Parameters
+    ----------
+    e : sp.Basic
+        A Sympy expression, potentially containing mixed float and int exponents
+
+    Returns
+    -------
+    sp.Basic
+        Simplified expression with float and int exponents combined
+    """
+
+    def rewrite(expr, new_args):
+
+        new_args = list(new_args)
+        pow_val = new_args[1]
+        pow_val_int = int(new_args[1])
+
+        if pow_val.epsilon_eq(pow_val_int):
+            new_args[1] = sp.Integer(pow_val_int)
+
+        return type(expr)(*new_args)
+
+    def isfloatpow(expr):
+        return expr.is_Pow and expr.args[1].is_Float
+
+    if not e.args:
+        return e
+
+    else:
+        new_args = tuple(simplify_exponents(a) for a in e.args)
+
+        if isfloatpow(e):
+            return rewrite(e, new_args)
+        else:
+            return type(e)(*new_args)
+
+
 def get_sol_expr(eqns: Union[sp.Equality, list[sp.Equality]],
                  symbol: sp.Symbol,
                  avoid: Optional[set[sp.Symbol]] = None) -> Optional[sp.Basic]:
@@ -167,7 +212,7 @@ def get_sol_expr(eqns: Union[sp.Equality, list[sp.Equality]],
     # only include unique equations that actually contains the symbol
     # this might leave multiple equations, there's no guarantee
     # that the equations can be solved
-    # sort by the number of symbols on the RHS, use default_sort_key as
+    # sort by the number of symbols on the RHS, use default_sort_key as the
     # secondary sort key to make sure that the order is consistent
     def eqn_simplicity(eqn):
         return len(eqn.rhs.free_symbols), default_sort_key(eqn)
@@ -183,12 +228,15 @@ def get_sol_expr(eqns: Union[sp.Equality, list[sp.Equality]],
 
                 ret = get_sol_expr(eqn, symbol)
 
+                # don't return an expression that contains symbols to be avoided
                 if ret is not None and not (avoid & ret.free_symbols):
                     return ret
 
-    # if the symbol could not be solved directly from the LHS,
-    # try to solve all relevant equations instead, this will likely not work
-    # use dict=True to avoid inconsistent return types
+    # if the symbol could not be solved directly from the LHS of a single equation,
+    # try to solve all relevant (i.e. containing the requested symbol) equations instead
+    # use dict=True to avoid inconsistent return types from sp.solve
+    # make sure to define the assumptions correctly for all symbols, otherwise the
+    # Sympy solver might not be able to find an explicit solution
     sol = sp.solve(eqns, symbol, dict=True)
 
     if not sol:
@@ -198,9 +246,10 @@ def get_sol_expr(eqns: Union[sp.Equality, list[sp.Equality]],
     # since we solved for a single variable
     sol = sol[0]
 
-    # there should only be a single key in this dict
+    # hopefully, there is only be a single key in this dict
+    # (quadratic equations might have multiple solutions, etc...)
     # sort with default_sort_key to keep the output consistent
-    # sympy might otherwise order expressions randomly
+    # Sympy might otherwise order expressions randomly
     return sorted(sol.values(),
                   key=default_sort_key)[0]
 
@@ -385,8 +434,7 @@ def substitute_unknowns(e: sp.Basic,
 
         if n_expr is None:
             raise ValueError(
-                f'Symbol {n} could not be isolated based on the specified equations. '
-                'Define the secondary equations so that unknown symbols are on the LHS.')
+                f'Symbol {n} could not be isolated based on the specified equations.')
 
         # check if the expression for n contains even more unknown symbols
         # extend the list that is iterated over to account for these symbols
@@ -417,12 +465,20 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
                 mapping_name: str = 'mapping') -> Union[Callable, str]:
     """
     Returns a function that maps a set of :math:`x`-values to a set of :math:`y`-values.
+    :math:`y` represents unknown variables, and :math:`x` represents known variables.
+
     The function will have input parameters corresponding to the symbols in ``x_symbols``,
     and returns a dict with values for each symbol in ``y_symbols``.
     The list ``y_solution`` contains an explicit solution for all the specified :math:`y`-values
     in terms of :math:`x`-values.
     :math:`x`-values that are not part of ``x_symbols`` (i.e. mapping parameters) will have
     values specified in ``value_map``.
+
+    .. tip::
+        The resulting mapping function might take a while to evaluate, avoid
+        calling it in a loop. Use Numpy arrays to evaluate multiple inputs
+        at the same time. It is possible to mix single values and arrays
+        in the inputs.
 
     Parameters
     ----------
@@ -464,6 +520,10 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
     if isinstance(x_symbols, sp.Symbol):
         x_symbols = [x_symbols]
 
+    if not y_symbols:
+        raise ValueError(
+            f'No y-symbols specified, mapping function needs at least one return value')
+
     # in case the specified y-symbols are not directly defined in y_solution,
     # they must be defined in the secondary equations
     unknown_y_symbols = [n for n in y_symbols
@@ -474,21 +534,19 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
                          'x-values in the list y_solution or a corresponding secondary equation, '
                          'pass a list of secondary equations that define these (kwarg secondary_equations)')
 
-    N = len(y_symbols)
-    M = len(x_symbols)
-
     # in case there are x-values not defined in value_map, check if they
     # can be solved (isolated) from the secondary equations
     all_x_symbols = sorted(flatten(n[1].free_symbols for n in y_solution),
                            key=default_sort_key)
 
-    # sympy symbols for the base SI units (kg, m, K, etc...)
+    # make a copy to avoid modifying the caller's object
+    value_map = value_map.copy()
+
+    # Sympy symbols for the base SI units (kg, m, K, etc...)
     # this can also contain custom user-defined dimensions,
     # so it needs to be re-evaluated inside this function
     # update value_map with values for the dimension symbols
     # the units have the values Q(1, unit)
-    # make a copy to avoid modifying the caller's object
-    value_map = value_map.copy()
     value_map.update({
         a: Quantity(1, b) for a, b in Quantity.get_dimension_symbol_map().items()
     })
@@ -508,10 +566,11 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
         y_solution_ = []
 
         for lhs, rhs in y_solution:
-            y_solution_.append((lhs, substitute_unknowns(rhs,
-                                                         known_x_symbols,
-                                                         secondary_equations,
-                                                         avoid=set(y_symbols))))
+
+            rhs_subs = substitute_unknowns(rhs, known_x_symbols, secondary_equations,
+                                           avoid=set(y_symbols))
+
+            y_solution_.append((lhs, rhs_subs))
 
         y_solution = y_solution_
 
@@ -520,24 +579,25 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
     y_solution_ = []
 
     for yi in y_symbols:
+
+        # expression for this y-variable
         yi_expr = [n[1] for n in y_solution if n[0] == yi]
 
         # in case this y-symbol is in unknown_y_symbols
         if not yi_expr:
 
-            # the unknown y-symbol should be defined on the LHS of one
-            # of the secondary equations
+            # the unknown y-symbol should be defined in the secondary equations
             yi_expr = get_sol_expr(secondary_equations, yi)
 
             if yi_expr is None:
                 raise ValueError(
-                    f'Symbol {yi} could not be isolated based on the specified equations. '
-                    'Define the secondary equations so that unknown symbols are on the LHS.')
+                    f'Symbol {yi} could not be isolated based on the specified secondary equations.')
 
             if to_str:
                 # indicate that the lambda function for this expression
-                # must be evaluted after the main y-variables are evaluated
+                # must be evaluted after the explicit y-variables are evaluated
                 n = (yi_expr, 'post')
+
             else:
                 # this function can only be evaluated after the known
                 # y-symbols have been evaluated
@@ -551,7 +611,7 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
 
     y_solution = y_solution_
 
-    # at this point, the y_solution list contains explicit expressions
+    # at this point, the y_solution list contains explicit expressions or functions
     # for all the required y-symbols
     # all x-values are either known, dimensionality symbols (kg, m, K) or mapping parameters
 
@@ -563,17 +623,16 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
 
         for a, b in y_solution:
 
+            # some of the expressions require other y-values as input
+            # these must be placed *after* the explicit ones
             if isinstance(b, tuple) and b[1] == 'post':
                 y_solution_str_post.append((a, get_lambda(b[0], to_str=True)))
             else:
                 y_solution_str.append((a, get_lambda(b, to_str=True)))
 
-        # make sure the _post y-variables are solved after the main ones
+        # make sure the _post y-variables are solved after the explicit ones
         y_solution_str += y_solution_str_post
 
-        # use exec() on this string to define the function, this does not
-        # depend upon in-memory objects
-        # the parameter and return values are identical to the object version
         return mapping_repr(y_solution_str, value_map, x_symbols,
                             mapping_name=mapping_name, units=units)
 
@@ -589,11 +648,16 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
         if params is None:
             params = {}
 
+        # raise error in case the user passes an unknown key
+        # ignore missing keys, they will be taken from value_map instead
         if set(params) - x_symbols_set:
             raise ValueError(f'Expected parameters\n{x_symbols_set}\n'
                              f'passed\n{set(params)}')
 
+        # update existing keys, or add new ones
         params = value_map | params
+
+        # evaluate the explicit y-expressions
         ret = {yi: fn(params) for yi, fn in fns}
 
         # evaluate the unknown y-values based on the evaluated ones
@@ -663,6 +727,7 @@ def mapping_repr(y_solution: list[tuple[sp.Symbol, tuple[str, list[str]]]],
     # the values in this map can be overwritten by the params dict that is passed to the mapping
     value_map_str = json.dumps(serialize(value_map_id))
 
+    # this code is only executed once when the mapping function is imported
     s_glob = [
         'import json',
         'from encomp.sympy import get_lambda_kwargs, to_identifier',
@@ -685,6 +750,8 @@ def mapping_repr(y_solution: list[tuple[sp.Symbol, tuple[str, list[str]]]],
         lambda_str, args = b
         n_id = to_identifier(n)
 
+        # use "value_map | params | ret" to update keys in value_map
+        # with new ones from params and ret
         s.extend([
             f'{n_id}_func = {lambda_str}',
             f'args = {args}',
@@ -955,51 +1022,6 @@ sp.Symbol.__ = lambda s, x: s.append(x, where='sup')
 
 # shorthand to add Delta before a symbol
 sp.Symbol.delta = lambda s: s.decorate(prefix='\\Delta')
-
-
-def simplify_exponents(expr: sp.Basic) -> sp.Basic:
-    """
-    Simplifies an expression by combining float and int exponents.
-    This is not done automatically by Sympy.
-
-    Adapted from
-    https://stackoverflow.com/questions/54243832/sympy-wont-simplify-or-expand-exponential-with-decimals.
-
-    Parameters
-    ----------
-    expr : sp.Basic
-        A Sympy expression, potentially containing mixed float and int exponents
-
-    Returns
-    -------
-    sp.Basic
-        Simplified expression with float and int exponents combined
-    """
-
-    def rewrite(expr, new_args):
-
-        new_args = list(new_args)
-        pow_val = new_args[1]
-        pow_val_int = int(new_args[1])
-
-        if pow_val.epsilon_eq(pow_val_int):
-            new_args[1] = sp.Integer(pow_val_int)
-
-        return type(expr)(*new_args)
-
-    def isfloatpow(expr):
-        return expr.is_Pow and expr.args[1].is_Float
-
-    if not expr.args:
-        return expr
-
-    else:
-        new_args = tuple(simplify_exponents(a) for a in expr.args)
-
-        if isfloatpow(expr):
-            return rewrite(expr, new_args)
-        else:
-            return type(expr)(*new_args)
 
 
 def display_equation(eqn: sp.Equality,
