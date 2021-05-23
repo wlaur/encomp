@@ -21,7 +21,7 @@ class Settings(BaseSettings):
 
     data_directory: Path = ENCOMP_BASE / 'data'
     additional_units: Path = data_directory / 'additional-units.txt'
-    type_checking: bool = True
+    type_checking: bool = False
 
     # whether to typeset sub- and superscripts for sympy symbols
     typeset_symbol_scripts: bool = True

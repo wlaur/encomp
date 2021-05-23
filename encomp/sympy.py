@@ -212,10 +212,10 @@ def get_sol_expr(eqns: Union[sp.Equality, list[sp.Equality]],
     # only include unique equations that actually contains the symbol
     # this might leave multiple equations, there's no guarantee
     # that the equations can be solved
-    # sort by the number of symbols on the RHS, use default_sort_key as the
+    # sort by the number of free symbols, use default_sort_key as the
     # secondary sort key to make sure that the order is consistent
     def eqn_simplicity(eqn):
-        return len(eqn.rhs.free_symbols), default_sort_key(eqn)
+        return len(eqn.free_symbols), default_sort_key(eqn)
 
     eqns = sorted(set(filter(lambda eqn: symbol in eqn.free_symbols, eqns)),
                   key=eqn_simplicity)
@@ -224,6 +224,7 @@ def get_sol_expr(eqns: Union[sp.Equality, list[sp.Equality]],
     # first check if any of the equations directly contain the symbol on the LHS
     if len(eqns) > 1:
         for eqn in eqns:
+
             if symbol in eqn.lhs.free_symbols:
 
                 ret = get_sol_expr(eqn, symbol)
@@ -634,7 +635,8 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
         y_solution_str += y_solution_str_post
 
         return mapping_repr(y_solution_str, value_map, x_symbols,
-                            mapping_name=mapping_name, units=units)
+                            mapping_name=mapping_name,
+                            units=units)
 
     # these functions can be constructed beforehand, calling
     # the mapping function will only evaluate them
@@ -678,6 +680,7 @@ def mapping_repr(y_solution: list[tuple[sp.Symbol, tuple[str, list[str]]]],
                  value_map: dict[sp.Symbol, Union[Quantity, npt.ArrayLike]],
                  x_symbols: list[sp.Symbol],
                  mapping_name: str = 'mapping',
+                 iterative_symbols: Optional[list[sp.Symbol]] = None,
                  units: bool = False) -> str:
     """
     Constructs a string of Python source code that can be executed
@@ -702,6 +705,9 @@ def mapping_repr(y_solution: list[tuple[sp.Symbol, tuple[str, list[str]]]],
         these symbols, the value is taken from ``value_map`` instead
     mapping_name : str, optional
         Name of the mapping function, by default 'mapping'
+    iterative_symbols : Optional[list[sp.Symbol]], optional
+        List of symbols that are used in an iterative evaluation of the mapping function,
+        by default None
     units : bool, optional
         Whether to keep the units in the mapping return dict, if False Quantity is converted
         to float (after calling ``to_base_units()``), by default False
