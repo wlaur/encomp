@@ -16,10 +16,12 @@ that the dimensionality of the unit is correct.
 """
 
 import re
+import warnings
 from typing import Union, Type, Optional
 from functools import lru_cache
 import sympy as sp
 import numpy as np
+import pandas as pd
 
 import pint
 from pint.unit import UnitsContainer, Unit, UnitDefinition
@@ -35,6 +37,10 @@ from encomp.utypes import (Magnitude,
                            Volume,
                            VolumeFlow,
                            get_dimensionality_name)
+
+if SETTINGS.ignore_ndarray_unit_stripped_warning:
+    warnings.filterwarnings('ignore',
+                            message='The unit of the quantity is stripped when downcasting to ndarray.')
 
 
 class DimensionalityError(ValueError):
@@ -188,12 +194,14 @@ class Quantity(pint.quantity.Quantity):
 
         if isinstance(val, Quantity):
 
-            if isinstance(val, np.ndarray):
-                val = val.copy()
-
             # don't return val.to(unit) directly, since we want to make this
             # the correct dimensional subclass as well
-            val = val._convert_magnitude(unit)
+            val = val._convert_magnitude_not_inplace(unit)
+
+        if isinstance(val, pd.Series):
+
+            # support passing pd.Series directly
+            val = val.values
 
         # pint.Quantity.to_root_units calls __class__(magnitude, other)
         # where other is a UnitsContainer

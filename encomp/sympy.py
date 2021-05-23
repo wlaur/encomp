@@ -1,6 +1,6 @@
 """
 Imports and extends the ``sympy`` library for symbolic mathematics.
-Contains helper functions for converting a Sympy expression to a lambda function.
+Contains functions for converting Sympy expressions to Python functions.
 """
 
 
@@ -50,22 +50,25 @@ def to_identifier(s: Union[sp.Symbol, str]) -> str:
 
     s = s.name
 
+    s_orig = s
+
     s = s.replace(',', '_')
     s = s.replace('^', '__')
     s = s.replace("'", 'prime')
 
+    # need to differentiate between symbols "\text{m}" and "m"
+    # the string "text" is a bit long, replace with "T"
+    s = s.replace('text', 'T')
+
     # the substring "lambda" cannot exist in the identifier
     s = s.replace('lambda', 'lam')
 
-    # TODO: just remove all non-alphanumeric?
-    remove = ['\\', '{', '}', '.', ';', '"', '*', '+', '-', '/']
-
-    for n in remove:
-        s = s.replace(n, '')
+    # remove all non-alphanumeric or _
+    s = re.sub(r'\W+', '', s)
 
     if not s.isidentifier():
         raise ValueError(
-            f'Symbol could not be converted to a valid identifer: {s}')
+            f'Symbol could not be converted to a valid Python identifer: {s_orig}')
 
     return s
 

@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     # whether to typeset sub- and superscripts for sympy symbols
     typeset_symbol_scripts: bool = True
 
+    ignore_ndarray_unit_stripped_warning: bool = True
+
     matplotlib_notebook_format: Literal['retina', 'png', 'svg'] = 'retina'
 
 
