@@ -47,7 +47,7 @@ class Balance:
 
         return Eq_symbolic(lhs=self.eqn.lhs,
                            rhs=self.eqn.rhs,
-                           tag=f'{self.balance_type.title()} balance{tag_repr.title()}')._repr_latex_()
+                           tag=f'{self.balance_type.title()} balance{tag_repr}')._repr_latex_()
 
     def to_json(self) -> dict:
 
