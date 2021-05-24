@@ -825,12 +825,12 @@ def mapping_repr_iterative(mapping: str,
 
         n_id = to_identifier(n)
 
-        # use "value_map | params | ret" to update keys in value_map
-        # with new ones from params and ret
+        # store the iterative param in the ret dict as well
         s_it.extend([
             f'{indent}' + f'args = {args}',
             f'{indent}' +
             f'{n_id} = {n_id}_func(**get_lambda_kwargs(value_map | params | ret, args, units={units}))',
+            f'{indent}' + f'ret["{n_id}"] = {n_id}',
             f'{indent}' + f'params["{n_id}"] = {n_id}',
             '\n'
         ])
