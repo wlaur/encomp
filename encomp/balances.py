@@ -128,6 +128,7 @@ class BalancedSystem:
     def mapping(self,
                 value_map: dict[Union[sp.Symbol, str], Union[Quantity, npt.ArrayLike]],
                 iterative_symbols: Optional[list[sp.Symbol]] = None,
+                callback: Optional[Callable] = None,
                 units: bool = False,
                 to_str: bool = False) -> Union[Callable, str]:
         """
@@ -148,6 +149,9 @@ class BalancedSystem:
         iterative_symbols : Optional[list[sp.Symbol]], optional
             List of symbols that are used in an iterative evaluation of the mapping function,
             by default None
+        callback : Optional[Callable], optional
+            Callback function in case of iterative symbols, by default None.
+            Takes tow args: iteration number and the combined dict ``value_map | params | ret``
         units : bool, optional
             Whether to use units for the return values (the inputs must be always Quantity), by default False
         to_str : bool, optional
@@ -197,13 +201,16 @@ class BalancedSystem:
             if params is None:
                 params = {}
 
-            for _ in range(n_iter):
+            for it in range(1, n_iter + 1):
 
                 ret = mapping(params)
 
                 for n, fn in iterative_mappings.items():
                     val_i = fn(value_map | params | ret)
                     params[n] = val_i
+
+                if callback is not None:
+                    callback(it, value_map | params | ret)
 
             return ret
 
