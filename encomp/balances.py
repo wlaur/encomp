@@ -17,7 +17,8 @@ import numpy.typing as npt
 
 from encomp.structures import flatten, divide_chunks
 from encomp.sympy import (sp, get_mapping, substitute_unknowns,
-                          get_sol_expr, evaluate, get_function)
+                          get_sol_expr, evaluate, get_function,
+                          get_lambda, to_identifier, mapping_repr_iterative)
 from encomp.units import Quantity
 
 
@@ -167,6 +168,8 @@ class BalancedSystem:
         if self.sol is None:
             self.solve()
 
+        mapping_name = 'mapping'
+
         mapping = get_mapping(
             self.unknowns,
             list(value_map),
@@ -174,7 +177,8 @@ class BalancedSystem:
             value_map,
             secondary_equations=self.secondary_equations,
             units=units,
-            to_str=to_str
+            to_str=to_str,
+            mapping_name=mapping_name
         )
 
         if not iterative_symbols:
@@ -184,13 +188,21 @@ class BalancedSystem:
             raise ValueError('Iterative symbols must be part of value_map, passed unknown symbol(s)'
                              f'\n{set(iterative_symbols) - set(value_map)}')
 
-        if to_str:
-            raise NotImplementedError('TODO')
-
         iterative_mappings = {
-            n: self._get_eval_func(n, value_map, mapping, units=units)
+            n: self._get_eval_func(n, value_map, mapping,
+                                   units=units, to_str=to_str)
             for n in iterative_symbols
         }
+
+        if to_str:
+
+            if callback is not None:
+                raise NotImplementedError(
+                    'Callback function is not supported for string output')
+
+            return mapping_repr_iterative(mapping, iterative_mappings,
+                                          mapping_name=f'{mapping_name}_iterative',
+                                          units=units)
 
         def iterative_mapping(params: dict = None, n_iter=5):
 
@@ -242,7 +254,8 @@ class BalancedSystem:
     def _get_eval_func(self, symbol: sp.Symbol,
                        value_map: dict[sp.Symbol, Union[Quantity, npt.ArrayLike]],
                        mapping: Optional[Callable] = None,
-                       units: bool = True) -> Callable:
+                       units: bool = True,
+                       to_str: bool = False) -> Union[Callable, tuple[str, list[str]]]:
         """
         Get a callable function that takes ``value_map`` as input and
         returns the value for ``symbol``.
@@ -258,20 +271,21 @@ class BalancedSystem:
             None it will be created (if necessary), by default None
         units : bool
             Whether to use units for the return value, by default True
+        to_str : bool
+            Whether to reuturn a string representation of the function, by default False
 
         Returns
         -------
-        Callable
-            Function that returns the specified value with ``value_map`` as input
+        Union[Callable, tuple[str, list[str]]]
+            Function that returns the specified value with ``value_map`` as input,
+            or a string representation and a list of args in case ``to_str=True``
         """
 
         expr = self._get_expr(symbol, set(value_map) | set(self.unknowns))
 
-        if mapping is None:
-            # generating the explicit forms for all unknown variables will take a while
-            mapping = self.mapping(value_map, units=units)
-
-        unknown_value_map = mapping()
+        if to_str:
+            fcn_str, args = get_lambda(expr, to_str=True)
+            return fcn_str, args
 
         return get_function(expr, units=units)
 

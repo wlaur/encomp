@@ -773,6 +773,75 @@ def mapping_repr(y_solution: list[tuple[sp.Symbol, tuple[str, list[str]]]],
     return '\n'.join(s_glob) + '\n\n' + f'\n{indent}'.join(s)
 
 
+def mapping_repr_iterative(mapping: str,
+                           iterative_mappings: dict[sp.Symbol, tuple[str, list[str]]],
+                           mapping_name: str = 'mapping_iterative',
+                           units: bool = False) -> str:
+    """
+    Appends an iterative function to the end of the module source code ``mapping``.
+
+    Parameters
+    ----------
+    mapping : str
+        Module source code, output from ``mapping_repr``
+    iterative_mappings : dict[sp.Symbol, tuple[str, list[str]]]
+        Mapping from symbol to function string and list of args
+    mapping_name : str, optional
+        Name of the iterative mapping function, by default 'mapping_iterative'.
+        This name cannot be the same as the mapping name in the ``mapping`` source code.
+    units : bool, optional
+        Whether to keep the units in the mapping return dict, if False Quantity is converted
+        to float (after calling ``to_base_units()``), by default False
+
+    Returns
+    -------
+    str
+        Module source code with an iterative function appended
+    """
+
+    indent = ' ' * 4
+
+    s_it = [
+        f'def {mapping_name}(params=None, n_iter=10):',
+        'if n_iter < 1: '
+        'raise ValueError(f"Number of iterations must be at least 1, passed {n_iter=}")',
+        'if params is None: params = {}',
+        'params = {to_identifier(a): b for a, b in params.items()}',
+        '\n'
+    ]
+
+    for n, (lambda_str, args) in iterative_mappings.items():
+        n_id = to_identifier(n)
+        s_it.append(f'{n_id}_func = {lambda_str}\n')
+
+    s_it.extend([
+        '\n',
+        'for it in range(1, n_iter + 1):',
+        f'{indent}' + 'ret = mapping(params)'
+        '\n'
+    ])
+
+    for n, (lambda_str, args) in iterative_mappings.items():
+
+        n_id = to_identifier(n)
+
+        # use "value_map | params | ret" to update keys in value_map
+        # with new ones from params and ret
+        s_it.extend([
+            f'{indent}' + f'args = {args}',
+            f'{indent}' +
+            f'{n_id} = {n_id}_func(**get_lambda_kwargs(value_map | params | ret, args, units={units}))',
+            f'{indent}' + f'params["{n_id}"] = {n_id}',
+            '\n'
+        ])
+
+    s_it.extend([
+        'return ret'
+    ])
+
+    return mapping + '\n\n' + f'\n{indent}'.join(s_it)
+
+
 def typeset_chemical(s: str) -> str:
     """
     Typesets chemical formulas using Latex.
