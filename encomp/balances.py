@@ -5,9 +5,6 @@ unknown variables based on balance relationships and known parameters.
 
 Balances can be based on energy, mass or stoichiometry (chemical). One balance equation is required for
 each unknown variable.
-
-.. warning::
-    All balance equation must be *linear* with respect to the unknown variables.
 """
 
 
@@ -100,21 +97,33 @@ class BalancedSystem:
 
     def solve(self) -> None:
         """
-        Solves the (linear) balance equations for the unknown symbols.
+        Solves the balance equations for the unknown symbols.
+        First tries to solve as a linear system, if the balance equations are nonlinear
+        the method ``solve_nonlinear`` is used.
+
         Sets the ``sol`` attribute of this instance to a list of ``(symbol, expression)``
         tuples for each unknown symbol (same order as the ``unknowns`` list).
         """
 
-        eqns = [n.eqn for n in self.balances]
-
         try:
-            sol_set = linsolve(eqns, self.unknowns)
+            sol_set = linsolve([n.eqn for n in self.balances], self.unknowns)
         except NonlinearError as e:
-            raise ValueError(
-                'Balance equations are nonlinear in terms of one or more of the unknown variables') from e
+            return self.solve_nonlinear()
 
         self.sol = list(zip(self.unknowns, sol_set.args[0]))
         self.sol_dict = dict(zip(self.unknowns, sol_set.args[0]))
+
+    def solve_nonlinear(self) -> None:
+        """
+        Tries to solve nonlinear balance equations,
+        there is no guarantee that this will work.
+        """
+
+        sol = sp.solve([n.eqn for n in self.balances],
+                       self.unknowns, dict=True)
+
+        self.sol_dict = sol[0]
+        self.sol = list(self.sol_dict.items())
 
     def mapping(self,
                 value_map: dict[Union[sp.Symbol, str], Union[Quantity, npt.ArrayLike]],
@@ -218,7 +227,6 @@ class BalancedSystem:
         expr_subs = substitute_unknowns(expr,
                                         knowns,
                                         self.secondary_equations)
-
         if expr_subs is not None:
             expr = expr_subs
 
@@ -290,6 +298,12 @@ class BalancedSystem:
             The evaluated value of the symbol, given the specified ``value_map``
         """
 
+        # in case the symbol to be evaluated exists in value_map, remove it
+        # we don't want to simply look it up from this dict
+        if symbol in value_map:
+            value_map = value_map.copy()
+            value_map.pop(symbol)
+
         expr = self._get_expr(symbol, set(value_map) | set(self.unknowns))
 
         try:
@@ -305,7 +319,6 @@ class BalancedSystem:
                 mapping = self.mapping(value_map, units=units)
 
             unknown_value_map = mapping()
-
             return evaluate(expr, value_map | unknown_value_map, units=units)
 
     def _repr_html_(self) -> str:

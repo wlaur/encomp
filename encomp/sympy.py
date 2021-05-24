@@ -209,13 +209,14 @@ def get_sol_expr(eqns: Union[sp.Equality, list[sp.Equality]],
     if isinstance(eqns, sp.Equality):
         eqns = [eqns]
 
-    # only include unique equations that actually contains the symbol
+    # only include unique equations that actually contains the symbol,
+    # preferably on the LHS
     # this might leave multiple equations, there's no guarantee
     # that the equations can be solved
     # sort by the number of free symbols, use default_sort_key as the
     # secondary sort key to make sure that the order is consistent
     def eqn_simplicity(eqn):
-        return len(eqn.free_symbols), default_sort_key(eqn)
+        return len(eqn.lhs.free_symbols), default_sort_key(eqn)
 
     eqns = sorted(set(filter(lambda eqn: symbol in eqn.free_symbols, eqns)),
                   key=eqn_simplicity)
