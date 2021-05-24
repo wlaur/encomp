@@ -278,6 +278,7 @@ class BalancedSystem:
     def evaluate(self, symbol: sp.Symbol,
                  value_map: dict[sp.Symbol, Union[Quantity, npt.ArrayLike]],
                  mapping: Optional[Callable] = None,
+                 n_iter: int = 10,
                  units: bool = True) -> Quantity:
         """
         Evaluates the specified symbol based on the values in ``value_map``.
@@ -296,6 +297,9 @@ class BalancedSystem:
         mapping : Optional[Callable]
             Callable that evaluates the unknown variables, in case this is
             None it will be created (if necessary), by default None
+        n_iter : int, optional
+            Number of iterations in case the mapping function needs to be evaluated
+            and there are iterative symbols, by default 10
         units : bool
             Whether to use units for the return value, by default True
 
@@ -323,9 +327,16 @@ class BalancedSystem:
 
             if mapping is None:
                 # generating the explicit forms for all unknown variables will take a while
+                # this does not consider iterative symbols, the user needs to pass the mapping
+                # object explicitly in that case
                 mapping = self.mapping(value_map, units=units)
 
-            unknown_value_map = mapping()
+            # we don't know if the mapping takes kwarg n_iter or not
+            try:
+                unknown_value_map = mapping(n_iter=n_iter)
+            except:
+                unknown_value_map = mapping()
+
             return evaluate(expr, value_map | unknown_value_map, units=units)
 
     def _repr_html_(self) -> str:
