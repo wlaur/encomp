@@ -29,7 +29,7 @@ def to_identifier(s: Union[sp.Symbol, str]) -> str:
 
     The Latex command ``\\text{}`` is replaced with ``T``. This is
     done to differentiate between symbols ``\\text{kg}`` (returns ``Tkg``)
-    and``kg`` (returns ``kg``).
+    and ``kg`` (returns ``kg``).
 
     Parameters
     ----------
