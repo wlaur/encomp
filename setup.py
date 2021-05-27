@@ -13,6 +13,6 @@ setup(
         'encomp',
         'encomp.tests',
     ],
-    python_requires='~=3.8',
+    python_requires='~=3.9',
     include_package_data=True  # package data is specified in MANIFEST.in
 )

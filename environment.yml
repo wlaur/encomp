@@ -26,6 +26,5 @@ dependencies:
   - bokeh
   - chart-studio
   - plotly
-  # - wntr / no Python 3.9 support
   - pip:
       - -r file:requirements.txt
