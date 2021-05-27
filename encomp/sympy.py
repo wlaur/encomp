@@ -1,6 +1,6 @@
 """
 Imports and extends the ``sympy`` library for symbolic mathematics.
-Contains functions for converting Sympy expressions to Python functions.
+Contains tools for converting Sympy expressions to Python modules and functions.
 """
 
 
@@ -21,17 +21,15 @@ from encomp.structures import flatten
 from encomp.serialize import serialize
 
 
-# functions that don't take mutable inputs (list, dict) are
-# decorated with @lru_cache to avoid re-evaluating the functions for identical inputs
-
 @lru_cache
 def to_identifier(s: Union[sp.Symbol, str]) -> str:
     """
     Converts a Sympy symbol to a valid Python identifier.
     This function will only remove special characters.
 
-    Latex commands are not stripped: the symbol ``\\text{kg}`` returns ``textkg`` and
-    ``kg`` returns ``kg``.
+    The Latex command ``\\text{}`` is replaced with ``T``. This is
+    done to differentiate between symbols ``\\text{kg}`` (returns ``Tkg``)
+    and``kg`` (returns ``kg``).
 
     Parameters
     ----------
