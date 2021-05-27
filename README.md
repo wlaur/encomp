@@ -58,7 +58,7 @@ To use ``encomp`` from a Jupyter Notebook, import the ``encomp.notebook`` module
 from encomp.notebook import *
 ```
 
-This will import commonly used functions and classes
+This will import commonly used functions and classes.
 It also registers the ``%read`` and ``%%write`` Jupyter magics for reading and writing custom objects from and to JSON.
 
 Some examples:
