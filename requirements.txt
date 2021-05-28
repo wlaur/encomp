@@ -6,3 +6,4 @@ pydata-sphinx-theme
 sphinx-gallery
 sphinx-autodoc-typehints
 scikit-learn
+python-dateutil
