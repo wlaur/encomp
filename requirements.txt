@@ -3,6 +3,8 @@ python-dateutil
 
 numpy
 pandas
+scipy
+jupyter
 matplotlib
 scikit-learn
 sympy
