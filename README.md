@@ -2,6 +2,8 @@
 
 > General-purpose library for *en*gineering *comp*utations, with focus on clean and consistent interfaces.
 
+Package documentation at https://encomp.readthedocs.io/en/latest/
+
 ## Features
 
 * Consistent interfaces to commonly used engineering tools:
@@ -18,8 +20,18 @@
 
 ## Installation
 
-Install Miniconda or Anconda if not already installed.
+Install with ``pip``:
 
+```
+pip install encomp
+```
+
+This will install ``encomp`` along with its dependencies into the currently active Python environment.
+
+
+### Development environment
+
+Install Miniconda or Anconda if not already installed.
 Clone this repository, open a terminal and navigate to the root directory.
 Setup a new environment using ``conda``:
 
@@ -28,8 +40,7 @@ conda env create -f environment.yml
 ```
 
 This will install the necessary dependencies into a new ``conda`` environment named ``encomp-env``.
-Some dependencies are installed with ``pip``.
-
+The dependencies (except for ``scipy`` and ``jupyter``) are installed with ``pip``.
 
 Install ``encomp`` into the new environment:
 
@@ -39,7 +50,7 @@ pip install .
 ```
 
 
-### Removing the ``conda`` environment
+#### Removing the ``conda`` environment
 
 To completely remove the ``conda`` environment for ``encomp``:
 

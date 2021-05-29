@@ -19,11 +19,27 @@ def pip_install():
     os.system('pip install .')
 
 
+def upload_pip():
+
+    cmds = [
+        'rmdir /s/q build',
+        'rmdir /s/q dist',
+        'python setup.py bdist_wheel',
+        'twine upload dist/*'
+    ]
+
+    for n in cmds:
+        os.system(n)
+
+
 def main(task=None):
 
     if task is None:
         build_docs()
         pip_install()
+
+    elif task == 'pip':
+        upload_pip()
 
     elif task == 'docs':
         build_docs()

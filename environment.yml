@@ -5,26 +5,9 @@ channels:
 dependencies:
   - python=3.9
   - pip
-  - pydantic
-  - pytest
   - scipy
   - jupyter
   - CoolProp
-  - pint
-  - fluids
-  - thermo
-  - fire
-  - networkx
-  - uncertainties
-  - sympy
-  - autopep8
-  - typeguard
-  - xlsxwriter
-  - openpyxl
-  - seaborn
-  - asttokens
-  - bokeh
-  - chart-studio
-  - plotly
   - pip:
       - -r file:requirements.txt
+      - -r file:requirements-dev.txt

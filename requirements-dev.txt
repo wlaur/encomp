@@ -1,0 +1,8 @@
+autopep8
+pytest
+twine
+Sphinx
+nbsphinx
+pydata-sphinx-theme
+sphinx-gallery
+sphinx-autodoc-typehints

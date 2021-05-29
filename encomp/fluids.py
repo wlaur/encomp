@@ -5,8 +5,13 @@ Uses CoolProp as backend.
 
 from typing import Annotated
 import numpy as np
-from CoolProp.CoolProp import PropsSI
-from CoolProp.HumidAirProp import HAPropsSI
+
+try:
+    from CoolProp.CoolProp import PropsSI
+    from CoolProp.HumidAirProp import HAPropsSI
+except ImportError:
+    raise ImportError('CoolProp package not installed, install with conda '
+                      'in case "pip install CoolProp" fails')
 
 from encomp.structures import flatten
 from encomp.units import Quantity, Unit
