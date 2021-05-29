@@ -28,6 +28,12 @@ pip install encomp
 
 This will install ``encomp`` along with its dependencies into the currently active Python environment.
 
+> ``CoolProp`` might not be installable with ``pip`` for Python 3.9. Install manually with ``conda`` for now:
+
+```
+conda install CoolProp
+```
+
 
 ### Development environment
 
