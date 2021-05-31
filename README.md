@@ -31,7 +31,7 @@ This will install ``encomp`` along with its dependencies into the currently acti
 > ``CoolProp`` might not be installable with ``pip`` for Python 3.9. Install manually with ``conda`` for now:
 
 ```
-conda install CoolProp
+conda install conda-forge::coolprop
 ```
 
 
