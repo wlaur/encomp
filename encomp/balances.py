@@ -15,9 +15,9 @@ import numpy.typing as npt
 
 
 from encomp.structures import flatten, divide_chunks
-from encomp.sympy import (sp, get_mapping, substitute_unknowns,
-                          get_sol_expr, evaluate, get_function,
-                          get_lambda, to_identifier, mapping_repr_iterative)
+from encomp.sympy import (sp, substitute_unknowns, get_sol_expr,
+                          evaluate, get_function, get_lambda)
+
 from encomp.units import Quantity
 
 
@@ -118,97 +118,11 @@ class BalancedSystem:
                 to_str: bool = False,
                 mapping_name: str = 'mapping') -> Union[Callable, str]:
         """
-        Returns a mapping function (as object or string representation of a Python module)
-        that returns evaluated values for unknown variables given the parameters defined
-        in ``value_map``. The keys in ``value_map`` are symbols in the balance equations,
-        and the values are default values that are used in case the mapping function
-        did not receive an input for a certain symbol. Set the values in ``value_map`` to None
-        to make them required (the mapping function will raise an error in case None is multiplied
-        with a Quantity or ``np.ndarray``).
-
-        Parameters
-        ----------
-        value_map : dict[Union[sp.Symbol, str], Union[Quantity, npt.ArrayLike]]
-            Mapping from symbol or symbol identifier to value. Make sure the keys match
-            the symbols used in the balanced system. The value can be set to None to
-            make a key an required input to this mapping function
-        iterative_symbols : Optional[list[sp.Symbol]], optional
-            List of symbols that are used in an iterative evaluation of the mapping function,
-            by default None
-        callback : Optional[Callable], optional
-            Callback function in case of iterative symbols, by default None.
-            Takes two args: iteration number and the combined dict ``value_map | params | ret``
-        to_str : bool, optional
-            Whether to output a string representation of a Python module instead of a
-            function object, by default False
-        mapping_name : str, optional
-            Name of the mapping function, by default 'mapping'
-
-
-        Returns
-        -------
-        Union[Callable, str]
-            The mapping function, object or string representation of a Python module
+        .. todo::
+            Implement a method that constructs a mapping from x → y variables.
         """
 
-        M = self.get_matrix()
-
-        mapping = get_mapping(
-            self.unknowns,
-            list(value_map),
-            M,
-            value_map,
-            secondary_equations=self.secondary_equations,
-            to_str=to_str,
-            mapping_name=mapping_name
-        )
-
-        if not iterative_symbols:
-            return mapping
-
-        if set(iterative_symbols) - set(value_map):
-            raise ValueError('Iterative symbols must be part of value_map, passed unknown symbol(s)'
-                             f'\n{set(iterative_symbols) - set(value_map)}')
-
-        iterative_mappings = {
-            n: self._get_eval_func(n, value_map, mapping,
-                                   units=False, to_str=to_str)
-            for n in iterative_symbols
-        }
-
-        if to_str:
-
-            if callback is not None:
-                raise NotImplementedError(
-                    'Callback function is not supported for string output')
-
-            return mapping_repr_iterative(mapping, iterative_mappings,
-                                          mapping_name=f'{mapping_name}_iterative',
-                                          units=False)
-
-        def iterative_mapping(params: dict = None, n_iter=5):
-
-            if n_iter < 1:
-                raise ValueError(
-                    f'Number of iterations must be at least 1, passed {n_iter=}')
-
-            if params is None:
-                params = {}
-
-            for it in range(1, n_iter + 1):
-
-                ret = mapping(params)
-
-                for n, fn in iterative_mappings.items():
-                    val_i = fn(value_map | params | ret)
-                    params[n] = val_i
-
-                if callback is not None:
-                    callback(it, value_map | params | ret)
-
-            return ret
-
-        return iterative_mapping
+        raise NotImplementedError()
 
     def _get_expr(self, symbol: sp.Symbol, knowns: set[sp.Symbol]) -> sp.Basic:
 
