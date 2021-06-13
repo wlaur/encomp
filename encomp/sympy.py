@@ -7,6 +7,7 @@ Contains tools for converting Sympy expressions to Python modules and functions.
 from typing import Callable, Optional, Union, Literal
 import re
 import json
+import numpy as np
 import sympy as sp
 from sympy.utilities.lambdify import lambdify, lambdastr
 from sympy import default_sort_key
@@ -19,6 +20,9 @@ from encomp.settings import SETTINGS
 from encomp.units import Quantity
 from encomp.structures import flatten
 from encomp.serialize import serialize
+from encomp.misc import pad_2D_array
+
+_IDENTIFIER_MAP: dict[str, sp.Symbol] = {}
 
 
 @lru_cache
@@ -41,6 +45,11 @@ def to_identifier(s: Union[sp.Symbol, str]) -> str:
     str
         Valid Python identifier created from the input symbol
     """
+
+    s_inp = s
+
+    if s in _IDENTIFIER_MAP:
+        return _IDENTIFIER_MAP[s]
 
     # assume that input strings are already identifiers
     if isinstance(s, str):
@@ -67,6 +76,8 @@ def to_identifier(s: Union[sp.Symbol, str]) -> str:
     if not s.isidentifier():
         raise ValueError(
             f'Symbol could not be converted to a valid Python identifer: {s_orig}')
+
+    _IDENTIFIER_MAP[s_inp] = s
 
     return s
 
@@ -332,6 +343,52 @@ def get_lambda(e: sp.Basic, *,
     return fcn, args
 
 
+def get_lambda_matrix(M: sp.Matrix) -> tuple[str, list[str]]:
+    """
+    Converts the input matrix into a lambda function that returns
+    an array.
+    Converts the matrix to Python source, it is not possible to
+    use in-memory lambda functions for this. Use ``eval(src)``
+    on the output from this function to create a function object.
+
+    Parameters
+    ----------
+    M : sp.Matrix
+        Input matrix
+
+    Returns
+    -------
+    tuple[str, list[str]]
+        Python source code for the function and a list of parameters
+    """
+
+    args = set()
+
+    nrows, ncols = M.shape
+
+    arr = np.zeros((nrows, ncols), dtype=object)
+
+    for i in range(nrows):
+        for j in range(ncols):
+            fcn_str, n_args = get_lambda(M[i, j], to_str=True)
+            args |= set(n_args)
+
+            # remove the "lambda x, y, x:" part and extra parens,
+            # the are added later
+            fcn_str = fcn_str.split(
+                ':', 1)[-1].strip().removeprefix('(').removesuffix(')')
+            arr[i, j] = fcn_str
+
+    # remove quotes around strings, they are mathematical expressions
+    funcs = str(arr.tolist()).replace("'", '').replace('"', '')
+
+    # TODO: "VisibleDeprecationWarning: Creating an ndarray from ragged..."
+    # when mixing input vectors and floats
+    func_src = f'lambda {", ".join(args)}: np.array({funcs})'
+
+    return func_src, sorted(args)
+
+
 @lru_cache
 def get_function(e: sp.Basic, *, units: bool = False) -> Callable:
     """
@@ -457,10 +514,9 @@ def substitute_unknowns(e: sp.Basic,
 
 def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
                 x_symbols: Union[sp.Symbol, list[sp.Symbol]],
-                y_solution: list[Union[list[sp.Basic], tuple[sp.Symbol, sp.Basic]]],
+                M: sp.Matrix,
                 value_map: dict[sp.Symbol, Union[Quantity, npt.ArrayLike]], *,
                 secondary_equations: Optional[list[sp.Equality]] = None,
-                units: bool = False,
                 to_str: bool = False,
                 mapping_name: str = 'mapping') -> Union[Callable, str]:
     """
@@ -469,36 +525,32 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
 
     The function will have input parameters corresponding to the symbols in ``x_symbols``,
     and returns a dict with values for each symbol in ``y_symbols``.
-    The list ``y_solution`` contains an explicit solution for all the specified :math:`y`-values
-    in terms of :math:`x`-values.
+    The matrix ``M`` is the system matrix :math:`[A, b]` that represents the linear system.
     :math:`x`-values that are not part of ``x_symbols`` (i.e. mapping parameters) will have
     values specified in ``value_map``.
 
     .. tip::
         The resulting mapping function might take a while to evaluate, avoid
         calling it in a loop. Use Numpy arrays to evaluate multiple inputs
-        at the same time. It is possible to mix single values and arrays
-        in the inputs.
+        at the same time.
+
+    .. note::
+        The return values do not contain units, the values are in the base SI units.
 
     Parameters
     ----------
     y_symbols : Union[sp.Symbol, list[sp.Symbol]]
-        :math:`N` symbol(s) that will be return values from the mapping function.
-        In case the symbol is not directly solved in ``y_solution``, it needs to
-        be explicitly defined in ``secondary_equations``.
+        :math:`N` unknown symbol(s) that will be return values from the mapping function.
     x_symbols : Union[sp.Symbol, list[sp.Symbol]]
         :math:`M` symbol(s) that will be input parameters to the mapping function
-    y_solution : list[Union[list[sp.Basic], tuple[sp.Symbol, sp.Basic]]]
-        Explicit solution for all :math:`y`-values in terms of :math:`x`-values,
-        list of 2-element lists or tuples with (symbol, expression)
+    M : sp.Matrix
+        System matrix with :math:`N` rows and :math:`N+1` columns
+        (corresponding to the unknowns, plus the constant terms)
     value_map : dict[sp.Symbol, Union[Quantity, npt.ArrayLike]]
         Values to use for additional parameters in the solution expressions
     secondary_equations : Optional[list[sp.Equality]], optional
         Secondary equations used to evaluate :math:`x`-values that are not
         specified in the mapping ``value_map``, by default None
-    units : bool, optional
-        Whether to keep the units, if False Quantity is converted
-        to float (after calling ``to_base_units()``), by default False
     to_str : bool, optional
         Whether to return the string representation of the mapping function, by default False
     mapping_name : str, optional
@@ -508,10 +560,7 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
     -------
     Union[Callable, str]
         Mapping function that takes :math:`M` inputs (dict) and
-        returns :math:`N` outputs (dict). In case ``units=True`` the
-        outputs are Quantity, otherwise they are float. The inputs are always Quantity,
-        if ``units=False`` they are converted to float with ``to_base_unit()``.
-        If ``to_str=True``, returns a string representation of the mapping function.
+        returns :math:`N` outputs (dict).
     """
 
     if isinstance(y_symbols, sp.Symbol):
@@ -524,20 +573,10 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
         raise ValueError(
             f'No y-symbols specified, mapping function needs at least one return value')
 
-    # in case the specified y-symbols are not directly defined in y_solution,
-    # they must be defined in the secondary equations
-    unknown_y_symbols = [n for n in y_symbols
-                         if n not in [m[0] for m in y_solution]]
-
-    if unknown_y_symbols and secondary_equations is None:
-        raise ValueError('All y-symbols must have an explicit solution in terms of '
-                         'x-values in the list y_solution or a corresponding secondary equation, '
-                         'pass a list of secondary equations that define these (kwarg secondary_equations)')
-
     # in case there are x-values not defined in value_map, check if they
     # can be solved (isolated) from the secondary equations
-    all_x_symbols = sorted(flatten(n[1].free_symbols for n in y_solution),
-                           key=default_sort_key)
+    required_x_symbols = sorted(flatten(n.free_symbols for n in M),
+                                key=default_sort_key)
 
     # make a copy to avoid modifying the caller's object
     value_map = value_map.copy()
@@ -552,7 +591,7 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
     })
 
     known_x_symbols = set(value_map) | set(x_symbols)
-    unknown_x_symbols = [n for n in all_x_symbols
+    unknown_x_symbols = [n for n in required_x_symbols
                          if n not in known_x_symbols]
 
     # eliminate the unknown x-symbols and substitute them with known ones
@@ -562,87 +601,26 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
             raise ValueError(f'Solution expression contains unknown x-symbols: {unknown_x_symbols}, '
                              'pass a list of secondary equations that define these (kwarg secondary_equations)')
 
-        # make a new list, don't modify the input to this function
-        y_solution_ = []
+        replacements = {}
 
-        for lhs, rhs in y_solution:
+        for n in unknown_x_symbols:
+            replacement_expr = get_sol_expr(secondary_equations, n)
+            replacements[n] = replacement_expr
 
-            rhs_subs = substitute_unknowns(rhs, known_x_symbols, secondary_equations,
-                                           avoid=set(y_symbols))
-
-            y_solution_.append((lhs, rhs_subs))
-
-        y_solution = y_solution_
-
-    # only keep the expressions that are needed for the specified return values
-    # use the same order as the input list of y-symbols
-    y_solution_ = []
-
-    for yi in y_symbols:
-
-        # expression for this y-variable
-        yi_expr = [n[1] for n in y_solution if n[0] == yi]
-
-        # in case this y-symbol is in unknown_y_symbols
-        if not yi_expr:
-
-            # the unknown y-symbol should be defined in the secondary equations
-            yi_expr = get_sol_expr(secondary_equations, yi)
-
-            if yi_expr is None:
-                raise ValueError(
-                    f'Symbol {yi} could not be isolated based on the specified secondary equations.')
-
-            if to_str:
-                # indicate that the lambda function for this expression
-                # must be evaluted after the explicit y-variables are evaluated
-                n = (yi_expr, 'post')
-
-            else:
-                # this function can only be evaluated after the known
-                # y-symbols have been evaluated
-                n = get_function(yi_expr, units=units)
-
-            y_solution_.append((yi, n))
-
-        else:
-            yi_expr = yi_expr[0]
-            y_solution_.append((yi, yi_expr))
-
-    y_solution = y_solution_
-
-    # at this point, the y_solution list contains explicit expressions or functions
-    # for all the required y-symbols
-    # all x-values are either known, dimensionality symbols (kg, m, K) or mapping parameters
-
-    # return a string representation of the mapping function
-    if to_str:
-
-        y_solution_str = []
-        y_solution_str_post = []
-
-        for a, b in y_solution:
-
-            # some of the expressions require other y-values as input
-            # these must be placed *after* the explicit ones
-            if isinstance(b, tuple) and b[1] == 'post':
-                y_solution_str_post.append((a, get_lambda(b[0], to_str=True)))
-            else:
-                y_solution_str.append((a, get_lambda(b, to_str=True)))
-
-        # make sure the _post y-variables are solved after the explicit ones
-        y_solution_str += y_solution_str_post
-
-        return mapping_repr(y_solution_str, value_map, x_symbols,
-                            mapping_name=mapping_name,
-                            units=units)
-
-    # these functions can be constructed beforehand, calling
-    # the mapping function will only evaluate them
-    fns = [(yi, get_function(e, units=units)) for yi, e in y_solution
-           if isinstance(e, sp.Basic)]
+        M = M.subs(replacements)
 
     x_symbols_set = set(x_symbols)
+
+    # the A matrix is inverted to solve the system
+    # the b matrix is simply evaluated and added to the unknowns
+    A = M[:, :-1]
+    b = M[:, -1]
+
+    A_src, A_args = get_lambda_matrix(A)
+    b_src, b_args = get_lambda_matrix(b)
+
+    A_func = eval(A_src)
+    b_func = eval(b_src)
 
     def mapping(params: Optional[dict] = None):
 
@@ -658,13 +636,42 @@ def get_mapping(y_symbols: Union[sp.Symbol, list[sp.Symbol]],
         # update existing keys, or add new ones
         params = value_map | params
 
-        # evaluate the explicit y-expressions
-        ret = {yi: fn(params) for yi, fn in fns}
+        # the A matrix is inverted numerically, so it must be
+        # done each time the mapping is evaluated
+        A_arr = A_func(**get_lambda_kwargs(params, A_args, units=False))
+        b_arr = b_func(**get_lambda_kwargs(params, b_args, units=False))
 
-        # evaluate the unknown y-values based on the evaluated ones
-        for yi, fn in y_solution:
-            if yi not in ret and isinstance(fn, Callable):
-                ret[yi] = fn(params | ret)
+        N = max(n.shape[0] if isinstance(n, np.ndarray)
+                else 1 for n in A_arr.ravel())
+
+        A_arr = pad_2D_array(A_arr, N)
+        A_arr = np.stack(A_arr.tolist())
+
+        # the last 2 dimensions must be invertable,
+        # the first dimension is from the input vectors
+        if A_arr.ndim == 3:
+            A_arr = np.moveaxis(A_arr, 2, 0)
+
+            b_arr = pad_2D_array(b_arr, N)
+            b_arr = np.stack(b_arr.tolist())
+            b_arr = np.moveaxis(b_arr, 2, 0)
+
+        A_arr_inv = np.linalg.inv(A_arr)
+
+        # np.matmul behaves differently from "arr.dot(other)"
+        sol = np.matmul(A_arr_inv, b_arr).squeeze()
+
+        # evaluate the explicit y-expressions
+        ret = {}
+
+        for i, yi in enumerate(y_symbols):
+
+            if sol.ndim == 1:
+                val = sol[i]
+            else:
+                val = sol[:, i].reshape(-1)
+
+            ret[yi] = val
 
         # sort the output in the same order as the list of y-symbols
         ret = dict(

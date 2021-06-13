@@ -4,6 +4,7 @@ Miscellaneous functions that do not fit anywhere else.
 
 import ast
 import asttokens
+import numpy as np
 
 from typing import Any, _GenericAlias, Union, Type
 from typeguard import check_type
@@ -129,3 +130,31 @@ def name_assignments(src: str) -> list[tuple[str, str]]:
                     assigned_names.append((node.targets[0].id, assignment_src))
 
     return assigned_names
+
+
+def pad_2D_array(arr: np.ndarray, N: int) -> np.ndarray:
+    """
+    Pads a ragged 2D Numpy arrays
+
+    Parameters
+    ----------
+    arr : np.ndarray
+        Input array
+    N : int
+        Goal length, padding is added to reach this
+
+    Returns
+    -------
+    np.ndarray
+        Output array, without ragged sequences
+    """
+
+    arr = arr.copy()
+
+    for i in range(arr.shape[0]):
+        for j in range(arr.shape[1]):
+            val = arr[i, j]
+            if isinstance(val, (int, float)):
+                arr[i, j] = np.repeat(val, N)
+
+    return arr

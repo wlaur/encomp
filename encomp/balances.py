@@ -11,7 +11,6 @@ each unknown variable.
 from typing import Optional, Literal, Callable, Union
 from symbolic_equation import Eq as Eq_symbolic
 from sympy import default_sort_key
-from sympy.solvers.solveset import linsolve, NonlinearError
 import numpy.typing as npt
 
 
@@ -88,7 +87,6 @@ class BalancedSystem:
             secondary_equations = []
 
         self.secondary_equations = secondary_equations.copy()
-        self.sol = None
 
     @property
     def free_symbols(self) -> set[sp.Symbol]:
@@ -96,42 +94,29 @@ class BalancedSystem:
         s2 = set(flatten(n.free_symbols for n in self.secondary_equations))
         return s1 | s2
 
-    def solve(self) -> None:
+    def get_matrix(self) -> sp.Matrix:
         """
-        Solves the balance equations for the unknown symbols.
-        First tries to solve as a linear system, if the balance equations are nonlinear
-        the method ``solve_nonlinear`` is used.
+        Find the matrix :math:`[A, b]` that corresponds to the
+        linear system :math:`A x = b`.
 
-        Sets the ``sol`` attribute of this instance to a list of ``(symbol, expression)``
-        tuples for each unknown symbol (same order as the ``unknowns`` list).
-        """
-
-        try:
-            sol_set = linsolve([n.eqn for n in self.balances], self.unknowns)
-        except NonlinearError as e:
-            return self.solve_nonlinear()
-
-        self.sol = list(zip(self.unknowns, sol_set.args[0]))
-        self.sol_dict = dict(zip(self.unknowns, sol_set.args[0]))
-
-    def solve_nonlinear(self) -> None:
-        """
-        Tries to solve nonlinear balance equations,
-        there is no guarantee that this will work.
+        Returns
+        -------
+        sp.Matrix
+            System matrix
         """
 
-        sol = sp.solve([n.eqn for n in self.balances],
-                       self.unknowns, dict=True)
+        eqns = [n.eqn for n in self.balances]
+        A, b = sp.linear_eq_to_matrix(eqns, *self.unknowns)
+        M = sp.Matrix.hstack(A, b)
 
-        self.sol_dict = sol[0]
-        self.sol = list(self.sol_dict.items())
+        return M
 
     def mapping(self,
                 value_map: dict[Union[sp.Symbol, str], Union[Quantity, npt.ArrayLike]],
                 iterative_symbols: Optional[list[sp.Symbol]] = None,
                 callback: Optional[Callable] = None,
-                units: bool = False,
-                to_str: bool = False) -> Union[Callable, str]:
+                to_str: bool = False,
+                mapping_name: str = 'mapping') -> Union[Callable, str]:
         """
         Returns a mapping function (as object or string representation of a Python module)
         that returns evaluated values for unknown variables given the parameters defined
@@ -152,12 +137,13 @@ class BalancedSystem:
             by default None
         callback : Optional[Callable], optional
             Callback function in case of iterative symbols, by default None.
-            Takes tow args: iteration number and the combined dict ``value_map | params | ret``
-        units : bool, optional
-            Whether to use units for the return values (the inputs must be always Quantity), by default False
+            Takes two args: iteration number and the combined dict ``value_map | params | ret``
         to_str : bool, optional
             Whether to output a string representation of a Python module instead of a
             function object, by default False
+        mapping_name : str, optional
+            Name of the mapping function, by default 'mapping'
+
 
         Returns
         -------
@@ -165,18 +151,14 @@ class BalancedSystem:
             The mapping function, object or string representation of a Python module
         """
 
-        if self.sol is None:
-            self.solve()
-
-        mapping_name = 'mapping'
+        M = self.get_matrix()
 
         mapping = get_mapping(
             self.unknowns,
             list(value_map),
-            self.sol,
+            M,
             value_map,
             secondary_equations=self.secondary_equations,
-            units=units,
             to_str=to_str,
             mapping_name=mapping_name
         )
@@ -190,7 +172,7 @@ class BalancedSystem:
 
         iterative_mappings = {
             n: self._get_eval_func(n, value_map, mapping,
-                                   units=units, to_str=to_str)
+                                   units=False, to_str=to_str)
             for n in iterative_symbols
         }
 
@@ -202,7 +184,7 @@ class BalancedSystem:
 
             return mapping_repr_iterative(mapping, iterative_mappings,
                                           mapping_name=f'{mapping_name}_iterative',
-                                          units=units)
+                                          units=False)
 
         def iterative_mapping(params: dict = None, n_iter=5):
 
@@ -234,13 +216,7 @@ class BalancedSystem:
             raise ValueError(
                 f'Symbol {symbol} is not included in the balances or secondary equations')
 
-        if self.sol is None:
-            self.solve()
-
-        if symbol in self.unknowns:
-            expr = self.sol_dict[symbol]
-        else:
-            expr = get_sol_expr(self.secondary_equations, symbol)
+        expr = get_sol_expr(self.secondary_equations, symbol)
 
         # substitute as if the unknowns were known, they can be evaluated if necessary
         expr_subs = substitute_unknowns(expr,
@@ -296,7 +272,6 @@ class BalancedSystem:
                  units: bool = True) -> Quantity:
         """
         Evaluates the specified symbol based on the values in ``value_map``.
-        Will find the symbolic solution to the balances in case it is not already solved.
 
         .. note::
             This method is very slow, do not evaluate this in a loop.
@@ -402,8 +377,7 @@ class BalancedSystem:
 
         attrs = ['balances',
                  'unknowns',
-                 'secondary_equations',
-                 'sol']
+                 'secondary_equations']
 
         return {'type': 'BalancedSystem',
                 'data': {a: serialize(getattr(self, a)) for a in attrs}}
@@ -413,13 +387,6 @@ class BalancedSystem:
 
         from encomp.serialize import decode
 
-        if 'sol' in d:
-            sol = decode(d.pop('sol'))
-        else:
-            sol = None
-
         bs = cls(**{a: decode(b) for a, b in d.items()})
-        bs.sol = sol
-        bs.sol_dict = dict(sol)
 
         return bs
