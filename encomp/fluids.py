@@ -429,8 +429,17 @@ class Fluid(CoolPropFluid):
 
     def __repr__(self) -> str:
 
-        props_str = ', '.join(f'{p}={self.get(p):{fmt}}'
-                              for p, fmt in self.REPR_PROPERTIES)
+        props = []
+
+        for p, fmt in self.REPR_PROPERTIES:
+
+            # CoolProp might not have a backend for all props
+            try:
+                props.append(f'{p}={self.get(p):{fmt}}')
+            except Exception:
+                props.append(f'{p}=N/A')
+
+        props_str = ', '.join(props)
 
         s = f'<{self.__class__.__name__} "{self.name}", {props_str}>'
 

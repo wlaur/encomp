@@ -4,7 +4,7 @@ from encomp import __version__
 
 # load requirements.txt (base install) dependencies
 with open('requirements.txt') as f:
-    install_requires = f.read().splitlines()
+    install_requires = [n for n in f.read().splitlines() if n.strip()]
 
 
 # include readme
