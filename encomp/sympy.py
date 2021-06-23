@@ -606,7 +606,8 @@ def typeset(x: Optional[str]) -> Optional[str]:
         alpha_str = ''.join(n for n in p if n.isalpha())
 
         # typeset everything except 1-letter lower case as text
-        typeset_text = len(alpha_str) >= 2 or len(p) == 1 and p.isupper()
+        typeset_text = len(alpha_str) >= 2 or (
+            len(alpha_str) == 1 and alpha_str.isupper())
 
         if typeset_text:
 
