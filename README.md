@@ -131,6 +131,11 @@ qty = Quantity[Temperature / Length](1, 'delta_degC / km')
 another_qty = Quantity[Temperature / Length**2](1, 'delta_degC / liter')
 ```
 
+## Settings
+
+The attributes in the ``encomp.settings.Settings`` class can be modified with an ``.env``-file.
+Place a file named ``.env`` in the current working directory to override the default settings.
+
 
 ## TODO
 

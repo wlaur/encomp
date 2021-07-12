@@ -1,5 +1,6 @@
 fire
 python-dateutil
+python-dotenv
 
 numpy
 pandas
