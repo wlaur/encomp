@@ -92,12 +92,12 @@ html_css_files = [
 #
 # html_sidebars = {}
 
-# clean theme with a lot of nice interactive content with Bootstrap (might not work in IE11)
+# clean theme with a lot of nice interactive content with Bootstrap
 # blue in sidebar: 0, 91, 129
 html_theme = 'pydata_sphinx_theme'
 
-# html_logo = 'img/encomp-logo.svg'
-# html_favicon = 'img/encomp-logo.ico'
+html_logo = 'img/logo.svg'
+html_favicon = 'img/favicon.ico'
 
 html_sidebars = {'**': ['globaltoc.html', 'relations.html',
                         'sourcelink.html', 'searchbox.html']}

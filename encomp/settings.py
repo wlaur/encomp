@@ -4,10 +4,11 @@ Contains settings used elsewhere in the library.
 
 from typing import Literal
 from pathlib import Path
-from pydantic import BaseSettings
+from pydantic import BaseSettings, DirectoryPath, FilePath
 from dotenv import load_dotenv, find_dotenv
 
-load_dotenv(dotenv_path=find_dotenv())
+# find the first file named ".env" in the current directory or a parent directory
+load_dotenv(dotenv_path=find_dotenv(filename='.env'))
 
 ENCOMP_BASE = Path(__file__).parent.resolve()
 
@@ -16,14 +17,20 @@ class Settings(BaseSettings):
     """
     Settings class.
 
-    Use an ``.env`` file to override the defaults.
-    The ``.env``-file is located using ``dotenv.find_dotenv()``, this will find a
-    file in the directory of the running Python process.
+    Use an ``.env``-file to override the defaults.
+    The ``.env``-file is located using ``dotenv.find_dotenv(filename='.env')``, this will find a
+    file in the directory of the running Python process or in a parent directory.
 
-    .. tip::
-        The variables in the ``.env``-file have the same names (not case-sensitive)
-        as the attributes of this class. Names that are defined
-        as global environment variables take precedence over names in the ``.env``-file.
+    The variables in the ``.env``-file have the same names (not case-sensitive)
+    as the attributes of this class, with the additional prefix ``ENCOMP_``.
+    In case of invalid values in the ``.env``-file or environment variables,
+    a *ValidationError* is raised.
+
+    .. note::
+
+        Names that are defined as global environment variables (either on the system
+        or user level) take precedence over names in the ``.env``-file.
+        The global environment variables are loaded even if no ``.env``-file was found.
 
     * ``DATA_DIRECTORY``: path to a directory with auxiliary data
     * ``ADDITIONAL_UNITS``: path to a file with additional unit definitions for ``pint``
@@ -36,8 +43,8 @@ class Settings(BaseSettings):
     * ``MATPLOTLIB_NOTEBOOK_FORMAT``: figure format for Matplotlib figures in Jupyter Notebooks
     """
 
-    data_directory: Path = ENCOMP_BASE / 'data'
-    additional_units: Path = data_directory / 'additional-units.txt'
+    data_directory: DirectoryPath = ENCOMP_BASE / 'data'
+    additional_units: FilePath = data_directory / 'additional-units.txt'
 
     type_checking: bool = False
     typeset_symbol_scripts: bool = True
@@ -46,8 +53,11 @@ class Settings(BaseSettings):
     matplotlib_notebook_format: Literal['retina', 'png', 'svg'] = 'retina'
 
     class Config:
+        env_prefix = 'ENCOMP_'
         env_file = '.env'
         env_file_encoding = 'utf-8'
 
 
+# the settings object is initialized the first time the library loads
+# settings can be changed during runtime by setting attributes on this instance
 SETTINGS = Settings()

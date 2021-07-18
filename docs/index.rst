@@ -2,6 +2,10 @@
 encomp documentation
 ====================
 
+.. image:: img/logo.svg
+   :width: 200px
+   :align: center
+
 
 Overview
 ---------
