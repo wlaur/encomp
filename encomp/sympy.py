@@ -562,7 +562,7 @@ def typeset(x: Optional[str]) -> Optional[str]:
 
     will be typeset as ``\\text{input},i``: the ``i`` is
     a separate part and is typeset with a math font.
-    Spaces around commans will be removed to make sub- and
+    Spaces around commas will be removed to make sub- and
     superscripts more compact.
     Use ``~`` before a single upper-case letter to typeset it
     with a math font.
