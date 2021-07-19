@@ -124,7 +124,7 @@ Each *dimensionality* (for example *pressure*, *length*, *time*) is represented 
 
 > Use type annotations to restrict the dimensionalities of function parameters and return values.
 
-In case the ``ENCOMP_TYPE_CHECKING`` environment variable is set, the ``typeguard.typechecked`` decorator is automatically applied to all functions and methods inside the main ``encomp`` library.
+In case the ``ENCOMP_TYPE_CHECKING`` environment variable is set to ``True``, the ``typeguard.typechecked`` decorator is automatically applied to all functions and methods inside the main ``encomp`` library.
 To use it on your own functions, apply the decorator explicitly:
 
 
