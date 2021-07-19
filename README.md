@@ -6,14 +6,37 @@ Package documentation at https://encomp.readthedocs.io/en/latest/
 
 ## Features
 
-* Consistent interfaces to commonly used engineering tools:
-    * ``pint`` for units and conversions
-    * ``CoolProp`` for fluid properties (including IAPWS)
-    * ``fluids`` and ``thermo`` for process engineering calculations
-    * Integrates with the rest of the Python scientific stack
-* Strong type system that integrates physical units and their dimensionalities
-    * Leverages the standard library ``typing`` module, ``pint`` and ``typeguard`` to ensure that inputs and outputs to functions and classes match the specified dimensionalities
-    * Uses ``pydantic`` to create self-validating objects
+Main functionality of the ``encomp`` library:
+
+* Handles physical quantities with a magnitude, unit and dimensionality
+
+   * Module ``encomp.units``, ``encomp.utypes``
+   * Extends the ``pint`` library
+   * Uses Python's type system to validate dimensionalities
+   * Integrates with ``np.ndarray`` and ``pd.Series``
+   * Automatic JSON serialization and decoding
+
+* Implements a flexible interface to CoolProp
+
+   * Module ``encomp.fluids``
+   * Uses quantities for all inputs and outputs
+   * Fluids are represented as class instances, the properties are class attributes
+
+* Extends Sympy
+
+   * Module ``encomp.sympy``, ``encomp.balances``
+   * Adds convenience methods for creating symbols with sub- and superscripts
+   * Additional functions to convert (algebraic) expressions and systems to Python code that supports Numpy arrays
+
+* Jupyter Notebook integration
+
+   * Module ``encomp.notebook``
+   * Imports commonly used functions and classes
+   * Defines custom Jupyter magics
+
+
+The other modules implement calculations related to process engineering and thermodynamics.
+The module ``encomp.serialize`` implements custom JSON serialization and decoding for classes used elsewhere in the library.
 
 > This library is under work: all features are not yet implemented.
 
@@ -28,7 +51,7 @@ pip install encomp
 
 This will install ``encomp`` along with its dependencies into the currently active Python environment.
 
-> ``CoolProp`` might not be installable with ``pip`` for Python 3.9. Install manually with ``conda`` for now:
+> ``CoolProp`` is not installable with ``pip`` for Python 3.9. Install manually with ``conda`` for now:
 
 ```
 conda install conda-forge::coolprop
@@ -99,8 +122,9 @@ This class is used to construct objects with a *magnitude* and *unit*.
 It can also be used to restrict function and class attribute types.
 Each *dimensionality* (for example *pressure*, *length*, *time*) is represented by a subclass of ``Quantity``.
 
-Use type annotations to restrict the dimensionalities of a function's parameters and return value.
-The ``typeguard.typechecked`` decorator is automatically applied to all functions and methods inside the main ``encomp`` library.
+> Use type annotations to restrict the dimensionalities of function parameters and return values.
+
+In case the ``ENCOMP_TYPE_CHECKING`` environment variable is set, the ``typeguard.typechecked`` decorator is automatically applied to all functions and methods inside the main ``encomp`` library.
 To use it on your own functions, apply the decorator explicitly:
 
 
@@ -109,8 +133,13 @@ from typeguard import typechecked
 from encomp.api import Quantity
 
 @typechecked
-def some_func(T: Quantity['Temperature']) -> Quantity['Length']:
-    return T * Quantity(12.4, 'm/K')
+def some_func(T: Quantity['Temperature']) -> tuple[Quantity['Length'], Quantity['Pressure']]:
+    """
+    Takes a temperature or temperature difference and
+    returns length and a pressure quantities.
+    """
+
+    return T * Quantity(12.4, 'm/K'), Q(1, 'bar')
 
 some_func(Q(12, 'delta_degC'))  # the dimensionalities check out
 some_func(Q(26, 'kW'))  # raises an exception
@@ -129,6 +158,12 @@ qty = Quantity[Temperature / Length](1, 'delta_degC / km')
 
 # raises an exception since liter is Length**3 and the Quantity expects Length**2
 another_qty = Quantity[Temperature / Length**2](1, 'delta_degC / liter')
+
+# create a new subclass of Quantity with restricted input units
+CustomQuantity = Quantity[Temperature / Length**3]
+
+# pint handles a wide range of input formats
+CustomQuantity(1, '°F per yard³')
 ```
 
 ## Settings
@@ -141,14 +176,18 @@ See the file ``.env.example`` in the base of this repository for examples.
 
 ## TODO
 
-* Combine EPANET for pressure / flow simulation with energy systems simulations (``omeof``)
+
+* Check compatibility with MyPy and other type checkers
+   * Would be nice to see issues with dimensionality directly in the IDE
+   * Might not be possible since the subclass ``Quantity['Temperature']`` is constructed at runtime
+* Combine EPANET (``wntr``) for pressure / flow simulation with energy systems simulations (``omeof``)
 * Make a web interface to draw circuits (using a JS node-graph editor) and visualize results.
 
 Ensure compatibility with
 
 * numpy
 * pandas
-* Excel (via df.to_excel, both with ``openpyxl`` and ``xlsxwriter``
+* Excel (via ``df.to_excel``, both with ``openpyxl`` and ``xlsxwriter``
     * parse units from Excel (header name like "Pressure [bar]" etc...)
 * nbconvert (HTML and Latex/PDF output)
     * figure out how to typeset using SIUNITX

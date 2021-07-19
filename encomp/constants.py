@@ -12,9 +12,6 @@ class Constants:
     """
     Collection of constants.
     Use a single instance of this class to refer to these constants.
-
-    .. todo::
-        Should some of these be changeable?
     """
 
     R = Q(8.3144598, 'kg*m²/K/mol/s²')

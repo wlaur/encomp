@@ -142,7 +142,7 @@ class Quantity(pint.quantity.Quantity):
     def get_unit(cls, unit_name: str) -> Unit:
         return cls._REGISTRY.parse_units(unit_name)
 
-    @lru_cache
+    @lru_cache()
     def _get_subclass_with_dimensions(dim: UnitsContainer) -> Type['Quantity']:
 
         if dim is not None:

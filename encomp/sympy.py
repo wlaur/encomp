@@ -24,7 +24,7 @@ from encomp.serialize import serialize
 _IDENTIFIER_MAP: dict[str, sp.Symbol] = {}
 
 
-@lru_cache
+@lru_cache()
 def to_identifier(s: Union[sp.Symbol, str]) -> str:
     """
     Converts a Sympy symbol to a valid Python identifier.
@@ -81,7 +81,7 @@ def to_identifier(s: Union[sp.Symbol, str]) -> str:
     return s
 
 
-@lru_cache
+@lru_cache()
 def get_args(e: sp.Basic) -> list[str]:
     """
     Returns a sorted list of identifiers for
@@ -306,7 +306,7 @@ def get_lambda_kwargs(value_map: dict[Union[sp.Symbol, str], Union[Quantity, npt
             if include is None or to_identifier(a) in include}
 
 
-@lru_cache
+@lru_cache()
 def get_lambda(e: sp.Basic, *,
                to_str: bool = False) -> tuple[Union[Callable, str], list[str]]:
     """
@@ -388,7 +388,7 @@ def get_lambda_matrix(M: sp.Matrix) -> tuple[str, list[str]]:
     return func_src, sorted(args)
 
 
-@lru_cache
+@lru_cache()
 def get_function(e: sp.Basic, *, units: bool = False) -> Callable:
     """
     Wrapper around :py:func:`encomp.sympy.get_lambda` that
