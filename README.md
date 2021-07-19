@@ -136,7 +136,7 @@ from encomp.api import Quantity
 def some_func(T: Quantity['Temperature']) -> tuple[Quantity['Length'], Quantity['Pressure']]:
     """
     Takes a temperature or temperature difference and
-    returns length and a pressure quantities.
+    returns length and pressure quantities.
     """
 
     return T * Quantity(12.4, 'm/K'), Q(1, 'bar')
