@@ -140,7 +140,6 @@ Series objects are converted to ``ndarray`` before constructing the quantity, wh
     arr = np.linspace(0, 1)
     s = pd.Series(arr, name='series_name')
 
-
     pressure = Q(arr, 'bar')
     pressure_ = Q(s, 'bar') # Series is converted to np.ndarray
 
