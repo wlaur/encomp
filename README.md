@@ -2,7 +2,7 @@
 
 > General-purpose library for *en*gineering *comp*utations, with focus on clean and consistent interfaces.
 
-Package documentation at https://encomp.readthedocs.io/en/latest/
+Documentation at https://encomp.readthedocs.io/en/latest/
 
 ## Features
 
