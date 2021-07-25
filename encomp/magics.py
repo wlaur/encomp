@@ -24,10 +24,6 @@ from encomp.serialize import save, load
 # check if this is imported into a Notebook
 __INTERACTIVE__ = 'ipykernel_launcher.py' in sys.argv[0]
 
-if not __INTERACTIVE__:
-    raise ImportError(
-        'Cannot import module encomp.magics from outside a Jupyter Notebook')
-
 
 @magics_class
 class NotebookMagics(Magics):

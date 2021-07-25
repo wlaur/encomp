@@ -1,10 +1,6 @@
-encomp examples
-===============
+Examples
+========
 
-
-
-Notebooks
----------
 
 
 .. nbgallery::

@@ -1,9 +1,0 @@
-{
-    "a": {
-        "type": "Quantity",
-        "data": [
-            1,
-            "bar"
-        ]
-    }
-}

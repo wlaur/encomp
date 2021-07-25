@@ -18,8 +18,6 @@ from symbolic_equation import Eq as Eq_symbolic
 
 from encomp.settings import SETTINGS
 from encomp.units import Quantity
-from encomp.structures import flatten
-from encomp.serialize import serialize
 
 _IDENTIFIER_MAP: dict[str, sp.Symbol] = {}
 
@@ -171,7 +169,7 @@ def simplify_exponents(e: sp.Basic) -> sp.Basic:
 
         return type(expr)(*new_args)
 
-    def isfloatpow(expr):
+    def is_float_pow(expr):
         return expr.is_Pow and expr.args[1].is_Float
 
     if not e.args:
@@ -180,7 +178,7 @@ def simplify_exponents(e: sp.Basic) -> sp.Basic:
     else:
         new_args = tuple(simplify_exponents(a) for a in e.args)
 
-        if isfloatpow(e):
+        if is_float_pow(e):
             return rewrite(e, new_args)
         else:
             return type(e)(*new_args)

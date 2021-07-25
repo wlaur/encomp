@@ -4,6 +4,10 @@
 
 version: 2
 
+submodules:
+  exclude:
+   - encomp/tests
+
 sphinx:
    configuration: docs/conf.py
 

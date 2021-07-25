@@ -1,14 +1,6 @@
 encomp package
 ==============
 
-Subpackages
------------
-
-.. toctree::
-   :maxdepth: 4
-
-   encomp.tests
-
 Submodules
 ----------
 

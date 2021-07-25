@@ -8,7 +8,7 @@ Package documentation at https://encomp.readthedocs.io/en/latest/
 
 Main functionality of the ``encomp`` library:
 
-* Handles physical quantities with a magnitude, unit and dimensionality
+* Handles physical quantities with magnitude(s), dimensionality and units
 
    * Module ``encomp.units``, ``encomp.utypes``
    * Extends the ``pint`` library

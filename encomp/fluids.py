@@ -400,7 +400,7 @@ class Fluid(CoolPropFluid):
 
     def get(self, output: CProperty) -> Quantity:
         """
-        Uses the constant fixed points to call´
+        Uses the constant fixed points to call
         :py:meth:`encomp.fluids.CoolPropFluid.get`.
 
         Parameters

@@ -15,7 +15,7 @@ Overview
 
 Main functionality of the ``encomp`` library:
 
-* Handles physical quantities with a magnitude, unit and dimensionality
+* Handles physical quantities with magnitude(s), dimensionality and units
 
    * Module ``encomp.units``, ``encomp.utypes``
    * Extends the ``pint`` library
@@ -51,7 +51,6 @@ The module ``encomp.serialize`` implements custom JSON serialization and decodin
    This library should be used as a starting point when developing your own engineering calculations.
    For instance, using the ``encomp.units.Quantity`` class and decorating functions with ``@typeguard.typechecked`` will eliminate all unit-related errors in your calculations.
 
-
    ``encomp`` also serves as an overview of commonly used Python libraries for engineering and science.
 
 
@@ -62,6 +61,7 @@ Contents
 .. toctree::
    :maxdepth: 3
 
+   usage
    examples
 
-   source/modules
+   source/encomp

@@ -13,9 +13,11 @@
 
 import os
 import sys
-sys.path.insert(0, os.path.abspath('..'))
+from sphinx.domains.python import PythonDomain
 
-from encomp import __version__
+# make sure the local source is loaded when importing
+sys.path.insert(0, os.path.abspath('..'))
+from encomp import __version__  # noqa: E402
 
 
 # -- Project information -----------------------------------------------------
@@ -49,14 +51,14 @@ extensions = [
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 
-# List of patterns, relative to source directory, that match files and
+# list of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '**.ipynb_checkpoints']
 
 
 # add mock imports to avoid running modules:
-autodoc_mock_imports = ['encomp.notebook', 'encomp.magics']
+# autodoc_mock_imports = ['encomp.notebook', 'encomp.magics']
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -112,7 +114,7 @@ pygments_style = 'sphinx'
 # make sure they are referenced inside the corresponding notebook
 # NOTE: the .ipynb suffix is not included in the names
 nbsphinx_thumbnails = {
-    # 'notebooks/test': '_images/test-thumb.png',
+    'notebooks/test': '_images/logo.svg',
 
 }
 
@@ -122,12 +124,10 @@ html_scaled_image_link = False
 
 # show type hints in doc body instead of signature
 autodoc_typehints = 'description'
-autoclass_content = 'both'  # get docstring from class level and init simultaneously
+autoclass_content = 'init'  # get docstring from class level and init simultaneously
 
 nbsphinx_allow_errors = True
 
-
-from sphinx.domains.python import PythonDomain
 
 class PatchedPythonDomain(PythonDomain):
     def resolve_xref(self, env, fromdocname, builder, typ, target, node, contnode):
@@ -135,6 +135,7 @@ class PatchedPythonDomain(PythonDomain):
             del node['refspecific']
         return super(PatchedPythonDomain, self).resolve_xref(
             env, fromdocname, builder, typ, target, node, contnode)
+
 
 def setup(sphinx):
     sphinx.add_domain(PatchedPythonDomain, override=True)

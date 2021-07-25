@@ -5,7 +5,9 @@ import fire
 def build_docs():
 
     cmds = [
-        'sphinx-apidoc -f -o docs\source encomp',
+
+        # exclude the encomp.tests subpackage
+        'sphinx-apidoc -f -o docs/source encomp encomp/tests',
         'call docs\make clean',
         'call docs\make html'
     ]
@@ -52,5 +54,4 @@ def main(task=None):
 
 
 if __name__ == '__main__':
-
     fire.Fire(main)
