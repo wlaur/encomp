@@ -8,7 +8,6 @@ import sys
 # check if this is imported into a Notebook
 __INTERACTIVE__ = 'ipykernel_launcher.py' in sys.argv[0]
 
-
 import os
 import json
 import inspect
@@ -32,7 +31,6 @@ from IPython.display import (display,
                              Math,
                              IFrame)
 
-from matplotlib_inline.backend_inline import set_matplotlib_formats
 
 from encomp.settings import SETTINGS
 from encomp.misc import grid_dimensions
@@ -40,22 +38,26 @@ from encomp.sympy import sp
 from encomp.units import Q, Quantity, wraps
 from encomp.fluids import Fluid, Water, HumidAir
 
-# loads Jupyter Notebook magics: %%markdown, %%output, %%write and %read
-import encomp.magics
-
-
-plt.style.use('seaborn-notebook')
-matplotlib.rcParams['font.sans-serif'] = 'Arial'
-matplotlib.rcParams['font.family'] = 'sans-serif'
-set_matplotlib_formats(SETTINGS.matplotlib_notebook_format)
-
-# this is required to get table output in PDF
-pd.options.display.latex.repr = True
 
 SNS_PALETTE = sns.color_palette()
 SNS_BLUE = SNS_PALETTE[0]
 
 GraphicInput = Union[Path, str, plt.Figure]
+
+if __INTERACTIVE__:
+
+    # loads Jupyter Notebook magics: %%markdown, %%output, %%write and %read
+    import encomp.magics
+
+    plt.style.use('seaborn-notebook')
+    matplotlib.rcParams['font.sans-serif'] = 'Arial'
+    matplotlib.rcParams['font.family'] = 'sans-serif'
+
+    from matplotlib_inline.backend_inline import set_matplotlib_formats
+    set_matplotlib_formats(SETTINGS.matplotlib_notebook_format)
+
+    # this is required to get table output in PDF
+    pd.options.display.latex.repr = True
 
 
 def mprint(x):
