@@ -3,6 +3,7 @@ pytest
 twine
 Sphinx
 nbsphinx
-pydata-sphinx-theme
+furo
+sphinx-inline-tabs
 sphinx-gallery
 sphinx-autodoc-typehints

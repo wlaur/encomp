@@ -61,8 +61,8 @@ ureg.preprocessors = [
     lambda x: x.replace('%', 'percent')
 ]
 
-# set to True, otherwise degC must be explicitly converted to K when multiplying
-ureg.autoconvert_offset_to_baseunit = True
+# if False, degC must be explicitly converted to K when multiplying
+ureg.autoconvert_offset_to_baseunit = SETTINGS.autoconvert_offset_to_baseunit
 
 # enable support for matplotlib axis ticklabels etc...
 ureg.setup_matplotlib()
@@ -91,7 +91,7 @@ with open(SETTINGS.additional_units, 'r', encoding='utf-8') as f:
             except pint.errors.RedefinitionError:
                 pass
 
-ureg.default_format = '~P'  # compact format
+ureg.default_format = SETTINGS.default_unit_format
 
 
 class Quantity(pint.quantity.Quantity):

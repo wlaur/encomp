@@ -43,6 +43,7 @@ extensions = [
     'sphinx.ext.autosectionlabel',
     'nbsphinx',
     'sphinx_gallery.load_style',
+    'sphinx_inline_tabs',
     'IPython.sphinxext.ipython_console_highlighting',
     'sphinx.ext.mathjax',
     'sphinx_autodoc_typehints'
@@ -70,8 +71,11 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '**.ipynb_checkpoints']
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
-#
-# html_theme_options = {}
+
+html_theme_options = {
+    'sidebar_hide_name': True
+
+}
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -94,21 +98,17 @@ html_css_files = [
 #
 # html_sidebars = {}
 
-# clean theme with a lot of nice interactive content with Bootstrap
-# blue in sidebar: 0, 91, 129
-html_theme = 'pydata_sphinx_theme'
+# blue in logo: 0, 91, 129
+html_theme = 'furo'
 
-html_logo = 'img/logo.svg'
+html_logo = 'img/logo-small.svg'
 html_favicon = 'img/favicon.ico'
 
-html_sidebars = {'**': ['globaltoc.html', 'relations.html',
-                        'sourcelink.html', 'searchbox.html']}
-
 autosummary_generate = True
-
 todo_include_todos = True
 
 pygments_style = 'sphinx'
+pygments_dark_style = 'monokai'
 
 # the images must be included in the _build dir when generating the HTML docs
 # make sure they are referenced inside the corresponding notebook
@@ -124,7 +124,7 @@ html_scaled_image_link = False
 
 # show type hints in doc body instead of signature
 autodoc_typehints = 'description'
-autoclass_content = 'init'  # get docstring from class level and init simultaneously
+autoclass_content = 'both'  # get docstring from class level and init simultaneously
 
 nbsphinx_allow_errors = True
 

@@ -554,7 +554,7 @@ def typeset(x: Optional[str]) -> Optional[str]:
 
     Use comma ``,`` to separate parts of the input, for example
 
-    .. code-block::
+    .. code:: none
 
         input,i
 

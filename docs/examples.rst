@@ -1,8 +1,6 @@
 Examples
 ========
 
-
-
 .. nbgallery::
    :caption: Jupyter Notebooks:
    :name: notebook-gallery

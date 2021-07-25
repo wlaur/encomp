@@ -10,13 +10,13 @@ Main functionality of the ``encomp`` library:
 
 * Handles physical quantities with magnitude(s), dimensionality and units
 
-   * Module ``encomp.units``, ``encomp.utypes``
+   * Modules ``encomp.units``, ``encomp.utypes``
    * Extends the ``pint`` library
    * Uses Python's type system to validate dimensionalities
    * Integrates with ``np.ndarray`` and ``pd.Series``
    * Automatic JSON serialization and decoding
 
-* Implements a flexible interface to CoolProp
+* Implements a flexible interface to [CoolProp](http://www.coolprop.org)
 
    * Module ``encomp.fluids``
    * Uses quantities for all inputs and outputs
@@ -24,7 +24,7 @@ Main functionality of the ``encomp`` library:
 
 * Extends Sympy
 
-   * Module ``encomp.sympy``, ``encomp.balances``
+   * Modules ``encomp.sympy``, ``encomp.balances``
    * Adds convenience methods for creating symbols with sub- and superscripts
    * Additional functions to convert (algebraic) expressions and systems to Python code that supports Numpy arrays
 

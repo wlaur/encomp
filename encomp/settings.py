@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     The variables in the ``.env``-file have the same names (not case-sensitive)
     as the attributes of this class, with the additional prefix ``ENCOMP_``.
     In case of invalid values in the ``.env``-file or environment variables,
-    a *ValidationError* is raised.
+    a ``ValidationError`` is raised.
 
     .. note::
 
@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     * ``IGNORE_NDARRAY_UNIT_STRIPPED_WARNING``: whether to suppress the ``pint`` warning
       when converting Quantity to Numpy array.
     * ``MATPLOTLIB_NOTEBOOK_FORMAT``: figure format for Matplotlib figures in Jupyter Notebooks
+    * ``AUTOCONVERT_OFFSET_TO_BASEUNIT``: whether to automatically convert offset units in calculations. If this is False, °C must be converted to K before multiplication (for example)
+    * ``DEFAULT_UNIT_FORMAT``: default unit format for ``Quantity`` objects
+
+    .. note::
+        All names are case-insensitive.
+
     """
 
     data_directory: DirectoryPath = ENCOMP_BASE / 'data'
@@ -51,11 +57,14 @@ class Settings(BaseSettings):
     ignore_ndarray_unit_stripped_warning: bool = True
 
     matplotlib_notebook_format: Literal['retina', 'png', 'svg'] = 'retina'
+    autoconvert_offset_to_baseunit: bool = True
+    default_unit_format: Literal['~P', '~L', '~H', '~Lx'] = '~P'
 
     class Config:
         env_prefix = 'ENCOMP_'
         env_file = '.env'
         env_file_encoding = 'utf-8'
+        case_sensitive = False
 
 
 # the settings object is initialized the first time the library loads

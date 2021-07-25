@@ -17,39 +17,39 @@ Main functionality of the ``encomp`` library:
 
 * Handles physical quantities with magnitude(s), dimensionality and units
 
-   * Module ``encomp.units``, ``encomp.utypes``
+   * Modules :py:mod:`encomp.units`, :py:mod:`encomp.utypes`
    * Extends the ``pint`` library
    * Uses Python's type system to validate dimensionalities
    * Integrates with ``np.ndarray`` and ``pd.Series``
    * Automatic JSON serialization and decoding
 
-* Implements a flexible interface to CoolProp
+* Implements a flexible interface to `CoolProp <http://www.coolprop.org>`_
 
-   * Module ``encomp.fluids``
-   * Uses quantities for all inputs and outputs
+   * Module :py:mod:`encomp.fluids`
+   * Uses quantities for all inputs and outputs (including dimensionless quantities)
    * Fluids are represented as class instances, the properties are class attributes
 
 * Extends Sympy
 
-   * Module ``encomp.sympy``, ``encomp.balances``
+   * Modules :py:mod:`encomp.sympy`, :py:mod:`encomp.balances`
    * Adds convenience methods for creating symbols with sub- and superscripts
    * Additional functions to convert (algebraic) expressions and systems to Python code that supports Numpy arrays
 
 * Jupyter Notebook integration
 
-   * Module ``encomp.notebook``
+   * Module :py:mod:`encomp.notebook`
    * Imports commonly used functions and classes
    * Defines custom Jupyter magics
 
 
 The other modules implement calculations related to process engineering and thermodynamics.
-The module ``encomp.serialize`` implements custom JSON serialization and decoding for classes used elsewhere in the library.
+The module :py:mod:`encomp.serialize` implements custom JSON serialization and decoding for classes used elsewhere in the library.
 
 
 .. tip::
 
-   This library should be used as a starting point when developing your own engineering calculations.
-   For instance, using the ``encomp.units.Quantity`` class and decorating functions with ``@typeguard.typechecked`` will eliminate all unit-related errors in your calculations.
+   This library can be used as a starting point when developing your own engineering calculations.
+   For instance, using the :py:class:`encomp.units.Quantity` class and decorating functions with ``@typeguard.typechecked`` will eliminate all unit-related errors in your calculations.
 
    ``encomp`` also serves as an overview of commonly used Python libraries for engineering and science.
 
