@@ -9,9 +9,13 @@ import numpy as np
 try:
     from CoolProp.CoolProp import PropsSI
     from CoolProp.HumidAirProp import HAPropsSI
+
 except ImportError:
-    raise ImportError('CoolProp package not installed, install with conda '
-                      'in case "pip install CoolProp" fails')
+
+    import warnings
+    warnings.warn('CoolProp package not installed, install with conda '
+                  'in case "pip install CoolProp" fails:'
+                  '\nconda install conda-forge::coolprop')
 
 from encomp.structures import flatten
 from encomp.units import Quantity, Unit
