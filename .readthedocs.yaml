@@ -14,8 +14,8 @@ submodules:
 sphinx:
    configuration: docs/conf.py
 
-# build:
-#    image: testing
+build:
+   image: testing
 
-# python:
-#    version: 3.9
+python:
+   version: 3.9
