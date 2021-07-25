@@ -1,6 +1,9 @@
 """
 Module that imports commonly used functions and
 sets up the ``encomp`` Jupyter Notebook environment.
+
+.. note::
+    This module requires ``IPython``
 """
 
 import sys

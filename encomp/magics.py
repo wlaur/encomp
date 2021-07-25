@@ -1,5 +1,8 @@
 """
 Contains Jupyter Notebook cell and line magics.
+
+.. note::
+    This module requires ``IPython``
 """
 
 import sys

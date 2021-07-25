@@ -13,8 +13,7 @@ try:
 except ImportError:
 
     import warnings
-    warnings.warn('CoolProp package not installed, install with conda '
-                  'in case "pip install CoolProp" fails:'
+    warnings.warn('CoolProp package not installed, install with conda:'
                   '\nconda install conda-forge::coolprop')
 
 from encomp.structures import flatten

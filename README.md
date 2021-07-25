@@ -176,7 +176,7 @@ See the file ``.env.example`` in the base of this repository for examples.
 
 ## TODO
 
-
+* Make some (unused) dependencies optional (like ``scikit-learn``)
 * Check compatibility with MyPy and other type checkers
    * Would be nice to see issues with dimensionality directly in the IDE
    * Might not be possible since the subclass ``Quantity['Temperature']`` is constructed at runtime
