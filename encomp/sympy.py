@@ -635,7 +635,7 @@ def decorate(self,
 
     Using LaTeX syntax supported by ``sympy``:
 
-    .. code-block::
+    .. code:: none
 
         {prefix}^{prefix_sub}_{prefix_sup}{symbol}_{suffix_sub}^{suffix_sup}{suffix}
 

@@ -18,9 +18,9 @@ def interpolate(x: npt.ArrayLike,
 
     .. code-block:: python
 
-        >>> x = np.linspace(0, 5, 25)
-        >>> y = np.random.rand(x.shape[0])
-        >>> interpolate(x, y)([0, 4, 4.1])  # interpolated values at x = 0, 4, 4,1
+        x = np.linspace(0, 5, 25)
+        y = np.random.rand(x.shape[0])
+        interpolate(x, y)([0, 4, 4.1])  # interpolated values at x = 0, 4, 4,1
 
     Parameters
     ----------
@@ -81,12 +81,12 @@ def polynomial(x: npt.ArrayLike,
 
     .. code-block:: python
 
-        >>> x = np.linspace(0, 5, 25)a
-        >>> noise = np.random.rand(x.shape[0]) * 0.01
-        >>> y = x**2 + noise
-        >>> poly = polynomial(x, y)
-        >>> poly([0, 1, 2])  # values for p_2(x) at x = 0, 5, 7
-        >>> poly.coefficients  # polynomial coefficients, length order+1
+        x = np.linspace(0, 5, 25)a
+        noise = np.random.rand(x.shape[0]) * 0.01
+        y = x**2 + noise
+        poly = polynomial(x, y)
+        poly([0, 1, 2])  # values for p_2(x) at x = 0, 5, 7
+        poly.coefficients  # polynomial coefficients, length order+1
 
     Parameters
     ----------
@@ -126,9 +126,9 @@ def exponential(x_start: float,
 
     .. code-block:: python
 
-        >>> x = np.linspace(0, 10)
-        >>> exp_func = exponential(0, 10, 20, 30, k=-5)
-        >>> plt.plot(x, exp_func(x))
+        x = np.linspace(0, 10)
+        exp_func = exponential(0, 10, 20, 30, k=-5)
+        plt.plot(x, exp_func(x))
 
     Parameters
     ----------

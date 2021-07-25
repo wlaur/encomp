@@ -42,7 +42,7 @@ class Settings(BaseSettings):
       when converting Quantity to Numpy array.
     * ``MATPLOTLIB_NOTEBOOK_FORMAT``: figure format for Matplotlib figures in Jupyter Notebooks
     * ``AUTOCONVERT_OFFSET_TO_BASEUNIT``: whether to automatically convert offset units in calculations. If this is False, °C must be converted to K before multiplication (for example)
-    * ``DEFAULT_UNIT_FORMAT``: default unit format for ``Quantity`` objects
+    * ``DEFAULT_UNIT_FORMAT``: default unit format for ``Quantity`` objects: one of ``~P`` (compact), ``~L`` (Latex), ``~H`` (HTML), ``~Lx`` (Latex with SIUNITX package)
 
     .. note::
         All names are case-insensitive.

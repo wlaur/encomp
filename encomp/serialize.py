@@ -119,23 +119,24 @@ def decode(inp: JSON) -> Any:
     Decodes objects that were serialized
     with :py:func:`encomp.serialize.custom_serializer`.
 
-    .. note::
-        Dictionary keys are always str in JSON, this function
-        cannot determine if the key "1" or "2.0" was originally a string or integer.
-        String keys can be converted to float/int afterwards if necessary.
+    .. warning::
+        Dictionary keys are always strings in JSON.
+        This function cannot determine if the key ``"2.0"``
+        was originally a string or float, all keys in
+        the returned object are strings.
 
     Parameters
     ----------
     inp : JSON
-        Serialized representation of some object
+        Serialized representation of an object
 
     Returns
     -------
     Any
-        The actual object
+        The decoded object
     """
 
-    # nested list (cannot be tuple)
+    # nested list (cannot be tuple, since JSON does not support tuples)
     if isinstance(inp, list):
         return [decode(n) for n in inp]
 
@@ -202,7 +203,7 @@ def decode(inp: JSON) -> Any:
                 from encomp.balances import BalancedSystem
                 return BalancedSystem.from_dict(inp['data'])
 
-        # not possible to have a custom object as key,
+        # it's not possible to have a custom object as key,
         # JSON allows only str (float and int are converted to str)
         # not possible to determine if string "1" was originally an int,
         # so this function will not convert numeric str to int
@@ -217,11 +218,11 @@ def custom_serializer(obj: Any) -> JSON:
     """
     Serializes objects that are not JSON-serializable by default.
     Fallback is ``obj.__dict__``, if this does not exist
-    return the object unchanged.
+    the input object is returned unchanged.
 
     The general structure for custom objects is
 
-    .. code-block::python
+    .. code-block:: python
 
         class CustomClass:
 
@@ -238,8 +239,11 @@ def custom_serializer(obj: Any) -> JSON:
 
         obj = CustomClass()
 
-        custom_serializer(obj)
+        json_repr = custom_serializer(obj)
         # {'type': 'CustomClass', 'data': {'A': 1, 'B': 2}}
+
+        # construct a new object from the serialized representation
+        obj_ = CustomClass.from_dict(json_repr)
 
     Numpy arrays and pandas DataFrames are handled separately.
 

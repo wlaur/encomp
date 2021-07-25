@@ -4,14 +4,6 @@ encomp package
 Submodules
 ----------
 
-encomp.api module
------------------
-
-.. automodule:: encomp.api
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 encomp.balances module
 ----------------------
 

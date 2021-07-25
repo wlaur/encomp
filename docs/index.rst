@@ -18,7 +18,7 @@ Main functionality of the ``encomp`` library:
 * Handles physical quantities with magnitude(s), dimensionality and units
 
    * Modules :py:mod:`encomp.units`, :py:mod:`encomp.utypes`
-   * Extends the ``pint`` library
+   * Extends the `pint <https://pypi.org/project/Pint/>`_ library
    * Uses Python's type system to validate dimensionalities
    * Integrates with ``np.ndarray`` and ``pd.Series``
    * Automatic JSON serialization and decoding
@@ -29,7 +29,7 @@ Main functionality of the ``encomp`` library:
    * Uses quantities for all inputs and outputs (including dimensionless quantities)
    * Fluids are represented as class instances, the properties are class attributes
 
-* Extends Sympy
+* Extends `Sympy <https://pypi.org/project/sympy/>`_
 
    * Modules :py:mod:`encomp.sympy`, :py:mod:`encomp.balances`
    * Adds convenience methods for creating symbols with sub- and superscripts
@@ -39,7 +39,7 @@ Main functionality of the ``encomp`` library:
 
    * Module :py:mod:`encomp.notebook`
    * Imports commonly used functions and classes
-   * Defines custom Jupyter magics
+   * Defines custom Jupyter magics (module :py:mod:`encomp.magics`)
 
 
 The other modules implement calculations related to process engineering and thermodynamics.

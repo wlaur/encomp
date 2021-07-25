@@ -130,16 +130,16 @@ To use it on your own functions, apply the decorator explicitly:
 
 ```python
 from typeguard import typechecked
-from encomp.api import Quantity
+from encomp.units import Q
 
 @typechecked
-def some_func(T: Quantity['Temperature']) -> tuple[Quantity['Length'], Quantity['Pressure']]:
+def some_func(T: Q['Temperature']) -> tuple[Q['Length'], Q['Pressure']]:
     """
     Takes a temperature or temperature difference and
     returns length and pressure quantities.
     """
 
-    return T * Quantity(12.4, 'm/K'), Q(1, 'bar')
+    return T * Q(12.4, 'm/K'), Q(1, 'bar')
 
 some_func(Q(12, 'delta_degC'))  # the dimensionalities check out
 some_func(Q(26, 'kW'))  # raises an exception
@@ -151,16 +151,16 @@ To create a new dimensionality (for example temperature difference per length), 
 
 
 ```python
-from encomp.api import Quantity
+from encomp.units import Q
 from encomp.utypes import Temperature, Length
 
-qty = Quantity[Temperature / Length](1, 'delta_degC / km')
+qty = Q[Temperature / Length](1, 'delta_degC / km')
 
 # raises an exception since liter is Length**3 and the Quantity expects Length**2
-another_qty = Quantity[Temperature / Length**2](1, 'delta_degC / liter')
+another_qty = Q[Temperature / Length**2](1, 'delta_degC / liter')
 
 # create a new subclass of Quantity with restricted input units
-CustomQuantity = Quantity[Temperature / Length**3]
+CustomQuantity = Q[Temperature / Length**3]
 
 # pint handles a wide range of input formats
 CustomQuantity(1, '°F per yard³')
@@ -176,7 +176,6 @@ See the file ``.env.example`` in the base of this repository for examples.
 
 ## TODO
 
-* Make some (unused) dependencies optional (like ``scikit-learn``)
 * Check compatibility with MyPy and other type checkers
    * Would be nice to see issues with dimensionality directly in the IDE
    * Might not be possible since the subclass ``Quantity['Temperature']`` is constructed at runtime

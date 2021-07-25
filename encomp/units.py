@@ -257,7 +257,7 @@ class Quantity(pint.quantity.Quantity):
 
     def _to_unit(self, unit: Union[Unit, UnitsContainer, str, 'Quantity']) -> Unit:
 
-        # compatibility with internal pint API, this should maybe be avoided
+        # compatibility with internal pint API
         if isinstance(unit, UnitsContainer):
             unit = self._REGISTRY.parse_units(str(unit))
 

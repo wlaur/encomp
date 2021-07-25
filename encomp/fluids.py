@@ -1,6 +1,12 @@
 """
 Classes and functions relating to fluid properties.
 Uses CoolProp as backend.
+
+.. note::
+    This module has the same name as the package `fluids <https://pypi.org/project/fluids/>`_,
+    which is also included when installing ``encomp``.
+    Avoid importing as a standalone module (``from encomp import fluids``) to differentiate between these.
+
 """
 
 from typing import Annotated
@@ -140,7 +146,7 @@ class CoolPropFluid:
 
         **Pure**
 
-        .. code-block::
+        .. code:: none
 
             1-Butene,Acetone,Air,Ammonia,Argon,Benzene,CarbonDioxide,CarbonMonoxide,
             CarbonylSulfide,CycloHexane,CycloPropane,Cyclopentane,D4,D5,D6,Deuterium,
@@ -160,7 +166,7 @@ class CoolPropFluid:
 
         **Incompressible pure**
 
-        .. code-block::
+        .. code:: none
 
             INCOMP::AS10,INCOMP::AS20,INCOMP::AS30,INCOMP::AS40,INCOMP::AS55,INCOMP::DEB,
             INCOMP::DSF,INCOMP::DowJ,INCOMP::DowJ2,INCOMP::DowQ,INCOMP::DowQ2,INCOMP::HC10,
@@ -175,7 +181,7 @@ class CoolPropFluid:
 
         **Incompressible mixtures**
 
-        .. code-block::
+        .. code:: none
 
             INCOMP::FRE,INCOMP::IceEA,INCOMP::IceNA,INCOMP::IcePG,INCOMP::LiBr,INCOMP::MAM,
             INCOMP::MAM2,INCOMP::MCA,INCOMP::MCA2,INCOMP::MEA,INCOMP::MEA2,INCOMP::MEG,
@@ -188,7 +194,7 @@ class CoolPropFluid:
 
         **Mixtures**
 
-        .. code-block::
+        .. code:: none
 
             AIR.MIX,AMARILLO.MIX,Air.mix,Amarillo.mix,EKOFISK.MIX,Ekofisk.mix,GULFCOAST.MIX,
             GULFCOASTGAS(NIST1).MIX,GulfCoast.mix,GulfCoastGas(NIST1).mix,HIGHCO2.MIX,
