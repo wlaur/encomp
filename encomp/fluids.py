@@ -280,6 +280,40 @@ class CoolPropFluid:
         raise ValueError(f'Key {key} does not exist')
 
     @classmethod
+    def is_valid_prop(cls, prop: CProperty) -> bool:
+
+        try:
+            cls.get_prop_key(prop)
+            return True
+
+        except ValueError:
+            return False
+
+    @classmethod
+    def check_inputs(cls, kwargs: dict) -> None:
+        """
+        Checks the input ``kwargs`` and raises ``ValueError``
+        in case any of the names are not CoolProp property names.
+
+        Parameters
+        ----------
+        kwargs : dict
+            Dict to check
+
+        Raises
+        ------
+        ValueError
+            In case any of the keys are invalid CoolProp names
+        """
+
+        invalid = [key for key in kwargs if not cls.is_valid_prop(key)]
+
+        if invalid:
+            raise ValueError(f'Invalid CoolProp property name{"s" if len(invalid) > 1 else ""}: '
+                             f'{", ".join(invalid)}\n'
+                             f'Valid names:\n{", ".join(sorted(cls.ALL_PROPERTIES))}')
+
+    @classmethod
     def describe(cls, prop: CProperty) -> str:
 
         key = cls.get_prop_key(prop)
@@ -396,7 +430,9 @@ class Fluid(CoolPropFluid):
             CoolProp property name.
         """
 
-        super().__init__(name)
+        self.name = name
+
+        self.check_inputs(kwargs)
 
         if len(kwargs) != 2:
             raise ValueError(
@@ -429,7 +465,19 @@ class Fluid(CoolPropFluid):
 
     @property
     def phase(self) -> str:
-        return self.PHASES[self.get('PHASE')]
+        phase_idx = self.get('PHASE')
+
+        # self.get() returns a dimensionless Quantity
+        phase_idx = phase_idx.m
+
+        if isinstance(phase_idx, np.ndarray):
+
+            if len(set(phase_idx)) == 1:
+                phase_idx = float(phase_idx[0])
+            else:
+                return 'Variable'
+
+        return self.PHASES[phase_idx]
 
     def __getattr__(self, attr):
 
@@ -514,6 +562,8 @@ class HumidAir(Fluid):
         """
 
         self.name = 'Humid air'
+
+        self.check_inputs(kwargs)
 
         if len(kwargs) != 3:
             raise ValueError(
@@ -606,6 +656,8 @@ class Water(Fluid):
 
         self.name = 'Water'
 
+        self.check_inputs(kwargs)
+
         if len(kwargs) != 2:
 
             if set(kwargs) == {'P', 'T', 'Q'}:
@@ -629,8 +681,10 @@ class Water(Fluid):
         # show the vapor quality in the repr in case of saturated steam
         vapor_quality = self.Q
 
-        if vapor_quality > 0 and vapor_quality < 1:
-            repr_properties = list(repr_properties) + [('Q', '.2f')]
+        # ignore this for vector inputs
+        if isinstance(vapor_quality, (int, float)):
+            if (vapor_quality > 0).sum() and (vapor_quality < 1).sum():
+                repr_properties = list(repr_properties) + [('Q', '.2f')]
 
         props_str = ', '.join(f'{p}={self.get(p):{fmt}}'
                               for p, fmt in repr_properties)

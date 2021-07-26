@@ -1,4 +1,5 @@
 import pytest
+import numpy as np
 
 from encomp.units import Q
 from encomp.fluids import Fluid, HumidAir, Water
@@ -28,3 +29,36 @@ def test_Fluid():
 
         # incorrect argument name
         Water(T=Q(1, 'bar'), P=Q(9, 'degC'))
+
+
+def test_Water():
+
+    water_single = Water(
+        T=Q(25, '°C'),
+        P=Q(5, 'bar')
+    )
+
+    repr(water_single)
+
+    water_multi = Water(
+        T=Q(np.linspace(25, 50), '°C'),
+        P=Q(5, 'bar')
+    )
+
+    repr(water_multi)
+
+    water_mixed_phase = Water(
+        T=Q(np.linspace(25, 500, 10), '°C'),
+        P=Q(np.linspace(0.5, 10, 10), 'bar')
+    )
+
+    repr(water_mixed_phase)
+
+    with pytest.raises(Exception):
+
+        # mismatching sizes
+        # must access an attribute before it's actually evaluated
+        Water(
+            T=Q(np.linspace(25, 500, 10), '°C'),
+            P=Q(np.linspace(0.5, 10, 50), 'bar')
+        ).P

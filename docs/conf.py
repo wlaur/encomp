@@ -44,6 +44,7 @@ extensions = [
     'nbsphinx',
     'sphinx_gallery.load_style',
     'sphinx_inline_tabs',
+    'sphinx_copybutton',
     'IPython.sphinxext.ipython_console_highlighting',
     'sphinx.ext.mathjax',
     'sphinx_autodoc_typehints'

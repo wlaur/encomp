@@ -47,6 +47,10 @@ class DimensionalityError(ValueError):
     pass
 
 
+class DimensionalityRedefinitionError(ValueError):
+    pass
+
+
 # always use pint.get_application_registry() to get the UnitRegistry instance
 # there should only be one registry at a time, pint raises ValueError
 # in case quantities from different registries interact
@@ -456,7 +460,7 @@ def define_dimensionality(name: str, symbol: str = None) -> None:
     """
     Defines a new dimensionality that can be combined with existing
     dimensionalities. In case the dimensionality is already defined,
-    an error will be raised.
+    ``DimensionalityRedefinitionError`` will be raised.
 
     This can be used to define a new dimensionality for an amount
     of some specific substance. For instance, if the dimensionalities
@@ -476,8 +480,9 @@ def define_dimensionality(name: str, symbol: str = None) -> None:
     """
 
     if name in _CUSTOM_DIMENSIONS:
-        raise ValueError('Cannot define new dimensionality with '
-                         f'name: {name}, a dimensionality with this name was already defined')
+        raise DimensionalityRedefinitionError(
+            'Cannot define new dimensionality with '
+            f'name: {name}, a dimensionality with this name was already defined')
 
     definition_str = f'{name} = [{name}]'
 
