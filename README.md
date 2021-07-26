@@ -11,7 +11,7 @@ Main functionality of the ``encomp`` library:
 * Handles physical quantities with magnitude(s), dimensionality and units
 
    * Modules ``encomp.units``, ``encomp.utypes``
-   * Extends the ``pint`` library
+   * Extends the [pint](https://pypi.org/project/Pint) library
    * Uses Python's type system to validate dimensionalities
    * Integrates with ``np.ndarray`` and ``pd.Series``
    * Automatic JSON serialization and decoding
@@ -22,7 +22,7 @@ Main functionality of the ``encomp`` library:
    * Uses quantities for all inputs and outputs
    * Fluids are represented as class instances, the properties are class attributes
 
-* Extends Sympy
+* Extends [Sympy](https://pypi.org/project/sympy/)
 
    * Modules ``encomp.sympy``, ``encomp.balances``
    * Adds convenience methods for creating symbols with sub- and superscripts
