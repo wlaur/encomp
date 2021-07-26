@@ -166,6 +166,10 @@ Series objects are converted to ``ndarray`` before constructing the quantity, wh
     pressure_ = Q(s, 'bar') # Series is converted to np.ndarray
 
 
+In case a tuple or list is given as magnitude when creating a quantity, it will be converted to a Numpy array.
+
+
+
 Combining quantities
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -339,4 +343,110 @@ All inputs must be the same length (or a single value).
     # T=[25.0 77.8 130.6 183.3 236.1 288.9 341.7 394.4 447.2 500.0] °C,
     # D=[997.2 973.3 934.5 2.5 2.2 2.0 1.8 1.6 1.5 1.4] kg/m³,
     # V=[0.9 0.4 0.2 0.0 0.0 0.0 0.0 0.0 0.0 0.0] cP>
+
+
+
+
+Sympy functionality
+-------------------
+
+To load additional methods for the ``sympy.Symbol`` class, import Sympy via the :py:mod:`encomp.sympy` module.
+
+
+.. code-block:: python
+
+    from encomp.sympy import sp
+
+
+Typesetting
+~~~~~~~~~~~
+
+The following convenience methods are added to the ``sp.Symbol`` class:
+
+* ``sp.Symbol._()``: add subscript
+* ``sp.Symbol.__()``: add superscript
+* ``sp.Symbol.decorate()``: add sub- and superscript prefixes and suffixes (:py:func:`encomp.sympy.decorate`)
+
+These methods return new instances of ``sp.Symbol`` with the same assumptions (i.e. *positive*, *real*, *integer*, etc...) as the original instance.
+
+
+.. code-block:: python
+
+    n = sp.Symbol('n', integer=True)
+
+    n_test = n._('test')
+    str(n_test)
+    # n_{\\text{test}}
+
+    n_test.assumptions0['integer'] # True
+
+.. tip::
+
+    The assumptions for a ``sp.Symbol`` are accessed with the attribute ``assumptions0`` (note the ``0`` at the end).
+
+
+The ``_`` and ``__`` methods will typeset the sub- and superscripts automatically:
+
+* Single-letter lower case with math font: ``n._('a')`` → :math:`n_a`
+* Single-letter upper case with regular font: ``n._('A')`` → :math:`n_{\text{A}}`
+* Chemical formulas: ``n._('H_2O')`` → :math:`n_{\text{H}_2\text{O}}`
+* Strings with two or more characters with regular font: ``n._('water')`` → :math:`n_{\text{water}}`
+* Parts are split with ``,``: ``n._('outlet,A,i,H_2SO_4')`` → :math:`n_{\text{outlet},\text{A},i,\text{H}_2\text{SO}_4}`
+* Combine sub- and superscript: ``n._('a').__('in')`` → :math:`n_{a}^{\text{in}}`
+
+
+The ``decorate`` method offers more control:
+
+* ``n.decorate(prefix='\sum', prefix_sub='2', suffix_sup='i', suffix='\ldots')`` → :math:`{\sum}_{2}n^{i}{\ldots}`
+
+
+Integration with quantities
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Quantities can be used when evaluating Sympy expressions.
+The units will be converted to Sympy symbols automatically.
+The class method :py:meth:`encomp.units.Quantity.from_expr` is used to convert an expression back to a quantity.
+
+
+.. code-block:: python
+
+    x, y, z = sp.symbols('x, y, z')
+
+    expr = 25 * x * y / z
+
+    result_expr = expr.subs({
+        x: Q(235, 'yard'),
+        y: Q(2, 'm²'),
+        z: Q(0.4, 'm³/kg')
+    })
+
+    result_qty = Q.from_expr(result_expr)
+    # 26860.5 kg
+
+
+:py:meth:`encomp.units.Quantity.from_expr` will raise ``KeyError`` in case there is a symbol in the expression that is not an SI unit.
+This does not work with user-defined dimensionalities.
+
+
+In case the magnitude of a quantity is a Numpy array, :py:meth:`encomp.units.Quantity.from_expr` does not work.
+The expression must instead be converted to a function with :py:func:`encomp.sympy.get_function`:
+
+
+.. code-block:: python
+
+    from encomp.sympy import get_function
+
+    x, y, z = sp.symbols('x, y, z')
+
+    expr = 25 * x * y / z
+
+    # units=False by default, since this is faster to evaluate
+    fcn = get_function(expr, units=True)
+
+    result_qty = fcn({
+        x: Q(np.array([235, 335]), 'yard'),
+        y: Q([2, 5], 'm²'), # regular lists will be converted to array
+        z: Q(0.4, 'm³/kg')
+    })
+    # [26860.5 95726.25] kg
 

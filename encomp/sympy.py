@@ -6,7 +6,6 @@ Contains tools for converting Sympy expressions to Python modules and functions.
 
 from typing import Callable, Optional, Union, Literal
 import re
-import json
 import numpy as np
 import sympy as sp
 from sympy.utilities.lambdify import lambdify, lambdastr
