@@ -39,7 +39,7 @@ def test_decorate():
 
     n = sp.Symbol('n')
 
-    n.decorate(prefix='\sum', prefix_sub='2', suffix_sup='i', suffix='\ldots')
+    n.decorate(prefix=r'\sum', prefix_sub='2', suffix_sup='i', suffix=r'\ldots')
     n._('H_2O').__('out')
 
 

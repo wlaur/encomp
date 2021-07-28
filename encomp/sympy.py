@@ -525,9 +525,9 @@ def typeset_chemical(s: str) -> str:
 
     parts = []
 
-    for n in re.sub('[A-Z]_\d', '|\g<0>|', s).split('|'):
+    for n in re.sub(r'[A-Z]_\d', r'|\g<0>|', s).split('|'):
 
-        if re.match('[A-Z]_\d', n):
+        if re.match(r'[A-Z]_\d', n):
             parts.extend([f'{n[:-2]}', '}',  f'_{n[-1]}', '\\text{'])
         else:
             parts.append(n)
