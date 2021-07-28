@@ -17,6 +17,7 @@ that the dimensionality of the unit is correct.
 
 import re
 import warnings
+import numbers
 from typing import Union, Type, Optional
 from functools import lru_cache
 import sympy as sp
@@ -289,7 +290,10 @@ class Quantity(pint.quantity.Quantity):
         # better to use ":.2f" formatting or round() anyway
 
         # avoid numpy.core._exceptions.UFuncTypeError (not on all platforms?)
-        if isinstance(self._magnitude, np.ndarray):
+        # convert integer arrays to float (creating a copy)
+        if (isinstance(self._magnitude, np.ndarray) and
+                issubclass(self._magnitude.dtype.type, numbers.Integral)):
+
             self._magnitude = self._magnitude.astype(float)
 
         return super().ito(unit)
