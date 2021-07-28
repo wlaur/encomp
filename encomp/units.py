@@ -284,6 +284,14 @@ class Quantity(pint.quantity.Quantity):
 
         unit = self._to_unit(unit)
 
+        # it's not safe to convert units as int, the
+        # user will have to convert back to int if necessary
+        # better to use ":.2f" formatting or round() anyway
+
+        # avoid numpy.core._exceptions.UFuncTypeError (not on all platforms?)
+        if isinstance(self._magnitude, np.ndarray):
+            self._magnitude = self._magnitude.astype(float)
+
         return super().ito(unit)
 
     def __format__(self, format_type: str) -> str:

@@ -1,5 +1,6 @@
 import pytest
 from pytest import approx
+import numpy as np
 
 from encomp.units import Q, wraps
 from encomp.utypes import *
@@ -50,8 +51,15 @@ def test_Q():
 
     assert P3.m == approx(100, rel=1e-12)
 
+    # test conversions to np.ndarray with int/float dtypes
     a = Q([1, 2, 3], 'bar')
     a.ito('kPa')
+
+    a = Q(np.array([1, 2, 3.0]), 'bar')
+    a.ito('kPa')
+
+    a = Q(np.array([1.0, 2.0, 3.0]), 'bar')
+    a.ito('bar')
 
     # conversion to new object
     P4 = Q(1, 'bar')
