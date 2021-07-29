@@ -23,7 +23,7 @@ def pip_install():
 
 def docker_build():
 
-    os.system('docker build -t encomp .')
+    os.system('docker build -t encomp . --no-cache')
 
 
 def upload_pip():
