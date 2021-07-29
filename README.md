@@ -24,7 +24,7 @@ Main functionality of the ``encomp`` library:
 
 * Extends [Sympy](https://pypi.org/project/sympy/)
 
-   * Modules ``encomp.sympy``, ``encomp.balances``
+   * Module ``encomp.sympy``
    * Adds convenience methods for creating symbols with sub- and superscripts
    * Additional functions to convert (algebraic) expressions and systems to Python code that supports Numpy arrays
 

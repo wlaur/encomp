@@ -1,9 +1,62 @@
 """
 Functions related to serializing and decoding (deserializing)
-objects to/from JSON.
+various objects to and from JSON.
+
+The general structure for custom object classes is
+
+    .. code-block:: python
+
+        from typing import Union
+        import json
+
+        from encomp.serialize import serialize, decode
+
+        class CustomClass:
+
+            def __init__(self, A=None, B=None):
+                self.A = A
+                self.B = B
+
+            @classmethod
+            def from_dict(cls, d: dict) -> 'CustomClass':
+                return cls(**d)
+
+            def to_json(self) -> Union[dict, str]:
+                d = {'A': self.A, 'B': self.B}
+
+                # return JSON string or dict
+                # return json.dumps(d)
+                return d
+
+            @property
+            def json(self) -> dict:
+                return self.to_json()
+
+        obj = CustomClass()
+
+        json_repr = serialize(obj)
+        # {'type': 'CustomClass', 'data': {'A': 1, 'B': 2}}
+
+        # construct a new object from the serialized representation
+        obj_ = decode(json_repr, custom=CustomClass)
+
+The custom class must contain a method named ``to_json()`` or a property named
+``json`` that returns a JSON-serializable ``dict`` (or a string representation).
+
+
+To decode a serialized custom object, a method named ``from_dict()`` must be defined.
+Additionally, the (uninitialized) class implementation (or a list of classes) must be passed to the
+:py:func:`encomp.serialize.decode` function with the parameter ``custom``.
+The class name is used as the ``type`` key when serializing.
+This same name must be used when passing the class implementation for decoding.
+
+.. todo::
+
+    Handle timestamps, datetime objects etc., also as pandas index.
+
 """
 
-from typing import Any, Union, Callable
+from typing import Any, Union, Callable, Type, Optional
 import inspect
 import json
 from pathlib import Path
@@ -81,11 +134,11 @@ def serialize(obj: Any) -> JSON:
     if isinstance(obj, str):
         return obj
 
+    # tuple is converted to list, no way to
+    # convert back to tuple when decoding
+    # tuples should not be used with objects that are serialized
     if isinstance(obj, tuple):
         obj = list(obj)
-
-    if isinstance(obj, np.ndarray):
-        obj = obj.tolist()
 
     # only allow dict or list containers
     if isinstance(obj, list):
@@ -114,138 +167,19 @@ def serialize(obj: Any) -> JSON:
     return custom_serializer(obj)
 
 
-def decode(inp: JSON) -> Any:
-    """
-    Decodes objects that were serialized
-    with :py:func:`encomp.serialize.custom_serializer`.
-
-    .. warning::
-        Dictionary keys are always strings in JSON.
-        This function cannot determine if the key ``"2.0"``
-        was originally a string or float, all keys in
-        the returned object are strings.
-
-    Parameters
-    ----------
-    inp : JSON
-        Serialized representation of an object
-
-    Returns
-    -------
-    Any
-        The decoded object
-    """
-
-    # nested list (cannot be tuple, since JSON does not support tuples)
-    if isinstance(inp, list):
-        return [decode(n) for n in inp]
-
-    if isinstance(inp, dict):
-
-        # serialized pint.Quantity with array as magnitude
-        if {'_units', '_magnitude'} <= set(inp):
-
-            m = decode(inp['_magnitude'])
-            return Quantity(m, inp['_units'])
-
-        # check if this dict is output from custom_serializer
-        # it might also be a regular dict that just happens to
-        # have the key "type", in this case it will be decoded normally
-        if 'type' in inp:
-
-            if inp['type'] == 'Quantity':
-
-                val, unit = inp['data']
-
-                # decode custom np.array objects
-                val = decode(val)
-
-                # check if this list has types that matches a serialized Quantity
-                if (isinstance_types(val, Magnitude) and
-                        isinstance_types(unit, Union[Unit, str])):
-
-                    if unit == '':
-                        unit = 'dimensionless'
-
-                    try:
-                        return Quantity(val, unit)
-
-                    except Exception:
-                        pass
-
-            if inp['type'] == 'Path':
-                return Path(inp['data'])
-
-            if inp['type'] == 'DataFrame':
-
-                df_dict = decode(json.loads(inp['data']))
-                return pd.DataFrame.from_dict(df_dict)
-
-            if inp['type'] == 'ndarray':
-
-                data = [decode(x) for x in inp['data']]
-                return np.array(data)
-
-            if inp['type'] == 'Decimal':
-                return Decimal(inp['data'])
-
-            if inp['type'] == 'AffineScalarFunc':
-                return ufloat(*inp['data'])
-
-            if inp['type'] == 'Sympy':
-                return sp.sympify(inp['data'])
-
-            if inp['type'] == 'Balance':
-                from encomp.balances import Balance
-                return Balance.from_dict(inp['data'])
-
-            if inp['type'] == 'BalancedSystem':
-                from encomp.balances import BalancedSystem
-                return BalancedSystem.from_dict(inp['data'])
-
-        # it's not possible to have a custom object as key,
-        # JSON allows only str (float and int are converted to str)
-        # not possible to determine if string "1" was originally an int,
-        # so this function will not convert numeric str to int
-        # to avoid issues with this, avoid using integer / float keys
-        return {a: decode(b)
-                for a, b in inp.items()}
-
-    return inp
-
-
 def custom_serializer(obj: Any) -> JSON:
     """
     Serializes objects that are not JSON-serializable by default.
     Fallback is ``obj.__dict__``, if this does not exist
     the input object is returned unchanged.
-
-    The general structure for custom objects is
-
-    .. code-block:: python
-
-        class CustomClass:
-
-            def __init__(self, A=None, B=None):
-                self.A = A
-                self.B = B
-
-            @classmethod
-            def from_dict(cls, d):
-                return cls(**d)
-
-            def to_json(self):
-                return {'A': self.A, 'B': self.B}
-
-        obj = CustomClass()
-
-        json_repr = custom_serializer(obj)
-        # {'type': 'CustomClass', 'data': {'A': 1, 'B': 2}}
-
-        # construct a new object from the serialized representation
-        obj_ = CustomClass.from_dict(json_repr)
-
     Numpy arrays and pandas DataFrames are handled separately.
+
+    Custom classes can use a method named ``to_json()`` or
+    a property named ``json`` that returns a ``dict`` or
+    a string representation of a ``dict``.
+    The class name is stored in the ``type`` attribute in the output JSON.
+
+    If these attributes are not found, ``__dict__`` or ``str()`` is used.
 
     Parameters
     ----------
@@ -272,11 +206,20 @@ def custom_serializer(obj: Any) -> JSON:
             'data': [serialize(obj.m), str(obj.u._units)]
         }
 
+    if isinstance(obj, pd.Series):
+
+        return {
+            'type': 'Series',
+            'data': obj.to_json(orient='split',
+                                default_handler=custom_serializer)
+        }
+
     if isinstance(obj, pd.DataFrame):
 
         return {
             'type': 'DataFrame',
-            'data': obj.to_json(default_handler=custom_serializer)
+            'data': obj.to_json(orient='split',
+                                default_handler=custom_serializer)
         }
 
     if isinstance(obj, np.ndarray):
@@ -307,11 +250,30 @@ def custom_serializer(obj: Any) -> JSON:
             'data': sp.srepr(obj)
         }
 
-    if hasattr(obj, 'to_json'):
-        return obj.to_json()
+    # method named "to_json" or @property named "json"
+    if hasattr(obj, 'to_json') or hasattr(obj, 'json'):
 
-    if hasattr(obj, 'json'):
-        return obj.json
+        # this method can return a dict or a string
+        # JSON representation
+        if hasattr(obj, 'json'):
+            json_repr = getattr(obj, 'json')
+        else:
+            json_repr = obj.to_json()
+
+        # make sure the object's dict representation is serializable
+        # if this is a string this is not necessary
+        if not isinstance(json_repr, str):
+            json_repr = serialize(json_repr)
+
+        obj_type = obj.__class__.__name__
+
+        # the custom class must implement classmethod
+        # from_dict, which takes json_repr as input and
+        # returns a class instance
+        return {
+            'type': obj_type,
+            'data': json_repr
+        }
 
     if hasattr(obj, '__dict__'):
         return obj.__dict__
@@ -321,6 +283,156 @@ def custom_serializer(obj: Any) -> JSON:
 
     # fallback, this cannot be deserialized
     return str(obj)
+
+
+def decode(inp: JSON,
+           custom: Optional[Union[Type, list[Type]]] = None) -> Any:
+    """
+    Decodes objects that were serialized
+    with :py:func:`encomp.serialize.custom_serializer`.
+    Custom classes can be constructed from an optional
+    class constructor parameter.
+
+    .. warning::
+        Dictionary keys are always strings in JSON.
+        This function cannot determine if the key ``"2.0"``
+        was originally a string or float, all keys in
+        the returned object are strings.
+
+    Parameters
+    ----------
+    inp : JSON
+        Serialized representation of an object
+    custom : Optional[Union[Type, list[Type]]]
+        Potential custom class implementation(s). The class name
+        is stored as the ``type`` key in the input JSON (if the object
+        was serialized with :py:func:`encomp.serialize.custom_serializer`).
+
+        .. note::
+            The exact class names that were used for serializing
+            must be used when decoding. The ``obj.__class__.__name__``
+            attribute is used, make sure to use unique class names.
+
+    Returns
+    -------
+    Any
+        The decoded object
+    """
+
+    if custom is None:
+        custom = []
+
+    if not isinstance(custom, list):
+        custom = [custom]
+
+    # nested list (cannot be tuple, since JSON does not support tuples)
+    if isinstance(inp, list):
+        return [decode(n, custom=custom) for n in inp]
+
+    if isinstance(inp, dict):
+
+        # serialized pint.Quantity with array as magnitude
+        if {'_units', '_magnitude'} <= set(inp):
+
+            # decode custom np.array objects
+            # not necessary to pass on the custom kwarg,
+            # the Quantity magnitude cannot be a custom class
+            m = decode(inp['_magnitude'])
+            return Quantity(m, inp['_units'])
+
+        # check if this dict is output from custom_serializer
+        # it might also be a regular dict that just happens to
+        # have the key "type", in this case it will be decoded normally
+        if 'type' in inp:
+
+            if inp['type'] == 'Quantity':
+
+                val, unit = inp['data']
+
+                # not necessary to pass on the custom kwarg
+                val = decode(val)
+
+                # check if this list has types that matches a serialized Quantity
+                if (isinstance_types(val, Magnitude) and
+                        isinstance_types(unit, Union[Unit, str])):
+
+                    if unit == '':
+                        unit = 'dimensionless'
+
+                    try:
+                        return Quantity(val, unit)
+
+                    except Exception:
+                        pass
+
+            if inp['type'] == 'Path':
+                return Path(inp['data'])
+
+            if inp['type'] == 'Series':
+                return pd.read_json(inp['data'],
+                                    typ='series', orient='split')
+
+            if inp['type'] == 'DataFrame':
+                return pd.read_json(inp['data'],
+                                    typ='frame', orient='split')
+
+            if inp['type'] == 'ndarray':
+
+                # not necessary to pass on the custom kwarg
+                data = [decode(x) for x in inp['data']]
+                return np.array(data)
+
+            if inp['type'] == 'Decimal':
+                return Decimal(inp['data'])
+
+            if inp['type'] == 'AffineScalarFunc':
+                return ufloat(*inp['data'])
+
+            if inp['type'] == 'Sympy':
+                return sp.sympify(inp['data'])
+
+            # load custom classes, based on list of classes
+            custom_dict = {n.__name__: n for n in custom}
+
+            if inp['type'] in custom_dict:
+
+                custom_class = custom_dict[inp['type']]
+
+                if not hasattr(custom_class, 'from_dict'):
+
+                    # want to raise an error here
+                    # implementation is incorrect if this method is missing
+                    raise AttributeError(
+                        f'Custom class {custom_class} '
+                        'must contain a classmethod named "from_dict" '
+                        'that takes a dict as input and returns a class instance')
+
+                d = inp['data']
+
+                # in case the to_json() method returns a string,
+                # the string must be loaded into a dict
+                # it's not possible to have a non-JSON string here,
+                # a custom object cannot serialize to a single string value
+                if isinstance(d, str):
+                    d = json.loads(d)
+
+                # in case the dict representation contains objects
+                # that must be decoded
+                d = decode(d, custom=custom)
+
+                return custom_class.from_dict(d)
+
+        # it's not possible to have any custom object as key,
+        # JSON allows only str (float and int are converted to str)
+        # not possible to determine if string "1" was originally an int,
+        # so this function will not convert numeric str to int
+        # to avoid issues with this, avoid using integer / float keys
+        # need to pass on the custom class list here
+        return {a: decode(b, custom=custom)
+                for a, b in inp.items()}
+
+    # basic types should be returned as-is
+    return inp
 
 
 def save(names: dict[str, Any],

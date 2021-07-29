@@ -287,7 +287,7 @@ class Quantity(pint.quantity.Quantity):
 
         # it's not safe to convert units as int, the
         # user will have to convert back to int if necessary
-        # better to use ":.2f" formatting or round() anyway
+        # better to use ":.0f" formatting or round() anyway
 
         # avoid numpy.core._exceptions.UFuncTypeError (not on all platforms?)
         # convert integer arrays to float (creating a copy)

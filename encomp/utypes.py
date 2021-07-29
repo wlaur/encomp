@@ -18,7 +18,7 @@ from pint.unit import UnitsContainer
 # type alias for the magnitude input to Quantity
 # also accept Decimal and AffineScalarFunc (from uncertainties package)
 MagnitudeValue = Union[float, int, Decimal, AffineScalarFunc]
-Magnitude = Union[MagnitudeValue, list[MagnitudeValue], npt.ArrayLike]
+Magnitude = Union[MagnitudeValue, list[MagnitudeValue], set[MagnitudeValue], npt.ArrayLike]
 
 # base dimensionalities: the 7 base dimensions in the SI system and dimensionless
 Dimensionless = UnitsContainer()

@@ -150,24 +150,38 @@ In case the dimensionality already exists, ``DimensionalityRedefinitionError`` i
 Using multiple magnitudes
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Numpy arrays and Pandas Series objects can also be used as magnitude.
-Series objects are converted to ``ndarray`` before constructing the quantity, which means that all metadata is removed.
+
+Lists, tuples, sets, Numpy arrays and Pandas Series objects can also be used as magnitude.
+In case a tuple or list is given as magnitude when creating a quantity, it will be converted to a Numpy array.
 
 
 .. code-block:: python
 
+    # lists and tuples are converted to array
+    type(Q([1, 2, 3], 'kg').m) # numpy.ndarray
+    type(Q((1, 2, 3), 'kg').m) # numpy.ndarray
+
+    # set is not converted, since Numpy has no corresponding type
+    type(Q({1, 2, 3}, 'kg').m) # set
+
     import numpy as np
-    import pandas as pd
 
     arr = np.linspace(0, 1)
+    Q(arr, 'bar')
+    # [0.0 0.02040816326530612 0.04081632653061224 ... 0.9795918367346939 1.0] bar
+
+
+
+Series objects are also converted to ``ndarray`` before constructing the quantity, which means that all metadata is removed.
+
+
+.. code-block:: python
+
+    import pandas as pd
+
     s = pd.Series(arr, name='series_name')
 
-    pressure = Q(arr, 'bar')
     pressure_ = Q(s, 'bar') # Series is converted to np.ndarray
-
-
-In case a tuple or list is given as magnitude when creating a quantity, it will be converted to a Numpy array.
-
 
 
 Combining quantities
@@ -197,10 +211,10 @@ This is only required when defining the temperature difference directly.
 
     # the degree step for °C is equal to 1 K
     Q(4.19, 'kJ/kg/K') * Q(5, 'delta_degC') # 20.95 kJ Δ°C/(K kg)
-    Q(4.19, 'kJ/kg/K') * Q(5, 'K') # 20.95 kJ Δ°C/(K kg)
+    Q(4.19, 'kJ/kg/K') * Q(5, 'K') # 20.95 kJ/kg
 
     # the units Δ°C and K don't cancel out automatically
-    (Q(4.19, 'kJ/kg/K') * Q(5, 'K')).to('kJ/kg') # 20.95 kJ/kg
+    (Q(4.19, 'kJ/kg/K') * Q(5, 'delta_degC')).to('kJ/kg') # 20.95 kJ/kg
 
 .. tip::
 

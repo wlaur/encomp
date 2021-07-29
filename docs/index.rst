@@ -26,7 +26,7 @@ Main functionality of the ``encomp`` library:
    * Uses quantities for all inputs and outputs (including dimensionless quantities)
    * Fluids are represented as class instances, the properties are class attributes
 * Extends `Sympy <https://pypi.org/project/sympy/>`_
-   * Modules :py:mod:`encomp.sympy`, :py:mod:`encomp.balances`
+   * Module :py:mod:`encomp.sympy`
    * Adds convenience methods for creating symbols with sub- and superscripts
    * Additional functions to convert (algebraic) expressions and systems to Python code that supports Numpy arrays
 * Jupyter Notebook integration

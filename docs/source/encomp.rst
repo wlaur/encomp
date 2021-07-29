@@ -4,14 +4,6 @@ encomp package
 Submodules
 ----------
 
-encomp.balances module
-----------------------
-
-.. automodule:: encomp.balances
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 encomp.constants module
 -----------------------
 

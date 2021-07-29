@@ -59,7 +59,7 @@ def test_Q():
     a.ito('kPa')
 
     a = Q(np.array([1.0, 2.0, 3.0]), 'bar')
-    a.ito('bar')
+    a.ito('kPa')
 
     # conversion to new object
     P4 = Q(1, 'bar')
