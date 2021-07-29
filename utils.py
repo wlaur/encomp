@@ -21,6 +21,11 @@ def pip_install():
     os.system('pip install .')
 
 
+def docker_build():
+
+    os.system('docker build -t encomp .')
+
+
 def upload_pip():
 
     cmds = [
@@ -48,6 +53,9 @@ def main(task=None):
 
     elif task == 'install':
         pip_install()
+
+    elif task == 'dbuild':
+        docker_build()
 
     else:
         raise ValueError(f'Unknown task: {task}')

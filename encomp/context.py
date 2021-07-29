@@ -14,7 +14,7 @@ from encomp.units import set_quantity_format, ureg
 
 
 @contextmanager
-def working_dir(path: Union[Path, str]) -> None:
+def working_dir(path: Union[Path, str]):
     """
     Context manager that changes the working directory.
     The working directory is changed back after the context
@@ -37,7 +37,7 @@ def working_dir(path: Union[Path, str]) -> None:
 
 
 @contextmanager
-def temp_dir() -> None:
+def temp_dir():
     """
     Context manager that changes the current working directory
     to a temporary directory. The temporary directory is deleted
@@ -58,7 +58,7 @@ def temp_dir() -> None:
 
 
 @contextmanager
-def silence_stdout() -> None:
+def silence_stdout():
     """
     Context manager that redirects ``stdout`` to ``os.devnull``.
     This is used suppress functions that print to ``stdout``.

@@ -88,6 +88,27 @@ conda remove -y --name encomp-env --all
 ```
 
 
+### Docker container
+
+To create a Docker image with an installation of ``encomp``, use the ``Dockerfile`` included in the base of this repository.
+
+```
+docker build -t encomp .
+```
+
+This will create a new Docker image based on ``continuumio/miniconda3`` and install all necessary development dependencies.
+``encomp`` is then installed from ``pip``, and the test suite is run before the image is exported.
+
+
+To run the Docker container in the currently active shell, use
+
+```
+docker run -it encomp
+```
+
+The ``conda`` environment ``encomp-env`` is automatically activated.
+
+
 ## Getting started
 
 To use ``encomp`` from a Jupyter Notebook, import the ``encomp.notebook`` module:
