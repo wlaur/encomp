@@ -9,5 +9,5 @@ dependencies:
   - jupyter
   - CoolProp
   - pip:
-      - -r file:requirements.txt
-      - -r file:requirements-dev.txt
+    - -r requirements.txt
+    - -r requirements-dev.txt
