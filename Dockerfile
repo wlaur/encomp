@@ -17,8 +17,5 @@ RUN conda install conda-forge::coolprop
 # install latest version from pip
 RUN pip install encomp
 
-# test the installation
-RUN pytest --pyargs encomp
-
 # run the docker container with
 # docker run -it encomp

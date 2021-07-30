@@ -555,7 +555,7 @@ def convert_volume_mass(inp: Union[Quantity[Mass],
     inp : Union[Quantity[Mass], Quantity[MassFlow], Quantity[Volume], Quantity[VolumeFlow]]
         Input mass or volume
     rho : Quantity[Density], optional
-        Density, by default 997 kg/m³
+        Density, by default 997 kg/m³ (or ``encomp.constants.CONTSTANTS.default_density``)
 
     Returns
     -------
@@ -564,7 +564,10 @@ def convert_volume_mass(inp: Union[Quantity[Mass],
     """
 
     if rho is None:
-        rho = Q(997, 'kg/m³')
+
+        # TODO: possible to avoid issues with circular imports?
+        from encomp.constants import CONSTANTS
+        rho = CONSTANTS.default_density
 
     if inp.dimensionality in (Mass, MassFlow):
         return (inp / rho).to_reduced_units()

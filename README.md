@@ -97,7 +97,7 @@ docker build -t encomp .
 ```
 
 This will create a new Docker image based on ``continuumio/miniconda3`` and install all necessary development dependencies.
-``encomp`` is then installed from ``pip``, and the test suite is run before the image is exported.
+The latest version of ``encomp`` is installed using ``pip``.
 
 
 To run the Docker container in the currently active shell, use

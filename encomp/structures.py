@@ -20,13 +20,19 @@ def divide_chunks(container: Iterable[Any], N: int) -> Iterator[Any]:
     container : Iterable[Any]
         The container that will be split into chunks
     N : int
-        Number of element for one chunk (last chuck might be shorter)
+        Number of element for one chunk (last chunk might be shorter)
 
     Yields
     -------
     Iterator[Any]
         Generator of chunks
     """
+
+    if not len(container):
+        raise ValueError('Cannot chunk empty container')
+
+    if N < 1:
+        raise ValueError(f'Cannot split container into {N} chunks')
 
     for i in range(0, len(container), N):
         yield container[i:i + N]
