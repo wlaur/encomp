@@ -54,6 +54,7 @@ Contents
 .. toctree::
    :maxdepth: 3
 
+   setup
    usage
    examples
 

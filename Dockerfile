@@ -14,8 +14,14 @@ ENV PATH /opt/conda/envs/encomp-env/bin:$PATH
 # TODO: remove this once coolprop supports Python 3.9
 RUN conda install conda-forge::coolprop
 
-# install latest version from pip
-RUN pip install encomp
+
+# copy local whl-file and install
+# use wildcard since filename contains version number
+# make sure that the latest version is the only file in the /dist folder
+# run "python utils.py build" to create this file
+COPY dist/encomp-* .
+
+RUN pip install encomp-*.whl
 
 # run the docker container with
 # docker run -it encomp

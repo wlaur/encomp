@@ -57,58 +57,6 @@ This will install ``encomp`` along with its dependencies into the currently acti
 conda install conda-forge::coolprop
 ```
 
-
-### Development environment
-
-Install Miniconda or Anconda if not already installed.
-Clone this repository, open a terminal and navigate to the root directory.
-Setup a new environment using ``conda``:
-
-```
-conda env create -f environment.yml
-```
-
-This will install the necessary dependencies into a new ``conda`` environment named ``encomp-env``.
-The dependencies (except for ``scipy`` and ``jupyter``) are installed with ``pip``.
-
-Install ``encomp`` into the new environment:
-
-```
-conda activate encomp-env
-pip install .
-```
-
-
-#### Removing the ``conda`` environment
-
-To completely remove the ``conda`` environment for ``encomp``:
-
-```
-conda remove -y --name encomp-env --all
-```
-
-
-### Docker container
-
-To create a Docker image with an installation of ``encomp``, use the ``Dockerfile`` included in the base of this repository.
-
-```
-docker build -t encomp .
-```
-
-This will create a new Docker image based on ``continuumio/miniconda3`` and install all necessary development dependencies.
-The latest version of ``encomp`` is installed using ``pip``.
-
-
-To run the Docker container in the currently active shell, use
-
-```
-docker run -it encomp
-```
-
-The ``conda`` environment ``encomp-env`` is automatically activated.
-
-
 ## Getting started
 
 To use ``encomp`` from a Jupyter Notebook, import the ``encomp.notebook`` module:
