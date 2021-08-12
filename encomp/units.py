@@ -70,7 +70,10 @@ ureg.preprocessors = [
 ureg.autoconvert_offset_to_baseunit = SETTINGS.autoconvert_offset_to_baseunit
 
 # enable support for matplotlib axis ticklabels etc...
-ureg.setup_matplotlib()
+try:
+    ureg.setup_matplotlib()
+except ImportError:
+    pass
 
 
 try:
