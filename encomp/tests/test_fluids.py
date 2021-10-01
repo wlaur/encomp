@@ -40,6 +40,10 @@ def test_Fluid():
     Fluid('water', T=Q([23, 25], 'C'), P=Q(np.nan, 'bar')).H
     Fluid('water', T=Q([23, 25], 'C'), P=Q([1, np.nan], 'bar')).H
 
+    Water(T=Q([25, 25, 63], 'C'), Q=Q([np.nan, np.nan, 0.4], '')).H
+    Water(T=Q([25, np.nan, 63], 'C'), Q=Q([np.nan, 0.2, 0.5], '')).H
+    Water(T=Q([25, np.nan, np.nan], 'C'), Q=Q([np.nan, 0.2, np.nan], '')).H
+
     # returns NaN (not empty array)
     assert np.isnan(Fluid('water', T=Q([], 'C'), P=Q([], 'bar')).H.m)
 

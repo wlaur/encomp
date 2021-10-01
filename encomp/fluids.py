@@ -413,19 +413,26 @@ class CoolPropFluid:
 
         if not is_single_value:
 
-            if not mask.sum():
+            N = mask.sum()
+
+            if not N:
                 val = np.empty_like(val_1)
                 val[:] = np.nan
 
+            elif N == mask.shape[0]:
+                val = PropsSI(output,
+                              prop_1, val_1,
+                              prop_2, val_2,
+                              self.name)
+
             else:
-                val = np.where(
-                    mask,
-                    PropsSI(output,
-                            prop_1, val_1[mask],
-                            prop_2, val_2[mask],
-                            self.name),
-                    np.nan
-                )
+                val = np.empty_like(val_1)
+                val[:] = np.nan
+
+                val[mask] = PropsSI(output,
+                                    prop_1, val_1[mask],
+                                    prop_2, val_2[mask],
+                                    self.name)
 
         else:
 
