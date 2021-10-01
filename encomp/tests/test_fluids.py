@@ -30,6 +30,27 @@ def test_Fluid():
         # incorrect argument name
         Water(T=Q(1, 'bar'), P=Q(9, 'degC'))
 
+    Fluid('water', T=Q([25, 95], 'C'), P=Q([1, 2], 'bar')).H
+    Fluid('water', T=Q([25, np.nan], 'C'), P=Q([1, 2], 'bar')).H
+    Fluid('water', T=Q([np.nan, np.nan], 'C'), P=Q([1, 2], 'bar')).H
+    Fluid('water', T=Q([np.nan, np.nan], 'C'), P=Q([np.nan, np.nan], 'bar')).H
+    Fluid('water', T=Q(23, 'C'), P=Q([1, 2], 'bar')).H
+    Fluid('water', T=Q(23, 'C'), P=Q([1], 'bar')).H
+    Fluid('water', T=Q([23, 25], 'C'), P=Q([1], 'bar')).H
+    Fluid('water', T=Q([23, 25], 'C'), P=Q(np.nan, 'bar')).H
+    Fluid('water', T=Q([23, 25], 'C'), P=Q([1, np.nan], 'bar')).H
+
+    # returns NaN (not empty array)
+    assert np.isnan(Fluid('water', T=Q([], 'C'), P=Q([], 'bar')).H.m)
+
+    # returns single float (not 1-element list)
+    assert not Fluid('water', T=Q([23], 'C'), P=Q([1], 'bar')).H.m.shape
+
+    with pytest.raises(ValueError):
+        Fluid('water', T=Q([np.nan, np.nan], 'C'),
+              P=Q([np.nan, np.nan, np.nan], 'bar')).H
+        Fluid('water', T=Q([np.nan, np.nan], 'C'), P=Q([], 'bar')).H
+
 
 def test_Water():
 

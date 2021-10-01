@@ -390,10 +390,52 @@ class CoolPropFluid:
         val_1 = qty_1.to(unit_1).m
         val_2 = qty_2.to(unit_2).m
 
-        val = PropsSI(output,
-                      prop_1, val_1,
-                      prop_2, val_2,
-                      self.name)
+        def _is_array_multiple_elements(x):
+            if not isinstance(x, (list, np.ndarray)):
+                return False
+            if len(x) > 1:
+                return True
+            return False
+
+        # TODO: this is not elegant
+        mask = np.isfinite(val_1) & np.isfinite(val_2)
+        is_single_value = True
+
+        if _is_array_multiple_elements(val_1):
+            is_single_value = False
+            if not _is_array_multiple_elements(val_2):
+                val_2 = np.repeat(val_2, len(val_1))
+
+        if _is_array_multiple_elements(val_2):
+            is_single_value = False
+            if not _is_array_multiple_elements(val_1):
+                val_1 = np.repeat(val_1, len(val_2))
+
+        if not is_single_value:
+
+            if not mask.sum():
+                val = np.empty_like(val_1)
+                val[:] = np.nan
+
+            else:
+                val = np.where(
+                    mask,
+                    PropsSI(output,
+                            prop_1, val_1[mask],
+                            prop_2, val_2[mask],
+                            self.name),
+                    np.nan
+                )
+
+        else:
+
+            if mask:
+                val = PropsSI(output,
+                              prop_1, val_1,
+                              prop_2, val_2,
+                              self.name)
+            else:
+                val = np.nan
 
         qty = Quantity(val, unit_output)
 
