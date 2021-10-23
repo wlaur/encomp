@@ -110,8 +110,8 @@ class CoolPropFluid:
     }
 
     ALL_PROPERTIES: set[str] = set(flatten(PROPERTY_MAP))
-    REPR_PROPERTIES: tuple[tuple[str, str]] = (('P', '.0f'), ('T', '.1f'),
-                                               ('D', '.1f'), ('V', '.2g'))
+    REPR_PROPERTIES: tuple[tuple[str, str], ...] = (('P', '.0f'), ('T', '.1f'),
+                                                    ('D', '.1f'), ('V', '.2g'))
 
     # preferred return units
     # key is the first name in the tuple used in PROPERTY_MAP
@@ -267,6 +267,9 @@ class CoolPropFluid:
         for names in cls.PROPERTY_MAP:
             if prop in names:
                 return names
+
+        raise ValueError(
+            f'Property "{prop}" is not a valid CoolProp property name')
 
     @classmethod
     def get_coolprop_unit(cls, prop: CProperty) -> Unit:
@@ -487,12 +490,12 @@ class Fluid(CoolPropFluid):
             raise ValueError(
                 f'Exactly two fixed points are required, passed {list(kwargs)}')
 
-        kwargs = list(kwargs.items())
+        kwargs_list = list(kwargs.items())
 
-        self.point_1 = kwargs[0]
-        self.point_2 = kwargs[1]
+        self.point_1 = kwargs_list[0]
+        self.point_2 = kwargs_list[1]
 
-    def get(self, output: CProperty) -> Quantity:
+    def get(self, output: CProperty, *args) -> Quantity:
         """
         Uses the constant fixed points to call
         :py:meth:`encomp.fluids.CoolPropFluid.get`.
@@ -517,16 +520,16 @@ class Fluid(CoolPropFluid):
         phase_idx = self.get('PHASE')
 
         # self.get() returns a dimensionless Quantity
-        phase_idx = phase_idx.m
+        phase_idx_val = phase_idx.m
 
-        if isinstance(phase_idx, np.ndarray):
+        if isinstance(phase_idx_val, np.ndarray):
 
-            if len(set(phase_idx)) == 1:
-                phase_idx = float(phase_idx[0])
+            if len(set(phase_idx_val)) == 1:
+                phase_idx_val = float(phase_idx_val[0])
             else:
                 return 'Variable'
 
-        return self.PHASES[phase_idx]
+        return self.PHASES[phase_idx_val]
 
     def __getattr__(self, attr):
 
@@ -594,9 +597,9 @@ class HumidAir(Fluid):
         'B': '°C',
     }
 
-    REPR_PROPERTIES: tuple[tuple[str, str]] = (('P', '.0f'), ('T', '.1f'),
-                                               ('R', '.2f'), ('Vda', '.1f'),
-                                               ('Vha', '.1f'), ('M', '.2g'))
+    REPR_PROPERTIES: tuple[tuple[str, str], ...] = (('P', '.0f'), ('T', '.1f'),
+                                                    ('R', '.2f'), ('Vda', '.1f'),
+                                                    ('Vha', '.1f'), ('M', '.2g'))
 
     def __init__(self, **kwargs: Quantity):
         """
@@ -618,13 +621,13 @@ class HumidAir(Fluid):
             raise ValueError(
                 f'Exactly three fixed points are required, passed {list(kwargs)}')
 
-        kwargs = list(kwargs.items())
+        kwargs_list = list(kwargs.items())
 
-        self.point_1 = kwargs[0]
-        self.point_2 = kwargs[1]
-        self.point_3 = kwargs[2]
+        self.point_1 = kwargs_list[0]
+        self.point_2 = kwargs_list[1]
+        self.point_3 = kwargs_list[2]
 
-    def get(self, output: CProperty) -> Quantity:
+    def get(self, output: CProperty, *args) -> Quantity:
         """
         Uses the constant fixed points to call ``CoolProp.CoolProp.HAPropsSI``.
 
@@ -689,8 +692,8 @@ class HumidAir(Fluid):
 
 class Water(Fluid):
 
-    REPR_PROPERTIES: tuple[tuple[str, str]] = (('P', '.0f'), ('T', '.1f'),
-                                               ('D', '.1f'), ('V', '.1f'))
+    REPR_PROPERTIES: tuple[tuple[str, str], ...] = (('P', '.0f'), ('T', '.1f'),
+                                                    ('D', '.1f'), ('V', '.1f'))
 
     def __init__(self, **kwargs: Quantity):
         """
@@ -718,10 +721,10 @@ class Water(Fluid):
             raise ValueError(
                 f'Exactly two fixed points are required, passed {list(kwargs)}')
 
-        kwargs = list(kwargs.items())
+        kwargs_list = list(kwargs.items())
 
-        self.point_1 = kwargs[0]
-        self.point_2 = kwargs[1]
+        self.point_1 = kwargs_list[0]
+        self.point_2 = kwargs_list[1]
 
     def __repr__(self) -> str:
 

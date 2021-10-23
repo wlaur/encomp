@@ -210,7 +210,7 @@ class Graphic:
 
                 elif isinstance(p, list) and p[0] == 'svg':
 
-                    svg_src = '<svg ' + p[1].strip().split('<svg ', 1)[1]
+                    svg_src = '<svg ' + p[1].strip().split('<svg', 1)[1]
                     cell_src = f'<td width="{td_width}">{svg_src}</td>'
 
                     html_src.append(cell_src)
