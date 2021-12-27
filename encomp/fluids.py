@@ -439,7 +439,7 @@ class CoolPropFluid:
 
         else:
 
-            if mask:
+            if np.asanyarray(mask).size:
                 val = PropsSI(output,
                               prop_1, val_1,
                               prop_2, val_2,
@@ -729,14 +729,6 @@ class Water(Fluid):
     def __repr__(self) -> str:
 
         repr_properties = self.REPR_PROPERTIES
-
-        # show the vapor quality in the repr in case of saturated steam
-        vapor_quality = self.Q
-
-        # ignore this for vector inputs
-        if isinstance(vapor_quality, (int, float)):
-            if (vapor_quality > 0).sum() and (vapor_quality < 1).sum():
-                repr_properties = list(repr_properties) + [('Q', '.2f')]
 
         props_str = ', '.join(f'{p}={self.get(p):{fmt}}'
                               for p, fmt in repr_properties)

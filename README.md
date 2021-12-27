@@ -149,7 +149,7 @@ See the file ``.env.example`` in the base of this repository for examples.
    * Would be nice to see issues with dimensionality directly in the IDE
    * Might not be possible since the subclass ``Quantity['Temperature']`` is constructed at runtime
 * Combine EPANET (``wntr``) for pressure / flow simulation with energy systems simulations (``omeof``)
-* Make a web interface to draw circuits (using a JS node-graph editor) and visualize results.
+
 
 Ensure compatibility with
 
