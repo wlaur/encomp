@@ -155,8 +155,6 @@ Ensure compatibility with
 
 * numpy
 * pandas
-* Excel (via ``df.to_excel``, both with ``openpyxl`` and ``xlsxwriter``
-    * parse units from Excel (header name like "Pressure [bar]" etc...)
 * nbconvert (HTML and Latex/PDF output)
     * figure out how to typeset using SIUNITX
     * look into JupyterBook and similar projects

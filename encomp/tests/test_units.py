@@ -2,7 +2,7 @@ import pytest
 from pytest import approx
 import numpy as np
 
-from encomp.units import Q, wraps
+from encomp.units import Q, wraps, check
 from encomp.utypes import *
 
 
@@ -15,6 +15,19 @@ def test_Q():
     Q(1, 'h')
     Q(1, 'newton')
     Q(1, 'cSt')
+
+    # ensure that the inputs can be nested
+    Q(Q(1, 'kg'))
+    mass = Q(12, 'kg')
+    Q(Q(Q(Q(mass))))
+    Q(Q(Q(Q(mass), 'lbs')))
+    Q(Q(Q(Q(mass), 'lbs')), 'stone')
+
+    # no unit input defaults to dimensionless
+    assert Q(12).check('')
+    assert Q(1) == Q(100, '%')
+    Q['Dimensionless'](21)
+    assert isinstance(Q(21), Q['Dimensionless'])
 
     # input Quantity as unit
     Q(1, Q(2, 'bar'))
@@ -105,5 +118,18 @@ def test_wraps():
         return a * b**2 + 1
 
     assert isinstance(func(Q(1, 'yd'), Q(20, 'lbs')), Q['Mass'])
-
     assert Q(1, 'bar').check(Pressure)
+
+
+def test_check():
+
+    assert not Q(1, 'kg').check('[energy]')
+    assert Q(1, 'kg').check(Mass)
+    assert not Q(1, 'kg').check(Energy)
+
+    @check('[length]', '[mass]')
+    def func(a, b):
+
+        return a * b
+
+    func(Q(1, 'yd'), Q(20, 'lbs'))

@@ -1,5 +1,6 @@
 autopep8
 pytest
+mypy
 hypothesis
 twine
 Sphinx

@@ -10,10 +10,9 @@ scipy
 matplotlib
 seaborn
 sympy
-xlsxwriter
-openpyxl
 pint
 uncertainties
 fluids
 thermo
+ht
 symbolic-equation

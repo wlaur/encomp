@@ -59,12 +59,7 @@ ureg = pint.get_application_registry()
 
 
 # keep track of user-created dimensions
-_CUSTOM_DIMENSIONS = []
-
-# TODO: move the preprocessing from the Quantity class here instead
-ureg.preprocessors = [
-    lambda x: x.replace('%', 'percent')
-]
+_CUSTOM_DIMENSIONS: list[str] = []
 
 # if False, degC must be explicitly converted to K when multiplying
 ureg.autoconvert_offset_to_baseunit = SETTINGS.autoconvert_offset_to_baseunit
@@ -78,26 +73,36 @@ except ImportError:
 
 try:
     # define percent as 1 / 100
-    ureg.define(UnitDefinition('percent', '%',
-                (), ScaleConverter(1 / 100.0)))
+    ureg.define(
+        UnitDefinition(
+            'percent',
+            '%',
+            (),
+            ScaleConverter(1 / 100.0)
+        )
+    )
 except pint.errors.RedefinitionError:
     pass
 
 
-with open(SETTINGS.additional_units, 'r', encoding='utf-8') as f:
+if (
+    SETTINGS.additional_units is not None and
+    SETTINGS.additional_units.is_file()
+):
+    with open(SETTINGS.additional_units, 'r', encoding='utf-8') as f:
 
-    lines = f.read().split('\n')
-    for line in lines:
+        lines = f.read().split('\n')
+        for line in lines:
 
-        if line.startswith('#'):
-            continue
+            if line.startswith('#'):
+                continue
 
-        if line.strip():
+            if line.strip():
 
-            try:
-                ureg.define(line)
-            except pint.errors.RedefinitionError:
-                pass
+                try:
+                    ureg.define(line)
+                except pint.errors.RedefinitionError:
+                    pass
 
 ureg.default_format = SETTINGS.default_unit_format
 
@@ -109,7 +114,6 @@ class Quantity(pint.quantity.Quantity):
     """
 
     _REGISTRY = ureg
-    default_format = _REGISTRY.default_format
 
     # used to validate dimensionality using type checking,
     # if None the dimensionality is not checked
@@ -144,7 +148,9 @@ class Quantity(pint.quantity.Quantity):
         'feet_water': 'feet_H2O',
         'foot_water': 'feet_H2O',
         'ft_H2O': 'feet_H2O',
-        'ft_water': 'feet_H2O'}
+        'ft_water': 'feet_H2O',
+        '%': 'percent'
+    }
 
     @classmethod
     def get_unit(cls, unit_name: str) -> Unit:
@@ -196,9 +202,20 @@ class Quantity(pint.quantity.Quantity):
 
         return cls._get_subclass_with_dimensions(dim)
 
-    def __new__(cls,
-                val: Union[Magnitude, 'Quantity'],
-                unit: Union[Unit, UnitsContainer, str, 'Quantity']) -> 'Quantity':
+    def __new__(
+            cls,
+            val: Union[Magnitude, 'Quantity'],
+            unit: Union[Unit, UnitsContainer, str, 'Quantity', None] = None
+    ) -> 'Quantity':
+
+        if unit is None:
+
+            # this allows us to create new dimensionless quantities
+            # by omitting the unit
+            try:
+                unit = val.u
+            except Exception:
+                unit = ''
 
         if isinstance(val, Quantity):
 
@@ -270,6 +287,8 @@ class Quantity(pint.quantity.Quantity):
             unit = self._REGISTRY.parse_units(str(unit))
 
         if isinstance(unit, str):
+
+            # unit = self._custom_units.get(unit, unit)
             unit = self._REGISTRY.parse_units(Quantity.correct_unit(unit))
 
         if isinstance(unit, Quantity):
@@ -462,13 +481,21 @@ class Quantity(pint.quantity.Quantity):
 # override the implementation of the Quantity class for the current registry
 # this ensures that all Quantity objects created with this registry
 # uses the subclass encomp.units.Quantity instead of pint.Quantity
+# pint uses an "ApplicationRegistry" wrapper class since v. 0.18,
+# account for this by setting the attribute on the "_registry" member
 ureg.Quantity = Quantity
+try:
+    ureg._registry.Quantity = Quantity
+except Exception:
+    pass
+
 
 # shorthand for the Quantity class
 Q = Quantity
 
 # shorthand for the @wraps(ret, args, strict=True|False) decorator
 wraps = ureg.wraps
+check = ureg.check
 
 
 def define_dimensionality(name: str, symbol: str = None) -> None:
@@ -541,28 +568,37 @@ def set_quantity_format(fmt: str = 'compact') -> None:
 
     ureg.default_format = fmt
 
+    try:
+        ureg._registry.default_format = fmt
+    except Exception:
+        pass
 
-def convert_volume_mass(inp: Union[Quantity[Mass],
-                                   Quantity[MassFlow],
-                                   Quantity[Volume],
-                                   Quantity[VolumeFlow]],
-                        rho: Optional[Quantity[Density]] = None) -> Union[Quantity[Mass],
-                                                                          Quantity[MassFlow],
-                                                                          Quantity[Volume],
-                                                                          Quantity[VolumeFlow]]:
+
+def convert_volume_mass(
+    inp: Union[Quantity[Mass],
+               Quantity[MassFlow],
+               Quantity[Volume],
+               Quantity[VolumeFlow]],
+    rho: Optional[Quantity[Density]] = None
+) -> Union[Quantity[Mass],
+           Quantity[MassFlow],
+           Quantity[Volume],
+           Quantity[VolumeFlow]]:
     """
     Converts mass to volume or vice versa.
 
     Parameters
     ----------
-    inp : Union[Quantity[Mass], Quantity[MassFlow], Quantity[Volume], Quantity[VolumeFlow]]
+    inp : Union[Quantity[Mass], Quantity[MassFlow],
+        Quantity[Volume], Quantity[VolumeFlow]]
         Input mass or volume
     rho : Quantity[Density], optional
         Density, by default 997 kg/m³ (or ``encomp.constants.CONTSTANTS.default_density``)
 
     Returns
     -------
-    Union[Quantity[Mass], Quantity[MassFlow], Quantity[Volume], Quantity[VolumeFlow]]
+    Union[Quantity[Mass], Quantity[MassFlow],
+        Quantity[Volume], Quantity[VolumeFlow]]
         The input converted to mass or volume
     """
 
