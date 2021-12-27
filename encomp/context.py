@@ -87,11 +87,12 @@ def quantity_format(fmt: str = 'compact'):
         Also accepts aliases: ``'compact': '~P'`` and ``'siunitx': '~Lx'``.
     """
 
-    old_fmt = ureg.default_format
+    default = getattr(getattr(ureg, '_registry', ureg),
+                      'default_format', '~P') or '~P'
 
     set_quantity_format(fmt)
 
     try:
         yield
     finally:
-        set_quantity_format(old_fmt)
+        set_quantity_format(default)

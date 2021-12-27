@@ -106,6 +106,11 @@ if (
 
 ureg.default_format = SETTINGS.default_unit_format
 
+try:
+    ureg._registry.default_format = SETTINGS.default_unit_format
+except Exception:
+    pass
+
 
 class Quantity(pint.quantity.Quantity):
     """
@@ -484,6 +489,7 @@ class Quantity(pint.quantity.Quantity):
 # pint uses an "ApplicationRegistry" wrapper class since v. 0.18,
 # account for this by setting the attribute on the "_registry" member
 ureg.Quantity = Quantity
+
 try:
     ureg._registry.Quantity = Quantity
 except Exception:
