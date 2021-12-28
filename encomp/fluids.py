@@ -12,6 +12,7 @@ Uses CoolProp as backend.
 from typing import Annotated
 import numpy as np
 
+
 try:
     from CoolProp.CoolProp import PropsSI
     from CoolProp.HumidAirProp import HAPropsSI
@@ -416,7 +417,7 @@ class CoolPropFluid:
 
         if not is_single_value:
 
-            N = mask.sum()
+            N: int = mask.sum()
 
             if not N:
                 val = np.empty_like(val_1)

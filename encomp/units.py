@@ -15,6 +15,9 @@ that the dimensionality of the unit is correct.
     in case the default behavior of the unit registry is expected.
 """
 
+
+from __future__ import annotations
+
 import re
 import warnings
 import numbers
@@ -40,8 +43,9 @@ from encomp.utypes import (Magnitude,
                            get_dimensionality_name)
 
 if SETTINGS.ignore_ndarray_unit_stripped_warning:
-    warnings.filterwarnings('ignore',
-                            message='The unit of the quantity is stripped when downcasting to ndarray.')
+    warnings.filterwarnings(
+        'ignore',
+        message='The unit of the quantity is stripped when downcasting to ndarray.')
 
 
 class DimensionalityError(ValueError):
@@ -112,7 +116,61 @@ except Exception:
     pass
 
 
-class Quantity(pint.quantity.Quantity):
+@lru_cache(maxsize=None)
+def _get_subclass_with_dimensions(dim: UnitsContainer) -> Type[Quantity]:
+
+    if dim is not None:
+        dim_name = get_dimensionality_name(dim)
+    else:
+        dim_name = 'None'
+
+    # return a new subclass definition that restricts the dimensionality
+    # the parent class is Quantity (this class does not restrict dimensionality)
+    # also override the __class__ attribute so that the internal pint API (__mul__, __div___, etc...)
+    # returns a Quantity object that does not restrict the dimensionality (since it will change
+    # when dividing or multiplying quantities with each other)
+    # the created Quantity will later be converted to the correct dimensional subclass
+    # when __new__() is evaluated
+    DimensionalQuantity = type(
+        f'Quantity[{dim_name}]',
+        (Quantity,),
+        {'_expected_dimensionality': dim,
+            '__class__': Quantity}
+    )
+
+    return DimensionalQuantity
+
+
+class QuantityMeta(type):
+
+    def __getitem__(mcls, dim: Union[UnitsContainer, Unit, str, Quantity]) -> Type[Quantity]:
+
+        # use same dimensionality as another Quantity or Unit
+        if isinstance(dim, (Quantity, Unit)):
+            dim = dim.dimensionality
+
+        if isinstance(dim, str):
+
+            # pint also uses empty string to represent dimensionless
+            if dim == '':
+                dim = 'Dimensionless'
+
+            # this is case-sensitive
+            if dim in _DIMENSIONALITIES_REV:
+                dim = _DIMENSIONALITIES_REV[dim]
+            else:
+                raise ValueError(f'Dimension {dim} is not defined')
+
+        if not isinstance(dim, UnitsContainer):
+            raise ValueError('Quantity type annotation must be a dimensionality, '
+                             f'passed "{dim}" ({type(dim)})')
+
+        subclass = _get_subclass_with_dimensions(dim)
+
+        return subclass
+
+
+class Quantity(pint.quantity.Quantity, metaclass=QuantityMeta):
     """
     Subclass of ``pint.quantity.Quantity`` with additional functionality
     and integration with other libraries.
@@ -161,57 +219,11 @@ class Quantity(pint.quantity.Quantity):
     def get_unit(cls, unit_name: str) -> Unit:
         return cls._REGISTRY.parse_units(unit_name)
 
-    @lru_cache()
-    def _get_subclass_with_dimensions(dim: UnitsContainer) -> Type['Quantity']:
-
-        if dim is not None:
-            dim_name = get_dimensionality_name(dim)
-        else:
-            dim_name = 'None'
-
-        # return a new subclass definition that restricts the dimensionality
-        # the parent class is Quantity (this class does not restrict dimensionality)
-        # also override the __class__ attribute so that the internal pint API (__mul__, __div___, etc...)
-        # returns a Quantity object that does not restrict the dimensionality (since it will change
-        # when dividing or multiplying quantities with each other)
-        # the created Quantity will later be converted to the correct dimensional subclass
-        # when __new__() is evaluated
-        DimensionalQuantity = type(f'Quantity[{dim_name}]',
-                                   (Quantity,),
-                                   {'_expected_dimensionality': dim,
-                                    '__class__': Quantity})
-
-        return DimensionalQuantity
-
-    def __class_getitem__(cls, dim: Union[UnitsContainer, Unit, str, 'Quantity']) -> Type['Quantity']:
-
-        # use same dimensionality as another Quantity or Unit
-        if isinstance(dim, (Quantity, Unit)):
-            dim = dim.dimensionality
-
-        if isinstance(dim, str):
-
-            # pint also uses empty string to represent dimensionless
-            if dim == '':
-                dim = 'Dimensionless'
-
-            # this is case-sensitive
-            if dim in _DIMENSIONALITIES_REV:
-                dim = _DIMENSIONALITIES_REV[dim]
-            else:
-                raise ValueError(f'Dimension {dim} is not defined')
-
-        if not isinstance(dim, UnitsContainer):
-            raise ValueError('Quantity type annotation must be a dimensionality, '
-                             f'passed "{dim}" ({type(dim)})')
-
-        return cls._get_subclass_with_dimensions(dim)
-
     def __new__(
             cls,
-            val: Union[Magnitude, 'Quantity'],
-            unit: Union[Unit, UnitsContainer, str, 'Quantity', None] = None
-    ) -> 'Quantity':
+            val: Union[Magnitude, Quantity],
+            unit: Union[Unit, UnitsContainer, str, Quantity, None] = None
+    ) -> Quantity:
 
         if unit is None:
 
@@ -249,7 +261,7 @@ class Quantity(pint.quantity.Quantity):
             # in case this Quantity was initialized without specifying
             # the dimensionality, check the dimensionality and return the
             # subclass with correct dimensionality
-            DimensionalQuantity = cls._get_subclass_with_dimensions(
+            DimensionalQuantity = _get_subclass_with_dimensions(
                 unit.dimensionality)
 
             # __new__ will return an instance of this subclass
@@ -285,7 +297,7 @@ class Quantity(pint.quantity.Quantity):
 
         return qty
 
-    def _to_unit(self, unit: Union[Unit, UnitsContainer, str, 'Quantity']) -> Unit:
+    def _to_unit(self, unit: Union[Unit, UnitsContainer, str, Quantity]) -> Unit:
 
         # compatibility with internal pint API
         if isinstance(unit, UnitsContainer):
@@ -301,14 +313,14 @@ class Quantity(pint.quantity.Quantity):
 
         return unit
 
-    def to(self, unit: Union[Unit, UnitsContainer, str, 'Quantity']) -> 'Quantity':
+    def to(self, unit: Union[Unit, UnitsContainer, str, Quantity]) -> Quantity:
 
         unit = self._to_unit(unit)
         m = self._convert_magnitude_not_inplace(unit)
 
         return self.__class__(m, unit)
 
-    def ito(self, unit: Union[Unit, UnitsContainer, str, 'Quantity']) -> None:
+    def ito(self, unit: Union[Unit, UnitsContainer, str, Quantity]) -> None:
 
         unit = self._to_unit(unit)
 
@@ -438,7 +450,7 @@ class Quantity(pint.quantity.Quantity):
         return cls._dimension_symbol_map
 
     @classmethod
-    def from_expr(cls, expr: sp.Basic) -> 'Quantity':
+    def from_expr(cls, expr: sp.Basic) -> Quantity:
         """
         Converts a Sympy expression with unit symbols
         into a Quantity. This only works in case expression
@@ -479,7 +491,7 @@ class Quantity(pint.quantity.Quantity):
         yield cls.validate
 
     @classmethod
-    def validate(cls, qty: 'Quantity') -> 'Quantity':
+    def validate(cls, qty: Quantity) -> Quantity:
         return cls(qty.m, qty.u)
 
 

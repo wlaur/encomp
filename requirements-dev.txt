@@ -1,6 +1,8 @@
 autopep8
 pytest
 mypy
+data-science-types
+sqlalchemy-stubs
 hypothesis
 twine
 Sphinx
