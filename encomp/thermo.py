@@ -14,32 +14,29 @@ from encomp.utypes import (Mass,
                            Energy,
                            Power,
                            Length,
-                           Area,
-                           Temperature)
-
-
-# these dimensionalities are not unique to the names here, these
-# should only be defined where context makes it clear what physical
-# property they describe
-HeatCapacity = Energy / Mass / Temperature
-ThermalConductivity = Power / Length / Temperature
-HeatTransferCoefficient = Power / Area / Temperature
+                           HeatCapacity,
+                           ThermalConductivity,
+                           HeatTransferCoefficient,
+                           Temperature,
+                           HeatCapacity)
 
 
 SIGMA = CONSTANTS.SIGMA
 DEFAULT_CP = Quantity[HeatCapacity](4.18, 'kJ/kg/K')
 
 
-def heat_balance(*args: Union[Quantity[Mass],
-                              Quantity[MassFlow],
-                              Quantity[Energy],
-                              Quantity[Power],
-                              Quantity[Temperature]],
-                 cp: Quantity[HeatCapacity] = DEFAULT_CP) -> Union[Quantity[Mass],
-                                                                   Quantity[MassFlow],
-                                                                   Quantity[Energy],
-                                                                   Quantity[Power],
-                                                                   Quantity[Temperature]]:
+def heat_balance(
+    *args: Union[Quantity[Mass],
+                 Quantity[MassFlow],
+                 Quantity[Energy],
+                 Quantity[Power],
+                 Quantity[Temperature]],
+    cp: Quantity[HeatCapacity] = DEFAULT_CP
+) -> Union[Quantity[Mass],
+           Quantity[MassFlow],
+           Quantity[Energy],
+           Quantity[Power],
+           Quantity[Temperature]]:
     """
     Solves the heat balance equation
 
@@ -70,7 +67,7 @@ def heat_balance(*args: Union[Quantity[Mass],
 
     params = {
         'm':  (Union[Quantity[Mass], Quantity[MassFlow]], ('kg', 'kg/s')),
-        'dT': (Quantity[Temperature], 'delta_degC'),
+        'dT': (Quantity[Temperature], ('delta_degC', )),
         'Q_h': (Union[Quantity[Energy], Quantity[Power]], ('kJ', 'kW'))
     }
 
@@ -110,9 +107,9 @@ def heat_balance(*args: Union[Quantity[Mass],
 
     elif 'dT' not in vals:
         ret = vals['Q_h'] / (cp * vals['m'])
-        unit = units['dT']
+        unit = units['dT'][0]
 
-        if not isinstance(ret, Quantity[Temperature]):
+        if not ret.check(Temperature):
             raise ValueError(f'Both units must be per unit time in case one '
                              f'of them is: {vals}')
 
@@ -176,15 +173,15 @@ def intermediate_temperatures(T_b: Quantity[Temperature],
     """
 
     # convert input to numerical values with correct unit
-    T_s = T_s.to('K').m
-    T_b = T_b.to('K').m
-    k = k.to('W/m/K').m
-    d = d.to('m').m
-    h_in = h_in.to('W/m²/K').m
-    h_out = h_out.to('W/m²/K').m
+    T_s_val = T_s.to('K').m
+    T_b_val = T_b.to('K').m
+    k_val = k.to('W/m/K').m
+    d_val = d.to('m').m
+    h_in_val = h_in.to('W/m²/K').m
+    h_out_val = h_out.to('W/m²/K').m
 
-    if abs(d - 0) < tol:
-        d = tol
+    if abs(d_val - 0) < tol:
+        d_val = tol
 
     # system of coupled equations: heat transfer rate through all layers is identical
     # inner convection == conduction == (outer convection + radiation)
@@ -193,14 +190,14 @@ def intermediate_temperatures(T_b: Quantity[Temperature],
 
         T1, T2 = x
 
-        eq1 = k / d * (T1 - T2) - h_out * (T2 - T_s) - \
-            epsilon * SIGMA.m * (T2**4 - T_s**4)
+        eq1 = k_val / d_val * (T1 - T2) - h_out_val * (T2 - T_s_val) - \
+            epsilon * SIGMA.m * (T2**4 - T_s_val**4)
 
-        eq2 = k / d * (T1 - T2) - h_in * (T_b - T1)
+        eq2 = k_val / d_val * (T1 - T2) - h_in_val * (T_b_val - T1)
 
         return [eq1, eq2]
 
     # use the boundary temperatures as initial guesses
-    T1_val, T2_val = fsolve(fun, [T_b, T_s])
+    T1_val, T2_val = fsolve(fun, [T_b_val, T_s_val])
 
     return Quantity(T1_val, 'K').to('degC'), Quantity(T2_val, 'K').to('degC')

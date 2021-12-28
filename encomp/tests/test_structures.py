@@ -13,6 +13,13 @@ def test_flatten():
     assert len(flat) == 6
 
 
+    nested = ([1, 2, 3], 3, [6, 7])
+
+    flat = list(flatten(nested))
+
+    assert len(flat) == 6
+
+
 @given(
     lst=lists(integers(), min_size=1, max_size=100),
 )

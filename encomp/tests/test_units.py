@@ -2,7 +2,7 @@ import pytest
 from pytest import approx
 import numpy as np
 
-from encomp.units import Q, wraps, check
+from encomp.units import Quantity, Q, wraps, check
 from encomp.utypes import *
 
 
@@ -16,6 +16,11 @@ def test_Q():
     Q(1, 'newton')
     Q(1, 'cSt')
 
+    # make sure that the alias Q behaves identically to Quantity
+    assert Q(1) == Quantity(1)
+    assert type(Q(1)) is type(Quantity(1))
+    assert type(Q) is type(Quantity)
+
     # ensure that the inputs can be nested
     Q(Q(1, 'kg'))
     mass = Q(12, 'kg')
@@ -28,6 +33,12 @@ def test_Q():
     assert Q(1) == Q(100, '%')
     Q['Dimensionless'](21)
     assert isinstance(Q(21), Q['Dimensionless'])
+
+    # check type of "m"
+    assert isinstance(Q(1, 'meter').m, int)
+    assert isinstance(Q(2.3, 'meter').m, float)
+    assert isinstance(Q([2, 3.4], 'meter').m, np.ndarray)
+    assert isinstance(Q(np.array([2, 3.4]), 'meter').m, np.ndarray)
 
     # input Quantity as unit
     Q(1, Q(2, 'bar'))
@@ -111,7 +122,7 @@ def test_wraps():
     # decorator for making the input/output of a function into Quantity
     # however, it does not enforce the return value
 
-    @wraps('kg', ('m', 'kg'), strict=True)
+    @ wraps('kg', ('m', 'kg'), strict=True)
     def func(a, b):
 
         # this is incorrect, cannot add 1 to a dimensional Quantity
@@ -127,7 +138,7 @@ def test_check():
     assert Q(1, 'kg').check(Mass)
     assert not Q(1, 'kg').check(Energy)
 
-    @check('[length]', '[mass]')
+    @ check('[length]', '[mass]')
     def func(a, b):
 
         return a * b

@@ -14,7 +14,7 @@ from encomp.utypes import (Mass,
                            Volume,
                            VolumeFlow,
                            Temperature,
-                           Substance,
+                           MolarMass,
                            Pressure,
                            Density)
 from encomp.fluids import Fluid
@@ -25,7 +25,7 @@ R = CONSTANTS.R
 
 def ideal_gas_density(T: Quantity[Temperature],
                       P: Quantity[Pressure],
-                      M: Quantity[Mass / Substance]) -> Quantity[Density]:
+                      M: Quantity[MolarMass]) -> Quantity[Density]:
     """
     Returns the density :math:`\\rho` of an ideal gas.
 
@@ -43,7 +43,7 @@ def ideal_gas_density(T: Quantity[Temperature],
         Temperature of the gas
     P : Quantity[Pressure]
         Absolute pressure of the gas
-    M : Quantity[Mass / Substance]
+    M : Quantity[MolarMass]
         Molar mass of the gas
 
     Returns
@@ -58,12 +58,14 @@ def ideal_gas_density(T: Quantity[Temperature],
     return rho.to('kg/m³')
 
 
-def convert_gas_volume(V1: Union[Quantity[Volume], Quantity[VolumeFlow]],
-                       condition_1: Union[tuple[Quantity[Pressure], Quantity[Temperature]],
-                                          Literal['N', 'S']] = 'N',
-                       condition_2: Union[tuple[Quantity[Pressure], Quantity[Temperature]],
-                                          Literal['N', 'S']] = 'N',
-                       fluid_name: str = 'Air') -> Union[Quantity[Volume], Quantity[VolumeFlow]]:
+def convert_gas_volume(
+        V1: Union[Quantity[Volume], Quantity[VolumeFlow]],
+        condition_1: Union[tuple[Quantity[Pressure], Quantity[Temperature]],
+                           Literal['N', 'S']] = 'N',
+        condition_2: Union[tuple[Quantity[Pressure], Quantity[Temperature]],
+                           Literal['N', 'S']] = 'N',
+        fluid_name: str = 'Air'
+) -> Union[Quantity[Volume], Quantity[VolumeFlow]]:
     """
     Converts the volume :math:`V_1` (at :math:`T_1, P_1`) to
     :math:`V_2` (at :math:`T_1, P_1`).
@@ -94,21 +96,28 @@ def convert_gas_volume(V1: Union[Quantity[Volume], Quantity[VolumeFlow]],
                       'S': (CONSTANTS.standard_conditions_pressure,
                             CONSTANTS.standard_conditions_temperature)}
 
-    if condition_1 in n_s_conditions:
+    if isinstance(condition_1, str) and condition_1 in n_s_conditions:
         condition_1 = n_s_conditions[condition_1]
 
-    if condition_2 in n_s_conditions:
+    if isinstance(condition_2, str) and condition_2 in n_s_conditions:
         condition_2 = n_s_conditions[condition_2]
 
-    P1, T1 = condition_1
-    P2, T2 = condition_2
+    if isinstance(condition_1, tuple):
+        P1, T1 = condition_1
+    else:
+        raise ValueError(f'Incorrect value for condition 1: {condition_1}')
+
+    if isinstance(condition_2, tuple):
+        P2, T2 = condition_2
+    else:
+        raise ValueError(f'Incorrect value for condition 2: {condition_2}')
 
     Z1 = Fluid(fluid_name, T=T1, P=P1).Z
     Z2 = Fluid(fluid_name, T=T2, P=P2).Z
 
     # from ideal gas law PV = nRT: n and R are constant
     # also considers compressibility factor Z
-    V2 = V1 * (P1 / P2) * (T2 / T1) * (Z2 / Z1)
+    V2: Quantity = V1 * (P1 / P2) * (T2 / T1) * (Z2 / Z1)
 
     # volume at P2, T2 in same units as V1
     return V2.to(V1.u)

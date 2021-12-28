@@ -21,11 +21,12 @@ from __future__ import annotations
 import re
 import warnings
 import numbers
-from typing import Union, Type, Optional
+from typing import Union, Optional, Generic, TypeVar
 from functools import lru_cache
 import sympy as sp
 import numpy as np
 import pandas as pd
+
 
 import pint
 from pint.unit import UnitsContainer, Unit, UnitDefinition
@@ -46,6 +47,9 @@ if SETTINGS.ignore_ndarray_unit_stripped_warning:
     warnings.filterwarnings(
         'ignore',
         message='The unit of the quantity is stripped when downcasting to ndarray.')
+
+
+T = TypeVar('T')
 
 
 class DimensionalityError(ValueError):
@@ -117,7 +121,7 @@ except Exception:
 
 
 @lru_cache(maxsize=None)
-def _get_subclass_with_dimensions(dim: UnitsContainer) -> Type[Quantity]:
+def _get_subclass_with_dimensions(dim: UnitsContainer) -> type[Quantity]:
 
     if dim is not None:
         dim_name = get_dimensionality_name(dim)
@@ -143,7 +147,7 @@ def _get_subclass_with_dimensions(dim: UnitsContainer) -> Type[Quantity]:
 
 class QuantityMeta(type):
 
-    def __getitem__(mcls, dim: Union[UnitsContainer, Unit, str, Quantity]) -> Type[Quantity]:
+    def __getitem__(mcls, dim: Union[UnitsContainer, Unit, str, Quantity]) -> type[Quantity]:
 
         # use same dimensionality as another Quantity or Unit
         if isinstance(dim, (Quantity, Unit)):
@@ -170,7 +174,7 @@ class QuantityMeta(type):
         return subclass
 
 
-class Quantity(pint.quantity.Quantity, metaclass=QuantityMeta):
+class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
     """
     Subclass of ``pint.quantity.Quantity`` with additional functionality
     and integration with other libraries.
@@ -183,6 +187,8 @@ class Quantity(pint.quantity.Quantity, metaclass=QuantityMeta):
     # subclasses of Quantity have this class attribute set, which
     # will restrict the dimensionality when creating the object
     _expected_dimensionality = None
+
+    _dimension_symbol_map: Optional[dict[sp.Basic, Unit]] = None
 
     # compact, Latex, HTML, Latex/siunitx formatting
     FORMATTING_SPECS = ('~P', '~L', '~H', '~Lx')
@@ -215,6 +221,26 @@ class Quantity(pint.quantity.Quantity, metaclass=QuantityMeta):
         '%': 'percent'
     }
 
+    @staticmethod
+    def _validate_unit(unit: Union[Unit, UnitsContainer, str, Quantity]) -> Unit:
+
+        if isinstance(unit, Unit):
+            return unit
+
+        if isinstance(unit, Quantity):
+            return unit.u
+
+        # compatibility with internal pint API
+        if isinstance(unit, UnitsContainer):
+            return Quantity._validate_unit(str(unit))
+
+        if isinstance(unit, str):
+            return Quantity._REGISTRY.parse_units(Quantity.correct_unit(unit))
+
+        raise ValueError(
+            f'Incorrect input for unit: {unit} ({type(unit)}), '
+            'expected Unit, UnitsContainer, str or Quantity')
+
     @classmethod
     def get_unit(cls, unit_name: str) -> Unit:
         return cls._REGISTRY.parse_units(unit_name)
@@ -229,10 +255,7 @@ class Quantity(pint.quantity.Quantity, metaclass=QuantityMeta):
 
             # this allows us to create new dimensionless quantities
             # by omitting the unit
-            try:
-                unit = val.u
-            except Exception:
-                unit = ''
+            unit = getattr(val, 'u', None) or ''
 
         if isinstance(val, Quantity):
 
@@ -245,16 +268,7 @@ class Quantity(pint.quantity.Quantity, metaclass=QuantityMeta):
             # support passing pd.Series directly
             val = val.values
 
-        # pint.Quantity.to_root_units calls __class__(magnitude, other)
-        # where other is a UnitsContainer
-        if isinstance(unit, UnitsContainer):
-            unit = cls._REGISTRY.parse_units(str(unit))
-
-        if isinstance(unit, Quantity):
-            unit = unit.u
-
-        if isinstance(unit, str):
-            unit = cls._REGISTRY.parse_units(Quantity.correct_unit(unit))
+        valid_unit = cls._validate_unit(unit)
 
         if cls._expected_dimensionality is None:
 
@@ -262,19 +276,19 @@ class Quantity(pint.quantity.Quantity, metaclass=QuantityMeta):
             # the dimensionality, check the dimensionality and return the
             # subclass with correct dimensionality
             DimensionalQuantity = _get_subclass_with_dimensions(
-                unit.dimensionality)
+                valid_unit.dimensionality)
 
             # __new__ will return an instance of this subclass
-            return DimensionalQuantity(val, unit)
+            return DimensionalQuantity(val, valid_unit)
 
         expected_dimensionality = cls._expected_dimensionality
 
-        if unit.dimensionality != expected_dimensionality:
+        if valid_unit.dimensionality != expected_dimensionality:
 
-            dim_name = get_dimensionality_name(unit.dimensionality)
+            dim_name = get_dimensionality_name(valid_unit.dimensionality)
             expected_name = get_dimensionality_name(expected_dimensionality)
 
-            raise DimensionalityError(f'Quantity with unit "{unit}" has incorrect '
+            raise DimensionalityError(f'Quantity with unit "{valid_unit}" has incorrect '
                                       f'dimensionality {dim_name}, '
                                       f'expected {expected_name}')
 
@@ -287,7 +301,7 @@ class Quantity(pint.quantity.Quantity, metaclass=QuantityMeta):
 
         # at this point the value and dimensionality are verified to be correct
         # pass the inputs to pint to actually construct the Quantity
-        qty = super().__new__(cls, val, units=unit)
+        qty = super().__new__(cls, val, units=valid_unit)
 
         # avoid casting issues with numpy, use float64 instead of int32
         # it's always possible for the user to change the dtype of the _magnitude attribute
@@ -299,28 +313,22 @@ class Quantity(pint.quantity.Quantity, metaclass=QuantityMeta):
 
     def _to_unit(self, unit: Union[Unit, UnitsContainer, str, Quantity]) -> Unit:
 
-        # compatibility with internal pint API
-        if isinstance(unit, UnitsContainer):
-            unit = self._REGISTRY.parse_units(str(unit))
+        return self._validate_unit(unit)
 
-        if isinstance(unit, str):
+    @property
+    def m(self) -> float:
+        return super().m
 
-            # unit = self._custom_units.get(unit, unit)
-            unit = self._REGISTRY.parse_units(Quantity.correct_unit(unit))
-
-        if isinstance(unit, Quantity):
-            unit = unit.u
-
-        return unit
-
-    def to(self, unit: Union[Unit, UnitsContainer, str, Quantity]) -> Quantity:
+    def to(self,  # type: ignore[override]
+           unit: Union[Unit, UnitsContainer, str, Quantity]) -> Quantity:
 
         unit = self._to_unit(unit)
         m = self._convert_magnitude_not_inplace(unit)
 
         return self.__class__(m, unit)
 
-    def ito(self, unit: Union[Unit, UnitsContainer, str, Quantity]) -> None:
+    def ito(self,  # type: ignore[override]
+            unit: Union[Unit, UnitsContainer, str, Quantity]) -> None:
 
         unit = self._to_unit(unit)
 
@@ -336,6 +344,11 @@ class Quantity(pint.quantity.Quantity, metaclass=QuantityMeta):
             self._magnitude = self._magnitude.astype(float)
 
         return super().ito(unit)
+
+    def to_base_units(self) -> Quantity:
+
+        # ignore typing issues, super().to_base_units() type hint is for the superclass
+        return super().to_base_units()  # type: ignore
 
     def __format__(self, format_type: str) -> str:
         """
@@ -440,12 +453,14 @@ class Quantity(pint.quantity.Quantity, metaclass=QuantityMeta):
     @classmethod
     def get_dimension_symbol_map(cls) -> dict[sp.Basic, Unit]:
 
-        if hasattr(cls, '_dimension_symbol_map') and cls._dimension_symbol_map is not None:
+        if cls._dimension_symbol_map is not None:
             return cls._dimension_symbol_map
 
         # also consider custom dimensions defined with encomp.units.define_dimensionality
-        cls._dimension_symbol_map = {cls.get_unit_symbol(n): cls.get_unit(n)
-                                     for n in list(_BASE_SI_UNITS) + _CUSTOM_DIMENSIONS}
+        cls._dimension_symbol_map = {
+            cls.get_unit_symbol(n): cls.get_unit(n)
+            for n in list(_BASE_SI_UNITS) + _CUSTOM_DIMENSIONS
+        }
 
         return cls._dimension_symbol_map
 
@@ -508,8 +523,20 @@ except Exception:
     pass
 
 
-# shorthand for the Quantity class
-Q = Quantity
+class Q(Quantity):
+    """
+    Shorthand for the :py:class:`encomp.units.Quantity` class.
+
+    Use this class when initializing ``Quantity`` objects, this way
+    the type is inferred correctly.
+    Do not use this class for type hints, use the full name ``Quantity`` instead.
+    """
+
+    # the actual instances are created dynamically
+    # this is essentially identical to setting "Q = Quantity",
+    # except that it solves a mypy-related issue and shows a different docstring
+    pass
+
 
 # shorthand for the @wraps(ret, args, strict=True|False) decorator
 wraps = ureg.wraps
@@ -593,15 +620,19 @@ def set_quantity_format(fmt: str = 'compact') -> None:
 
 
 def convert_volume_mass(
-    inp: Union[Quantity[Mass],
-               Quantity[MassFlow],
-               Quantity[Volume],
-               Quantity[VolumeFlow]],
+    inp: Union
+    [Quantity[Mass],
+     Quantity[MassFlow],
+     Quantity[Volume],
+     Quantity[VolumeFlow]
+     ],
     rho: Optional[Quantity[Density]] = None
-) -> Union[Quantity[Mass],
-           Quantity[MassFlow],
-           Quantity[Volume],
-           Quantity[VolumeFlow]]:
+) -> Union[
+    Quantity[Mass],
+    Quantity[MassFlow],
+    Quantity[Volume],
+    Quantity[VolumeFlow]
+]:
     """
     Converts mass to volume or vice versa.
 

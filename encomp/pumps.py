@@ -2,12 +2,12 @@
 Classes that represent and model the behavior of different types of pumps.
 """
 
+from __future__ import annotations
 
 from typing import Optional, Union, Annotated
 import copy
 from pydantic import validator, BaseModel
 import numpy as np
-import numpy.typing as npt
 
 from encomp.math import interpolate
 from encomp.units import Quantity
@@ -81,7 +81,7 @@ class CentrifugalPump(Pump):
 
     def transform(self, *,
                   frequency: Optional[Ratio] = None,
-                  diameter: Optional[Ratio] = None) -> 'CentrifugalPump':
+                  diameter: Optional[Ratio] = None) -> CentrifugalPump:
         """
         Applies affinity law transformations to the pump instance and returns
         a new instance. One or both of ``frequency`` and ``diameter`` can be
@@ -126,7 +126,7 @@ class CentrifugalPump(Pump):
                 'head': 2,
                 'power': 5}
 
-        ratio = frequency or diameter
+        ratio = frequency or diameter or 1
 
         arr[:, 0] *= ratio**exponents['flow']
         arr[:, 1] *= ratio**exponents['head']
@@ -137,12 +137,12 @@ class CentrifugalPump(Pump):
 
         return transformed
 
-    def copy(self) -> 'CentrifugalPump':
+    def copy(self):
         return copy.deepcopy(self)
 
     @staticmethod
-    def grid_interpolation(x: npt.ArrayLike,
-                           arr: npt.ArrayLike,
+    def grid_interpolation(x: np.ndarray,
+                           arr: np.ndarray,
                            idx: int) -> np.ndarray:
 
         x = np.array(x)

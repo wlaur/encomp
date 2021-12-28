@@ -6,7 +6,7 @@ import ast
 import asttokens
 import numpy as np
 
-from typing import Any, _GenericAlias, Union, Type
+from typing import Any, _GenericAlias, Union, Type  # type: ignore
 from typeguard import check_type
 
 
@@ -33,7 +33,7 @@ def isinstance_types(obj: Any,
     """
 
     # normal types are checked with isinstance()
-    if isinstance(expected, Type):
+    if isinstance(expected, Type):  # type: ignore
         return isinstance(obj, expected)
 
     try:
@@ -123,8 +123,8 @@ def name_assignments(src: str) -> list[tuple[str, str]]:
             if isinstance(node, ast.Assign):
                 if isinstance(node.targets[0], ast.Name):
 
-                    start = node.first_token.startpos
-                    end = node.last_token.endpos
+                    start = node.first_token.startpos  # type: ignore
+                    end = node.last_token.endpos  # type: ignore
                     assignment_src = atok.text[start:end]
 
                     assigned_names.append((node.targets[0].id, assignment_src))

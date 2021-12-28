@@ -7,6 +7,7 @@ The dimensionalities defined in this module can be combined with ``*`` and ``/``
 Some commonly used derived dimensionalities (like density) are defined for convenience.
 """
 
+from typing import Generic, TypeVar
 from typing import Union
 
 from decimal import Decimal
@@ -15,20 +16,33 @@ import numpy.typing as npt
 from uncertainties.core import AffineScalarFunc
 from pint.unit import UnitsContainer
 
+
+R = TypeVar('R')
+
+
+class Dimensionality(UnitsContainer, Generic[R]):
+    pass
+
+
 # type alias for the magnitude input to Quantity
 # also accept Decimal and AffineScalarFunc (from uncertainties package)
 MagnitudeValue = Union[float, int, Decimal, AffineScalarFunc]
-Magnitude = Union[MagnitudeValue, list[MagnitudeValue], set[MagnitudeValue], npt.ArrayLike]
+Magnitude = Union[MagnitudeValue, list[MagnitudeValue],
+                  set[MagnitudeValue], npt.ArrayLike]
 
 # base dimensionalities: the 7 base dimensions in the SI system and dimensionless
-Dimensionless = UnitsContainer()
-Length = UnitsContainer({'[length]': 1})
-Mass = UnitsContainer({'[mass]': 1})
-Time = UnitsContainer({'[time]': 1})
-Temperature = UnitsContainer({'[temperature]': 1})
-Substance = UnitsContainer({'[substance]': 1})
-Current = UnitsContainer({'[current]': 1})
-Luminosity = UnitsContainer({'[luminosity]': 1})
+# NOTE: these must be defined as Dimensionality(...) * Dimensionless to avoid issues with mypy
+_Dimensionless: Dimensionality = Dimensionality()
+
+Dimensionless = Dimensionality() * _Dimensionless
+Length = Dimensionality({'[length]': 1}) * _Dimensionless
+Mass = Dimensionality({'[mass]': 1}) * _Dimensionless
+Time = Dimensionality({'[time]': 1}) * _Dimensionless
+Temperature = Dimensionality({'[temperature]': 1}) * _Dimensionless
+Substance = Dimensionality({'[substance]': 1}) * _Dimensionless
+Current = Dimensionality({'[current]': 1}) * _Dimensionless
+Luminosity = Dimensionality({'[luminosity]': 1}) * _Dimensionless
+
 
 # derived dimensionalities
 Area = Length**2
@@ -43,7 +57,13 @@ Velocity = Length / Time
 DynamicViscosity = Mass / Length / Time
 KinematicViscosity = Length**2 / Time
 Frequency = 1 / Time
+MolarMass = Mass / Substance
 
+
+# these dimensionalities might have different names depending on context
+HeatCapacity = Energy / Mass / Temperature
+ThermalConductivity = Power / Length / Temperature
+HeatTransferCoefficient = Power / Area / Temperature
 
 _DIMENSIONALITIES: dict[UnitsContainer, str] = {
     Dimensionless: 'Dimensionless',

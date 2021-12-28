@@ -36,14 +36,6 @@ encomp.gases module
    :undoc-members:
    :show-inheritance:
 
-encomp.hex module
------------------
-
-.. automodule:: encomp.hex
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 encomp.magics module
 --------------------
 

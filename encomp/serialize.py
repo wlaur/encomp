@@ -338,7 +338,8 @@ def decode(inp: JSON,
             # not necessary to pass on the custom kwarg,
             # the Quantity magnitude cannot be a custom class
             m = decode(inp['_magnitude'])
-            return Quantity(m, inp['_units'])
+            units = inp['_units']
+            return Quantity(m, units)
 
         # check if this dict is output from custom_serializer
         # it might also be a regular dict that just happens to

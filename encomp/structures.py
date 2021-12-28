@@ -2,10 +2,10 @@
 Data structures and related functions.
 """
 
-from typing import Iterator, Iterable, Optional, Any
+from typing import Sequence, Iterator, Optional, Any
 
 
-def divide_chunks(container: Iterable[Any], N: int) -> Iterator[Any]:
+def divide_chunks(container: Sequence[Any], N: int) -> Iterator[Any]:
     """
     Generator that divides a container into chunks with length ``N``.
     The last chunk might not have ``N`` elements.
@@ -17,8 +17,9 @@ def divide_chunks(container: Iterable[Any], N: int) -> Iterator[Any]:
 
     Parameters
     ----------
-    container : Iterable[Any]
-        The container that will be split into chunks
+    container : Sequence[Any]
+        The container that will be split into chunks. Since sets are unordered,
+        it does not make sense to accept set inputs here.
     N : int
         Number of element for one chunk (last chunk might be shorter)
 
@@ -38,7 +39,7 @@ def divide_chunks(container: Iterable[Any], N: int) -> Iterator[Any]:
         yield container[i:i + N]
 
 
-def flatten(container: Iterable[Any],
+def flatten(container: Sequence[Any],
             max_depth: Optional[int] = None, *,
             depth: int = 0) -> Iterator[Any]:
     """
@@ -60,8 +61,9 @@ def flatten(container: Iterable[Any],
 
     Parameters
     ----------
-    container : Iterable
-        The container to be flattened
+    container : Sequence[Any]
+        The container to be flattened. Note that it is not possible
+        to construct nested sets, so the ``Sequence`` type is appropriate here
     max_depth : int, optional
         The maximum level to flatten to, by default None (flatten all)
     depth : int
@@ -82,7 +84,7 @@ def flatten(container: Iterable[Any],
     for obj in container:
 
         # check if this object can be flattened further
-        if isinstance(obj, Iterable) and not isinstance(obj, str):
+        if isinstance(obj, Sequence) and not isinstance(obj, str):
 
             for sub_obj in flatten(obj, max_depth=max_depth, depth=depth):
                 yield sub_obj

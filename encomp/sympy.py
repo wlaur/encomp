@@ -102,7 +102,7 @@ def get_args(e: sp.Basic) -> list[str]:
 
 
 def recursive_subs(e: sp.Basic,
-                   replacements: list[Union[list[sp.Basic], tuple[sp.Symbol, sp.Basic]]]) -> sp.Basic:
+                   replacements: list[tuple[sp.Symbol, sp.Basic]]) -> sp.Basic:
     """
     Substitute the expressions in ``replacements`` recursively.
     This might not be necessary in all cases, Sympy's builtin
@@ -117,7 +117,7 @@ def recursive_subs(e: sp.Basic,
     ----------
     e : sp.Basic
         Input expression
-    replacements : list[Union[list[sp.Basic], tuple[sp.Symbol, sp.Basic]]]
+    replacements : list[tuple[sp.Symbol, sp.Basic]]
         List of replacements: ``symbol, replace``
 
     Returns
@@ -366,14 +366,18 @@ def get_lambda_matrix(M: sp.Matrix) -> tuple[str, list[str]]:
 
     for i in range(nrows):
         for j in range(ncols):
+
             fcn_str, n_args = get_lambda(M[i, j], to_str=True)
             args |= set(n_args)
 
-            # remove the "lambda x, y, x:" part and extra parens,
-            # the are added later
-            fcn_str = fcn_str.split(
-                ':', 1)[-1].strip().removeprefix('(').removesuffix(')')
-            arr[i, j] = fcn_str
+            if isinstance(fcn_str, str):
+
+                # remove the "lambda x, y, x:" part and extra parens,
+                # the are added later
+                fcn_str = fcn_str.split(
+                    ':', 1)[-1].strip().removeprefix('(').removesuffix(')')
+
+                arr[i, j] = fcn_str
 
     # remove quotes around strings, they are mathematical expressions
     funcs = str(arr.tolist()).replace("'", '').replace('"', '')
@@ -471,10 +475,13 @@ def substitute_unknowns(e: sp.Basic,
     if avoid is None:
         avoid = set()
 
-    replacements = []
+    replacements: list[tuple[sp.Symbol, sp.Basic]] = []
 
     def _get_unknowns(expr):
-        all_symbols = sorted(expr.free_symbols, key=default_sort_key)
+
+        all_symbols: list[sp.Symbol] = sorted(expr.free_symbols,
+                                              key=default_sort_key)
+
         already_replaced = [m[0] for m in replacements]
 
         return [n for n in all_symbols if n not in (knowns | avoid) and
@@ -545,7 +552,7 @@ def typeset_chemical(s: str) -> str:
     return ret
 
 
-def typeset(x: Optional[str]) -> Optional[str]:
+def typeset(x: Union[str, int]) -> str:
     """
     Does some additional typesetting for the input
     Latex string, for example ``\\text{}`` around
@@ -569,17 +576,14 @@ def typeset(x: Optional[str]) -> Optional[str]:
 
     Parameters
     ----------
-    x : Optional[str]
-        Input Latex string
+    x : Union[str, int]
+        Input string or int (will be converted to str)
 
     Returns
     -------
-    Optional[str]
+    str
         Output Latex string
     """
-
-    if x is None:
-        return None
 
     x = str(x)
 
@@ -673,11 +677,11 @@ def decorate(self,
 
     parts = [
         prefix,
-        typeset(prefix_sup),
-        typeset(prefix_sub),
+        typeset(prefix_sup) if prefix_sup is not None else None,
+        typeset(prefix_sub) if prefix_sub is not None else None,
         self.name,
-        typeset(suffix_sub),
-        typeset(suffix_sup),
+        typeset(suffix_sub) if suffix_sub is not None else None,
+        typeset(suffix_sup) if suffix_sup is not None else None,
         suffix
     ]
 
@@ -731,7 +735,7 @@ def append(self, s: Union[str, int],
 
     symbol = self.name
 
-    s = typeset(str(s))
+    s = typeset(s)
 
     if delimiter not in symbol:
         decorated_parts = [symbol, delimiter, '{' + s + '}']

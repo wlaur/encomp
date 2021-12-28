@@ -1,15 +1,15 @@
 import numpy as np
-from typing import Union, Callable, Optional
+from typing import Union, Callable, Optional, Mapping, Any
 from scipy.interpolate import interp1d
 from sympy import geometry
 import numpy.typing as npt
 
-from encomp.misc import isinstance_types
 
-
-def interpolate(x: npt.ArrayLike,
-                y: npt.ArrayLike,
-                fill_value: Union[str, tuple[float, float]] = 'nan') -> Callable[[float], float]:
+def interpolate(
+    x: Mapping[int, float],
+    y: Mapping[int, float],
+    fill_value: Union[str, tuple[float, float]] = 'nan'
+) -> Callable[[Union[float, np.ndarray]], Union[float, np.ndarray]]:
     """
     Wrapper around ``scipy.interpolate.interp1d``
     that returns function for interpolating :math:`x` vs :math:`x`.
@@ -24,10 +24,10 @@ def interpolate(x: npt.ArrayLike,
 
     Parameters
     ----------
-    x : npt.ArrayLike
+    x : Mapping[int, float]
         Sequence of :math:`x`-values
-    y : npt.ArrayLike
-        Sequence of :math:`y`-values with ame length as ``x``
+    y : Mapping[int, float]
+        Sequence of :math:`y`-values with same length as ``x``
     fill_value : str, optional
         What to do outside the interpolation range, by default 'nan'
 
@@ -39,11 +39,11 @@ def interpolate(x: npt.ArrayLike,
 
     Returns
     -------
-    Callable
+    Callable[[Union[float, np.ndarray]], Union[float, np.ndarray]]
         An interpolation function based on the input dataset
     """
 
-    kwargs = {'bounds_error': False}
+    kwargs: dict[str, Any] = {'bounds_error': False}
 
     if isinstance(fill_value, str):
 
@@ -167,8 +167,8 @@ def exponential(x_start: float,
                       (1 - np.exp(k * (x - x_start) / (x_end - x_start))))
 
 
-def r_squared(y_pred: npt.ArrayLike,
-              y_data: npt.ArrayLike) -> float:
+def r_squared(y_pred: np.ndarray,
+              y_data: np.ndarray) -> float:
     """
     Calculates the :math:`R^2`-value for predicted values ``y_pred``
     based on known data in ``y_data``.
@@ -178,9 +178,9 @@ def r_squared(y_pred: npt.ArrayLike,
 
     Parameters
     ----------
-    y_pred : npt.ArrayLike
+    y_pred : np.ndarray
         Sequence of estimated :math:`y`-values
-    y_data : npt.ArrayLike
+    y_data : np.ndarray
         Sequence of known :math:`y`-values
 
     Returns
@@ -232,10 +232,10 @@ def circle_line_intersection(A: Union[tuple[float, float], geometry.Point2D],
         or None in case the line and circle do no intersect.
     """
 
-    if isinstance_types(A, tuple[float, float]):
+    if isinstance(A, tuple):
         A = geometry.Point2D(A[0], A[1])
 
-    if isinstance_types(B, tuple[float, float]):
+    if isinstance(B, tuple):
         B = geometry.Point2D(B[0], B[1])
 
     circle = geometry.Circle((x0, y0), r)
