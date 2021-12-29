@@ -102,6 +102,52 @@ def test_Water():
         ).P
 
 
+def test_HumidAir():
+    T = Q(20, 'C')
+    P = Q(20, 'bar')
+    R = Q(20, '%')
+
+    ha = HumidAir(T=T, P=P, R=R)
+    ha.V
+
+    T = Q([25, 34], 'C')
+    P = Q(20, 'bar')
+    R = Q(20, '%')
+
+    ha = HumidAir(T=T, P=P, R=R)
+    ha.V
+
+    T = Q([25, 34], 'C')
+    P = Q([20, 30], 'bar')
+    R = Q([20, 40], '%')
+
+    ha = HumidAir(T=T, P=P, R=R)
+    ha.V
+
+    T = Q([25, 34], 'C')
+    P = Q([20, 30], 'bar')
+    R = Q([20, np.nan], '%')
+
+    ha = HumidAir(T=T, P=P, R=R)
+    ha.V
+
+    T = Q([np.nan, 34], 'C')
+    P = Q([np.nan, 30], 'bar')
+    R = Q([20, np.nan], '%')
+
+    ha = HumidAir(T=T, P=P, R=R)
+    ha.V
+
+    T = Q([20, 40], 'C')
+    P = Q([20, 1], 'bar')
+    R = Q([20, 101], '%')
+
+    ha = HumidAir(T=T, P=P, R=R)
+    val = ha.V.m
+    assert not np.isnan(val[0])
+    assert np.isnan(val[1])
+
+
 def test_shapes():
 
     N = 16

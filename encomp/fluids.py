@@ -9,7 +9,7 @@ Uses CoolProp as backend.
 
 """
 
-from typing import Annotated, Union, overload
+from typing import Annotated, Union, Optional, Callable
 import numpy as np
 
 
@@ -32,6 +32,10 @@ CName = Annotated[str, 'CoolProp fluid name']
 
 
 class CoolPropFluid:
+
+    BACKEND: Callable = PropsSI
+    APPEND_NAME_TO_CP_INPUTS: bool = True
+    EVALUATE_INVALID_SEPARATELY: bool = False
 
     PHASES: dict[float, str] = {
         0.0: 'Liquid',
@@ -236,7 +240,8 @@ class CoolPropFluid:
         * http://www.coolprop.org/fluid_properties/PurePseudoPure.html#list-of-fluids
         * http://www.coolprop.org/fluid_properties/Mixtures.html#binary-pairs
         * http://www.coolprop.org/fluid_properties/Incompressibles.html#the-different-fluids
-        * http://www.coolprop.org/coolprop/HighLevelAPI.html#table-of-inputs-outputs-to-hapropssi
+        # table-of-inputs-outputs-to-hapropssi
+        * http://www.coolprop.org/coolprop/HighLevelAPI.html
         * http://www.coolprop.org/fluid_properties/HumidAir.html
 
         The names ``Water`` and ``HEOS::Water`` uses the formulation defined by IAPWS-95.
@@ -261,6 +266,7 @@ class CoolPropFluid:
         """
 
         self.name = name
+        self.points: list[tuple[CProperty, Quantity]] = []
 
     @classmethod
     def get_prop_key(cls, prop: CProperty) -> tuple[str, ...]:
@@ -365,46 +371,55 @@ class CoolPropFluid:
 
         return matches
 
-    def evaluate(self,
-                 output: str,
-                 prop_1: CProperty,
-                 val_1: Union[float, np.ndarray],
-                 prop_2: CProperty,
-                 val_2: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
+    def evaluate(
+            self,
+            output: str,
+            *points: tuple[CProperty, Union[float, np.ndarray]]
+    ) -> Union[float, np.ndarray]:
 
-        # convert 1-element arrays to float
-        if isinstance(val_1, np.ndarray) and val_1.size == 1:
-            val_1 = float(val_1)
-        if isinstance(val_2, np.ndarray) and val_2.size == 1:
-            val_2 = float(val_2)
+        if all(isinstance(pt[1], (float, int)) for pt in points):
+            return self.evaluate_single(output, *points)  # type: ignore
 
-        if isinstance(val_1, float):
+        sizes = [pt[1].size for pt in points
+                 if isinstance(pt[1], np.ndarray)]
 
-            if isinstance(val_2, float):
-                return self.evaluate_single(output, prop_1, val_1, prop_2, val_2)
-            else:
-                val_1 = np.repeat(val_1, val_2.size).reshape(val_2.shape)
-                return self.evaluate_multiple(output, prop_1, val_1, prop_2, val_2)
+        if len(set(sizes)) != 1:
+            raise ValueError('All inputs must have the same size, '
+                             f'passed {points} with sizes {sizes}')
 
-        if isinstance(val_2, float):
+        N = sizes[0]
 
-            val_2 = np.repeat(val_2, val_1.size).reshape(val_1.shape)
-            return self.evaluate_multiple(output, prop_1, val_1, prop_2, val_2)
+        shapes = [pt[1].shape for pt in points
+                  if isinstance(pt[1], np.ndarray)]
 
-        return self.evaluate_multiple(output, prop_1, val_1, prop_2, val_2)
+        if len(set(shapes)) != 1:
+            raise ValueError('All inputs must have the same shape, '
+                             f'passed {points} with shapes {shapes}')
 
-    def evaluate_single(self,
-                        output: str,
-                        prop_1: CProperty,
-                        val_1: float,
-                        prop_2: CProperty,
-                        val_2: float) -> float:
+        shape = shapes[0]
+
+        def validate_arr(x: Union[float, np.ndarray]) -> np.ndarray:
+
+            if isinstance(x, (float, int)):
+                return np.repeat(x, N).astype(float).reshape(shape)
+            return x.astype(float)
+
+        points_arr = [(pt[0], validate_arr(pt[1])) for pt in points]
+
+        return self.evaluate_multiple(output, *points_arr)
+
+    def evaluate_single(
+            self,
+            output: str,
+            *points: tuple[CProperty, float]) -> float:
+
+        inputs = list(flatten(points))
+
+        if self.APPEND_NAME_TO_CP_INPUTS:
+            inputs.append(self.name)
 
         try:
-            val = PropsSI(output,
-                          prop_1, val_1,
-                          prop_2, val_2,
-                          self.name)
+            val: float = self.BACKEND(output, *inputs)
 
             if val == np.inf or val == -np.inf:
                 val = np.nan
@@ -414,58 +429,92 @@ class CoolPropFluid:
         except ValueError:
             return np.nan
 
-    def evaluate_multiple(self,
-                          output: str,
-                          prop_1: CProperty,
-                          val_1: np.ndarray,
-                          prop_2: CProperty,
-                          val_2: np.ndarray) -> np.ndarray:
+    def evaluate_multiple_separately(
+            self,
+            output: str,
+            props: list[CProperty],
+            arrs_flat_masked: list[np.ndarray],
+            N: int) -> np.ndarray:
 
-        shape_1 = val_1.shape
-        shape_2 = val_2.shape
+        vals = []
 
-        if shape_1 != shape_2:
-            raise ValueError(
-                'Inputs cannot have different shapes. '
-                f'Input 1 has shape {shape_1} and '
-                f'input 2 has shape {shape_2} '
-            )
+        for i in range(N):
 
-        val_1 = val_1.flatten()
-        val_2 = val_2.flatten()
+            arrs_flat_masked_i = [n[i] for n in arrs_flat_masked]
 
-        mask: np.ndarray = np.isfinite(val_1) & np.isfinite(val_2)
+            inputs_i = list(flatten(list(zip(props,
+                                             arrs_flat_masked_i))))
+
+            if self.APPEND_NAME_TO_CP_INPUTS:
+                inputs_i.append(self.name)
+
+            try:
+                val_i: float = self.BACKEND(output, *inputs_i)
+            except ValueError:
+                val_i = np.nan
+
+            vals.append(val_i)
+
+        return np.array(vals)
+
+    def evaluate_multiple(
+            self,
+            output: str,
+            *points: tuple[CProperty, np.ndarray]) -> np.ndarray:
+
+        props = [pt[0] for pt in points]
+        arrs = [pt[1] for pt in points]
+        shape = arrs[0].shape
+
+        arrs_flat = [n.flatten() for n in arrs]
+
+        mask: np.ndarray = np.logical_and.reduce(
+            [np.isfinite(n) for n in arrs_flat]
+        )
 
         def get_empty_like(x: np.ndarray) -> np.ndarray:
             empty = np.empty_like(x).astype(float)
             empty[:] = np.nan
             return empty
 
-        def validate_output(x: np.ndarray) -> np.ndarray:
-            x[x == np.inf] = np.nan
-            x[x == - np.inf] = np.nan
-            return x.reshape(shape_1)
-
-        val = get_empty_like(val_1)
+        val = get_empty_like(arrs_flat[0])
 
         # number of finite (not nan, inf, ...) values
         N = mask.astype(int).sum()
 
         if N > 0:
 
+            arrs_flat_masked = [n[mask] for n in arrs_flat]
+
+            inputs = list(flatten(list(zip(props, arrs_flat_masked))))
+
+            if self.APPEND_NAME_TO_CP_INPUTS:
+                inputs.append(self.name)
+
             # this can fail if the numeric values
             # are *all* incorrect, for example negative pressure
             try:
-                val_masked: np.ndarray = PropsSI(
-                    output,
-                    prop_1, val_1[mask],
-                    prop_2, val_2[mask],
-                    self.name)
+                val_masked: np.ndarray = self.BACKEND(output, *inputs)
 
             except ValueError:
-                val_masked = get_empty_like(val_1[mask])
+
+                # the HAPropsSI backend fails if one or more inputs
+                # are incorrect, PropsSI returns NaN for invalid inputs
+                # in case valid inputs are also present
+                if self.EVALUATE_INVALID_SEPARATELY:
+                    val_masked = self.evaluate_multiple_separately(
+                        output, props, arrs_flat_masked, N
+                    )
+
+                else:
+                    val_masked = get_empty_like(arrs_flat_masked[0])
 
             val[mask] = val_masked
+
+        def validate_output(x: np.ndarray) -> np.ndarray:
+            x[x == np.inf] = np.nan
+            x[x == - np.inf] = np.nan
+            return x.reshape(shape)
 
         return validate_output(val)
 
@@ -503,10 +552,23 @@ class CoolPropFluid:
 
         return qty
 
+    def to_numeric(self,
+                   prop: CProperty,
+                   qty: Quantity) -> Union[float, np.ndarray]:
+
+        unit = self.get_coolprop_unit(prop)
+
+        val = qty.to(unit).m
+
+        # 1-element arrays will be converted to floats
+        if isinstance(val, np.ndarray) and val.size == 1:
+            val = float(val)
+
+        return val
+
     def get(self,
             output: CProperty,
-            point_1: tuple[CProperty, Quantity],
-            point_2: tuple[CProperty, Quantity]) -> Quantity:
+            *points: tuple[CProperty, Quantity]) -> Quantity:
         """
         Wraps the function ``CoolProp.CoolProp.PropsSI``, handles input
         and output with :py:class:`encomp.units.Quantity` objects.
@@ -515,10 +577,10 @@ class CoolPropFluid:
         ----------
         output : CProperty
             Name of the output property
-        point_1 : tuple[str, Quantity]
-            First fixed state variable: name and value of the property
-        point_2 : tuple[str, Quantity]
-            Second fixed state variable: name and value of the property
+        points : tuple[CProperty, Quantity]
+            Fixed state variables: name and value of the property.
+            The number of points must match the number expected
+            by the CoolProp backend function.
 
         Returns
         -------
@@ -526,17 +588,11 @@ class CoolPropFluid:
             Value (and unit) of the output property
         """
 
-        prop_1, qty_1 = point_1
-        prop_2, qty_2 = point_2
+        points_numeric = [
+            (pt[0], self.to_numeric(*pt)) for pt in points
+        ]
 
-        unit_1 = self.get_coolprop_unit(prop_1)
-        unit_2 = self.get_coolprop_unit(prop_2)
-
-        # magnitudes are either int/float or np.ndarray
-        val_1 = qty_1.to(unit_1).m
-        val_2 = qty_2.to(unit_2).m
-
-        val = self.evaluate(output, prop_1, val_1, prop_2, val_2)
+        val = self.evaluate(output, *points_numeric)
 
         return self.construct_quantity(val, output)
 
@@ -570,6 +626,11 @@ class Fluid(CoolPropFluid):
         self.point_1 = kwargs_list[0]
         self.point_2 = kwargs_list[1]
 
+        self.points = [
+            self.point_1,
+            self.point_2
+        ]
+
     def get(self, output: CProperty, *args) -> Quantity:
         """
         Uses the constant fixed points to call
@@ -586,9 +647,7 @@ class Fluid(CoolPropFluid):
             Value (and unit) of the output property
         """
 
-        return super().get(output,
-                           self.point_1,
-                           self.point_2)
+        return super().get(output, *self.points)
 
     @property
     def phase(self) -> str:
@@ -631,6 +690,10 @@ class Fluid(CoolPropFluid):
 
 
 class HumidAir(Fluid):
+
+    BACKEND = HAPropsSI
+    APPEND_NAME_TO_CP_INPUTS = False
+    EVALUATE_INVALID_SEPARATELY = True
 
     # unit and description for properties in function HAPropsSI
     PROPERTY_MAP: dict[tuple[str, ...], tuple[str, str]] = {
@@ -707,53 +770,11 @@ class HumidAir(Fluid):
         self.point_2 = kwargs_list[1]
         self.point_3 = kwargs_list[2]
 
-    def get(self, output: CProperty, *args) -> Quantity:
-        """
-        Uses the constant fixed points to call ``CoolProp.CoolProp.HAPropsSI``.
-
-        Parameters
-        ----------
-        output : CProperty
-            Name of the output property
-
-        Returns
-        -------
-        Quantity
-            Value (and unit) of the output property
-        """
-
-        prop_1, qty_1 = self.point_1
-        prop_2, qty_2 = self.point_2
-        prop_3, qty_3 = self.point_3
-
-        unit_1 = self.get_coolprop_unit(prop_1)
-        unit_2 = self.get_coolprop_unit(prop_2)
-        unit_3 = self.get_coolprop_unit(prop_3)
-
-        unit_output = self.get_coolprop_unit(output)
-
-        val_1 = qty_1.to(unit_1).m
-        val_2 = qty_2.to(unit_2).m
-        val_3 = qty_3.to(unit_3).m
-
-        val = HAPropsSI(output,
-                        prop_1, val_1,
-                        prop_2, val_2,
-                        prop_3, val_3)
-
-        qty = Quantity(val, unit_output)
-
-        if (not isinstance(qty.m, np.ndarray) and output not in self._SKIP_ZERO_CHECK and
-                not qty.dimensionless and val < self._EPS):
-            qty = Quantity(float('NaN'), unit_output)
-
-        key = self.get_prop_key(output)
-
-        if key[0] in self.RETURN_UNITS:
-            ret_unit = self.RETURN_UNITS[key[0]]
-            qty = qty.to(ret_unit)
-
-        return qty
+        self.points = [
+            self.point_1,
+            self.point_2,
+            self.point_3
+        ]
 
     def __getattr__(self, attr):
 
@@ -772,8 +793,12 @@ class HumidAir(Fluid):
 
 class Water(Fluid):
 
-    REPR_PROPERTIES: tuple[tuple[str, str], ...] = (('P', '.0f'), ('T', '.1f'),
-                                                    ('D', '.1f'), ('V', '.1f'))
+    REPR_PROPERTIES: tuple[tuple[str, str], ...] = (
+        ('P', '.0f'),
+        ('T', '.1f'),
+        ('D', '.1f'),
+        ('V', '.1f')
+    )
 
     def __init__(self, **kwargs: Quantity):
         """
@@ -805,6 +830,11 @@ class Water(Fluid):
 
         self.point_1 = kwargs_list[0]
         self.point_2 = kwargs_list[1]
+
+        self.points = [
+            self.point_1,
+            self.point_2
+        ]
 
     def __repr__(self) -> str:
 
