@@ -3,6 +3,7 @@ import numpy as np
 
 from encomp.units import Q
 from encomp.fluids import Fluid, HumidAir, Water
+from encomp.utypes import Density
 
 
 def test_Fluid():
@@ -44,11 +45,23 @@ def test_Fluid():
     Water(T=Q([25, np.nan, 63], 'C'), Q=Q([np.nan, 0.2, 0.5], '')).H
     Water(T=Q([25, np.nan, np.nan], 'C'), Q=Q([np.nan, 0.2, np.nan], '')).H
 
-    # returns NaN (not empty array)
-    assert np.isnan(Fluid('water', T=Q([], 'C'), P=Q([], 'bar')).H.m)
+    # returns empty array (not nan)
+    ret = Fluid('water', T=Q([], 'C'), P=Q([], 'bar')).H.m
+    assert isinstance(ret, np.ndarray) and ret.size == 0
+    ret = Fluid('water', T=Q([], 'C'), P=Q((), 'bar')).H.m
+    assert isinstance(ret, np.ndarray) and ret.size == 0
+    ret = Fluid('water', T=Q([], 'C'), P=Q(np.array([]), 'bar')).H.m
+    assert isinstance(ret, np.ndarray) and ret.size == 0
 
     # returns single float (not 1-element list)
-    assert not Fluid('water', T=Q([23], 'C'), P=Q([1], 'bar')).H.m.shape
+    assert isinstance(Fluid('water', T=Q([23], 'C'), P=Q([1], 'bar')).H.m,
+                      float)
+
+    assert isinstance(Fluid('water', T=Q(23, 'C'), P=Q([1], 'bar')).H.m,
+                      float)
+
+    assert isinstance(Fluid('water', T=Q([23], 'C'), P=Q(1, 'bar')).H.m,
+                      float)
 
     with pytest.raises(ValueError):
         Fluid('water', T=Q([np.nan, np.nan], 'C'),
@@ -87,3 +100,62 @@ def test_Water():
             T=Q(np.linspace(25, 500, 10), '°C'),
             P=Q(np.linspace(0.5, 10, 50), 'bar')
         ).P
+
+
+def test_shapes():
+
+    N = 16
+
+    T = Q(np.linspace(50, 60, N).reshape(4, 4), 'C')
+    P = Q(np.linspace(2, 4, N).reshape(4, 4), 'bar')
+
+    water = Fluid('water', T=T, P=P)
+
+    assert water.D.m.shape == P.m.shape
+    assert water.D.m.shape == T.m.shape
+
+    N = 27
+
+    T = Q(np.linspace(50, 60, N).reshape(3, 3, 3), 'C')
+    P = Q(np.linspace(2, 4, N).reshape(3, 3, 3), 'bar')
+
+    water = Fluid('water', T=T, P=P)
+
+    assert water.D.m.shape == P.m.shape
+    assert water.D.m.shape == T.m.shape
+
+
+def test_invalid_areas():
+
+    N = 10
+    T = Q(np.linspace(-100, -50, N), 'K')
+    P = Q(np.linspace(-1, -2, N), 'bar')
+
+    water = Fluid('water', T=T, P=P)
+
+    assert water.D.check(Density)
+    assert isinstance(water.D.m, np.ndarray)
+
+    T = Q(np.linspace(-100, 300, N), 'K')
+    P = Q(np.linspace(-1, 2, N), 'bar')
+
+    water = Fluid('water', T=T, P=P)
+
+    assert water.D.check(Density)
+    assert isinstance(water.D.m, np.ndarray)
+    assert np.isnan(water.D.m[0])
+    assert not np.isnan(water.D.m[-1])
+
+    arr1 = np.linspace(-100, 400, N)
+    arr2 = np.linspace(-1, 2, N)
+
+    arr1[-2] = np.nan
+    arr2[-1] = np.nan
+    arr2[-3] = np.nan
+
+    T = Q(arr1, 'K')
+    P = Q(arr2, 'bar')
+
+    water = Fluid('water', T=T, P=P)
+
+    assert water.D.m.size == N

@@ -9,7 +9,7 @@ Uses CoolProp as backend.
 
 """
 
-from typing import Annotated
+from typing import Annotated, Union, overload
 import numpy as np
 
 
@@ -110,9 +110,13 @@ class CoolPropFluid:
         ('Z', ):                                        ('dimensionless', 'Compressibility factor')
     }
 
-    ALL_PROPERTIES: set[str] = set(flatten(PROPERTY_MAP))
-    REPR_PROPERTIES: tuple[tuple[str, str], ...] = (('P', '.0f'), ('T', '.1f'),
-                                                    ('D', '.1f'), ('V', '.2g'))
+    ALL_PROPERTIES: set[str] = set(flatten(list(PROPERTY_MAP)))
+    REPR_PROPERTIES: tuple[tuple[str, str], ...] = (
+        ('P', '.0f'),
+        ('T', '.1f'),
+        ('D', '.1f'),
+        ('V', '.2g')
+    )
 
     # preferred return units
     # key is the first name in the tuple used in PROPERTY_MAP
@@ -361,6 +365,144 @@ class CoolPropFluid:
 
         return matches
 
+    def evaluate(self,
+                 output: str,
+                 prop_1: CProperty,
+                 val_1: Union[float, np.ndarray],
+                 prop_2: CProperty,
+                 val_2: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
+
+        # convert 1-element arrays to float
+        if isinstance(val_1, np.ndarray) and val_1.size == 1:
+            val_1 = float(val_1)
+        if isinstance(val_2, np.ndarray) and val_2.size == 1:
+            val_2 = float(val_2)
+
+        if isinstance(val_1, float):
+
+            if isinstance(val_2, float):
+                return self.evaluate_single(output, prop_1, val_1, prop_2, val_2)
+            else:
+                val_1 = np.repeat(val_1, val_2.size).reshape(val_2.shape)
+                return self.evaluate_multiple(output, prop_1, val_1, prop_2, val_2)
+
+        if isinstance(val_2, float):
+
+            val_2 = np.repeat(val_2, val_1.size).reshape(val_1.shape)
+            return self.evaluate_multiple(output, prop_1, val_1, prop_2, val_2)
+
+        return self.evaluate_multiple(output, prop_1, val_1, prop_2, val_2)
+
+    def evaluate_single(self,
+                        output: str,
+                        prop_1: CProperty,
+                        val_1: float,
+                        prop_2: CProperty,
+                        val_2: float) -> float:
+
+        try:
+            val = PropsSI(output,
+                          prop_1, val_1,
+                          prop_2, val_2,
+                          self.name)
+
+            if val == np.inf or val == -np.inf:
+                val = np.nan
+
+            return val
+
+        except ValueError:
+            return np.nan
+
+    def evaluate_multiple(self,
+                          output: str,
+                          prop_1: CProperty,
+                          val_1: np.ndarray,
+                          prop_2: CProperty,
+                          val_2: np.ndarray) -> np.ndarray:
+
+        shape_1 = val_1.shape
+        shape_2 = val_2.shape
+
+        if shape_1 != shape_2:
+            raise ValueError(
+                'Inputs cannot have different shapes. '
+                f'Input 1 has shape {shape_1} and '
+                f'input 2 has shape {shape_2} '
+            )
+
+        val_1 = val_1.flatten()
+        val_2 = val_2.flatten()
+
+        mask: np.ndarray = np.isfinite(val_1) & np.isfinite(val_2)
+
+        def get_empty_like(x: np.ndarray) -> np.ndarray:
+            empty = np.empty_like(x).astype(float)
+            empty[:] = np.nan
+            return empty
+
+        def validate_output(x: np.ndarray) -> np.ndarray:
+            x[x == np.inf] = np.nan
+            x[x == - np.inf] = np.nan
+            return x.reshape(shape_1)
+
+        val = get_empty_like(val_1)
+
+        # number of finite (not nan, inf, ...) values
+        N = mask.astype(int).sum()
+
+        if N > 0:
+
+            # this can fail if the numeric values
+            # are *all* incorrect, for example negative pressure
+            try:
+                val_masked: np.ndarray = PropsSI(
+                    output,
+                    prop_1, val_1[mask],
+                    prop_2, val_2[mask],
+                    self.name)
+
+            except ValueError:
+                val_masked = get_empty_like(val_1[mask])
+
+            val[mask] = val_masked
+
+        return validate_output(val)
+
+    def construct_quantity(self,
+                           val: Union[float, np.ndarray],
+                           output: str) -> Quantity:
+
+        unit_output = self.get_coolprop_unit(output)
+        qty = Quantity(val, unit_output)
+
+        # value with dimensions present in CoolProp (pressure, temperature, etc...) cannot be zero
+        # CoolProp uses 0.0 for missing data, change this to NaN
+        # the values are not always exactly 0, use the _EPS class attribute to check this
+        # skip this check for some properties
+        if not not qty.dimensionless and output not in self._SKIP_ZERO_CHECK:
+
+            if isinstance(qty.m, np.ndarray):
+
+                # Quantity.m is a @property, cannot be set
+                m = qty.m
+
+                m[m < self._EPS] = np.nan
+                qty = Quantity(m, unit_output)
+
+            elif isinstance(qty.m, (float, int)):
+
+                if qty.m < self._EPS:
+                    qty = Quantity(np.nan, unit_output)
+
+        key = self.get_prop_key(output)
+
+        if len(key) > 0 and key[0] in self.RETURN_UNITS:
+            ret_unit = self.RETURN_UNITS[key[0]]
+            qty.ito(ret_unit)
+
+        return qty
+
     def get(self,
             output: CProperty,
             point_1: tuple[CProperty, Quantity],
@@ -389,82 +531,14 @@ class CoolPropFluid:
 
         unit_1 = self.get_coolprop_unit(prop_1)
         unit_2 = self.get_coolprop_unit(prop_2)
-        unit_output = self.get_coolprop_unit(output)
 
+        # magnitudes are either int/float or np.ndarray
         val_1 = qty_1.to(unit_1).m
         val_2 = qty_2.to(unit_2).m
 
-        def _is_array_multiple_elements(x):
-            if not isinstance(x, (list, np.ndarray)):
-                return False
-            if len(x) > 1:
-                return True
-            return False
+        val = self.evaluate(output, prop_1, val_1, prop_2, val_2)
 
-        # TODO: this is not elegant
-        mask = np.isfinite(val_1) & np.isfinite(val_2)
-        is_single_value = True
-
-        if _is_array_multiple_elements(val_1):
-            is_single_value = False
-            if not _is_array_multiple_elements(val_2):
-                val_2 = np.repeat(val_2, len(val_1))
-
-        if _is_array_multiple_elements(val_2):
-            is_single_value = False
-            if not _is_array_multiple_elements(val_1):
-                val_1 = np.repeat(val_1, len(val_2))
-
-        if not is_single_value:
-
-            N: int = mask.sum()
-
-            if not N:
-                val = np.empty_like(val_1)
-                val[:] = np.nan
-
-            elif N == mask.shape[0]:
-                val = PropsSI(output,
-                              prop_1, val_1,
-                              prop_2, val_2,
-                              self.name)
-
-            else:
-                val = np.empty_like(val_1)
-                val[:] = np.nan
-
-                val[mask] = PropsSI(output,
-                                    prop_1, val_1[mask],
-                                    prop_2, val_2[mask],
-                                    self.name)
-
-        else:
-
-            if np.asanyarray(mask).size:
-                val = PropsSI(output,
-                              prop_1, val_1,
-                              prop_2, val_2,
-                              self.name)
-            else:
-                val = np.nan
-
-        qty = Quantity(val, unit_output)
-
-        # value with dimensions cannot be zero
-        # CoolProp uses 0.0 for missing data, change this to NaN
-        # the values are not exactly 0, use the _EPS class attribute to check this
-        # skip this check for some properties
-        if (not isinstance(qty.m, np.ndarray) and output not in self._SKIP_ZERO_CHECK and
-                not qty.dimensionless and val < self._EPS):
-            qty = Quantity(float('NaN'), unit_output)
-
-        key = self.get_prop_key(output)
-
-        if key[0] in self.RETURN_UNITS:
-            ret_unit = self.RETURN_UNITS[key[0]]
-            qty = qty.to(ret_unit)
-
-        return qty
+        return self.construct_quantity(val, output)
 
 
 class Fluid(CoolPropFluid):
@@ -584,7 +658,7 @@ class HumidAir(Fluid):
         ('Z', ):                          ('dimensionless', 'Compressibility factor')
     }
 
-    ALL_PROPERTIES: set[str] = set(flatten(PROPERTY_MAP))
+    ALL_PROPERTIES: set[str] = set(flatten(list(PROPERTY_MAP)))
 
     # HAPropsSI has different parameter names
     # density is not defined, need to use either Vda (volume per dry air)
@@ -598,9 +672,14 @@ class HumidAir(Fluid):
         'B': '°C',
     }
 
-    REPR_PROPERTIES: tuple[tuple[str, str], ...] = (('P', '.0f'), ('T', '.1f'),
-                                                    ('R', '.2f'), ('Vda', '.1f'),
-                                                    ('Vha', '.1f'), ('M', '.2g'))
+    REPR_PROPERTIES: tuple[tuple[str, str], ...] = (
+        ('P', '.0f'),
+        ('T', '.1f'),
+        ('R', '.2f'),
+        ('Vda', '.1f'),
+        ('Vha', '.1f'),
+        ('M', '.2g')
+    )
 
     def __init__(self, **kwargs: Quantity):
         """

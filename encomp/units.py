@@ -316,7 +316,7 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
         return self._validate_unit(unit)
 
     @property
-    def m(self) -> float:
+    def m(self) -> Union[float, np.ndarray]:
         return super().m
 
     def to(self,  # type: ignore[override]

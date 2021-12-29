@@ -63,7 +63,7 @@ def flatten(container: Sequence[Any],
     ----------
     container : Sequence[Any]
         The container to be flattened. Note that it is not possible
-        to construct nested sets, so the ``Sequence`` type is appropriate here
+        to construct nested sets, so the ``Sequence`` type is appropriate here.
     max_depth : int, optional
         The maximum level to flatten to, by default None (flatten all)
     depth : int

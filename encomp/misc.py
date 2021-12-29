@@ -153,8 +153,41 @@ def pad_2D_array(arr: np.ndarray, N: int) -> np.ndarray:
 
     for i in range(arr.shape[0]):
         for j in range(arr.shape[1]):
+
             val = arr[i, j]
+
             if isinstance(val, (int, float)):
                 arr[i, j] = np.repeat(val, N)
 
     return arr
+
+
+def is_multiple_element_array(x: Any) -> bool:
+    """
+    Checks whether the input is a Numpy array
+    or list-like with more than one element.
+
+    Parameters
+    ----------
+    x : Any
+        Input object
+
+    Returns
+    -------
+    bool
+        Whether ``x`` is an array or list-like
+        with more than one element
+    """
+
+    list_like = (list, tuple, np.ndarray)
+
+    if not isinstance(x, list_like):
+        return False
+
+    if isinstance(x, np.ndarray):
+        return x.size > 1
+
+    try:
+        return len(x) > 1
+    except TypeError:
+        return False
