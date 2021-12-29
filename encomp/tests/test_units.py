@@ -1,6 +1,7 @@
 import pytest
 from pytest import approx
 import numpy as np
+import pandas as pd
 
 from encomp.units import Quantity, Q, wraps, check
 from encomp.utypes import *
@@ -114,6 +115,17 @@ def test_Q():
 
     # percent or %
     Q(1.124124e-3, '').to('%').to('percent')
+    Q(1.124124e-3).to('%').to('percent')
+
+    # pd.Series is converted to np.ndarray
+    vals = [2, 3, 4]
+    s = pd.Series(vals, name='Pressure')
+    arr = Q(s, 'bar').to('kPa').m
+    assert isinstance(arr, np.ndarray)
+    assert arr[0] == 200
+
+    # np.ndarray magnitudes equality check
+    assert (Q(s, 'bar') == Q(vals, 'bar').to('kPa')).all()
 
 
 def test_wraps():

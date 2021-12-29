@@ -244,6 +244,7 @@ class CoolPropFluid:
         * http://www.coolprop.org/coolprop/HighLevelAPI.html
         * http://www.coolprop.org/fluid_properties/HumidAir.html
 
+
         The names ``Water`` and ``HEOS::Water`` uses the formulation defined by IAPWS-95.
         Use the name ``IF97::Water`` to instead use the slightly faster
         (but less accurate) IAPWS-97 formulation.
@@ -263,6 +264,7 @@ class CoolPropFluid:
                 * ``INCOMP::MITSW[0.05]``: seawater with 5 mass-percent salt.
                 * ``INCOMP::MPG[0.5]``: 50 % ethylene glycol
                 * ``INCOMP::T66``: Therminol 66 (https://www.therminol.com/product/71093438)
+
         """
 
         self.name = name
@@ -349,7 +351,6 @@ class CoolPropFluid:
     def search(cls, inp: str) -> list[str]:
         """
         Returns a list of CoolProp properties that matches the search input.
-
 
         Parameters
         ----------
