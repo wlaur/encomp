@@ -127,6 +127,12 @@ def test_Q():
     # np.ndarray magnitudes equality check
     assert (Q(s, 'bar') == Q(vals, 'bar').to('kPa')).all()
 
+    # support a single string as input if the
+    # magnitude and units are separated by one or more spaces
+    assert Q('1 meter').check(Length)
+    assert Q('1 meter per second').check(Velocity)
+    assert (Q('1 m') ** 3).check(Volume)
+
 
 def test_wraps():
 

@@ -253,6 +253,15 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
 
         if unit is None:
 
+            # support passing only string input, this is not recommended
+            delimiter = ' '
+            if isinstance(val, str) and delimiter in val:
+
+                m_str, u = val.split(delimiter, 1)
+                m = float(m_str.strip())
+                u = u.strip()
+                val = Q(m, u)
+
             # this allows us to create new dimensionless quantities
             # by omitting the unit
             unit = getattr(val, 'u', None) or ''
