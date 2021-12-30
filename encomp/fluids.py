@@ -9,17 +9,15 @@ Uses CoolProp as backend.
 
 """
 
-from typing import Annotated, Union, Optional, Callable
+import warnings
+from typing import Annotated, Union, Callable
 import numpy as np
 
 
 try:
     from CoolProp.CoolProp import PropsSI
     from CoolProp.HumidAirProp import HAPropsSI
-
 except ImportError:
-
-    import warnings
     warnings.warn('CoolProp package not installed, install with conda:'
                   '\nconda install conda-forge::coolprop')
 
@@ -36,6 +34,23 @@ class CoolPropFluid:
     BACKEND: Callable = PropsSI
     APPEND_NAME_TO_CP_INPUTS: bool = True
     EVALUATE_INVALID_SEPARATELY: bool = False
+
+    # substrings from the CoolProp error messages for when inputs are
+    # not valid or not implemented (CoolProp will always raise ValueError, no matter the error)
+    # in case the error message does not match any of these, a warning is emitted
+    COOLPROP_ERROR_MESSAGES = (
+        'is not valid for keyed_output',
+        'is not valid for trivial_keyed_output',
+        "For now, we don't support",
+        'is not implemented for this backend',
+        'is only defined within the two-phase region',
+        'failed ungracefully',
+        'value to T_phase_determination_pure_or_pseudopure is invalid',
+        "Brent's method f(b) is NAN",
+        'do not bracket the root',
+        'was unable to find a solution for',
+        'is outside the range of validity'
+    )
 
     PHASES: dict[float, str] = {
         0.0: 'Liquid',
@@ -372,9 +387,34 @@ class CoolPropFluid:
 
         return matches
 
+    def check_exception(self, prop: CProperty, e: ValueError) -> None:
+
+        msg = str(e)
+
+        # this error occurs in case the input values are outside
+        # the allowable range for this property
+        # in this case the return value will be NaN, no exception is raised
+        if 'No outputs were able to be calculated' in msg:
+            return
+
+        # if CoolProp has not implemented prop as output, return NaN
+        if any(n in msg for n in self.COOLPROP_ERROR_MESSAGES):
+            return
+
+        if 'Output string is invalid' in msg:
+            return
+
+        if 'Initialize failed for backend' in msg:
+            raise ValueError(
+                f'Fluid "{self.name}" could not be initalized, '
+                'ensure that the name is a valid CoolProp fluid name') from e
+
+        warnings.warn(
+            f'CoolProp could not calculate "{prop}" for fluid "{self.name}", output is NaN: {msg}')
+
     def evaluate(
             self,
-            output: str,
+            output: CProperty,
             *points: tuple[CProperty, Union[float, np.ndarray]]
     ) -> Union[float, np.ndarray]:
 
@@ -411,7 +451,7 @@ class CoolPropFluid:
 
     def evaluate_single(
             self,
-            output: str,
+            output: CProperty,
             *points: tuple[CProperty, float]) -> float:
 
         inputs = list(flatten(points))
@@ -427,12 +467,13 @@ class CoolPropFluid:
 
             return val
 
-        except ValueError:
+        except ValueError as e:
+            self.check_exception(output, e)
             return np.nan
 
     def evaluate_multiple_separately(
             self,
-            output: str,
+            output: CProperty,
             props: list[CProperty],
             arrs_flat_masked: list[np.ndarray],
             N: int) -> np.ndarray:
@@ -451,7 +492,8 @@ class CoolPropFluid:
 
             try:
                 val_i: float = self.BACKEND(output, *inputs_i)
-            except ValueError:
+            except ValueError as e:
+                self.check_exception(output, e)
                 val_i = np.nan
 
             vals.append(val_i)
@@ -460,7 +502,7 @@ class CoolPropFluid:
 
     def evaluate_multiple(
             self,
-            output: str,
+            output: CProperty,
             *points: tuple[CProperty, np.ndarray]) -> np.ndarray:
 
         props = [pt[0] for pt in points]
@@ -497,7 +539,9 @@ class CoolPropFluid:
             try:
                 val_masked: np.ndarray = self.BACKEND(output, *inputs)
 
-            except ValueError:
+            except ValueError as e:
+
+                self.check_exception(output, e)
 
                 # the HAPropsSI backend fails if one or more inputs
                 # are incorrect, PropsSI returns NaN for invalid inputs
@@ -521,7 +565,7 @@ class CoolPropFluid:
 
     def construct_quantity(self,
                            val: Union[float, np.ndarray],
-                           output: str) -> Quantity:
+                           output: CProperty) -> Quantity:
 
         unit_output = self.get_coolprop_unit(output)
         qty = Quantity(val, unit_output)
@@ -668,6 +712,9 @@ class Fluid(CoolPropFluid):
 
     def __getattr__(self, attr):
 
+        if attr not in self.ALL_PROPERTIES:
+            raise AttributeError(attr)
+
         # this is called in case attr does not exist
         return self.get(attr)
 
@@ -676,12 +723,7 @@ class Fluid(CoolPropFluid):
         props = []
 
         for p, fmt in self.REPR_PROPERTIES:
-
-            # CoolProp might not have a backend for all props
-            try:
-                props.append(f'{p}={self.get(p):{fmt}}')
-            except Exception:
-                props.append(f'{p}=N/A')
+            props.append(f'{p}={self.get(p):{fmt}}')
 
         props_str = ', '.join(props)
 
@@ -776,11 +818,6 @@ class HumidAir(Fluid):
             self.point_2,
             self.point_3
         ]
-
-    def __getattr__(self, attr):
-
-        # this is called in case attr does not exist
-        return self.get(attr)
 
     def __repr__(self) -> str:
 

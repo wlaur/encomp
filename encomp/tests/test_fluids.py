@@ -205,3 +205,62 @@ def test_invalid_areas():
     water = Fluid('water', T=T, P=P)
 
     assert water.D.m.size == N
+
+
+def test_properties_Fluid():
+
+    props = Fluid.ALL_PROPERTIES
+
+    fluid_names = ['water', 'methane', 'R134a']
+
+    Ts = [
+        25, 0, -1, -100, np.nan,
+        [25, 30], [np.nan, 25], [np.nan, np.nan], [np.inf, np.nan],
+        np.linspace(0, 10, 10), np.linspace(-10, 10, 10)
+    ]
+
+    Ps = [
+        1, 0, -1, -100, np.nan,
+        [3, 4], [np.nan, 3], [np.nan, np.nan], [np.inf, np.nan],
+        np.linspace(0, 10, 10), np.linspace(-10, 10, 10)
+    ]
+
+    for fluid_name in fluid_names:
+        for T, P in zip(Ts, Ps):
+
+            fluid = Fluid(fluid_name, T=Q(T, 'C'), P=Q(P, 'bar'))
+            repr(fluid)
+
+            for p in props:
+                getattr(fluid, p)
+
+
+def test_properties_HumidAir():
+
+    props = HumidAir.ALL_PROPERTIES
+
+    Ts = [
+        25, 0, -1, -100, np.nan,
+        [25, 30], [np.nan, 25], [np.nan, np.nan], [np.inf, np.nan],
+        np.linspace(0, 10, 10), np.linspace(-10, 10, 10)
+    ]
+
+    Ps = [
+        1, 0, -1, -100, np.nan,
+        [3, 4], [np.nan, 3], [np.nan, np.nan], [np.inf, np.nan],
+        np.linspace(0, 10, 10), np.linspace(-10, 10, 10)
+    ]
+
+    Rs = [
+        0.5, 0.1, -1, -100, np.nan, -0.5, 0.00001, -0.0001, 0.99999, 1, 1.00001,
+        [0.3, 0.4], [np.nan, 0.3], [np.nan, np.nan], [np.inf, np.nan],
+        np.linspace(0, 1, 10), np.linspace(-0.5, 0.5, 10)
+    ]
+
+    for T, P, R in zip(Ts, Ps, Rs):
+
+        ha = HumidAir(T=Q(T, 'C'), P=Q(P, 'bar'), R=Q(R, ''))
+        repr(ha)
+
+        for p in props:
+            getattr(ha, p)
