@@ -259,7 +259,7 @@ def test_properties_HumidAir():
 
     for T, P, R in zip(Ts, Ps, Rs):
 
-        ha = HumidAir(T=Q(T, 'C'), P=Q(P, 'bar'), R=Q(R, ''))
+        ha = HumidAir(T=Q(T, 'C'), P=Q(P, 'bar'), R=Q(R))
         repr(ha)
 
         for p in props:

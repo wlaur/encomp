@@ -3,17 +3,15 @@ Imports and extends the ``sympy`` library for symbolic mathematics.
 Contains tools for converting Sympy expressions to Python modules and functions.
 """
 
-
-from typing import Callable, Optional, Union, Literal
 import re
+from typing import Callable, Optional, Union, Literal
+from functools import lru_cache
+
 import numpy as np
 import sympy as sp
 from sympy.utilities.lambdify import lambdify, lambdastr
 from sympy import default_sort_key
-from functools import lru_cache
-import numpy.typing as npt
 from symbolic_equation import Eq as Eq_symbolic
-
 
 from encomp.settings import SETTINGS
 from encomp.units import Quantity
@@ -261,9 +259,9 @@ def get_sol_expr(eqns: Union[sp.Equality, list[sp.Equality]],
                   key=default_sort_key)[0]
 
 
-def get_lambda_kwargs(value_map: dict[Union[sp.Symbol, str], Union[Quantity, npt.ArrayLike]],
+def get_lambda_kwargs(value_map: dict[Union[sp.Symbol, str], Union[Quantity, np.ndarray]],
                       include: Optional[list[Union[sp.Symbol, str]]] = None, *,
-                      units: bool = False) -> dict[str, Union[Quantity, npt.ArrayLike]]:
+                      units: bool = False) -> dict[str, Union[Quantity, np.ndarray]]:
     """
     Returns a mapping from identifier to value (Quantity or float)
     based on the input value map (Symbol to value).
@@ -271,7 +269,7 @@ def get_lambda_kwargs(value_map: dict[Union[sp.Symbol, str], Union[Quantity, npt
 
     Parameters
     ----------
-    value_map : dict[Union[sp.Symbol, str], Union[Quantity, npt.ArrayLike]]
+    value_map : dict[Union[sp.Symbol, str], Union[Quantity, np.ndarray]]
         Mapping from symbol or symbol identifier to value
     include : Optional[list[Union[sp.Symbol, str]]], optional
         Optional list of symbols or symbol identifiers to include, by default None
@@ -281,7 +279,7 @@ def get_lambda_kwargs(value_map: dict[Union[sp.Symbol, str], Union[Quantity, npt
 
     Returns
     -------
-    dict[str, Union[Quantity, npt.ArrayLike]]
+    dict[str, Union[Quantity, np.ndarray]]
         Mapping from identifier to value
     """
 
@@ -420,8 +418,8 @@ def get_function(e: sp.Basic, *, units: bool = False) -> Callable:
 
 
 def evaluate(e: sp.Basic,
-             value_map: dict[sp.Symbol, Union[Quantity, npt.ArrayLike]], *,
-             units: bool = False) -> Union[Quantity, npt.ArrayLike]:
+             value_map: dict[sp.Symbol, Union[Quantity, np.ndarray]], *,
+             units: bool = False) -> Union[Quantity, np.ndarray]:
     """
     Evaluates the input expression, given the mapping of symbol to
     value in ``value_map``.
@@ -430,7 +428,7 @@ def evaluate(e: sp.Basic,
     ----------
     e : sp.Basic
         Input expression to evaluate
-    value_map : dict[sp.Symbol, Union[Quantity, npt.ArrayLike]]
+    value_map : dict[sp.Symbol, Union[Quantity, np.ndarray]]
         Mapping from symbol to value for all required symbols in ``e``,
         additional symbols may be present
     units : bool, optional
@@ -439,7 +437,7 @@ def evaluate(e: sp.Basic,
 
     Returns
     -------
-    Union[Quantity, npt.ArrayLike]
+    Union[Quantity, np.ndarray]
         Value of the expression, Quantity if ``units=True`` otherwise float
     """
 

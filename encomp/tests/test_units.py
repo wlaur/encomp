@@ -1,9 +1,11 @@
 import pytest
 from pytest import approx
+from typeguard import typechecked
 import numpy as np
 import pandas as pd
 
-from encomp.units import Quantity, Q, wraps, check
+
+from encomp.units import Quantity, Q, wraps, check, DimensionalityError
 from encomp.utypes import *
 
 
@@ -35,6 +37,10 @@ def test_Q():
     Q['Dimensionless'](21)
     assert isinstance(Q(21), Q['Dimensionless'])
 
+    assert Q(1) == Q('1')
+    assert Q(1) == Q('\n1\n')
+    assert Q(1) == Q('1 dimensionless')
+
     # check type of "m"
     assert isinstance(Q(1, 'meter').m, int)
     assert isinstance(Q(2.3, 'meter').m, float)
@@ -63,7 +69,7 @@ def test_Q():
     # this Quantity must have the same dimensionality as P
     Q[P](2, 'kPa')
 
-    with pytest.raises(Exception):
+    with pytest.raises(DimensionalityError):
         Q[Temperature](1, 'kg')
         Q[Pressure](1, 'meter')
         Q[Mass](1, P)
@@ -92,6 +98,8 @@ def test_Q():
     P4_b = P4.to(Q(123123, 'kPa'))
 
     assert P4_b.m == approx(100, rel=1e-12)
+
+    assert Q(1, 'bar') == Q(100, 'kPa') == Q('0.1 MPa') == Q('1e5', 'Pa')
 
     # check that nested Quantity objects can be used as input
     # only the first value is used as magnitude, the other Quantity
@@ -140,7 +148,7 @@ def test_wraps():
     # decorator for making the input/output of a function into Quantity
     # however, it does not enforce the return value
 
-    @ wraps('kg', ('m', 'kg'), strict=True)
+    @wraps('kg', ('m', 'kg'), strict=True)
     def func(a, b):
 
         # this is incorrect, cannot add 1 to a dimensional Quantity
@@ -156,9 +164,32 @@ def test_check():
     assert Q(1, 'kg').check(Mass)
     assert not Q(1, 'kg').check(Energy)
 
-    @ check('[length]', '[mass]')
+    @check('[length]', '[mass]')
     def func(a, b):
 
         return a * b
 
     func(Q(1, 'yd'), Q(20, 'lbs'))
+
+
+def test_typechecked():
+
+    @typechecked
+    def func_a(a: Quantity['Temperature']) -> Quantity['Pressure']:
+        return Q(2, 'bar')
+
+    assert func_a(Q(2, 'degC')) == Q(2, 'bar')
+
+    with pytest.raises(TypeError):
+        func_a(Q(2, 'meter'))
+
+    @typechecked
+    def func_b(a: Quantity) -> Quantity['Pressure']:
+        return a
+
+    assert func_b(Q(2, 'bar')) == Q(2, 'bar')
+    assert func_b(Q(2, 'psi')) == Q(2, 'psi')
+    assert func_b(Q(2, 'mmHg')) == Q(2, 'mmHg')
+
+    with pytest.raises(TypeError):
+        func_a(Q(2, 'meter'))

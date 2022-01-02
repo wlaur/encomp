@@ -247,7 +247,7 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
 
     def __new__(
             cls,
-            val: Union[Magnitude, Quantity],
+            val: Union[Magnitude, Quantity, str],
             unit: Union[Unit, UnitsContainer, str, Quantity, None] = None
     ) -> Quantity:
 
@@ -276,6 +276,9 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
 
             # support passing pd.Series directly
             val = val.values
+
+        if isinstance(val, str):
+            val = float(val)
 
         valid_unit = cls._validate_unit(unit)
 
@@ -531,21 +534,8 @@ try:
 except Exception:
     pass
 
-
-class Q(Quantity):
-    """
-    Shorthand for the :py:class:`encomp.units.Quantity` class.
-
-    Use this class when initializing ``Quantity`` objects, this way
-    the type is inferred correctly.
-    Do not use this class for type hints, use the full name ``Quantity`` instead.
-    """
-
-    # the actual instances are created dynamically
-    # this is essentially identical to setting "Q = Quantity",
-    # except that it solves a mypy-related issue and shows a different docstring
-    pass
-
+# shorthand for the Quantity class
+Q = Quantity
 
 # shorthand for the @wraps(ret, args, strict=True|False) decorator
 wraps = ureg.wraps

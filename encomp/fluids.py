@@ -708,7 +708,7 @@ class Fluid(CoolPropFluid):
             else:
                 return 'Variable'
 
-        return self.PHASES[phase_idx_val]
+        return self.PHASES.get(phase_idx_val, 'N/A')
 
     def __getattr__(self, attr):
 

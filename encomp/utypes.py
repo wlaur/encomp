@@ -11,8 +11,9 @@ from typing import Generic, TypeVar
 from typing import Union
 
 from decimal import Decimal
-import numpy.typing as npt
 
+import numpy as np
+import pandas as pd
 from uncertainties.core import AffineScalarFunc
 from pint.unit import UnitsContainer
 
@@ -20,6 +21,7 @@ from pint.unit import UnitsContainer
 R = TypeVar('R')
 
 
+# for mypy compatibility
 class Dimensionality(UnitsContainer, Generic[R]):
     pass
 
@@ -27,8 +29,11 @@ class Dimensionality(UnitsContainer, Generic[R]):
 # type alias for the magnitude input to Quantity
 # also accept Decimal and AffineScalarFunc (from uncertainties package)
 MagnitudeValue = Union[float, int, Decimal, AffineScalarFunc]
-Magnitude = Union[MagnitudeValue, list[MagnitudeValue],
-                  set[MagnitudeValue], npt.ArrayLike]
+Magnitude = Union[MagnitudeValue,
+                  list[MagnitudeValue],
+                  tuple[MagnitudeValue, ...],
+                  np.ndarray,
+                  pd.Series]
 
 # base dimensionalities: the 7 base dimensions in the SI system and dimensionless
 # NOTE: these must be defined as Dimensionality(...) * Dimensionless to avoid issues with mypy

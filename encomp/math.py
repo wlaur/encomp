@@ -2,7 +2,6 @@ import numpy as np
 from typing import Union, Callable, Optional, Mapping, Any
 from scipy.interpolate import interp1d
 from sympy import geometry
-import numpy.typing as npt
 
 
 def interpolate(
@@ -69,8 +68,8 @@ def interpolate(
     return interp1d(x, y, **kwargs)
 
 
-def polynomial(x: npt.ArrayLike,
-               y: npt.ArrayLike,
+def polynomial(x: np.ndarray,
+               y: np.ndarray,
                order: int = 2) -> np.poly1d:
     """
     Wrapper around ``np.poly1d`` and ``np.polyfit``
@@ -90,9 +89,9 @@ def polynomial(x: npt.ArrayLike,
 
     Parameters
     ----------
-    x : npt.ArrayLike
+    x : np.ndarray
         Sequence of :math:`x`-values
-    y : npt.ArrayLike
+    y : np.ndarray
         Sequence of :math:`y`-values with ame length as ``x``
     order : int, optional
         Order of the polynomial, by default 2
