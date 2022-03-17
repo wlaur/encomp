@@ -24,6 +24,7 @@ setup(
         'encomp',
         'encomp.tests',
     ],
+    package_data={'encomp': ['py.typed']},
     python_requires='~=3.9',
     install_requires=install_requires,
     long_description=long_description,

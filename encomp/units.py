@@ -21,7 +21,7 @@ from __future__ import annotations
 import re
 import warnings
 import numbers
-from typing import Union, Optional, Generic, TypeVar
+from typing import Union, Optional, Generic, TypeVar, Any
 from functools import lru_cache
 import sympy as sp
 import numpy as np
@@ -34,6 +34,7 @@ from pint.converters import ScaleConverter
 
 from encomp.settings import SETTINGS
 from encomp.utypes import (Magnitude,
+                           MagnitudeValue,
                            _DIMENSIONALITIES_REV,
                            _BASE_SI_UNITS,
                            Density,
@@ -520,6 +521,63 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
     @classmethod
     def validate(cls, qty: Quantity) -> Quantity:
         return cls(qty.m, qty.u)
+
+    def __mul__(self, other: Union[Q, MagnitudeValue]) -> Quantity:
+        return super().__mul__(other)
+
+    def __rmul__(self, other: Union[Q, MagnitudeValue]) -> Quantity:
+        return super().__rmul__(other)
+
+    def __imul__(self, other: Union[Q, MagnitudeValue]) -> Quantity:
+        return super().__imul__(other)
+
+    def __add__(self, other: Q) -> Quantity:
+        return super().__add__(other)
+
+    def __pow__(self, other: MagnitudeValue) -> Quantity:
+        return super().__pow__(other)
+
+    def __sub__(self, other: Q) -> Quantity:
+        return super().__sub__(other)
+
+    def __div__(self, other: Union[Q, MagnitudeValue]) -> Quantity:
+        return super().__div__(other)
+
+    def __idiv__(self, other: Union[Q, MagnitudeValue]) -> Quantity:
+        return super().__idiv__(other)
+
+    def __iadd__(self, other: Q) -> Quantity:
+        return super().__iadd__(other)
+
+    def __isub__(self, other: Q) -> Quantity:
+        return super().__isub__(other)
+
+    def __floordiv__(self, other: Union[Q, MagnitudeValue]) -> Quantity:
+        return super().__floordiv__(other)
+
+    def __ifloordiv__(self, other: Union[Q, MagnitudeValue]) -> Quantity:
+        return super().__ifloordiv__(other)
+
+    def __truediv__(self, other: Union[Q, MagnitudeValue]) -> Quantity:
+        return super().__truediv__(other)
+
+    def __itruediv__(self, other: Union[Q, MagnitudeValue]) -> Quantity:
+        return super().__itruediv__(other)
+
+    def __gt__(self, other: Q) -> Quantity:
+        return super().__gt__(other)
+
+    def __ge__(self, other: Q) -> Quantity:
+        return super().__ge__(other)
+
+    def __lt__(self, other: Q) -> Quantity:
+        return super().__lt__(other)
+
+    def __le__(self, other: Q) -> Quantity:
+        return super().__le__(other)
+
+    def __eq__(self, other: Any) -> bool:
+        return super().__eq__(other)
 
 
 # override the implementation of the Quantity class for the current registry

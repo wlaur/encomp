@@ -10,11 +10,9 @@ Some commonly used derived dimensionalities (like density) are defined for conve
 from typing import Generic, TypeVar
 from typing import Union
 
-from decimal import Decimal
 
 import numpy as np
 import pandas as pd
-from uncertainties.core import AffineScalarFunc
 from pint.unit import UnitsContainer
 
 
@@ -27,8 +25,7 @@ class Dimensionality(UnitsContainer, Generic[R]):
 
 
 # type alias for the magnitude input to Quantity
-# also accept Decimal and AffineScalarFunc (from uncertainties package)
-MagnitudeValue = Union[float, int, Decimal, AffineScalarFunc]
+MagnitudeValue = Union[float, int]
 Magnitude = Union[MagnitudeValue,
                   list[MagnitudeValue],
                   tuple[MagnitudeValue, ...],
