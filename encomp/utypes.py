@@ -60,6 +60,7 @@ DynamicViscosity = Mass / Length / Time
 KinematicViscosity = Length**2 / Time
 Frequency = 1 / Time
 MolarMass = Mass / Substance
+HeatingValue = Energy / Mass
 
 
 # these dimensionalities might have different names depending on context
