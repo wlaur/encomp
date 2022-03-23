@@ -53,17 +53,87 @@ def test_Fluid():
     ret = Fluid('water', T=Q([], 'C'), P=Q(np.array([]), 'bar')).H.m
     assert isinstance(ret, np.ndarray) and ret.size == 0
 
-    # returns single float (not 1-element list)
+    # 1-element list or array works in the same way as scalar,
+    # except that the output is also a 1-element list or array
+    ret = Water(
+        P=Q([2, 3], 'bar'),
+        Q=Q([0.5])
+    ).D.m
+
+    assert isinstance(ret, np.ndarray) and ret.size == 2
+
+    ret = Water(
+        P=Q([2, 3], 'bar'),
+        Q=Q(0.5)
+    ).D.m
+
+    assert isinstance(ret, np.ndarray) and ret.size == 2
+
+    ret = Water(
+        P=Q([2], 'bar'),
+        Q=Q([0.5])
+    ).D.m
+
+    assert isinstance(ret, np.ndarray) and ret.size == 1
+
+    ret = Water(
+        P=Q([2], 'bar'),
+        Q=Q(0.5)
+    ).D.m
+
+    assert isinstance(ret, np.ndarray) and ret.size == 1
+
+    ret = Water(
+        P=Q(2, 'bar'),
+        Q=Q([0.5])
+    ).D.m
+
+    assert isinstance(ret, np.ndarray) and ret.size == 1
+
+    ret = Water(
+        P=Q(2, 'bar'),
+        Q=Q(0.5)
+    ).D.m
+
+    assert isinstance(ret, float)
+
+    ret = Water(
+        P=Q([], 'bar'),
+        Q=Q([0.5])
+    ).D.m
+
+    assert isinstance(ret, np.ndarray) and ret.size == 0
+
+    ret = Water(
+        P=Q([], 'bar'),
+        Q=Q([])
+    ).D.m
+
+    assert isinstance(ret, np.ndarray) and ret.size == 0
+
+    ret = Water(
+        P=Q(np.array([]), 'bar'),
+        Q=Q(np.array([]))
+    ).D.m
+
+    assert isinstance(ret, np.ndarray) and ret.size == 0
+
+    # returns 1-element list
     assert isinstance(Fluid('water', T=Q([23], 'C'), P=Q([1], 'bar')).H.m,
-                      float)
+                      np.ndarray)
 
     assert isinstance(Fluid('water', T=Q(23, 'C'), P=Q([1], 'bar')).H.m,
-                      float)
+                      np.ndarray)
 
     assert isinstance(Fluid('water', T=Q([23], 'C'), P=Q(1, 'bar')).H.m,
+                      np.ndarray)
+
+    # returns float
+    assert isinstance(Fluid('water', T=Q(23, 'C'), P=Q(1, 'bar')).H.m,
                       float)
 
     with pytest.raises(ValueError):
+
         Fluid('water', T=Q([np.nan, np.nan], 'C'),
               P=Q([np.nan, np.nan, np.nan], 'bar')).H
         Fluid('water', T=Q([np.nan, np.nan], 'C'), P=Q([], 'bar')).H

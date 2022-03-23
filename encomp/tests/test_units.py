@@ -6,6 +6,7 @@ import pandas as pd
 
 
 from encomp.units import Quantity, Q, wraps, check, DimensionalityError
+from encomp.fluids import Water
 from encomp.utypes import *
 
 
@@ -193,3 +194,71 @@ def test_typechecked():
 
     with pytest.raises(TypeError):
         func_a(Q(2, 'meter'))
+
+
+def test_dataframe_assign():
+
+    df_multiple_rows = pd.DataFrame(
+        {
+            'A': [1, 2, 3],
+            'B': [1, 2, 3],
+        }
+    )
+
+    df_single_row = pd.DataFrame(
+        {
+            'A': [1],
+            'B': [1],
+        }
+    )
+
+    df_empty = pd.DataFrame(
+        {
+            'A': [],
+            'B': [],
+        }
+    )
+
+    for df in [df_multiple_rows, df_single_row, df_empty]:
+
+        df['C'] = Q(df.A, 'bar') * Q(25, 'meter')
+
+        df['Temp'] = Q(df.A, 'degC')
+
+        with pytest.raises(AttributeError):
+
+            density = Water(
+
+                # this is pd.Series[float]
+                T=df.Temp,
+                Q=Q(0.5)
+
+            ).D
+
+        density = Water(
+
+            # wrap in Quantity() to use the Water class
+            T=Q(df.Temp, 'degC'),
+            Q=Q(0.5)
+
+        ).D
+
+        # implicitly strips magnitude in whatever unit the Quantity happens to have
+        df['density'] = density
+
+        # assigns a column with specific unit
+        df['density_with_unit'] = density.to('kg/m3')
+
+        # the .m accessor is not necessary for vectors
+        df['density_with_unit_magnitude'] = density.to('kg/m3').m
+
+        # this does not work -- pandas function is_list_like(Q(4, 'bar')) -> True
+        # which means that this fails internally in pandas
+        # ValueError: Length of values (1) does not match length of index (3)
+        # df['D'] = Q(4, 'bar')
+
+        # i.e. the .m accessor must be used for scalar Quantity assignment
+
+        df['E'] = Q(df.A, 'bar').m
+        df['F'] = Q(4, 'bar').m
+

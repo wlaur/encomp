@@ -246,6 +246,19 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
     def get_unit(cls, unit_name: str) -> Unit:
         return cls._REGISTRY.parse_units(unit_name)
 
+    def __len__(self) -> int:
+
+        if isinstance(self._magnitude, (float, int)):
+
+            raise TypeError(
+                f'Quantity with scalar magnitude ({self._magnitude}) has no len(). '
+                'In case this error occurs when assigning to a pd.DataFrame, '
+                'try assigning the magnitude instead of the quantity '
+                '(df["column"] = qty.m instead of df["column"] = qty)'
+            )
+
+        return len(self._magnitude)
+
     def __new__(
             cls,
             val: Union[Magnitude, Quantity, str],

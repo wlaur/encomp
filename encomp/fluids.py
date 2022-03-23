@@ -418,34 +418,62 @@ class CoolPropFluid:
             *points: tuple[CProperty, Union[float, np.ndarray]]
     ) -> Union[float, np.ndarray]:
 
+        # case 1: all inputs are scalar, output is scalar
         if all(isinstance(pt[1], (float, int)) for pt in points):
             return self.evaluate_single(output, *points)  # type: ignore
 
-        sizes = [pt[1].size for pt in points
-                 if isinstance(pt[1], np.ndarray)]
+        # at this point, the output will be a vector of at least length 1
 
-        if len(set(sizes)) != 1:
-            raise ValueError('All inputs must have the same size, '
-                             f'passed {points} with sizes {sizes}')
+        def single_element_vector_to_float(x: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
 
-        N = sizes[0]
+            if isinstance(x, float):
+                return x
 
-        shapes = [pt[1].shape for pt in points
-                  if isinstance(pt[1], np.ndarray)]
+            if isinstance(x, np.ndarray) and x.size == 1:
+                return float(x[0])
 
-        if len(set(shapes)) != 1:
-            raise ValueError('All inputs must have the same shape, '
-                             f'passed {points} with shapes {shapes}')
+            return x
 
-        shape = shapes[0]
+        points = tuple(
+            (p, single_element_vector_to_float(v)) for p, v in points
+        )
 
-        def validate_arr(x: Union[float, np.ndarray]) -> np.ndarray:
+        sizes = [v.size for p, v in points
+                 if isinstance(v, np.ndarray)]
+
+        shapes = [v.shape for p, v in points
+                  if isinstance(v, np.ndarray)]
+
+        # the sizes list is empty if all inputs were 1-element vectors
+        if sizes:
+
+            N = sizes[0]
+            shape = shapes[0]
+
+            # 1-length vectors were converted to float, so this error will be relevant
+            if len(set(sizes)) != 1:
+                raise ValueError('All inputs must have the same size, '
+                                 f'passed {points} with sizes {sizes}')
+
+            if len(set(shapes)) != 1:
+                raise ValueError('All inputs must have the same shape, '
+                                 f'passed {points} with shapes {shapes}')
+
+        else:
+
+            N = 1
+            shape = (1, )
+
+        def expand_scalars(x: Union[float, np.ndarray]) -> np.ndarray:
 
             if isinstance(x, (float, int)):
                 return np.repeat(x, N).astype(float).reshape(shape)
+
             return x.astype(float)
 
-        points_arr = [(pt[0], validate_arr(pt[1])) for pt in points]
+        points_arr = tuple(
+            (p, expand_scalars(v)) for p, v in points
+        )
 
         return self.evaluate_multiple(output, *points_arr)
 
@@ -604,10 +632,6 @@ class CoolPropFluid:
         unit = self.get_coolprop_unit(prop)
 
         val = qty.to(unit).m
-
-        # 1-element arrays will be converted to floats
-        if isinstance(val, np.ndarray) and val.size == 1:
-            val = float(val)
 
         return val
 
