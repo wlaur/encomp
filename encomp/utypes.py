@@ -42,15 +42,15 @@ def base_dimension(name: str) -> Dimensionality:
 
 
 Dimensionless = Dimensionality() * _Dimensionless
-Normal = base_dimension('normal')
+Length = Dimensionality({'[length]': 1}) * _Dimensionless
+Mass = Dimensionality({'[mass]': 1}) * _Dimensionless
+Time = Dimensionality({'[time]': 1}) * _Dimensionless
+Temperature = Dimensionality({'[temperature]': 1}) * _Dimensionless
+Substance = Dimensionality({'[substance]': 1}) * _Dimensionless
+Current = Dimensionality({'[current]': 1}) * _Dimensionless
+Luminosity = Dimensionality({'[luminosity]': 1}) * _Dimensionless
 
-Length = base_dimension('length')
-Mass = base_dimension('mass')
-Time = base_dimension('time')
-Temperature = base_dimension('temperature')
-Substance = base_dimension('substance')
-Current = base_dimension('current')
-Luminosity = base_dimension('luminosity')
+Normal = Dimensionality({'[normal]': 1}) * _Dimensionless
 
 
 # derived dimensionalities
@@ -80,6 +80,8 @@ SpecificEnthalpy = Energy / Mass
 HeatCapacity = Energy / Mass / Temperature
 ThermalConductivity = Power / Length / Temperature
 HeatTransferCoefficient = Power / Area / Temperature
+MassPerNormalVolume = Mass / NormalVolume
+MassPerEnergy = Mass / Energy
 
 _DIMENSIONALITIES_REV: dict[str, UnitsContainer] = {
     'Dimensionless': Dimensionless,
@@ -116,7 +118,9 @@ _DIMENSIONALITIES_REV: dict[str, UnitsContainer] = {
 
     'HeatCapacity': HeatCapacity,
     'ThermalConductivity': ThermalConductivity,
-    'HeatTransferCoefficient': HeatTransferCoefficient
+    'HeatTransferCoefficient': HeatTransferCoefficient,
+    'MassPerNormalVolume': MassPerNormalVolume,
+    'MassPerEnergy': MassPerEnergy
 }
 
 # might not contain all elements of _DIMENSIONALITIES_REV
