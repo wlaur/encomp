@@ -176,6 +176,8 @@ def test_custom_units():
     Q[Normal * VolumeFlow](2, 'Nm**3/hour').to('normal liter/sec')
 
     Q(2, 'normal liter air / day')
+    Q(2, '1/Nm3').to('1 / (liter normal)')
+
 
 def test_wraps():
 

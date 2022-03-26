@@ -128,10 +128,10 @@ def parse_dimensionality_name(name: str) -> UnitsContainer:
         return _DIMENSIONALITIES_REV[name]
 
     raise ValueError(
-        f'Dimensionality "{name}" cannot be parsed as a dimensionality. '
-        f'Available dimensionalities:\n{", ".join(_DIMENSIONALITIES_REV)}\n'
+        f'"{name}" is not recognized as a dimensionality. '
+        f'Available dimensionalities:\n\n{",".join(_DIMENSIONALITIES_REV)}\n\n'
         'To use a dimensionality that is not listed above, pass an '
-        'encomp.utypes.Dimensionality instance instead of a string: '
+        'encomp.utypes.Dimensionality or pint.unit.UnitsContainer instance: '
         'CustomDimension = Mass**2 / Time; qty_cls = Quantity[CustomDimension]'
     )
 
@@ -532,7 +532,9 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
         # so we'll not even try to parse that
         for n in ['nm³', 'Nm³', 'nm3', 'Nm3', 'nm**3', 'Nm**3', 'nm^3', 'Nm^3']:
             if n in unit:
-                unit = unit.replace(n, 'normal * m³')
+                # include brackets, otherwise "kg/nm3" is
+                # incorrectly converted to "kg/normal*m3"
+                unit = unit.replace(n, '(normal * m³)')
 
         # replace unicode Δ°C or Δ°F with delta_degC or delta_degF
         unit = re.sub(r'\bΔ\s*°(C|F)\b', r'delta_deg\g<1>', unit)

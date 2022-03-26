@@ -62,6 +62,7 @@ MassFlow = Mass / Time
 VolumeFlow = Volume / Time
 NormalVolumeFlow = NormalVolume / Time
 Density = Mass / Volume
+SpecificVolume = 1 / Density
 Energy = Mass * Length**2 / Time**2
 Power = Energy / Time
 Velocity = Length / Time
@@ -74,6 +75,7 @@ MolarMass = Mass / Substance
 HeatingValue = Energy / Mass
 LowerHeatingValue = Energy / Mass
 HigherHeatingValue = Energy / Mass
+SpecificEnthalpy = Energy / Mass
 
 HeatCapacity = Energy / Mass / Temperature
 ThermalConductivity = Power / Length / Temperature
@@ -97,6 +99,7 @@ _DIMENSIONALITIES_REV: dict[str, UnitsContainer] = {
     'VolumeFlow': VolumeFlow,
     'NormalVolumeFlow': NormalVolumeFlow,
     'Density': Density,
+    'SpecificVolume': SpecificVolume,
     'Energy': Energy,
     'Power': Power,
     'Velocity': Velocity,
@@ -107,8 +110,9 @@ _DIMENSIONALITIES_REV: dict[str, UnitsContainer] = {
 
     'LowerHeatingValue': LowerHeatingValue,
     'HigherHeatingValue': HigherHeatingValue,
-    # the most general name last, will overwrite in dict _DIMENSIONALITIES
     'HeatingValue': HeatingValue,
+    # the most general name last, will overwrite in dict _DIMENSIONALITIES
+    'SpecificEnthalpy': SpecificEnthalpy,
 
     'HeatCapacity': HeatCapacity,
     'ThermalConductivity': ThermalConductivity,
