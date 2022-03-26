@@ -127,7 +127,9 @@ A ``TypeError`` will be raised in case the function ``func`` is called with inco
 Custom dimensionalities
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-By default, the seven SI dimensionalities (and combinations of these) are defined.
+By default, the seven SI dimensionalities (and combinations of these) are defined, along with some commonly used media (water, air, fuel).
+Additionally, the ``normal`` dimensionality is defined (used to represent normal volume).
+
 The function :py:func:`encomp.units.define_dimensionality` can be used to define a new, custom dimensionality.
 In case the dimensionality already exists, ``DimensionalityRedefinitionError`` is raised.
 
@@ -136,10 +138,10 @@ In case the dimensionality already exists, ``DimensionalityRedefinitionError`` i
 
     from encomp.units import define_dimensionality
 
-    define_dimensionality('air')
+    define_dimensionality('dry_air')
     define_dimensionality('oxygen')
 
-    m_air = Q(5, 'kg * air')
+    m_air = Q(5, 'kg * dry_air')
     n_O2 = Q(2.4, 'mol * oxygen')
     M_O2 = Q(32, 'g/mol')
 

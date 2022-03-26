@@ -29,20 +29,20 @@ import pandas as pd
 
 
 import pint
-from pint.unit import UnitsContainer, Unit, UnitDefinition
-from pint.converters import ScaleConverter
+from pint.unit import UnitsContainer, Unit
+from pint.registry import UnitRegistry
 
 from encomp.settings import SETTINGS
 from encomp.utypes import (Magnitude,
                            MagnitudeValue,
+                           _DIMENSIONALITIES,
                            _DIMENSIONALITIES_REV,
                            _BASE_SI_UNITS,
                            Density,
                            Mass,
                            MassFlow,
                            Volume,
-                           VolumeFlow,
-                           get_dimensionality_name)
+                           VolumeFlow)
 
 if SETTINGS.ignore_ndarray_unit_stripped_warning:
     warnings.filterwarnings(
@@ -61,36 +61,134 @@ class DimensionalityRedefinitionError(ValueError):
     pass
 
 
-# always use pint.get_application_registry() to get the UnitRegistry instance
-# there should only be one registry at a time, pint raises ValueError
-# in case quantities from different registries interact
-ureg = pint.get_application_registry()
-
-
 # keep track of user-created dimensions
 _CUSTOM_DIMENSIONS: list[str] = []
 
+
+def get_dimensionality_name(dim: UnitsContainer) -> str:
+    """
+    Returns a readable name for a dimensionality.
+
+    Parameters
+    ----------
+    dim : UnitsContainer
+        input dimensionality
+
+    Returns
+    -------
+    str
+        Readable name, or str representation of the input
+    """
+
+    if dim in _DIMENSIONALITIES:
+        return _DIMENSIONALITIES[dim]
+
+    # custom dimensions will be separated to increase readability
+    custom = {}
+
+    for n in _CUSTOM_DIMENSIONS:
+
+        dimension_str = f'[{n}]'
+
+        if dimension_str in dim:
+            exp = dim[dimension_str]
+            custom[dimension_str] = exp
+
+    if not len(custom):
+        return str(dim)
+
+    dim = dim.remove(list(custom))
+
+    if '[normal]' in custom:
+
+        custom_without_normal = custom.copy()
+        dim_with_normal = dim.copy()
+
+        normal_exp = custom_without_normal.pop('[normal]')
+        dim_with_normal = dim_with_normal.add('[normal]', normal_exp)
+
+        # move the normal part to the base dimensionality
+        # in case that is an explicitly defined dimensionality
+        if dim_with_normal in _DIMENSIONALITIES:
+            dim = dim_with_normal
+            custom = custom_without_normal
+
+    base_name = _DIMENSIONALITIES.get(dim, str(dim))
+
+    custom_dimensions = UnitsContainer(custom)
+    name = f'{base_name} * {custom_dimensions}'
+
+    return name
+
+
+def parse_dimensionality_name(name: str) -> UnitsContainer:
+
+    # this is case-sensitive
+    if name in _DIMENSIONALITIES_REV:
+        return _DIMENSIONALITIES_REV[name]
+
+    raise ValueError(
+        f'Dimensionality "{name}" cannot be parsed as a dimensionality. '
+        f'Available dimensionalities:\n{", ".join(_DIMENSIONALITIES_REV)}\n'
+        'To use a dimensionality that is not listed above, pass an '
+        'encomp.utypes.Dimensionality instance instead of a string: '
+        'CustomDimension = Mass**2 / Time; qty_cls = Quantity[CustomDimension]'
+    )
+
+
+# there should only be one registry at a time, pint raises ValueError
+# in case quantities from different registries interact
+
+class CustomRegistry:
+    """
+    Custom registry implementation, based on
+    ``LazyRegistry``.
+    """
+
+    def __init__(self, args=None, kwargs=None):
+        self.__dict__['params'] = args or (), kwargs or {}
+
+    def __init(self):
+        args, kwargs = self.__dict__['params']
+        kwargs['on_redefinition'] = 'raise'
+        kwargs['filename'] = str(SETTINGS.units.resolve().absolute())
+        self.__class__ = UnitRegistry
+        self.__init__(*args, **kwargs)
+        self._after_init()
+
+    def __getattr__(self, item):
+        if item == '_on_redefinition':
+            return 'raise'
+        self.__init()
+        return getattr(self, item)
+
+    def __setattr__(self, key, value):
+        if key == '__class__':
+            super().__setattr__(key, value)
+        else:
+            self.__init()
+            setattr(self, key, value)
+
+    def __getitem__(self, item):
+        self.__init()
+        return self[item]
+
+    def __call__(self, *args, **kwargs):
+        self.__init()
+        return self(*args, **kwargs)
+
+
+ureg = CustomRegistry()
+
+
 # if False, degC must be explicitly converted to K when multiplying
 ureg.autoconvert_offset_to_baseunit = SETTINGS.autoconvert_offset_to_baseunit
+
 
 # enable support for matplotlib axis ticklabels etc...
 try:
     ureg.setup_matplotlib()
 except ImportError:
-    pass
-
-
-try:
-    # define percent as 1 / 100
-    ureg.define(
-        UnitDefinition(
-            'percent',
-            '%',
-            (),
-            ScaleConverter(1 / 100.0)
-        )
-    )
-except pint.errors.RedefinitionError:
     pass
 
 
@@ -156,15 +254,17 @@ class QuantityMeta(type):
 
         if isinstance(dim, str):
 
+            dim = dim.strip()
+
             # pint also uses empty string to represent dimensionless
             if dim == '':
                 dim = 'Dimensionless'
 
-            # this is case-sensitive
-            if dim in _DIMENSIONALITIES_REV:
-                dim = _DIMENSIONALITIES_REV[dim]
-            else:
-                raise ValueError(f'Dimension {dim} is not defined')
+            try:
+                dim = parse_dimensionality_name(dim)
+            except Exception as e:
+                raise ValueError(
+                    f'Dimensionality "{dim}" is not defined') from e
 
         if not isinstance(dim, UnitsContainer):
             raise ValueError('Quantity type annotation must be a dimensionality, '
@@ -181,7 +281,8 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
     and integration with other libraries.
     """
 
-    _REGISTRY = ureg
+    # TODO: mypy complains about this
+    _REGISTRY: CustomRegistry = ureg
 
     # used to validate dimensionality using type checking,
     # if None the dimensionality is not checked
@@ -195,6 +296,8 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
     FORMATTING_SPECS = ('~P', '~L', '~H', '~Lx')
 
     # common unit names not supported by pint, also some misspellings
+    # TODO: these only work with the entire unit string as key, need to use ureg.define
+    # to override units at the pint parsing stage
     UNIT_CORRECTIONS = {
         'kpa': 'kPa',
         'mpa': 'MPa',
@@ -203,8 +306,10 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
         'C': 'degC',
         '°C': 'degC',
         '°F': 'degF',
-        'h': 'hour',
-        'km/h': 'km/hour',
+        'delta_C': 'delta_degC',
+        'delta_°C': 'delta_degC',
+        'delta_F': 'delta_degF',
+        'delta_°F': 'delta_degF',
         'kmh': 'km/hour',
         'mh2o': 'meter_H2O',
         'mH20': 'meter_H2O',
@@ -218,8 +323,7 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
         'feet_water': 'feet_H2O',
         'foot_water': 'feet_H2O',
         'ft_H2O': 'feet_H2O',
-        'ft_water': 'feet_H2O',
-        '%': 'percent'
+        'ft_water': 'feet_H2O'
     }
 
     @staticmethod
@@ -240,7 +344,8 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
 
         raise ValueError(
             f'Incorrect input for unit: {unit} ({type(unit)}), '
-            'expected Unit, UnitsContainer, str or Quantity')
+            'expected Unit, UnitsContainer, str or Quantity'
+        )
 
     @classmethod
     def get_unit(cls, unit_name: str) -> Unit:
@@ -422,13 +527,19 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
 
         unit = str(unit).strip()
 
-        # replace h with hr, pint interprets h as Planck constant
-        # h is the SI symbol for hour, should be supported
-        # use "planck_constant" to get the value for this constant
-        unit = re.sub(r'(\bh\b)', 'hr', unit)
+        # normal cubic meter, not nano or Newton
+        # there's no consistent way of writing normal liter,
+        # so we'll not even try to parse that
+        for n in ['nm³', 'Nm³', 'nm3', 'Nm3', 'nm**3', 'Nm**3', 'nm^3', 'Nm^3']:
+            if n in unit:
+                unit = unit.replace(n, 'normal * m³')
 
         # replace unicode Δ°C or Δ°F with delta_degC or delta_degF
         unit = re.sub(r'\bΔ\s*°(C|F)\b', r'delta_deg\g<1>', unit)
+
+        # percent & permille sign (pint cannot parse "%" and "‰" characters)
+        unit = unit.replace('%', 'percent')
+        unit = unit.replace('‰', 'permille')
 
         # add ** between letters and numbers if they
         # are right next to each other and if the number is at a word boundary
@@ -526,6 +637,18 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
             unit *= unit_i
 
         return cls(magnitude, unit).to_base_units()
+
+    @property
+    def dim(self) -> UnitsContainer:
+        return self.dimensionality
+
+    @property
+    def dimensionality_name(self) -> str:
+        return get_dimensionality_name(self.dimensionality)
+
+    @property
+    def dim_name(self) -> str:
+        return self.dimensionality_name
 
     @classmethod
     def __get_validators__(cls):
@@ -649,6 +772,21 @@ def define_dimensionality(name: str, symbol: str = None) -> None:
     ureg.define(definition_str)
 
     _CUSTOM_DIMENSIONS.append(name)
+
+
+try:
+
+    # define "normal" as a dimensionality (e.g. normal volume)
+    define_dimensionality('normal')
+
+    # define commonly used media as dimensionalities
+    define_dimensionality('air')
+    define_dimensionality('water')
+    define_dimensionality('fuel')
+
+# TODO: why does this happen when the module is reloaded with ipython?
+except pint.errors.DefinitionSyntaxError as e:
+    pass
 
 
 def set_quantity_format(fmt: str = 'compact') -> None:

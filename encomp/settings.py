@@ -33,6 +33,7 @@ class Settings(BaseSettings):
         The global environment variables are loaded even if no ``.env``-file was found.
 
     * ``DATA_DIRECTORY``: path to a directory with auxiliary data
+    * ``UNITS``: path to a file with unit definitions for ``pint``
     * ``ADDITIONAL_UNITS``: path to a file with additional unit definitions for ``pint``
     * ``TYPE_CHECKING``: whether to check parameter and return value types of the core
       library function. This does not impact user-defined functions, the
@@ -50,6 +51,8 @@ class Settings(BaseSettings):
     """
 
     data_directory: DirectoryPath = ENCOMP_BASE / 'data'
+
+    units: FilePath = data_directory / 'units.txt'
     additional_units: FilePath = data_directory / 'additional-units.txt'
 
     type_checking: bool = False

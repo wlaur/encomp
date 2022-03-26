@@ -19,7 +19,7 @@ from pint.unit import UnitsContainer
 R = TypeVar('R')
 
 
-# for mypy compatibility
+# mypy compatibility
 class Dimensionality(UnitsContainer, Generic[R]):
     pass
 
@@ -36,22 +36,31 @@ Magnitude = Union[MagnitudeValue,
 # NOTE: these must be defined as Dimensionality(...) * Dimensionless to avoid issues with mypy
 _Dimensionless: Dimensionality = Dimensionality()
 
+
+def base_dimension(name: str) -> Dimensionality:
+    return Dimensionality({f'[{name}]': 1}) * _Dimensionless
+
+
 Dimensionless = Dimensionality() * _Dimensionless
-Length = Dimensionality({'[length]': 1}) * _Dimensionless
-Mass = Dimensionality({'[mass]': 1}) * _Dimensionless
-Time = Dimensionality({'[time]': 1}) * _Dimensionless
-Temperature = Dimensionality({'[temperature]': 1}) * _Dimensionless
-Substance = Dimensionality({'[substance]': 1}) * _Dimensionless
-Current = Dimensionality({'[current]': 1}) * _Dimensionless
-Luminosity = Dimensionality({'[luminosity]': 1}) * _Dimensionless
+Normal = base_dimension('normal')
+
+Length = base_dimension('length')
+Mass = base_dimension('mass')
+Time = base_dimension('time')
+Temperature = base_dimension('temperature')
+Substance = base_dimension('substance')
+Current = base_dimension('current')
+Luminosity = base_dimension('luminosity')
 
 
 # derived dimensionalities
 Area = Length**2
 Volume = Length**3
+NormalVolume = Volume * Normal
 Pressure = Mass / Length / Time**2
 MassFlow = Mass / Time
 VolumeFlow = Volume / Time
+NormalVolumeFlow = NormalVolume / Time
 Density = Mass / Volume
 Energy = Mass * Length**2 / Time**2
 Power = Energy / Time
@@ -60,61 +69,57 @@ DynamicViscosity = Mass / Length / Time
 KinematicViscosity = Length**2 / Time
 Frequency = 1 / Time
 MolarMass = Mass / Substance
+
+# these dimensionalities might have different names depending on the context
 HeatingValue = Energy / Mass
+LowerHeatingValue = Energy / Mass
+HigherHeatingValue = Energy / Mass
 
-
-# these dimensionalities might have different names depending on context
 HeatCapacity = Energy / Mass / Temperature
 ThermalConductivity = Power / Length / Temperature
 HeatTransferCoefficient = Power / Area / Temperature
 
-_DIMENSIONALITIES: dict[UnitsContainer, str] = {
-    Dimensionless: 'Dimensionless',
-    Length: 'Length',
-    Mass: 'Mass',
-    Time: 'Time',
-    Temperature: 'Temperature',
-    Substance: 'Substance',
-    Current: 'Current',
-    Luminosity: 'Luminosity',
-    Area: 'Area',
-    Volume: 'Volume',
-    Pressure: 'Pressure',
-    MassFlow: 'MassFlow',
-    VolumeFlow: 'VolumeFlow',
-    Density: 'Density',
-    Energy: 'Energy',
-    Power: 'Power',
-    Velocity: 'Velocity',
-    DynamicViscosity: 'DynamicViscosity',
-    KinematicViscosity: 'KinematicViscosity',
-    Frequency: 'Frequency'
+_DIMENSIONALITIES_REV: dict[str, UnitsContainer] = {
+    'Dimensionless': Dimensionless,
+    'Normal': Normal,
+    'Length': Length,
+    'Mass': Mass,
+    'Time': Time,
+    'Temperature': Temperature,
+    'Substance': Substance,
+    'Current': Current,
+    'Luminosity': Luminosity,
+    'Area': Area,
+    'Volume': Volume,
+    'NormalVolume': NormalVolume,
+    'Pressure': Pressure,
+    'MassFlow': MassFlow,
+    'VolumeFlow': VolumeFlow,
+    'NormalVolumeFlow': NormalVolumeFlow,
+    'Density': Density,
+    'Energy': Energy,
+    'Power': Power,
+    'Velocity': Velocity,
+    'DynamicViscosity': DynamicViscosity,
+    'KinematicViscosity': KinematicViscosity,
+    'Frequency': Frequency,
+    'MolarMass': MolarMass,
+
+    'LowerHeatingValue': LowerHeatingValue,
+    'HigherHeatingValue': HigherHeatingValue,
+    # the most general name last, will overwrite in dict _DIMENSIONALITIES
+    'HeatingValue': HeatingValue,
+
+    'HeatCapacity': HeatCapacity,
+    'ThermalConductivity': ThermalConductivity,
+    'HeatTransferCoefficient': HeatTransferCoefficient
 }
 
-_DIMENSIONALITIES_REV = {
-    b: a for a, b in _DIMENSIONALITIES.items()}
+# might not contain all elements of _DIMENSIONALITIES_REV
+# dimensionalities can have multiple names
+_DIMENSIONALITIES = {
+    b: a for a, b in _DIMENSIONALITIES_REV.items()
+}
 
 
 _BASE_SI_UNITS: tuple[str, ...] = ('m', 'kg', 's', 'K', 'mol', 'A', 'cd')
-
-
-def get_dimensionality_name(dim: UnitsContainer) -> str:
-    """
-    Returns a readable name for a dimensionality.
-
-    Parameters
-    ----------
-    dim : UnitsContainer
-        input dimensionality
-
-    Returns
-    -------
-    str
-        Readable name, or str representation of the input
-    """
-
-    if dim in _DIMENSIONALITIES:
-        return _DIMENSIONALITIES[dim]
-
-    else:
-        return str(dim)

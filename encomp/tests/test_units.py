@@ -6,6 +6,7 @@ import pandas as pd
 
 
 from encomp.units import Quantity, Q, wraps, check, DimensionalityError
+
 from encomp.fluids import Water
 from encomp.utypes import *
 
@@ -143,6 +144,39 @@ def test_Q():
     assert (Q('1 m') ** 3).check(Volume)
 
 
+def test_custom_units():
+
+    # "ton" should always default to metric ton
+    assert (Q(1, 'ton') == Q(1, 'Ton') == Q(1, 'TON') == Q(
+        1, 'tonne') == Q(1, 'metric_ton') == Q(1000, 'kg'))
+
+    assert Q(1, 'US_ton') == Q(907.1847400000001, 'kg')
+
+    assert (Q(1, 'ton/hour') == Q(1, 'Ton/hour') == Q(1, 'TON/hour') ==
+            Q(1, 'tonne/hour') == Q(1, 'metric_ton/hour') == Q(1000, 'kg/hour'))
+
+    v1 = (Q(1000, 'liter') * Q(1, 'normal')).to_base_units().m
+    v2 = Q(1000, 'normal liter').to_base_units().m
+    v3 = Q(1, 'nm3').m
+    v4 = Q(1, 'Nm3').m
+
+    # floating point accuracy
+    assert round(v1, 10) == round(v2, 10) == round(v3, 10) == round(v4, 10)
+
+    factor = Q(12, 'Nm3 water/ (normal liter air)')
+    (Q(1, 'kg water') / factor).to('pound air')
+
+    Q['NormalVolume'](2, 'nm**3')
+
+    with pytest.raises(DimensionalityError):
+        Q['NormalVolumeFlow'](2, 'm**3/hour')
+
+    Q['NormalVolumeFlow'](2, 'Nm**3/hour').to('normal liter/sec')
+
+    Q[Normal * VolumeFlow](2, 'Nm**3/hour').to('normal liter/sec')
+
+    Q(2, 'normal liter air / day')
+
 def test_wraps():
 
     # @wraps(ret, args, strict=True|False) is a convenience
@@ -261,4 +295,3 @@ def test_dataframe_assign():
 
         df['E'] = Q(df.A, 'bar').m
         df['F'] = Q(4, 'bar').m
-
