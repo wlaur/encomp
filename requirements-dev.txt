@@ -5,6 +5,7 @@ data-science-types
 hypothesis
 twine
 Sphinx
+jinja2<3.0.3
 nbsphinx
 furo
 sphinx-inline-tabs
