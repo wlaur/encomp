@@ -174,7 +174,7 @@ In case a tuple or list is given as magnitude when creating a quantity, it will 
 
 
 
-Series objects are also converted to ``ndarray`` before constructing the quantity, which means that all metadata is removed.
+Pandas ``Series`` objects are converted to ``ndarray`` when constructing the quantity, which means that all metadata (such as index and name) is removed.
 
 
 .. code-block:: python
@@ -183,7 +183,7 @@ Series objects are also converted to ``ndarray`` before constructing the quantit
 
     s = pd.Series(arr, name='series_name')
 
-    pressure_ = Q(s, 'bar') # Series is converted to np.ndarray
+    pressure_ = Q(s, 'bar') # pd.Series is converted to np.ndarray
 
 
 Combining quantities
@@ -222,8 +222,6 @@ This is only required when defining the temperature difference directly.
 
     To raise an error (for example ``pint.errors.OffsetUnitCalculusError``) when doing ambiguous unit conversions, set the environment variable ``ENCOMP_AUTOCONVERT_OFFSET_TO_BASEUNIT`` to ``0``.
     See :py:class:`encomp.settings.Settings` for instructions on how to set global configuration parameters.
-
-
 
 
 
@@ -326,7 +324,7 @@ Using multiple inputs
 
 The CoolProp library supports vector inputs, which means that multiple inputs can be evaluated at the same time.
 The inputs must be instances of :py:class:`encomp.units.Quantity` with one-dimensional Numpy arrays as magnitude.
-All inputs must be the same length (or a single value).
+All inputs must be the same length (or a single scalar value).
 
 
 .. code-block:: python
@@ -352,7 +350,8 @@ All inputs must be the same length (or a single value).
     #  1.0: 'Supercritical fluid',
     #  8.0: 'Not imposed'}
 
-    # if one input is constant, it's converted to an array
+    # when one input is constant (float, int, single element array),
+    # it's repeated as an array
     Water(T=Q(np.linspace(25, 500, 10), '°C'),
           P=Q(5, 'bar'))
     # <Water (Variable), P=[500 500 500 500 500 500 500 500 500 500] kPa,
