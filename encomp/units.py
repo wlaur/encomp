@@ -425,7 +425,7 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
 
         # numpy array magnitudes must be copied, otherwise they will
         # be changed for the original object as well
-        # list input to pint.Quantity.__new__ will be convert to
+        # list input to pint.Quantity.__new__ will be converted to
         # np.ndarray, so there's no danger of modifying lists that are input to Quantity
         if isinstance(val, np.ndarray):
             val = val.copy()
@@ -447,7 +447,7 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
         return self._validate_unit(unit)
 
     @property
-    def m(self) -> Union[float, np.ndarray]:
+    def m(self) -> Union[float, int, np.ndarray]:
         return super().m
 
     def to(self,  # type: ignore[override]
@@ -511,8 +511,8 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
 
         * Fixes common misspellings and case-errors (kpa vs. kPa)
         * Adds ``**`` between the unit and the exponent if it's missing, for example ``kg/m3 → kg/m**3``.
-        * Replaces ``h`` with ``hr`` (hour), since ``pint`` interprets ``h`` as the Planck constant.
-          Use ``planck_constant`` to get this value if necessary.
+        * Parses "Nm³" (and variations of this) as "normal * m³"
+        * Converts % and ‰ to percent and permille
 
         Parameters
         ----------
@@ -522,7 +522,7 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
         Returns
         -------
         str
-            The corrected unit name, compatible with ``pint``
+            The corrected unit name
         """
 
         unit = str(unit).strip()
@@ -560,7 +560,7 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
         """
 
         if self.dimensionless:
-            return sp.sympify(self.m)
+            return sp.sympify(self.to_base_units().m)
 
         base_qty = self.to_base_units()
 
@@ -714,7 +714,7 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
     def __le__(self, other: Q) -> Quantity:
         return super().__le__(other)
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: Quantity) -> bool:
         return super().__eq__(other)
 
 
