@@ -9,10 +9,6 @@ that the dimensionality of the unit is correct.
 .. todo::
     When/if ``pint`` implements a typing system (there is an open PR for this),
     this module will have to be rewritten to be compatible with that.
-
-.. note::
-    This module will modify the default ``pint`` registry -- do not import
-    in case the default behavior of the unit registry is expected.
 """
 
 
