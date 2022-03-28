@@ -60,7 +60,8 @@ if __INTERACTIVE__:
     set_matplotlib_formats(SETTINGS.matplotlib_notebook_format)
 
     # this is required to get table output in PDF
-    pd.options.display.latex.repr = True
+    # set to False as default
+    pd.options.display.latex.repr = False
 
 
 def mprint(x):
