@@ -8,6 +8,8 @@ dependencies:
   - scipy
   - jupyter
   - CoolProp
+  - fire
   - pip:
     - -r requirements.txt
+    - -r requirements-optional.txt
     - -r requirements-dev.txt

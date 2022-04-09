@@ -3,7 +3,7 @@ FROM continuumio/miniconda3
 WORKDIR /app
 
 # copy environment specification and requirements and create the env
-COPY environment.yml requirements.txt requirements-dev.txt ./
+COPY environment.yml requirements.txt requirements-optional requirements-dev.txt ./
 RUN conda env create -f environment.yml
 
 # activate the env automatically for each new shell

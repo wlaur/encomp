@@ -1,5 +1,10 @@
 import os
-import fire
+
+try:
+    import fire
+except ImportError:
+    print('This script requires the "fire" package: pip install fire')
+    fire = None
 
 
 def build_docs():

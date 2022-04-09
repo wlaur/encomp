@@ -1,4 +1,3 @@
-fire
 python-dateutil
 python-dotenv
 pydantic
@@ -12,7 +11,4 @@ seaborn
 sympy
 pint
 uncertainties
-fluids
-thermo
-ht
 symbolic-equation
