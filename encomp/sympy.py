@@ -9,8 +9,17 @@ from functools import lru_cache
 
 import numpy as np
 import sympy as sp
-from sympy.utilities.lambdify import lambdify, lambdastr
 from sympy import default_sort_key
+
+try:
+    from sympy.utilities.lambdify import lambdify, lambdastr
+except ImportError:
+
+    def lambdify(*args, **kwargs) -> None:
+        raise NotImplementedError()
+
+    lambdastr = lambdify
+
 from symbolic_equation import Eq as Eq_symbolic
 
 from encomp.settings import SETTINGS
