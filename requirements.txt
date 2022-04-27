@@ -9,6 +9,6 @@ scipy
 matplotlib
 seaborn
 sympy
-pint
+pint>=0.19.1
 uncertainties
 symbolic-equation
