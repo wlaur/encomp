@@ -53,7 +53,7 @@ def ideal_gas_density(T: Quantity[Temperature],
     """
 
     # directly from ideal gas law
-    rho = (P * M) / (R * T)
+    rho = (P * M) / (R * T.to('K'))
 
     return rho.to('kg/m³')
 
