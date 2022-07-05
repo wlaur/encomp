@@ -11,6 +11,7 @@ import numpy as np
 
 from encomp.math import interpolate
 from encomp.units import Quantity
+from encomp.utypes import Power, MassFlow, VolumeFlow, Pressure
 from encomp.misc import isinstance_types
 
 
@@ -55,16 +56,16 @@ class CentrifugalPump(Pump):
     def check_units(cls, v):
 
         if not isinstance_types(Quantity(1, v[0]),
-                                Union[Quantity['MassFlow'],
-                                      Quantity['VolumeFlow']]):
+                                Union[Quantity[MassFlow],
+                                      Quantity[VolumeFlow]]):
             raise ValueError('First unit is mass or volume flow, '
                              f'passed "{v[0]}"')
 
-        if not isinstance_types(Quantity(1, v[1]), Quantity['Pressure']):
+        if not isinstance_types(Quantity(1, v[1]), Quantity[Pressure]):
             raise ValueError('Second unit is head (pressure), '
                              f'passed "{v[1]}"')
 
-        if len(v) == 3 and not isinstance_types(Quantity(1, v[2]), Quantity['Power']):
+        if len(v) == 3 and not isinstance_types(Quantity(1, v[2]), Quantity[Power]):
             raise ValueError('Third unit is power, '
                              f'passed "{v[2]}"')
 

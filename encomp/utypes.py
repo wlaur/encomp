@@ -7,7 +7,9 @@ The dimensionalities defined in this module can be combined with ``*`` and ``/``
 Some commonly used derived dimensionalities (like density) are defined for convenience.
 """
 
-from typing import Generic, TypeVar
+from __future__ import annotations
+
+from typing import TypeVar, Union, Any, Annotated
 from typing import Union
 
 
@@ -15,119 +17,265 @@ import numpy as np
 import pandas as pd
 from pint.unit import UnitsContainer
 
-
-R = TypeVar('R')
-
-
-# mypy compatibility
-class Dimensionality(UnitsContainer, Generic[R]):
-    pass
+DimensionalityName = Annotated[str, 'Dimensionality name']
 
 
 # type alias for the magnitude input to Quantity
 MagnitudeValue = Union[float, int]
+
 Magnitude = Union[MagnitudeValue,
                   list[MagnitudeValue],
                   tuple[MagnitudeValue, ...],
-                  np.ndarray,
+                  np.ndarray[Any, Any],
                   pd.Series]
-
-# base dimensionalities: the 7 base dimensions in the SI system and dimensionless
-# NOTE: these must be defined as Dimensionality(...) * Dimensionless to avoid issues with mypy
-_Dimensionless: Dimensionality = Dimensionality()
-
-
-def base_dimension(name: str) -> Dimensionality:
-    return Dimensionality({f'[{name}]': 1}) * _Dimensionless
-
-
-Dimensionless = Dimensionality() * _Dimensionless
-Length = Dimensionality({'[length]': 1}) * _Dimensionless
-Mass = Dimensionality({'[mass]': 1}) * _Dimensionless
-Time = Dimensionality({'[time]': 1}) * _Dimensionless
-Temperature = Dimensionality({'[temperature]': 1}) * _Dimensionless
-Substance = Dimensionality({'[substance]': 1}) * _Dimensionless
-Current = Dimensionality({'[current]': 1}) * _Dimensionless
-Luminosity = Dimensionality({'[luminosity]': 1}) * _Dimensionless
-
-Normal = Dimensionality({'[normal]': 1}) * _Dimensionless
-
-
-# derived dimensionalities
-Area = Length**2
-Volume = Length**3
-NormalVolume = Volume * Normal
-Pressure = Mass / Length / Time**2
-MassFlow = Mass / Time
-VolumeFlow = Volume / Time
-NormalVolumeFlow = NormalVolume / Time
-Density = Mass / Volume
-SpecificVolume = 1 / Density
-Energy = Mass * Length**2 / Time**2
-Power = Energy / Time
-Velocity = Length / Time
-DynamicViscosity = Mass / Length / Time
-KinematicViscosity = Length**2 / Time
-Frequency = 1 / Time
-MolarMass = Mass / Substance
-
-# these dimensionalities might have different names depending on the context
-HeatingValue = Energy / Mass
-LowerHeatingValue = Energy / Mass
-HigherHeatingValue = Energy / Mass
-SpecificEnthalpy = Energy / Mass
-
-HeatCapacity = Energy / Mass / Temperature
-ThermalConductivity = Power / Length / Temperature
-HeatTransferCoefficient = Power / Area / Temperature
-MassPerNormalVolume = Mass / NormalVolume
-MassPerEnergy = Mass / Energy
-
-_DIMENSIONALITIES_REV: dict[str, UnitsContainer] = {
-    'Dimensionless': Dimensionless,
-    'Normal': Normal,
-    'Length': Length,
-    'Mass': Mass,
-    'Time': Time,
-    'Temperature': Temperature,
-    'Substance': Substance,
-    'Current': Current,
-    'Luminosity': Luminosity,
-    'Area': Area,
-    'Volume': Volume,
-    'NormalVolume': NormalVolume,
-    'Pressure': Pressure,
-    'MassFlow': MassFlow,
-    'VolumeFlow': VolumeFlow,
-    'NormalVolumeFlow': NormalVolumeFlow,
-    'Density': Density,
-    'SpecificVolume': SpecificVolume,
-    'Energy': Energy,
-    'Power': Power,
-    'Velocity': Velocity,
-    'DynamicViscosity': DynamicViscosity,
-    'KinematicViscosity': KinematicViscosity,
-    'Frequency': Frequency,
-    'MolarMass': MolarMass,
-
-    'LowerHeatingValue': LowerHeatingValue,
-    'HigherHeatingValue': HigherHeatingValue,
-    'HeatingValue': HeatingValue,
-    # the most general name last, will overwrite in dict _DIMENSIONALITIES
-    'SpecificEnthalpy': SpecificEnthalpy,
-
-    'HeatCapacity': HeatCapacity,
-    'ThermalConductivity': ThermalConductivity,
-    'HeatTransferCoefficient': HeatTransferCoefficient,
-    'MassPerNormalVolume': MassPerNormalVolume,
-    'MassPerEnergy': MassPerEnergy
-}
-
-# might not contain all elements of _DIMENSIONALITIES_REV
-# dimensionalities can have multiple names
-_DIMENSIONALITIES = {
-    b: a for a, b in _DIMENSIONALITIES_REV.items()
-}
 
 
 _BASE_SI_UNITS: tuple[str, ...] = ('m', 'kg', 's', 'K', 'mol', 'A', 'cd')
+
+
+class Dimensionality:
+
+    uc: UnitsContainer
+
+    _existing: dict[UnitsContainer, type[Dimensionality]] = {}
+
+    @classmethod
+    def get_cls(cls, uc: UnitsContainer) -> type[Dimensionality]:
+
+        if uc in cls._existing:
+            return cls._existing[uc]
+
+        name = f'DimType[{uc}]'
+
+        _Dimensionality = type(
+            name,
+            (Dimensionality,),
+            {
+                'uc': uc
+            }
+        )
+
+        cls._existing[uc] = _Dimensionality
+
+        return _Dimensionality
+
+
+DT = TypeVar('DT', bound=Dimensionality)
+DT_ = TypeVar('DT_', bound=Dimensionality)
+DT__ = TypeVar('DT__', bound=Dimensionality)
+
+
+_NormalUC = UnitsContainer({'[normal]': 1})
+_LengthUC = UnitsContainer({'[length]': 1})
+_MassUC = UnitsContainer({'[mass]': 1})
+_TimeUC = UnitsContainer({'[time]': 1})
+_TemperatureUC = UnitsContainer({'[temperature]': 1})
+_SubstanceUC = UnitsContainer({'[substance]': 1})
+_CurrentUC = UnitsContainer({'[current]': 1})
+_LuminosityUC = UnitsContainer({'[luminosity]': 1})
+
+
+class Dimensionless(Dimensionality):
+    uc = UnitsContainer({})
+
+
+class Normal(Dimensionality):
+    uc = _NormalUC
+
+
+class Length(Dimensionality):
+    uc = _LengthUC
+
+
+class Mass(Dimensionality):
+    uc = _MassUC
+
+
+class Time(Dimensionality):
+    uc = _TimeUC
+
+
+class Temperature(Dimensionality):
+    uc = _TemperatureUC
+
+
+class Substance(Dimensionality):
+    uc = _SubstanceUC
+
+
+class Current(Dimensionality):
+    uc = _CurrentUC
+
+
+class Luminosity(Dimensionality):
+    uc = _LuminosityUC
+
+
+# derived dimensionalities
+_AreaUC = _LengthUC**2
+_VolumeUC = _LengthUC**3
+_NormalVolumeUC = _VolumeUC * _NormalUC
+_PressureUC = _MassUC / _LengthUC / _TimeUC**2
+_MassFlowUC = _MassUC / _TimeUC
+_VolumeFlowUC = _VolumeUC / _TimeUC
+_NormalVolumeFlowUC = _NormalVolumeUC / _TimeUC
+_DensityUC = _MassUC / _VolumeUC
+_SpecificVolumeUC = 1 / _DensityUC
+_EnergyUC = _MassUC * _LengthUC**2 / _TimeUC**2
+_PowerUC = _EnergyUC / _TimeUC
+_VelocityUC = _LengthUC / _TimeUC
+_DynamicViscosityUC = _MassUC / _LengthUC / _TimeUC
+_KinematicViscosityUC = _LengthUC**2 / _TimeUC
+_FrequencyUC = 1 / _TimeUC
+_MolarMassUC = _MassUC / _SubstanceUC
+
+# # these dimensionalities might have different names depending on the context
+_HeatingValueUC = _EnergyUC / _MassUC
+_LowerHeatingValueUC = _EnergyUC / _MassUC
+_HigherHeatingValueUC = _EnergyUC / _MassUC
+_SpecificEnthalpyUC = _EnergyUC / _MassUC
+_HeatCapacityUC = _EnergyUC / _MassUC / _TemperatureUC
+_ThermalConductivityUC = _PowerUC / _LengthUC / _TemperatureUC
+_HeatTransferCoefficientUC = _PowerUC / _AreaUC / _TemperatureUC
+_MassPerNormalVolumeUC = _MassUC / _NormalVolumeUC
+_MassPerEnergyUC = _MassUC / _EnergyUC
+
+
+class Area(Dimensionality):
+    uc = _AreaUC
+
+
+class Volume(Dimensionality):
+    uc = _VolumeUC
+
+
+class NormalVolume(Dimensionality):
+    uc = _NormalVolumeUC
+
+
+class Pressure(Dimensionality):
+    uc = _PressureUC
+
+
+class MassFlow(Dimensionality):
+    uc = _MassFlowUC
+
+
+class VolumeFlow(Dimensionality):
+    uc = _VolumeFlowUC
+
+
+class NormalVolumeFlow(Dimensionality):
+    uc = _NormalVolumeFlowUC
+
+
+class Density(Dimensionality):
+    uc = _DensityUC
+
+
+class SpecificVolume(Dimensionality):
+    uc = _SpecificVolumeUC
+
+
+class Energy(Dimensionality):
+    uc = _EnergyUC
+
+
+class Power(Dimensionality):
+    uc = _PowerUC
+
+
+class Velocity(Dimensionality):
+    uc = _VelocityUC
+
+
+class DynamicViscosity(Dimensionality):
+    uc = _DynamicViscosityUC
+
+
+class KinematicViscosity(Dimensionality):
+    uc = _KinematicViscosityUC
+
+
+class Frequency(Dimensionality):
+    uc = _FrequencyUC
+
+
+class MolarMass(Dimensionality):
+    uc = _MolarMassUC
+
+
+class HeatingValue(Dimensionality):
+    uc = _HeatingValueUC
+
+
+class LowerHeatingValue(Dimensionality):
+    uc = _LowerHeatingValueUC
+
+
+class HigherHeatingValue(Dimensionality):
+    uc = _HigherHeatingValueUC
+
+
+class SpecificEnthalpy(Dimensionality):
+    uc = _SpecificEnthalpyUC
+
+
+class HeatCapacity(Dimensionality):
+    uc = _HeatCapacityUC
+
+
+class ThermalConductivity(Dimensionality):
+    uc = _ThermalConductivityUC
+
+
+class HeatTransferCoefficient(Dimensionality):
+    uc = _HeatTransferCoefficientUC
+
+
+class MassPerNormalVolume(Dimensionality):
+    uc = _MassPerNormalVolumeUC
+
+
+class MassPerEnergy(Dimensionality):
+    uc = _MassPerEnergyUC
+
+
+_instances: list[type[Dimensionality]] = [
+    Dimensionless,
+    Normal,
+    Length,
+    Mass,
+    Time,
+    Temperature,
+    Substance,
+    Current,
+    Luminosity,
+    Area,
+    Volume,
+    NormalVolume,
+    Pressure,
+    MassFlow,
+    VolumeFlow,
+    NormalVolumeFlow,
+    Density,
+    SpecificVolume,
+    Energy,
+    Power,
+    Velocity,
+    DynamicViscosity,
+    KinematicViscosity,
+    Frequency,
+    MolarMass,
+    HeatingValue,
+    LowerHeatingValue,
+    HigherHeatingValue,
+    SpecificEnthalpy,
+    HeatCapacity,
+    ThermalConductivity,
+    HeatTransferCoefficient,
+    MassPerNormalVolume,
+    MassPerEnergy,
+]
+
+Dimensionality._existing.update({n.uc: n for n in _instances})

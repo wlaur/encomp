@@ -1,4 +1,4 @@
-from encomp.units import Q
+from encomp.units import Quantity
 from encomp.context import silence_stdout, quantity_format
 
 def test_context():
@@ -9,8 +9,8 @@ def test_context():
 
     with quantity_format('~Lx'):
 
-        s = str(Q(1, 'kPa'))
+        s = str(Quantity(1, 'kPa'))
         assert s == '\\SI[]{1}{\\kilo\\pascal}'
 
-    s = str(Q(1, 'kPa'))
+    s = str(Quantity(1, 'kPa'))
     assert s == '1 kPa'

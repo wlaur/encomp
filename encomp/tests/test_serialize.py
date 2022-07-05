@@ -5,7 +5,7 @@ from decimal import Decimal
 from uncertainties import ufloat
 from dataclasses import dataclass
 
-from encomp.units import Q
+from encomp.units import Quantity as Q
 from encomp.serialize import serialize, decode, is_serializable
 
 

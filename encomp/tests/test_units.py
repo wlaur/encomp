@@ -5,7 +5,8 @@ import numpy as np
 import pandas as pd
 
 
-from encomp.units import Quantity, Q, wraps, check, DimensionalityError
+from encomp.units import Quantity, wraps, check, DimensionalityError
+from encomp.units import Quantity as Q
 
 from encomp.fluids import Water
 from encomp.utypes import *
@@ -36,8 +37,9 @@ def test_Q():
     # no unit input defaults to dimensionless
     assert Q(12).check('')
     assert Q(1) == Q(100, '%')
-    Q['Dimensionless'](21)
-    assert isinstance(Q(21), Q['Dimensionless'])
+    Q[Dimensionless](21)
+    assert isinstance(Q(21), Q[Dimensionless])
+
 
     assert Q(1) == Q('1')
     assert Q(1) == Q('\n1\n')
@@ -65,11 +67,11 @@ def test_Q():
     Q[Temperature](1, '°C')
 
     # the dimensionalities can also be specified as strings
-    Q['Temperature'](1, '°C')
+    Q[Temperature](1, '°C')
 
     P = Q(1, 'bar')
     # this Quantity must have the same dimensionality as P
-    Q[P](2, 'kPa')
+    Q(2, 'kPa').check(P)
 
     with pytest.raises(DimensionalityError):
         Q[Temperature](1, 'kg')
@@ -110,7 +112,7 @@ def test_Q():
 
     # floating point math might make this off at the N:th decimal
     assert P2.m == approx(2, rel=1e-12)
-    assert isinstance(P2, Q['Pressure'])
+    assert isinstance(P2, Q[Pressure])
 
     with pytest.raises(Exception):
 
@@ -118,7 +120,10 @@ def test_Q():
         Q(Q(2, 'feet_water'), Q(321321, 'kg')).to(Q(123123, 'feet_water'))
 
     # the UnitsContainer objects can be used to construct new dimensionalities
-    Q[Length * Length * Length / Temperature](1, 'm³/K')
+    class CustomDimensionality(Dimensionality):
+        uc = Length.uc * Length.uc * Length.uc / Temperature.uc
+
+    Q[CustomDimensionality](1, 'm³/K')
 
     with pytest.raises(Exception):
         Q[Pressure / Area](1, 'bar/m')
@@ -166,14 +171,18 @@ def test_custom_units():
     factor = Q(12, 'Nm3 water/ (normal liter air)')
     (Q(1, 'kg water') / factor).to('pound air')
 
-    Q['NormalVolume'](2, 'nm**3')
+    Q[NormalVolume](2, 'nm**3')
 
     with pytest.raises(DimensionalityError):
-        Q['NormalVolumeFlow'](2, 'm**3/hour')
+        Q[NormalVolumeFlow](2, 'm**3/hour')
 
-    Q['NormalVolumeFlow'](2, 'Nm**3/hour').to('normal liter/sec')
+    Q[NormalVolumeFlow](2, 'Nm**3/hour').to('normal liter/sec')
 
-    Q[Normal * VolumeFlow](2, 'Nm**3/hour').to('normal liter/sec')
+
+    class _NormalVolumeFlow(NormalVolumeFlow):
+        uc = Normal.uc * VolumeFlow.uc
+
+    Q[_NormalVolumeFlow](2, 'Nm**3/hour').to('normal liter/sec')
 
     Q(2, 'normal liter air / day')
     Q(2, '1/Nm3').to('1 / (liter normal)')
@@ -191,7 +200,7 @@ def test_wraps():
         # this is incorrect, cannot add 1 to a dimensional Quantity
         return a * b**2 + 1
 
-    assert isinstance(func(Q(1, 'yd'), Q(20, 'lbs')), Q['Mass'])
+    assert isinstance(func(Q(1, 'yd'), Q(20, 'lbs')), Q[Mass])
     assert Q(1, 'bar').check(Pressure)
 
 
@@ -212,7 +221,7 @@ def test_check():
 def test_typechecked():
 
     @typechecked
-    def func_a(a: Quantity['Temperature']) -> Quantity['Pressure']:
+    def func_a(a: Quantity[Temperature]) -> Quantity[Pressure]:
         return Q(2, 'bar')
 
     assert func_a(Q(2, 'degC')) == Q(2, 'bar')
@@ -221,7 +230,7 @@ def test_typechecked():
         func_a(Q(2, 'meter'))
 
     @typechecked
-    def func_b(a: Quantity) -> Quantity['Pressure']:
+    def func_b(a: Quantity) -> Quantity[Pressure]:
         return a
 
     assert func_b(Q(2, 'bar')) == Q(2, 'bar')

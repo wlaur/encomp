@@ -17,8 +17,7 @@ from __future__ import annotations
 import re
 import warnings
 import numbers
-from typing import Union, Optional, Generic, TypeVar, Any
-from functools import lru_cache
+from typing import Union, Optional, Generic, overload
 import sympy as sp
 import numpy as np
 import pandas as pd
@@ -31,9 +30,13 @@ from pint.registry import UnitRegistry
 from encomp.settings import SETTINGS
 from encomp.utypes import (Magnitude,
                            MagnitudeValue,
-                           _DIMENSIONALITIES,
-                           _DIMENSIONALITIES_REV,
+                           DT,
+                           DT_,
+                           DT__,
+                           Dimensionality,
+                           DimensionalityName,
                            _BASE_SI_UNITS,
+                           Dimensionless,
                            Density,
                            Mass,
                            MassFlow,
@@ -44,9 +47,6 @@ if SETTINGS.ignore_ndarray_unit_stripped_warning:
     warnings.filterwarnings(
         'ignore',
         message='The unit of the quantity is stripped when downcasting to ndarray.')
-
-
-T = TypeVar('T')
 
 
 class DimensionalityError(ValueError):
@@ -61,23 +61,7 @@ class DimensionalityRedefinitionError(ValueError):
 _CUSTOM_DIMENSIONS: list[str] = []
 
 
-def get_dimensionality_name(dim: UnitsContainer) -> str:
-    """
-    Returns a readable name for a dimensionality.
-
-    Parameters
-    ----------
-    dim : UnitsContainer
-        input dimensionality
-
-    Returns
-    -------
-    str
-        Readable name, or str representation of the input
-    """
-
-    if dim in _DIMENSIONALITIES:
-        return _DIMENSIONALITIES[dim]
+def get_dimensionality_name(uc: UnitsContainer) -> Union[DimensionalityName, str]:
 
     # custom dimensions will be separated to increase readability
     custom = {}
@@ -86,50 +70,35 @@ def get_dimensionality_name(dim: UnitsContainer) -> str:
 
         dimension_str = f'[{n}]'
 
-        if dimension_str in dim:
-            exp = dim[dimension_str]
+        if dimension_str in uc:
+            exp = uc[dimension_str]
             custom[dimension_str] = exp
 
     if not len(custom):
-        return str(dim)
+        return str(uc)
 
-    dim = dim.remove(list(custom))
+    uc = uc.remove(list(custom))
 
     if '[normal]' in custom:
 
         custom_without_normal = custom.copy()
-        dim_with_normal = dim.copy()
+        dim_with_normal = uc.copy()
 
         normal_exp = custom_without_normal.pop('[normal]')
         dim_with_normal = dim_with_normal.add('[normal]', normal_exp)
 
-        # move the normal part to the base dimensionality
-        # in case that is an explicitly defined dimensionality
-        if dim_with_normal in _DIMENSIONALITIES:
-            dim = dim_with_normal
-            custom = custom_without_normal
+        # # move the normal part to the base dimensionality
+        # # in case that is an explicitly defined dimensionality
+        # if dim_with_normal in _DIMENSIONALITIES:
+        #     dim = dim_with_normal
+        #     custom = custom_without_normal
 
-    base_name = _DIMENSIONALITIES.get(dim, str(dim))
+    base_name = str(uc)
 
     custom_dimensions = UnitsContainer(custom)
     name = f'{base_name} * {custom_dimensions}'
 
     return name
-
-
-def parse_dimensionality_name(name: str) -> UnitsContainer:
-
-    # this is case-sensitive
-    if name in _DIMENSIONALITIES_REV:
-        return _DIMENSIONALITIES_REV[name]
-
-    raise ValueError(
-        f'"{name}" is not recognized as a dimensionality. '
-        f'Available dimensionalities:\n\n{",".join(_DIMENSIONALITIES_REV)}\n\n'
-        'To use a dimensionality that is not listed above, pass an '
-        'encomp.utypes.Dimensionality or pint.unit.UnitsContainer instance: '
-        'CustomDimension = Mass**2 / Time; qty_cls = Quantity[CustomDimension]'
-    )
 
 
 # there should only be one registry at a time, pint raises ValueError
@@ -215,76 +184,21 @@ except Exception:
     pass
 
 
-@lru_cache(maxsize=None)
-def _get_subclass_with_dimensions(dim: UnitsContainer) -> type[Quantity]:
-
-    if dim is not None:
-        dim_name = get_dimensionality_name(dim)
-    else:
-        dim_name = 'None'
-
-    # return a new subclass definition that restricts the dimensionality
-    # the parent class is Quantity (this class does not restrict dimensionality)
-    # also override the __class__ attribute so that the internal pint API (__mul__, __div___, etc...)
-    # returns a Quantity object that does not restrict the dimensionality (since it will change
-    # when dividing or multiplying quantities with each other)
-    # the created Quantity will later be converted to the correct dimensional subclass
-    # when __new__() is evaluated
-    DimensionalQuantity = type(
-        f'Quantity[{dim_name}]',
-        (Quantity,),
-        {'_expected_dimensionality': dim,
-            '__class__': Quantity}
-    )
-
-    return DimensionalQuantity
-
-
-class QuantityMeta(type):
-
-    def __getitem__(mcls, dim: Union[UnitsContainer, Unit, str, Quantity]) -> type[Quantity]:
-
-        # use same dimensionality as another Quantity or Unit
-        if isinstance(dim, (Quantity, Unit)):
-            dim = dim.dimensionality
-
-        if isinstance(dim, str):
-
-            dim = dim.strip()
-
-            # pint also uses empty string to represent dimensionless
-            if dim == '':
-                dim = 'Dimensionless'
-
-            try:
-                dim = parse_dimensionality_name(dim)
-            except Exception as e:
-                raise ValueError(
-                    f'Dimensionality "{dim}" is not defined') from e
-
-        if not isinstance(dim, UnitsContainer):
-            raise ValueError('Quantity type annotation must be a dimensionality, '
-                             f'passed "{dim}" ({type(dim)})')
-
-        subclass = _get_subclass_with_dimensions(dim)
-
-        return subclass
-
-
-class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
+class Quantity(pint.quantity.Quantity, Generic[DT]):
     """
     Subclass of ``pint.quantity.Quantity`` with additional functionality
     and integration with other libraries.
     """
 
-    # TODO: mypy complains about this
-    _REGISTRY: CustomRegistry = ureg
+    _REGISTRY: CustomRegistry = ureg  # type: ignore
+
+    _DIMENSIONAL_SUBCLASSES: dict[type[Dimensionality], type[Quantity]] = {}
 
     # used to validate dimensionality using type checking,
     # if None the dimensionality is not checked
     # subclasses of Quantity have this class attribute set, which
     # will restrict the dimensionality when creating the object
-    _expected_dimensionality = None
+    _expected_dimensionality: Optional[UnitsContainer] = None
 
     _dimension_symbol_map: Optional[dict[sp.Basic, Unit]] = None
 
@@ -321,6 +235,34 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
         'ft_H2O': 'feet_H2O',
         'ft_water': 'feet_H2O'
     }
+
+    @classmethod
+    def _get_dimensional_subclass(cls, dim: type[Dimensionality]) -> type[Quantity]:
+
+        if dim in cls._DIMENSIONAL_SUBCLASSES:
+            return cls._DIMENSIONAL_SUBCLASSES[dim]
+
+        quantity_name = f'Quantity[{dim.__name__}]'
+
+        DimensionalQuantity = type(
+            quantity_name,
+            (Quantity,),
+            {
+                '_expected_dimensionality': dim.uc,
+                '__class__': Quantity
+            }
+        )
+
+        cls._DIMENSIONAL_SUBCLASSES[dim] = DimensionalQuantity
+
+        return DimensionalQuantity
+
+    def __class_getitem__(cls, dim: type[DT]):
+
+        if not isinstance(dim, type):
+            dim = dim.__class__
+
+        return cls._get_dimensional_subclass(dim)
 
     @staticmethod
     def _validate_unit(unit: Union[Unit, UnitsContainer, str, Quantity]) -> Unit:
@@ -362,20 +304,21 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
 
     def __new__(
             cls,
-            val: Union[Magnitude, Quantity, str],
-            unit: Union[Unit, UnitsContainer, str, Quantity, None] = None
-    ) -> Quantity:
+            val: Union[Magnitude, Quantity[DT], str],
+            unit: Union[Unit, UnitsContainer, str, Quantity[DT], None] = None
+    ) -> Quantity[DT]:
 
         if unit is None:
 
             # support passing only string input, this is not recommended
             delimiter = ' '
+
             if isinstance(val, str) and delimiter in val:
 
                 m_str, u = val.split(delimiter, 1)
                 m = float(m_str.strip())
                 u = u.strip()
-                val = Q(m, u)
+                val = Quantity(m, u)
 
             # this allows us to create new dimensionless quantities
             # by omitting the unit
@@ -402,11 +345,10 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
             # in case this Quantity was initialized without specifying
             # the dimensionality, check the dimensionality and return the
             # subclass with correct dimensionality
-            DimensionalQuantity = _get_subclass_with_dimensions(
-                valid_unit.dimensionality)
+            dim = Dimensionality.get_cls(valid_unit.dimensionality)
 
             # __new__ will return an instance of this subclass
-            return DimensionalQuantity(val, valid_unit)
+            return cls._get_dimensional_subclass(dim)(val, valid_unit)
 
         expected_dimensionality = cls._expected_dimensionality
 
@@ -415,12 +357,13 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
             dim_name = get_dimensionality_name(valid_unit.dimensionality)
             expected_name = get_dimensionality_name(expected_dimensionality)
 
-            raise DimensionalityError(f'Quantity with unit "{valid_unit}" has incorrect '
-                                      f'dimensionality {dim_name}, '
-                                      f'expected {expected_name}')
+            raise DimensionalityError(
+                f'Quantity with unit "{valid_unit}" has incorrect '
+                f'dimensionality {dim_name}, '
+                f'expected {expected_name}'
+            )
 
-        # numpy array magnitudes must be copied, otherwise they will
-        # be changed for the original object as well
+        # numpy array magnitudes must be copied
         # list input to pint.Quantity.__new__ will be converted to
         # np.ndarray, so there's no danger of modifying lists that are input to Quantity
         if isinstance(val, np.ndarray):
@@ -428,26 +371,33 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
 
         # at this point the value and dimensionality are verified to be correct
         # pass the inputs to pint to actually construct the Quantity
-        qty = super().__new__(cls, val, units=valid_unit)
+
+        # pint.quantity.Quantity uses Generic[_MagnitudeType] in addition to Generic[DT],
+        # ignore this type mismatch since the Generic will be overridden
+        qty: Quantity[DT] = super().__new__(  # type: ignore
+            cls,
+            val,
+            units=valid_unit
+        )
 
         # avoid casting issues with numpy, use float64 instead of int32
         # it's always possible for the user to change the dtype of the _magnitude attribute
-        # in case int32 or similar is necessary (unlikely, fast calculations should not use pint at all)
+        # in case int32 or similar is necessary
         if isinstance(qty._magnitude, np.ndarray) and qty._magnitude.dtype == np.int32:
             qty._magnitude = qty._magnitude.astype(np.float64)
 
         return qty
 
-    def _to_unit(self, unit: Union[Unit, UnitsContainer, str, Quantity]) -> Unit:
+    def _to_unit(self, unit: Union[Unit, UnitsContainer, str, Quantity[DT]]) -> Unit:
 
         return self._validate_unit(unit)
 
     @property
-    def m(self) -> Union[float, int, np.ndarray]:
+    def m(self) -> Magnitude:
         return super().m
 
     def to(self,  # type: ignore[override]
-           unit: Union[Unit, UnitsContainer, str, Quantity]) -> Quantity:
+           unit: Union[Unit, UnitsContainer, str, Quantity[DT]]) -> Quantity[DT]:
 
         unit = self._to_unit(unit)
         m = self._convert_magnitude_not_inplace(unit)
@@ -455,7 +405,7 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
         return self.__class__(m, unit)
 
     def ito(self,  # type: ignore[override]
-            unit: Union[Unit, UnitsContainer, str, Quantity]) -> None:
+            unit: Union[Unit, UnitsContainer, str, Quantity[DT]]) -> None:
 
         unit = self._to_unit(unit)
 
@@ -465,17 +415,29 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
 
         # avoid numpy.core._exceptions.UFuncTypeError (not on all platforms?)
         # convert integer arrays to float (creating a copy)
-        if (isinstance(self._magnitude, np.ndarray) and
-                issubclass(self._magnitude.dtype.type, numbers.Integral)):
+        if (
+            isinstance(self._magnitude, np.ndarray) and
+            issubclass(self._magnitude.dtype.type, numbers.Integral)
+        ):
 
             self._magnitude = self._magnitude.astype(float)
 
         return super().ito(unit)
 
-    def to_base_units(self) -> Quantity:
+    def to_base_units(self) -> Quantity[DT]:
 
         # ignore typing issues, super().to_base_units() type hint is for the superclass
         return super().to_base_units()  # type: ignore
+
+    def check(self, unit: Union[Quantity, UnitsContainer, Unit, str, Dimensionality]) -> bool:
+
+        if isinstance(unit, Quantity):
+            unit = unit.dimensionality
+
+        if hasattr(unit, 'uc'):
+            unit = unit.uc
+
+        return super().check(unit)
 
     def __format__(self, format_type: str) -> str:
         """
@@ -613,10 +575,10 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
         args = expr.args
 
         if not args:
-            return cls(float(expr), 'dimensionless')
+            return cls(float(expr), 'dimensionless')  # type: ignore
 
         try:
-            magnitude = float(args[0])
+            magnitude = float(args[0])  # type: ignore
         except TypeError as e:
             raise ValueError(
                 f'Expression {expr} contains inconsistent units') from e
@@ -629,7 +591,7 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
 
             unit_i = cls.get_unit('')
 
-            for symbol, power in d.as_powers_dict().items():
+            for symbol, power in d.as_powers_dict().items():  # type: ignore
                 unit_i *= _dimension_symbol_map[symbol]**power
 
             unit *= unit_i
@@ -653,66 +615,112 @@ class Quantity(pint.quantity.Quantity, Generic[T], metaclass=QuantityMeta):
         yield cls.validate
 
     @classmethod
-    def validate(cls, qty: Quantity) -> Quantity:
+    def validate(cls, qty: Quantity[DT]) -> Quantity[DT]:
         return cls(qty.m, qty.u)
 
-    def __mul__(self, other: Union[Q, MagnitudeValue]) -> Quantity:
+    @overload
+    def __mul__(self: Quantity[Dimensionless], other: Quantity[DT_]) -> Quantity[DT_]:
+        ...
+
+    @overload
+    def __mul__(self, other: Quantity[Dimensionless]) -> Quantity[DT]:
+        ...
+
+    @overload
+    def __mul__(self, other: MagnitudeValue) -> Quantity[DT]:
+        ...
+
+    @overload
+    def __mul__(self, other: Quantity[DT_]) -> Quantity[DT__]:
+        ...
+
+    def __mul__(self, other: Union[MagnitudeValue, Quantity]) -> Quantity:
         return super().__mul__(other)
 
-    def __rmul__(self, other: Union[Q, MagnitudeValue]) -> Quantity:
-        return super().__rmul__(other)
+    def __rmul__(self,  # type: ignore[override]
+                 other: MagnitudeValue) -> Quantity[DT]:
+        return self.__mul__(other)
 
-    def __imul__(self, other: Union[Q, MagnitudeValue]) -> Quantity:
-        return super().__imul__(other)
+    @overload
+    def __truediv__(self, other: Quantity[Dimensionless]) -> Quantity[DT]:
+        ...
 
-    def __add__(self, other: Q) -> Quantity:
-        return super().__add__(other)
+    @overload
+    def __truediv__(self, other: MagnitudeValue) -> Quantity[DT]:
+        ...
 
-    def __pow__(self, other: MagnitudeValue) -> Quantity:
-        return super().__pow__(other)
+    @overload
+    def __truediv__(self, other: Quantity[DT_]) -> Quantity[DT__]:
+        ...
 
-    def __sub__(self, other: Q) -> Quantity:
-        return super().__sub__(other)
-
-    def __div__(self, other: Union[Q, MagnitudeValue]) -> Quantity:
-        return super().__div__(other)
-
-    def __idiv__(self, other: Union[Q, MagnitudeValue]) -> Quantity:
-        return super().__idiv__(other)
-
-    def __iadd__(self, other: Q) -> Quantity:
-        return super().__iadd__(other)
-
-    def __isub__(self, other: Q) -> Quantity:
-        return super().__isub__(other)
-
-    def __floordiv__(self, other: Union[Q, MagnitudeValue]) -> Quantity:
-        return super().__floordiv__(other)
-
-    def __ifloordiv__(self, other: Union[Q, MagnitudeValue]) -> Quantity:
-        return super().__ifloordiv__(other)
-
-    def __truediv__(self, other: Union[Q, MagnitudeValue]) -> Quantity:
+    def __truediv__(self, other: Union[MagnitudeValue, Quantity]) -> Quantity:
         return super().__truediv__(other)
 
-    def __itruediv__(self, other: Union[Q, MagnitudeValue]) -> Quantity:
-        return super().__itruediv__(other)
+    def __rtruediv__(self, other: MagnitudeValue) -> Quantity[DT_]:
+        return super().__rtruediv__(other)
 
-    def __gt__(self, other: Q) -> Quantity:
+    @overload
+    def __add__(self: Quantity[Dimensionless], other: MagnitudeValue) -> Quantity[Dimensionless]:
+        ...
+
+    @overload
+    def __add__(self, other: Quantity[DT]) -> Quantity[DT]:
+        ...
+
+    def __add__(self, other: Union[MagnitudeValue, Quantity[DT]]) -> Quantity[DT]:
+        return super().__add__(other)
+
+    def __radd__(self: Quantity[Dimensionless],  # type: ignore[override]
+                 other: MagnitudeValue) -> Quantity[Dimensionless]:
+        return super().__radd__(other)
+
+    @overload
+    def __sub__(self: Quantity[Dimensionless], other: MagnitudeValue) -> Quantity[Dimensionless]:
+        ...
+
+    @overload
+    def __sub__(self, other: Quantity[DT]) -> Quantity[DT]:
+        ...
+
+    def __sub__(self, other: Union[MagnitudeValue, Quantity[DT]]) -> Quantity[DT]:
+        return super().__sub__(other)
+
+    def __rsub__(self: Quantity[Dimensionless], other: MagnitudeValue) -> Quantity[Dimensionless]:
+        return super().__rsub__(other)
+
+    @overload
+    def __pow__(self: Quantity[Dimensionless], other: MagnitudeValue) -> Quantity[Dimensionless]:
+        ...
+
+    @overload
+    def __pow__(self, other: MagnitudeValue) -> Quantity[DT_]:
+        ...
+
+    @overload
+    def __pow__(self, other: Quantity[DT_]) -> Quantity[DT__]:
+        ...
+
+    def __pow__(self, other: Union[MagnitudeValue, Quantity]) -> Quantity:
+        return super().__pow__(other)
+
+    def __gt__(self, other: Quantity[DT]) -> bool:  # type: ignore[override]
         return super().__gt__(other)
 
-    def __ge__(self, other: Q) -> Quantity:
+    def __ge__(self, other: Quantity[DT]) -> bool:  # type: ignore[override]
         return super().__ge__(other)
 
-    def __lt__(self, other: Q) -> Quantity:
+    def __lt__(self, other: Quantity[DT]) -> bool:  # type: ignore[override]
         return super().__lt__(other)
 
-    def __le__(self, other: Q) -> Quantity:
+    def __le__(self, other: Quantity[DT]) -> bool:  # type: ignore[override]
         return super().__le__(other)
 
-    def __eq__(self, other: Quantity) -> bool:
+    def __eq__(self, other: Quantity) -> bool:  # type: ignore[override]
         return super().__eq__(other)
 
+
+# NOTE: to use a shorter name for Quantity, import the class using this name,
+# for example: from encomp.units import Quantity as Q
 
 # override the implementation of the Quantity class for the current registry
 # this ensures that all Quantity objects created with this registry
@@ -726,8 +734,6 @@ try:
 except Exception:
     pass
 
-# shorthand for the Quantity class
-Q = Quantity
 
 # shorthand for the @wraps(ret, args, strict=True|False) decorator
 wraps = ureg.wraps

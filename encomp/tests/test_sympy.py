@@ -1,5 +1,5 @@
 import numpy as np
-from encomp.units import Q
+from encomp.units import Quantity as Q
 from encomp.sympy import sp, to_identifier, get_args, get_function
 
 

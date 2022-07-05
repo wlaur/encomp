@@ -48,11 +48,6 @@ def pip_upload():
         os.system(n)
 
 
-def docker_build():
-
-    os.system('docker build -t encomp . --no-cache')
-
-
 def main(task=None):
 
     if task is None:
@@ -71,10 +66,6 @@ def main(task=None):
 
     elif task == 'install':
         local_install()
-
-    elif task == 'dbuild':
-        build()
-        docker_build()
 
     else:
         raise ValueError(f'Unknown task: {task}')

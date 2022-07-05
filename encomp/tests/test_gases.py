@@ -1,4 +1,4 @@
-from encomp.units import Q
+from encomp.units import Quantity as Q
 
 from encomp.gases import convert_gas_volume
 
