@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 import warnings
 import numbers
-from typing import Union, Optional, Generic, Any, NoReturn, overload
+from typing import Union, Optional, Generic, Any, overload
 import sympy as sp
 import numpy as np
 import pandas as pd
@@ -241,13 +241,17 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         return cls._get_dimensional_subclass(dim)
 
     @staticmethod
-    def _validate_unit(unit: Union[Unit, UnitsContainer, str, Quantity]) -> Unit:
+    def _validate_unit(unit: Union[Unit, UnitsContainer, str, Quantity, dict]) -> Unit:
 
         if isinstance(unit, Unit):
             return unit
 
         if isinstance(unit, Quantity):
             return unit.u
+
+        # compatibility with internal pint API
+        if isinstance(unit, dict):
+            return Quantity._validate_unit(str(UnitsContainer(unit)))
 
         # compatibility with internal pint API
         if isinstance(unit, UnitsContainer):
@@ -370,7 +374,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
 
         return qty
 
-    def _to_unit(self, unit: Union[Unit, UnitsContainer, str, Quantity[DT]]) -> Unit:
+    def _to_unit(self, unit: Union[Unit, UnitsContainer, str, Quantity[DT], dict]) -> Unit:
 
         return self._validate_unit(unit)
 
@@ -378,8 +382,14 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
     def m(self) -> Magnitude:
         return super().m
 
+    def to_reduced_units(self) -> Quantity[DT]:
+        return super().to_reduced_units()  # type: ignore
+
+    def to_base_units(self) -> Quantity[DT]:
+        return super().to_base_units()  # type: ignore
+
     def to(self,  # type: ignore[override]
-           unit: Union[Unit, UnitsContainer, str, Quantity[DT]]) -> Quantity[DT]:
+           unit: Union[Unit, UnitsContainer, str, Quantity[DT], dict]) -> Quantity[DT]:
 
         unit = self._to_unit(unit)
         m = self._convert_magnitude_not_inplace(unit)
@@ -406,20 +416,17 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
 
         return super().ito(unit)
 
-    def to_base_units(self) -> Quantity[DT]:
-
-        # ignore typing issues, super().to_base_units() type hint is for the superclass
-        return super().to_base_units()  # type: ignore
-
     def check(self, unit: Union[Quantity, UnitsContainer, Unit, str, Dimensionality]) -> bool:
+
+        # TODO: fix typing for this method, remove type: ignore
 
         if isinstance(unit, Quantity):
             unit = unit.dimensionality
 
         if hasattr(unit, 'dimensions'):
-            unit = unit.dimensions
+            unit = unit.dimensions  # type: ignore
 
-        return super().check(unit)
+        return super().check(unit)  # type: ignore
 
     def __format__(self, format_type: str) -> str:
         """
@@ -870,46 +877,68 @@ def set_quantity_format(fmt: str = 'compact') -> None:
         pass
 
 
-def convert_volume_mass(
-    inp: Union
-    [Quantity[Mass],
-     Quantity[MassFlow],
-     Quantity[Volume],
-     Quantity[VolumeFlow]
-     ],
-    rho: Optional[Quantity[Density]] = None
-) -> Union[
-    Quantity[Mass],
-    Quantity[MassFlow],
-    Quantity[Volume],
-    Quantity[VolumeFlow]
-]:
+@overload
+def convert_volume_mass(inp: Quantity[Mass],
+                        rho: Optional[Quantity[Density]] = None) -> Quantity[Volume]:
+    ...
+
+
+@overload
+def convert_volume_mass(inp: Quantity[MassFlow],
+                        rho: Optional[Quantity[Density]] = None) -> Quantity[VolumeFlow]:
+    ...
+
+
+@overload
+def convert_volume_mass(inp: Quantity[Volume],
+                        rho: Optional[Quantity[Density]] = None) -> Quantity[Mass]:
+    ...
+
+
+@overload
+def convert_volume_mass(inp: Quantity[VolumeFlow],
+                        rho: Optional[Quantity[Density]] = None) -> Quantity[MassFlow]:
+    ...
+
+
+@overload
+def convert_volume_mass(inp: Quantity[Any],
+                        rho: Optional[Quantity[Density]] = None) -> Union[Quantity[Mass], Quantity[MassFlow], Quantity[Volume], Quantity[VolumeFlow]]:
+    ...
+
+
+def convert_volume_mass(inp, rho=None):
     """
     Converts mass to volume or vice versa.
 
     Parameters
     ----------
-    inp : Union[Quantity[Mass], Quantity[MassFlow],
-        Quantity[Volume], Quantity[VolumeFlow]]
-        Input mass or volume
+    inp : Union[M, V]
+        Input mass or volume (or flow)
     rho : Quantity[Density], optional
-        Density, by default 997 kg/m³ (or ``encomp.constants.CONTSTANTS.default_density``)
+        Density, by default 997 kg/m³
 
     Returns
     -------
-    Union[Quantity[Mass], Quantity[MassFlow],
-        Quantity[Volume], Quantity[VolumeFlow]]
-        The input converted to mass or volume
+    Union[V, M]
+        Calculated volume or mass (or flow)
     """
 
     if rho is None:
+        rho = Quantity[Density](997, 'kg/m³')
 
-        # TODO: possible to avoid issues with circular imports?
-        from encomp.constants import CONSTANTS
-        rho = CONSTANTS.default_density
+    if not isinstance(rho, Quantity[Density]):  # type: ignore
+        raise TypeError(
+            f'Incorrect type for rho: {rho}'
+        )
 
-    if inp.dimensionality in (Mass, MassFlow):
+    if isinstance(inp, (Quantity[Mass], Quantity[MassFlow])):  # type: ignore
         return (inp / rho).to_reduced_units()
 
-    else:
+    elif isinstance(inp, (Quantity[Volume], Quantity[VolumeFlow])):  # type: ignore
         return (inp * rho).to_reduced_units()
+
+    else:
+        raise TypeError(
+            f'Incorrect input: {inp}'
+        )

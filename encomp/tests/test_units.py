@@ -7,7 +7,11 @@ import numpy as np
 import pandas as pd
 
 from encomp.misc import isinstance_types
-from encomp.units import Quantity, wraps, check, ExpectedDimensionalityError
+from encomp.units import (Quantity,
+                          wraps,
+                          check,
+                          ExpectedDimensionalityError,
+                          convert_volume_mass)
 from encomp.units import Quantity as Q
 
 from encomp.fluids import Water
@@ -23,6 +27,9 @@ def test_Q():
     Q(1, 'h')
     Q(1, 'newton')
     Q(1, 'cSt')
+
+    assert Q(1, 'meter/kilometer').to_reduced_units().m == 0.001
+    assert Q(1, 'km').to_base_units().m == 1000
 
     # make sure that the alias Q behaves identically to Quantity
     assert Q(1) == Quantity(1)
@@ -491,7 +498,6 @@ def test_typed_dict():
 
     assert isinstance_types(d, PTxDict)
 
-
     d = {
         'P': Q(25, 'bar'),
         'T': Q(25, 'meter'),
@@ -505,3 +511,18 @@ def test_typed_dict():
 
     assert not isinstance_types(d, PTxDict)
 
+
+def test_convert_volume_mass():
+
+    V = convert_volume_mass(
+        Q(125, 'kg/s'),
+        Q(25, 'kg/m**3')
+    )
+
+    assert V.check(VolumeFlow)
+
+    m = convert_volume_mass(
+        Q(125, 'liter/day')
+    )
+
+    assert m.check(MassFlow)

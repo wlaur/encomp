@@ -206,20 +206,6 @@ def test_quantity_pow_types() -> None:
 
 
 @pytest.mark.mypy_testing
-def test_quantity_div_types_custom() -> None:
-
-    t = Q[Time](2, 'hour')
-    m_ = Q[Mass](2, 'kg')
-
-    # this cannot be verified when type checking
-    # TODO: maybe add some common div/mul operations and their
-    # output dimensionalities using @overload?
-    mf: Q[MassFlow] = m_ / t
-
-    reveal_type(mf)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
-
-
-@pytest.mark.mypy_testing
 def test_quantity_add_types() -> None:
 
     m = Q[MassFlow](1, 'kg/s')
