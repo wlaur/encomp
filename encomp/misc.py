@@ -6,7 +6,7 @@ import ast
 import asttokens
 import numpy as np
 
-from typing import Any, _GenericAlias, Union, Type  # type: ignore
+from typing import Any, _GenericAlias, Union, Type, _TypedDictMeta  # type: ignore
 from typeguard import check_type
 
 
@@ -34,9 +34,15 @@ def isinstance_types(obj: Any,
 
     # normal types are checked with isinstance()
     if isinstance(expected, Type):  # type: ignore
-        return isinstance(obj, expected)
+
+        # typing.TypedDict is a special case
+        if not isinstance(expected, _TypedDictMeta):
+            return isinstance(obj, expected)
 
     try:
+
+        # this function raises TypeError in case the object type
+        # does not match the expected type
         check_type('obj', obj, expected)
         return True
 

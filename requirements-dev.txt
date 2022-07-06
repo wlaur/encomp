@@ -1,6 +1,7 @@
 autopep8
 pytest
 mypy
+pytest-mypy-testing
 data-science-types
 hypothesis
 twine

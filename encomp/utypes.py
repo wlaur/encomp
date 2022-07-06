@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import TypeVar, Union, Any, Annotated
 from typing import Union
+from abc import ABC
 
 
 import numpy as np
@@ -33,29 +34,65 @@ Magnitude = Union[MagnitudeValue,
 _BASE_SI_UNITS: tuple[str, ...] = ('m', 'kg', 's', 'K', 'mol', 'A', 'cd')
 
 
-class Dimensionality:
+class Dimensionality(ABC):
 
-    uc: UnitsContainer
+    dimensions: UnitsContainer
 
-    _existing: dict[UnitsContainer, type[Dimensionality]] = {}
+    # keeps track of all the dimensionalities that have been
+    # used in the current process
+    # use the class definition as key, since multiple dimensionalities
+    # might have the same UnitsContainer
+    _registry: dict[type[Dimensionality], UnitsContainer] = {}
+
+    # also store a reversed map, this might not contain all items in _registry
+    _registry_reversed: dict[UnitsContainer, type[Dimensionality]] = {}
+
+    def __init_subclass__(cls) -> None:
+
+        if not hasattr(cls, 'dimensions'):
+            raise AttributeError(
+                'Subtypes of Dimensionality must define the '
+                'attribute "dimensions" (an instance of pint.unit.UnitsContainer)'
+            )
+
+        if not isinstance(cls.dimensions, UnitsContainer):
+            raise TypeError(
+                'The "dimensions" attribute of the Dimensionality type '
+                'must be an instance of pint.unit.UnitsContainer, '
+                f'passed {cls} with dimensions: {cls.dimensions} ({type(cls.dimensions)})'
+            )
+
+        # NOTE: dict keys are class definitions, not class names
+        # for example, re-running a notebook cell will
+        # create a new class each time, which will have its own entry in
+        # the dimensionality registry
+        if cls in cls._registry:
+            return
+
+        cls._registry[cls] = cls.dimensions
+
+        # in case there are multiple class definitions with the same UnitRegistry,
+        # do not overwrite previously defined ones
+        if cls.dimensions not in cls._registry_reversed:
+            cls._registry_reversed[cls.dimensions] = cls
 
     @classmethod
-    def get_cls(cls, uc: UnitsContainer) -> type[Dimensionality]:
+    def get_dimensionality(cls, dimensions: UnitsContainer) -> type[Dimensionality]:
 
-        if uc in cls._existing:
-            return cls._existing[uc]
+        if dimensions in cls._registry_reversed:
+            return cls._registry_reversed[dimensions]
 
-        name = f'DimType[{uc}]'
-
+        # create a new, custom Dimensionality
+        # not possible to generate a proper name for this,
+        # so it will just contain the literal dimensions
+        # this will call __init_subclass__ to register the type
         _Dimensionality = type(
-            name,
+            f'Dimensionality[{dimensions}]',
             (Dimensionality,),
             {
-                'uc': uc
+                'dimensions': dimensions
             }
         )
-
-        cls._existing[uc] = _Dimensionality
 
         return _Dimensionality
 
@@ -75,40 +112,43 @@ _CurrentUC = UnitsContainer({'[current]': 1})
 _LuminosityUC = UnitsContainer({'[luminosity]': 1})
 
 
+# NOTE: each subclass defintion will create an entry in Dimensionality._registry
+# reloading (re-importing) this module will clear and reset the registry
+
 class Dimensionless(Dimensionality):
-    uc = UnitsContainer({})
+    dimensions = UnitsContainer({})
 
 
 class Normal(Dimensionality):
-    uc = _NormalUC
+    dimensions = _NormalUC
 
 
 class Length(Dimensionality):
-    uc = _LengthUC
+    dimensions = _LengthUC
 
 
 class Mass(Dimensionality):
-    uc = _MassUC
+    dimensions = _MassUC
 
 
 class Time(Dimensionality):
-    uc = _TimeUC
+    dimensions = _TimeUC
 
 
 class Temperature(Dimensionality):
-    uc = _TemperatureUC
+    dimensions = _TemperatureUC
 
 
 class Substance(Dimensionality):
-    uc = _SubstanceUC
+    dimensions = _SubstanceUC
 
 
 class Current(Dimensionality):
-    uc = _CurrentUC
+    dimensions = _CurrentUC
 
 
 class Luminosity(Dimensionality):
-    uc = _LuminosityUC
+    dimensions = _LuminosityUC
 
 
 # derived dimensionalities
@@ -129,6 +169,71 @@ _KinematicViscosityUC = _LengthUC**2 / _TimeUC
 _FrequencyUC = 1 / _TimeUC
 _MolarMassUC = _MassUC / _SubstanceUC
 
+
+class Area(Dimensionality):
+    dimensions = _AreaUC
+
+
+class Volume(Dimensionality):
+    dimensions = _VolumeUC
+
+
+class NormalVolume(Dimensionality):
+    dimensions = _NormalVolumeUC
+
+
+class Pressure(Dimensionality):
+    dimensions = _PressureUC
+
+
+class MassFlow(Dimensionality):
+    dimensions = _MassFlowUC
+
+
+class VolumeFlow(Dimensionality):
+    dimensions = _VolumeFlowUC
+
+
+class NormalVolumeFlow(Dimensionality):
+    dimensions = _NormalVolumeFlowUC
+
+
+class Density(Dimensionality):
+    dimensions = _DensityUC
+
+
+class SpecificVolume(Dimensionality):
+    dimensions = _SpecificVolumeUC
+
+
+class Energy(Dimensionality):
+    dimensions = _EnergyUC
+
+
+class Power(Dimensionality):
+    dimensions = _PowerUC
+
+
+class Velocity(Dimensionality):
+    dimensions = _VelocityUC
+
+
+class DynamicViscosity(Dimensionality):
+    dimensions = _DynamicViscosityUC
+
+
+class KinematicViscosity(Dimensionality):
+    dimensions = _KinematicViscosityUC
+
+
+class Frequency(Dimensionality):
+    dimensions = _FrequencyUC
+
+
+class MolarMass(Dimensionality):
+    dimensions = _MolarMassUC
+
+
 # # these dimensionalities might have different names depending on the context
 _HeatingValueUC = _EnergyUC / _MassUC
 _LowerHeatingValueUC = _EnergyUC / _MassUC
@@ -141,141 +246,37 @@ _MassPerNormalVolumeUC = _MassUC / _NormalVolumeUC
 _MassPerEnergyUC = _MassUC / _EnergyUC
 
 
-class Area(Dimensionality):
-    uc = _AreaUC
-
-
-class Volume(Dimensionality):
-    uc = _VolumeUC
-
-
-class NormalVolume(Dimensionality):
-    uc = _NormalVolumeUC
-
-
-class Pressure(Dimensionality):
-    uc = _PressureUC
-
-
-class MassFlow(Dimensionality):
-    uc = _MassFlowUC
-
-
-class VolumeFlow(Dimensionality):
-    uc = _VolumeFlowUC
-
-
-class NormalVolumeFlow(Dimensionality):
-    uc = _NormalVolumeFlowUC
-
-
-class Density(Dimensionality):
-    uc = _DensityUC
-
-
-class SpecificVolume(Dimensionality):
-    uc = _SpecificVolumeUC
-
-
-class Energy(Dimensionality):
-    uc = _EnergyUC
-
-
-class Power(Dimensionality):
-    uc = _PowerUC
-
-
-class Velocity(Dimensionality):
-    uc = _VelocityUC
-
-
-class DynamicViscosity(Dimensionality):
-    uc = _DynamicViscosityUC
-
-
-class KinematicViscosity(Dimensionality):
-    uc = _KinematicViscosityUC
-
-
-class Frequency(Dimensionality):
-    uc = _FrequencyUC
-
-
-class MolarMass(Dimensionality):
-    uc = _MolarMassUC
-
-
 class HeatingValue(Dimensionality):
-    uc = _HeatingValueUC
+    dimensions = _HeatingValueUC
 
 
 class LowerHeatingValue(Dimensionality):
-    uc = _LowerHeatingValueUC
+    dimensions = _LowerHeatingValueUC
 
 
 class HigherHeatingValue(Dimensionality):
-    uc = _HigherHeatingValueUC
+    dimensions = _HigherHeatingValueUC
 
 
 class SpecificEnthalpy(Dimensionality):
-    uc = _SpecificEnthalpyUC
+    dimensions = _SpecificEnthalpyUC
 
 
 class HeatCapacity(Dimensionality):
-    uc = _HeatCapacityUC
+    dimensions = _HeatCapacityUC
 
 
 class ThermalConductivity(Dimensionality):
-    uc = _ThermalConductivityUC
+    dimensions = _ThermalConductivityUC
 
 
 class HeatTransferCoefficient(Dimensionality):
-    uc = _HeatTransferCoefficientUC
+    dimensions = _HeatTransferCoefficientUC
 
 
 class MassPerNormalVolume(Dimensionality):
-    uc = _MassPerNormalVolumeUC
+    dimensions = _MassPerNormalVolumeUC
 
 
 class MassPerEnergy(Dimensionality):
-    uc = _MassPerEnergyUC
-
-
-_instances: list[type[Dimensionality]] = [
-    Dimensionless,
-    Normal,
-    Length,
-    Mass,
-    Time,
-    Temperature,
-    Substance,
-    Current,
-    Luminosity,
-    Area,
-    Volume,
-    NormalVolume,
-    Pressure,
-    MassFlow,
-    VolumeFlow,
-    NormalVolumeFlow,
-    Density,
-    SpecificVolume,
-    Energy,
-    Power,
-    Velocity,
-    DynamicViscosity,
-    KinematicViscosity,
-    Frequency,
-    MolarMass,
-    HeatingValue,
-    LowerHeatingValue,
-    HigherHeatingValue,
-    SpecificEnthalpy,
-    HeatCapacity,
-    ThermalConductivity,
-    HeatTransferCoefficient,
-    MassPerNormalVolume,
-    MassPerEnergy,
-]
-
-Dimensionality._existing.update({n.uc: n for n in _instances})
+    dimensions = _MassPerEnergyUC

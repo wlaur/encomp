@@ -1,10 +1,12 @@
+from typing import TypedDict
+
 import pytest
 from pytest import approx
 from typeguard import typechecked
 import numpy as np
 import pandas as pd
 
-
+from encomp.misc import isinstance_types
 from encomp.units import Quantity, wraps, check, DimensionalityError
 from encomp.units import Quantity as Q
 
@@ -39,7 +41,6 @@ def test_Q():
     assert Q(1) == Q(100, '%')
     Q[Dimensionless](21)
     assert isinstance(Q(21), Q[Dimensionless])
-
 
     assert Q(1) == Q('1')
     assert Q(1) == Q('\n1\n')
@@ -121,7 +122,8 @@ def test_Q():
 
     # the UnitsContainer objects can be used to construct new dimensionalities
     class CustomDimensionality(Dimensionality):
-        uc = Length.uc * Length.uc * Length.uc / Temperature.uc
+        dimensions = Length.dimensions * Length.dimensions * \
+            Length.dimensions / Temperature.dimensions
 
     Q[CustomDimensionality](1, 'm³/K')
 
@@ -178,9 +180,8 @@ def test_custom_units():
 
     Q[NormalVolumeFlow](2, 'Nm**3/hour').to('normal liter/sec')
 
-
     class _NormalVolumeFlow(NormalVolumeFlow):
-        uc = Normal.uc * VolumeFlow.uc
+        dimensions = Normal.dimensions * VolumeFlow.dimensions
 
     Q[_NormalVolumeFlow](2, 'Nm**3/hour').to('normal liter/sec')
 
@@ -306,3 +307,201 @@ def test_dataframe_assign():
 
         df['E'] = Q(df.A, 'bar').m
         df['F'] = Q(4, 'bar').m
+
+
+def test_generic_dimensionality():
+
+    assert issubclass(Q[Pressure], Q)
+    assert not issubclass(Q[Pressure], Q[Temperature])
+
+    assert Q[Pressure] is Q[Pressure]
+    assert Q[Pressure] == Q[Pressure]
+
+    assert Q[Pressure] is not Q[Temperature]
+    assert Q[Pressure] != Q[Temperature]
+
+    assert isinstance_types(
+        [Q, Q[Pressure], Q[Temperature]], list[type[Q]]
+    )
+
+    assert not isinstance_types(
+        [Q, Q[Pressure], Q[Temperature]], list[Q]
+    )
+
+    assert isinstance_types(
+        [Q[Pressure], Q[Pressure]], list[type[Q[Pressure]]]
+    )
+
+    with pytest.raises(TypeError):
+        Q[1]
+
+    with pytest.raises(TypeError):
+        Q['Temperature']
+
+    with pytest.raises(TypeError):
+        Q['string']
+
+    with pytest.raises(TypeError):
+        Q[None]
+
+
+def test_dynamic_dimensionalities():
+
+    # this will create a new dimensionality type
+    q1 = Q(1, 'kg^2/K^4')
+
+    # this will reuse the previously created one
+    q2 = Q(25, 'g*g/(K^2*K^2)')
+
+    assert type(q1) is type(q2)
+
+    # NOTE: don't use __class__ when checking this, always use type()
+    assert isinstance(q1, type(q2))
+    assert isinstance(q2, type(q1))
+    assert isinstance(q2, Q)
+    assert not isinstance(q2, Q[Pressure])
+
+    q3 = Q(25, 'm*g*g/(K^2*K^2)')
+
+    assert type(q3) is not type(q2)
+    assert not isinstance(q3, type(q1))
+
+
+def test_instance_checks():
+
+    assert isinstance(Q(2), Q[Dimensionless])
+    assert isinstance(Q(2), Q)
+
+    class Fraction(Dimensionless):
+        pass
+
+    # Q(2) will default to Dimensionless, since that was
+    # defined before Fraction
+    assert not isinstance(Q(2), Q[Fraction])
+    assert isinstance(Q(2), Q[Dimensionless])
+
+    # Q[Fraction] will override the subclass
+    assert isinstance(Q[Fraction](2), Q[Fraction])
+
+    assert isinstance(Q(25, 'bar'), Q[Pressure])
+
+    assert not isinstance(Q(25, 'C'), Q[Pressure])
+
+    assert isinstance(Q(25, 'C'), Q[Temperature])
+
+    assert isinstance(Q(25, 'kg'), Q[Mass])
+
+    assert isinstance(Q(25, 'kg'), Q)
+
+    assert isinstance_types(Q(25, 'C'), Q)
+    assert isinstance_types(Q(25, 'C'), Q[Temperature])
+
+    assert isinstance_types([Q(25, 'C')], list[Q[Temperature]])
+    assert isinstance_types(
+        [Q[Temperature](25, 'C'), Q(25, 'F')], list[Q[Temperature]])
+    assert isinstance_types([Q(25, 'C'), Q(25, 'bar')], list[Q])
+
+    class CustomDimensionality(Dimensionality):
+        dimensions = UnitsContainer({'[mass]': 1, '[temperature]': -2})
+
+    # Q(25, 'g/K^2') will find the correct subclass since there
+    # is no other, existing dimensionality with these dimensions
+    assert isinstance(Q(25, 'g/K^2'), Q[CustomDimensionality])
+
+    assert isinstance(Q[CustomDimensionality](
+        25, 'g/K^2'), Q[CustomDimensionality])
+
+    assert isinstance(Q[CustomDimensionality](25, 'g/K^2'), Q)
+
+    assert isinstance_types({Q(25, 'g/K^2')},
+                            set[Q[CustomDimensionality]])
+
+    assert not isinstance_types((Q(25, 'm*g/K^2'), ),
+                                tuple[Q[CustomDimensionality], ...])
+
+    assert not isinstance_types([Q(25, 'C')], list[Q[Pressure]])
+
+    assert isinstance_types([Q[Temperature](25, 'C'), Q(25, 'F')],
+                            list[Q[Temperature]])
+
+    assert not isinstance_types([Q[Temperature](25, 'C'), Q(25, 'F/day')],
+                                list[Q[Temperature]])
+
+    assert not isinstance_types([Q(25, 'C'), Q(25, 'bar')],
+                                list[Q[CustomDimensionality]])
+
+
+def test_typed_dict():
+
+    d = {
+        'P': Q[Pressure](25, 'bar'),
+        'T': Q[Temperature](25, 'degC'),
+        'x': Q[Dimensionless](0.5)
+    }
+
+    class PTxDict(TypedDict):
+        P: Q[Pressure]
+        T: Q[Temperature]
+        x: Q[Dimensionless]
+
+    # cannot use isinstance with complex types
+    with pytest.raises(TypeError):
+        isinstance(d, PTxDict)
+
+    assert isinstance_types(d, PTxDict)
+
+    d = {
+        'P': Q[Pressure](25, 'bar'),
+        'T': Q[Temperature](25, 'degC'),
+        'x': Q[Dimensionless](0.5),
+        'extra': Q
+    }
+
+    class PTxDict(TypedDict):
+        P: Q[Pressure]
+        T: Q[Temperature]
+        x: Q[Dimensionless]
+
+    assert not isinstance_types(d, PTxDict)
+
+    d = {
+        'P': Q[Pressure](25, 'bar'),
+        'T': Q[Temperature](25, 'degC'),
+        'x': Q[Dimensionless](0.5),
+    }
+
+    class PTxDict(TypedDict):
+        P: Q[Pressure]
+        T: Q[Temperature]
+        x: Q[Dimensionless]
+        missing: Q
+
+    assert not isinstance_types(d, PTxDict)
+
+    d = {
+        'P': Q(25, 'bar'),
+        'T': Q(25, 'degC'),
+        'x': Q(0.5),
+    }
+
+    class PTxDict(TypedDict):
+        P: Q[Pressure]
+        T: Q[Temperature]
+        x: Q[Dimensionless]
+
+    assert isinstance_types(d, PTxDict)
+
+
+    d = {
+        'P': Q(25, 'bar'),
+        'T': Q(25, 'meter'),
+        'x': Q(0.5),
+    }
+
+    class PTxDict(TypedDict):
+        P: Q[Pressure]
+        T: Q[Temperature]
+        x: Q[Dimensionless]
+
+    assert not isinstance_types(d, PTxDict)
+

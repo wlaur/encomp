@@ -5,10 +5,6 @@ will import this one).
 
 Implements a type-aware system on top of ``pint`` that verifies
 that the dimensionality of the unit is correct.
-
-.. todo::
-    When/if ``pint`` implements a typing system (there is an open PR for this),
-    this module will have to be rewritten to be compatible with that.
 """
 
 
@@ -59,46 +55,6 @@ class DimensionalityRedefinitionError(ValueError):
 
 # keep track of user-created dimensions
 _CUSTOM_DIMENSIONS: list[str] = []
-
-
-def get_dimensionality_name(uc: UnitsContainer) -> Union[DimensionalityName, str]:
-
-    # custom dimensions will be separated to increase readability
-    custom = {}
-
-    for n in _CUSTOM_DIMENSIONS:
-
-        dimension_str = f'[{n}]'
-
-        if dimension_str in uc:
-            exp = uc[dimension_str]
-            custom[dimension_str] = exp
-
-    if not len(custom):
-        return str(uc)
-
-    uc = uc.remove(list(custom))
-
-    if '[normal]' in custom:
-
-        custom_without_normal = custom.copy()
-        dim_with_normal = uc.copy()
-
-        normal_exp = custom_without_normal.pop('[normal]')
-        dim_with_normal = dim_with_normal.add('[normal]', normal_exp)
-
-        # # move the normal part to the base dimensionality
-        # # in case that is an explicitly defined dimensionality
-        # if dim_with_normal in _DIMENSIONALITIES:
-        #     dim = dim_with_normal
-        #     custom = custom_without_normal
-
-    base_name = str(uc)
-
-    custom_dimensions = UnitsContainer(custom)
-    name = f'{base_name} * {custom_dimensions}'
-
-    return name
 
 
 # there should only be one registry at a time, pint raises ValueError
@@ -157,10 +113,8 @@ except ImportError:
     pass
 
 
-if (
-    SETTINGS.additional_units is not None and
-    SETTINGS.additional_units.is_file()
-):
+def _load_additional_units() -> None:
+
     with open(SETTINGS.additional_units, 'r', encoding='utf-8') as f:
 
         lines = f.read().split('\n')
@@ -175,6 +129,14 @@ if (
                     ureg.define(line)
                 except pint.errors.RedefinitionError:
                     pass
+
+
+if (
+    SETTINGS.additional_units is not None and
+    SETTINGS.additional_units.is_file()
+):
+    _load_additional_units()
+
 
 ureg.default_format = SETTINGS.default_unit_format
 
@@ -206,7 +168,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
     FORMATTING_SPECS = ('~P', '~L', '~H', '~Lx')
 
     # common unit names not supported by pint, also some misspellings
-    # TODO: these only work with the entire unit string as key, need to use ureg.define
+    # TODO: this does not work with compound units, need to use ureg.define
     # to override units at the pint parsing stage
     UNIT_CORRECTIONS = {
         'kpa': 'kPa',
@@ -236,6 +198,9 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         'ft_water': 'feet_H2O'
     }
 
+    def __hash__(self) -> int:
+        return super().__hash__()
+
     @classmethod
     def _get_dimensional_subclass(cls, dim: type[Dimensionality]) -> type[Quantity]:
 
@@ -248,7 +213,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
             quantity_name,
             (Quantity,),
             {
-                '_expected_dimensionality': dim.uc,
+                '_expected_dimensionality': dim.dimensions,
                 '__class__': Quantity
             }
         )
@@ -260,7 +225,18 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
     def __class_getitem__(cls, dim: type[DT]):
 
         if not isinstance(dim, type):
-            dim = dim.__class__
+            raise TypeError(
+                'Generic type parameter to Quantity must be an '
+                'encomp.utypes.Dimensionality subtype, '
+                f'passed an instance of {type(dim)}: {dim}'
+            )
+
+        if not issubclass(dim, Dimensionality):
+            raise TypeError(
+                'Generic type parameter to Quantity must be an '
+                'encomp.utypes.Dimensionality subtype, '
+                f'passed: {dim}'
+            )
 
         return cls._get_dimensional_subclass(dim)
 
@@ -345,7 +321,13 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
             # in case this Quantity was initialized without specifying
             # the dimensionality, check the dimensionality and return the
             # subclass with correct dimensionality
-            dim = Dimensionality.get_cls(valid_unit.dimensionality)
+            # the name of the dimensionality class will be the first one
+            # defined with this UnitsContainer, i.e. custom dimensions
+            # will not override the defaults when creating Quantities with
+            # a dynamically determined subclass
+            dim = Dimensionality.get_dimensionality(
+                valid_unit.dimensionality
+            )
 
             # __new__ will return an instance of this subclass
             return cls._get_dimensional_subclass(dim)(val, valid_unit)
@@ -354,8 +336,8 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
 
         if valid_unit.dimensionality != expected_dimensionality:
 
-            dim_name = get_dimensionality_name(valid_unit.dimensionality)
-            expected_name = get_dimensionality_name(expected_dimensionality)
+            dim_name = str(valid_unit.dimensionality)
+            expected_name = str(expected_dimensionality)
 
             raise DimensionalityError(
                 f'Quantity with unit "{valid_unit}" has incorrect '
@@ -434,8 +416,8 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         if isinstance(unit, Quantity):
             unit = unit.dimensionality
 
-        if hasattr(unit, 'uc'):
-            unit = unit.uc
+        if hasattr(unit, 'dimensions'):
+            unit = unit.dimensions
 
         return super().check(unit)
 
@@ -604,7 +586,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
 
     @property
     def dimensionality_name(self) -> str:
-        return get_dimensionality_name(self.dimensionality)
+        return str(self.dimensionality)
 
     @property
     def dim_name(self) -> str:
@@ -778,19 +760,19 @@ def define_dimensionality(name: str, symbol: str = None) -> None:
     _CUSTOM_DIMENSIONS.append(name)
 
 
-try:
+# define commonly used media as dimensionalities
+# "normal" is used to signify normal volume, e.g. "Nm³/s"
+for dimensionality_name in (
+    'normal',
+    'air',
+    'water',
+    'fuel'
+):
 
-    # define "normal" as a dimensionality (e.g. normal volume)
-    define_dimensionality('normal')
-
-    # define commonly used media as dimensionalities
-    define_dimensionality('air')
-    define_dimensionality('water')
-    define_dimensionality('fuel')
-
-# TODO: why does this happen when the module is reloaded with ipython?
-except pint.errors.DefinitionSyntaxError as e:
-    pass
+    try:
+        define_dimensionality(dimensionality_name)
+    except pint.errors.DefinitionSyntaxError as e:
+        pass
 
 
 def set_quantity_format(fmt: str = 'compact') -> None:
