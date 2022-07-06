@@ -4,8 +4,13 @@ from encomp.units import convert_volume_mass
 from encomp.units import Quantity as Q
 from encomp.utypes import (Dimensionless,
                            Time,
+                           Length,
                            MassFlow,
+                           Mass,
+                           VolumeFlow,
                            Volume,
+                           Energy,
+                           NormalVolumeFlow,
                            Power,
                            Temperature)
 
@@ -47,16 +52,82 @@ def test_quantity_to_types() -> None:
 def test_quantity_combined_types() -> None:
 
     m = Q[MassFlow](25, 'kg/s')
-    t = Q[Time](25, 's')
     d = Q[Dimensionless](25, '%')
 
     p1 = ((m / m) * d)**2 / (1 - d / 2)
     reveal_type(p1)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
 
-    # p2 = m * t
 
-    # reveal_type(p2)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+@pytest.mark.mypy_testing
+def test_quantity_custom_mul_div_types() -> None:
 
+    s = Q[Length](1, 'm')
+
+    # autopep8: off
+
+    reveal_type(s * s)  # R: encomp.units.Quantity[encomp.utypes.Area]
+
+    reveal_type(s * s * s)  # R: encomp.units.Quantity[encomp.utypes.Volume]
+    reveal_type((s * s) * s)  # R: encomp.units.Quantity[encomp.utypes.Volume]
+    reveal_type(s * (s * s))  # R: encomp.units.Quantity[encomp.utypes.Volume]
+
+
+    reveal_type(s * (s * s) / s) # R: encomp.units.Quantity[encomp.utypes.Area]
+    reveal_type(s * (s * s) / s / s) # R: encomp.units.Quantity[encomp.utypes.Length]
+    reveal_type(s * s * s / s / s / s) # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+
+    mf = Q[MassFlow](1, 'kg/s')
+    vf = Q[VolumeFlow](1, 'liter/s')
+    nvf = Q[NormalVolumeFlow](1, 'Nm3/s')
+    v = Q[Volume](1, 'liter')
+    m = Q[Mass](25, 'kg')
+
+    t = Q[Time](1, 's')
+
+    reveal_type(mf * t)  # R: encomp.units.Quantity[encomp.utypes.Mass]
+    reveal_type(t * vf)  # R: encomp.units.Quantity[encomp.utypes.Volume]
+    reveal_type(nvf * t)  # R: encomp.units.Quantity[encomp.utypes.NormalVolume]
+
+
+    reveal_type((mf * t) / t)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+    reveal_type((t * vf) / t)  # R: encomp.units.Quantity[encomp.utypes.VolumeFlow]
+    reveal_type((nvf * t) / t)  # R: encomp.units.Quantity[encomp.utypes.NormalVolumeFlow]
+
+
+    reveal_type(m / v)  # R: encomp.units.Quantity[encomp.utypes.Density]
+    reveal_type(v / m)  # R: encomp.units.Quantity[encomp.utypes.SpecificVolume]
+
+    # autopep8: on
+
+    e = Q[Energy](25, 'MJ')
+
+    reveal_type(e / t)  # R: encomp.units.Quantity[encomp.utypes.Power]
+    reveal_type(t * (e / t))  # R: encomp.units.Quantity[encomp.utypes.Energy]
+    reveal_type(e / t * t)  # R: encomp.units.Quantity[encomp.utypes.Energy]
+
+    # TODO: deal with this, the Quantity[Any] case is caught incorrectly in the __truediv__ overloads
+    # u = e * t
+    # reveal_type(u / t)  # R: encomp.units.Quantity[encomp.utypes.Energy]
+
+
+@pytest.mark.mypy_testing
+def test_quantity_custom_pow_types() -> None:
+
+    s = Q[Length](1, 'm')
+
+    # NOTE: this only works with int 1, 2, 3, it's not possible to
+    # represent literal floats like "Literal[1.0]"
+    reveal_type(s**1)  # R: encomp.units.Quantity[encomp.utypes.Length]
+    reveal_type(s**2)  # R: encomp.units.Quantity[encomp.utypes.Area]
+    reveal_type(s**3)  # R: encomp.units.Quantity[encomp.utypes.Volume]
+
+    # this works with pylance but not mypy for some reason...
+    exp = 2
+    reveal_type(s**exp)  # R: encomp.units.Quantity[<nothing>]
+
+    # this does not work, only int literals can be detected by mypy
+    exp_ = int(3.0)
+    reveal_type(s**exp_)  # R: encomp.units.Quantity[<nothing>]
 
 
 @pytest.mark.mypy_testing
@@ -74,7 +145,7 @@ def test_convert_mass_flow_types() -> None:
 
     reveal_type(m)  # R: encomp.units.Quantity[encomp.utypes.Mass]
 
-    vf = Q(25, 'liter/day')  # E: Need type annotation for "vf"
+    # vf = Q(25, 'liter/day')  # E: Need type annotation for "vf"
 
-    # TODO: output is incorrect, should be Union[...]
-    unknown_output = convert_volume_mass(vf)
+    # # TODO: output is incorrect, should be Union[...]
+    # unknown_output = convert_volume_mass(vf)

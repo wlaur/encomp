@@ -96,7 +96,6 @@ class Dimensionality(ABC):
 
         return _Dimensionality
 
-
 # type variables that represent a certain dimensionality
 # the DT_ type is used to signify different dimensionalities than DT,
 # and DT__  signifies different than DT and DT__
@@ -104,7 +103,7 @@ DT = TypeVar('DT', bound=Dimensionality)
 DT_ = TypeVar('DT_', bound=Dimensionality)
 DT__ = TypeVar('DT__', bound=Dimensionality)
 
-
+_DimensionlessUC = UnitsContainer({})
 _NormalUC = UnitsContainer({'[normal]': 1})
 _LengthUC = UnitsContainer({'[length]': 1})
 _MassUC = UnitsContainer({'[mass]': 1})
@@ -119,7 +118,7 @@ _LuminosityUC = UnitsContainer({'[luminosity]': 1})
 # reloading (re-importing) this module will clear and reset the registry
 
 class Dimensionless(Dimensionality):
-    dimensions = UnitsContainer({})
+    dimensions = _DimensionlessUC
 
 
 class Normal(Dimensionality):
@@ -247,7 +246,8 @@ _ThermalConductivityUC = _PowerUC / _LengthUC / _TemperatureUC
 _HeatTransferCoefficientUC = _PowerUC / _AreaUC / _TemperatureUC
 _MassPerNormalVolumeUC = _MassUC / _NormalVolumeUC
 _MassPerEnergyUC = _MassUC / _EnergyUC
-
+_CurrencyUC = _DimensionlessUC
+_CurrencyPerEnergyUC = _CurrencyUC / _EnergyUC
 
 class HeatingValue(Dimensionality):
     dimensions = _HeatingValueUC
@@ -283,3 +283,10 @@ class MassPerNormalVolume(Dimensionality):
 
 class MassPerEnergy(Dimensionality):
     dimensions = _MassPerEnergyUC
+
+
+class Currency(Dimensionality):
+    dimensions = _CurrencyUC
+
+class CurrencyPerEnergy(Dimensionality):
+    dimensions = _CurrencyPerEnergyUC

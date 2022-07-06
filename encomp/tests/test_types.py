@@ -1,6 +1,6 @@
 import pytest
 
-from encomp.units import DimensionalityError
+from encomp.units import DimensionalityError, ExpectedDimensionalityError
 from encomp.units import Quantity as Q
 from encomp.utypes import (Dimensionless,
                            NormalVolumeFlow,
@@ -33,6 +33,31 @@ def test_quantity_reveal_type() -> None:
     unknown = Q(25, 'bar/week')  # E: Need type annotation for "unknown"
 
     reveal_type(unknown)  # R: encomp.units.Quantity[Any]
+
+
+@pytest.mark.mypy_testing
+def test_quantity_construction() -> None:
+
+    Q(25)
+    Q(25, None)
+
+    Q[Mass](25, Q[Mass](25, 'kg'))
+    Q[Mass](25, Q[Mass](25, 'kg').u)
+
+    with pytest.raises(ExpectedDimensionalityError):
+
+        # autopep8: off
+
+        Q[Mass](25, Q[Time](25, 'sec')) # E: Argument 2 to "Quantity" has incompatible type "Quantity[Time]"; expected "Union[Unit, UnitsContainer, str, Quantity[Mass], None]"
+
+        # autopep8: on
+
+    mf = Q[MassFlow](25, 'kg/s')
+    e = Q(25, 'kJ')  # E: Need type annotation for "e"
+
+    reveal_type(mf)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+
+    reveal_type(e)  # R: encomp.units.Quantity[Any]
 
 
 @pytest.mark.mypy_testing

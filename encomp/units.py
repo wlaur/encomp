@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 import warnings
 import numbers
-from typing import Union, Optional, Generic, Any, overload
+from typing import Union, Optional, Generic, Any, Literal, overload
 import sympy as sp
 import numpy as np
 import pandas as pd
@@ -33,11 +33,21 @@ from encomp.utypes import (Magnitude,
                            Dimensionality,
                            _BASE_SI_UNITS,
                            Dimensionless,
+                           Currency,
+                           CurrencyPerEnergy,
                            Density,
+                           Energy,
+                           Power,
+                           Time,
+                           Length,
+                           Area,
+                           Volume,
                            Mass,
                            MassFlow,
-                           Volume,
-                           VolumeFlow)
+                           VolumeFlow,
+                           NormalVolume,
+                           NormalVolumeFlow,
+                           SpecificVolume)
 
 if SETTINGS.ignore_ndarray_unit_stripped_warning:
     warnings.filterwarnings(
@@ -150,6 +160,16 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
     """
     Subclass of ``pint.quantity.Quantity`` with additional functionality
     and integration with other libraries.
+
+    Encodes the output dimensionalities of some common operations,
+    for example ``Length**2 -> Area``. This is implemented by overloading the
+    ``__mul__, __truediv__, __pow__`` methods.
+
+
+    .. todo::
+
+        Maybe the overload methods should be moved to a separate stub file?
+
     """
 
     _REGISTRY: CustomRegistry = ureg  # type: ignore
@@ -202,7 +222,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         return super().__hash__()
 
     @classmethod
-    def _get_dimensional_subclass(cls, dim: type[Dimensionality]) -> type[Quantity]:
+    def _get_dimensional_subclass(cls, dim: type[Dimensionality]) -> type[Quantity[DT]]:
 
         if dim in cls._DIMENSIONAL_SUBCLASSES:
             return cls._DIMENSIONAL_SUBCLASSES[dim]
@@ -222,7 +242,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
 
         return DimensionalQuantity
 
-    def __class_getitem__(cls, dim: type[DT]):
+    def __class_getitem__(cls, dim: type[DT]) -> type[Quantity[DT]]:
 
         if not isinstance(dim, type):
             raise TypeError(
@@ -283,9 +303,9 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         return len(self._magnitude)
 
     def __new__(
-            cls,
-            val: Union[Magnitude, Quantity[DT], str],
-            unit: Union[Unit, UnitsContainer, str, Quantity[DT], None] = None
+        cls,
+        val: Union[Magnitude, Quantity[DT], str],
+        unit: Union[Unit, UnitsContainer, str, Quantity[DT], None] = None
     ) -> Quantity[DT]:
 
         if unit is None:
@@ -334,7 +354,11 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
             )
 
             # __new__ will return an instance of this subclass
-            return cls._get_dimensional_subclass(dim)(val, valid_unit)
+            # NOTE: the type checker will not be able to infer the class in this case,
+            # since it is created dynamically
+
+            subcls = cls._get_dimensional_subclass(dim)
+            return subcls(val, valid_unit)
 
         expected_dimensionality = cls._expected_dimensionality
 
@@ -430,7 +454,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
 
     def __format__(self, format_type: str) -> str:
         """
-        Overloads the ``__format__`` method for Quantity:
+        Overrides the ``__format__`` method for Quantity:
         Ensure that the default formatting spec is used for fixed
         precision formatting (":.2f", ":.2g") when no explicit
         format is specified.
@@ -608,6 +632,50 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         return cls(qty.m, qty.u)
 
     @overload
+    def __mul__(self: Quantity[Length], other: Quantity[Length]) -> Quantity[Area]:
+        ...
+
+    @overload
+    def __mul__(self: Quantity[Area], other: Quantity[Length]) -> Quantity[Volume]:
+        ...
+
+    @overload
+    def __mul__(self: Quantity[Length], other: Quantity[Area]) -> Quantity[Volume]:
+        ...
+
+    @overload
+    def __mul__(self: Quantity[Time], other: Quantity[MassFlow]) -> Quantity[Mass]:
+        ...
+
+    @overload
+    def __mul__(self: Quantity[MassFlow], other: Quantity[Time]) -> Quantity[Mass]:
+        ...
+
+    @overload
+    def __mul__(self: Quantity[Time], other: Quantity[VolumeFlow]) -> Quantity[Volume]:
+        ...
+
+    @overload
+    def __mul__(self: Quantity[VolumeFlow], other: Quantity[Time]) -> Quantity[Volume]:
+        ...
+
+    @overload
+    def __mul__(self: Quantity[Time], other: Quantity[NormalVolumeFlow]) -> Quantity[NormalVolume]:
+        ...
+
+    @overload
+    def __mul__(self: Quantity[NormalVolumeFlow], other: Quantity[Time]) -> Quantity[NormalVolume]:
+        ...
+
+    @overload
+    def __mul__(self: Quantity[Power], other: Quantity[Time]) -> Quantity[Energy]:
+        ...
+
+    @overload
+    def __mul__(self: Quantity[Time], other: Quantity[Power]) -> Quantity[Energy]:
+        ...
+
+    @overload
     def __mul__(self: Quantity[Dimensionless], other: Quantity[DT_]) -> Quantity[DT_]:
         ...
 
@@ -631,7 +699,48 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         return super().__rmul__(other)
 
     @overload
-    def __truediv__(self, other: Quantity[DT]) -> Quantity[Dimensionless]:
+    def __truediv__(self, other: Quantity[DT]  # type: ignore
+                    ) -> Quantity[Dimensionless]:
+        ...
+
+    @overload
+    def __truediv__(self: Quantity[Volume], other: Quantity[Length]) -> Quantity[Area]:
+        ...
+
+    @overload
+    def __truediv__(self: Quantity[Volume], other: Quantity[Area]) -> Quantity[Length]:
+        ...
+
+    @overload
+    def __truediv__(self: Quantity[Area], other: Quantity[Length]) -> Quantity[Length]:
+        ...
+
+    @overload
+    def __truediv__(self: Quantity[Mass], other: Quantity[Time]) -> Quantity[MassFlow]:
+        ...
+
+    @overload
+    def __truediv__(self: Quantity[Volume], other: Quantity[Time]) -> Quantity[VolumeFlow]:
+        ...
+
+    @overload
+    def __truediv__(self: Quantity[NormalVolume], other: Quantity[Time]) -> Quantity[NormalVolumeFlow]:
+        ...
+
+    @overload
+    def __truediv__(self: Quantity[Mass], other: Quantity[Volume]) -> Quantity[Density]:
+        ...
+
+    @overload
+    def __truediv__(self: Quantity[Volume], other: Quantity[Mass]) -> Quantity[SpecificVolume]:
+        ...
+
+    @overload
+    def __truediv__(self: Quantity[Energy], other: Quantity[Time]) -> Quantity[Power]:
+        ...
+
+    @overload
+    def __truediv__(self: Quantity[Currency], other: Quantity[Energy]) -> Quantity[CurrencyPerEnergy]:
         ...
 
     @overload
@@ -669,6 +778,18 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
 
     def __rfloordiv__(self: Quantity[Dimensionless], other: MagnitudeValue) -> Quantity[Dimensionless]:
         return super().__rfloordiv__(other)
+
+    @overload
+    def __pow__(self, other: Literal[1]) -> Quantity[DT]:
+        ...
+
+    @overload
+    def __pow__(self: Quantity[Length], other: Literal[2]) -> Quantity[Area]:
+        ...
+
+    @overload
+    def __pow__(self: Quantity[Length], other: Literal[3]) -> Quantity[Volume]:
+        ...
 
     @overload
     def __pow__(self: Quantity[Dimensionless], other: MagnitudeValue) -> Quantity[Dimensionless]:
@@ -902,7 +1023,7 @@ def convert_volume_mass(inp: Quantity[VolumeFlow],
 
 
 @overload
-def convert_volume_mass(inp: Quantity[Any],
+def convert_volume_mass(inp: Quantity,
                         rho: Optional[Quantity[Density]] = None) -> Union[Quantity[Mass], Quantity[MassFlow], Quantity[Volume], Quantity[VolumeFlow]]:
     ...
 
