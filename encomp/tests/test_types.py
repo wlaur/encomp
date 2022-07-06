@@ -1,14 +1,352 @@
 import pytest
 
+from encomp.units import DimensionalityError
+from encomp.units import Quantity as Q
+from encomp.utypes import (Dimensionless,
+                           NormalVolumeFlow,
+                           MassFlow,
+                           Time,
+                           Mass,
+                           Temperature)
+
+
+# it's important that the expected mypy output is a comment on the
+# same line as the expression, disable autopep8 if necessary with
+# autopep8: off
+# ... some code above the line length limit
+# autopep8: on
+
 
 @pytest.mark.mypy_testing
-def mypy_test_invalid_assignment() -> None:
+def test_quantity_reveal_type() -> None:
 
-    # autopep8: off
+    m = Q[MassFlow](1, 'kg/s')
 
-    foo = "abc"
+    reveal_type(m)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
 
-    foo = 123  # E: Incompatible types in assignment (expression has type "int", variable has type "str")
+    T = Q[Temperature](1, 'degC')
+
+    reveal_type(T)  # R: encomp.units.Quantity[encomp.utypes.Temperature]
+
+    # if the dimensionality is omitted, the inferred type is Quantity[Any]
+    # the type will be correct at runtime
+    unknown = Q(25, 'bar/week')  # E: Need type annotation for "unknown"
+
+    reveal_type(unknown)  # R: encomp.units.Quantity[Any]
 
 
-    # autopep8: on
+@pytest.mark.mypy_testing
+def test_quantity_mul_types() -> None:
+
+    m = Q[MassFlow](1, 'kg/s')
+    n = Q[NormalVolumeFlow](1, 'Nm^3/h')
+
+    d = Q[Dimensionless](1, '%')
+
+    s_int = 5
+    s_float = 0.1
+
+    # multiplying 2 Quantities creates a new dimensionality
+    # that is only known at runtime
+    p1 = m * m  # E: Need type annotation for "p1"
+    p2 = m * n  # E: Need type annotation for "p2"
+    p3 = n * m  # E: Need type annotation for "p3"
+    p4 = n * n  # E: Need type annotation for "p4"
+
+    # scalar and Q[Dimensionless] multiplication preserves dimensionality
+
+    k1 = m * s_int
+    k2 = s_int * m
+
+    reveal_type(k1)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+    reveal_type(k2)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+
+    k3 = m * s_float
+    k4 = s_float * m
+
+    reveal_type(k3)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+    reveal_type(k4)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+
+    k5 = m * d
+    k6 = d * m
+
+    reveal_type(k5)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+    reveal_type(k6)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+
+    class CustomDimensionless(Dimensionless):
+        pass
+
+    d_custom = Q[CustomDimensionless](0.5)
+
+    # NOTE: this does not work for a custom dimensionless quantity
+    k7 = m * d_custom  # E: Need type annotation for "k7"
+    k8 = d_custom * m  # E: Need type annotation for "k8"
+
+
+@pytest.mark.mypy_testing
+def test_quantity_div_types() -> None:
+
+    m = Q[MassFlow](1, 'kg/s')
+    n = Q[NormalVolumeFlow](1, 'Nm^3/h')
+
+    d = Q[Dimensionless](1, '%')
+
+    s_int = 5
+    s_float = 0.1
+
+    # dividing 2 different Quantities creates a new dimensionality
+    # that is only known at runtime
+    p1 = m / n  # E: Need type annotation for "p1"
+    p2 = n / m  # E: Need type annotation for "p2"
+
+    # scalar/dimensionless divided by Quantity also creates a new, unknown dimensionality
+    p3 = s_int / m  # E: Need type annotation for "p3"
+    p4 = s_float / m  # E: Need type annotation for "p4"
+    p5 = d / m  # E: Need type annotation for "p5"
+
+    # quantity divided by scalar/dimensionless preserves dimensionality
+    p6 = m / d
+    p7 = m / s_int
+    p8 = m / s_float
+
+    reveal_type(p6)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+    reveal_type(p7)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+    reveal_type(p8)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+
+    p9 = d / s_int
+    p10 = d / s_float
+
+    reveal_type(p9)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+    reveal_type(p10)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+
+    # dividing by the same dimensionality creates dimensionless
+
+    p11 = m / m
+    p12 = n / n
+    p13 = d / d
+
+    reveal_type(p11)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+    reveal_type(p12)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+    reveal_type(p13)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+
+
+@pytest.mark.mypy_testing
+def test_quantity_floordiv_types() -> None:
+
+    # floordiv is only implemented in case the dimensionalities match
+
+    m = Q[MassFlow](1, 'kg/s')
+    n = Q[NormalVolumeFlow](1, 'Nm^3/h')
+    d = Q[Dimensionless](1, '%')
+
+    s_int = 5
+    s_float = 0.1
+
+    p1 = m // m
+    p2 = n // n
+    p3 = d // d
+
+    reveal_type(p1)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+    reveal_type(p2)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+    reveal_type(p3)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+
+    p4 = s_int // d
+    p5 = d // s_int
+    p6 = s_float // d
+    p7 = d // s_float
+
+    reveal_type(p4)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+    reveal_type(p5)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+    reveal_type(p6)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+    reveal_type(p7)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+
+    with pytest.raises(DimensionalityError):
+
+        # autopep8: off
+        p8 = m // n  # E: Unsupported operand types for // ("Quantity[MassFlow]" and "Quantity[NormalVolumeFlow]")
+        # autopep8: on
+
+
+@pytest.mark.mypy_testing
+def test_quantity_pow_types() -> None:
+
+    # pow is only implemented in case the dimensionalities match
+
+    m = Q[MassFlow](1, 'kg/s')
+    n = Q[NormalVolumeFlow](1, 'Nm^3/h')
+    d = Q[Dimensionless](1, '%')
+
+    s_int = 5
+    s_float = 0.1
+
+    p1 = s_int**d
+    p2 = d**s_int
+    p3 = s_float**d
+    p4 = d**s_float
+
+    reveal_type(p1)  # R: builtins.float
+    reveal_type(p2)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+    reveal_type(p3)  # R: builtins.float
+    reveal_type(p4)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+
+    p5 = m**s_int  # E: Need type annotation for "p5"
+    p6 = m**s_float  # E: Need type annotation for "p6"
+    p7 = m**d  # E: Need type annotation for "p7"
+
+    with pytest.raises(DimensionalityError):
+
+        # autopep8: off
+
+        # NOTE: the mypy test plugin cannot handle multiple errors on a single line
+
+        m**n  # E: Unsupported operand types for ** ("Quantity[MassFlow]" and "Quantity[NormalVolumeFlow]")
+        d**n  # E: Unsupported operand types for ** ("Quantity[Dimensionless]" and "Quantity[NormalVolumeFlow]")
+
+        # autopep8: on
+
+
+@pytest.mark.mypy_testing
+def test_quantity_div_types_custom() -> None:
+
+    t = Q[Time](2, 'hour')
+    m_ = Q[Mass](2, 'kg')
+
+    # this cannot be verified when type checking
+    # TODO: maybe add some common div/mul operations and their
+    # output dimensionalities using @overload?
+    mf: Q[MassFlow] = m_ / t
+
+    reveal_type(mf)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+
+
+@pytest.mark.mypy_testing
+def test_quantity_add_types() -> None:
+
+    m = Q[MassFlow](1, 'kg/s')
+    n = Q[NormalVolumeFlow](1, 'Nm^3/h')
+    d = Q[Dimensionless](1, '%')
+
+    s_int = 5
+    s_float = 0.1
+
+    p1 = m + m
+    p2 = n + n
+    p3 = d + d
+
+    reveal_type(p1)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+    reveal_type(p2)  # R: encomp.units.Quantity[encomp.utypes.NormalVolumeFlow]
+    reveal_type(p3)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+
+    with pytest.raises(DimensionalityError):
+
+        # autopep8: off
+
+        p4 = m + s_int # E: Unsupported operand types for + ("Quantity[MassFlow]" and "int")
+        p5 = m + s_float # E: Unsupported operand types for + ("Quantity[MassFlow]" and "float")
+
+        p4_ = s_int + m # E: Unsupported operand types for + ("int" and "Quantity[MassFlow]")
+        p5_ = s_float + m # E: Unsupported operand types for + ("float" and "Quantity[MassFlow]")
+
+        # autopep8: on
+
+    p6 = d + s_int
+    p7 = d + s_float
+    p8 = s_int + d
+    p9 = s_float + d
+
+    reveal_type(p6)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+    reveal_type(p7)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+    reveal_type(p8)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+    reveal_type(p9)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+
+
+@pytest.mark.mypy_testing
+def test_quantity_sub_types() -> None:
+
+    m = Q[MassFlow](1, 'kg/s')
+    n = Q[NormalVolumeFlow](1, 'Nm^3/h')
+    d = Q[Dimensionless](1, '%')
+
+    s_int = 5
+    s_float = 0.1
+
+    p1 = m - m
+    p2 = n - n
+    p3 = d - d
+
+    reveal_type(p1)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+    reveal_type(p2)  # R: encomp.units.Quantity[encomp.utypes.NormalVolumeFlow]
+    reveal_type(p3)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+
+    with pytest.raises(DimensionalityError):
+
+        # autopep8: off
+
+        p4 = m - s_int # E: Unsupported operand types for - ("Quantity[MassFlow]" and "int")
+        p5 = m - s_float # E: Unsupported operand types for - ("Quantity[MassFlow]" and "float")
+
+        p4_ = s_int - m # E: Unsupported operand types for - ("int" and "Quantity[MassFlow]")
+        p5_ = s_float - m # E: Unsupported operand types for - ("float" and "Quantity[MassFlow]")
+
+        # autopep8: on
+
+    p6 = d - s_int
+    p7 = d - s_float
+    p8 = s_int - d
+    p9 = s_float - d
+
+    reveal_type(p6)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+    reveal_type(p7)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+    reveal_type(p8)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+    reveal_type(p9)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+
+
+@pytest.mark.mypy_testing
+def test_quantity_comparison_types() -> None:
+
+    m = Q[MassFlow](1, 'kg/s')
+    n = Q[NormalVolumeFlow](1, 'Nm^3/h')
+    d = Q[Dimensionless](1, '%')
+
+    s_int = 5
+    s_float = 0.1
+
+    p1 = m > m
+    p2 = m < m
+    p3 = m >= m
+    p4 = m <= m
+    p5 = m == m
+
+    reveal_type(p1)  # R: builtins.bool
+    reveal_type(p2)  # R: builtins.bool
+    reveal_type(p3)  # R: builtins.bool
+    reveal_type(p4)  # R: builtins.bool
+    reveal_type(p5)  # R: builtins.bool
+
+    with pytest.raises(DimensionalityError):
+
+        # autopep8: off
+
+        p6 = m > n # E: Unsupported operand types for > ("Quantity[MassFlow]" and "Quantity[NormalVolumeFlow]")
+        p7 = m > d # E: Unsupported operand types for > ("Quantity[MassFlow]" and "Quantity[Dimensionless]")
+        p8 = m > s_int # E: Unsupported operand types for > ("Quantity[MassFlow]" and "int")
+        p9 = m > s_float # E: Unsupported operand types for > ("Quantity[MassFlow]" and "float")
+        p10 = s_int <= m  # E: Unsupported operand types for <= ("int" and "Quantity[MassFlow]")
+
+        # autopep8: on
+
+    # == is implemented for all types
+    p11 = s_int == m
+    p12 = m == s_float
+
+    # dimensionless can be compared with scalars
+
+    p13 = d < s_int
+    p14 = d > s_float
+    p15 = s_int <= d
+    p16 = s_float >= d
+
+    reveal_type(p13)  # R: builtins.bool
+    reveal_type(p14)  # R: builtins.bool
+    reveal_type(p15)  # R: builtins.bool
+    reveal_type(p16)  # R: builtins.bool

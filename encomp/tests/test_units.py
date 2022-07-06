@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from encomp.misc import isinstance_types
-from encomp.units import Quantity, wraps, check, DimensionalityError
+from encomp.units import Quantity, wraps, check, ExpectedDimensionalityError
 from encomp.units import Quantity as Q
 
 from encomp.fluids import Water
@@ -74,7 +74,7 @@ def test_Q():
     # this Quantity must have the same dimensionality as P
     Q(2, 'kPa').check(P)
 
-    with pytest.raises(DimensionalityError):
+    with pytest.raises(ExpectedDimensionalityError):
         Q[Temperature](1, 'kg')
         Q[Pressure](1, 'meter')
         Q[Mass](1, P)
@@ -175,7 +175,7 @@ def test_custom_units():
 
     Q[NormalVolume](2, 'nm**3')
 
-    with pytest.raises(DimensionalityError):
+    with pytest.raises(ExpectedDimensionalityError):
         Q[NormalVolumeFlow](2, 'm**3/hour')
 
     Q[NormalVolumeFlow](2, 'Nm**3/hour').to('normal liter/sec')

@@ -97,6 +97,9 @@ class Dimensionality(ABC):
         return _Dimensionality
 
 
+# type variables that represent a certain dimensionality
+# the DT_ type is used to signify different dimensionalities than DT,
+# and DT__  signifies different than DT and DT__
 DT = TypeVar('DT', bound=Dimensionality)
 DT_ = TypeVar('DT_', bound=Dimensionality)
 DT__ = TypeVar('DT__', bound=Dimensionality)

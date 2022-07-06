@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 import warnings
 import numbers
-from typing import Union, Optional, Generic, overload
+from typing import Union, Optional, Generic, Any, NoReturn, overload
 import sympy as sp
 import numpy as np
 import pandas as pd
@@ -22,6 +22,7 @@ import pandas as pd
 import pint
 from pint.unit import UnitsContainer, Unit
 from pint.registry import UnitRegistry
+from pint.errors import DimensionalityError  # noqa
 
 from encomp.settings import SETTINGS
 from encomp.utypes import (Magnitude,
@@ -30,7 +31,6 @@ from encomp.utypes import (Magnitude,
                            DT_,
                            DT__,
                            Dimensionality,
-                           DimensionalityName,
                            _BASE_SI_UNITS,
                            Dimensionless,
                            Density,
@@ -45,7 +45,7 @@ if SETTINGS.ignore_ndarray_unit_stripped_warning:
         message='The unit of the quantity is stripped when downcasting to ndarray.')
 
 
-class DimensionalityError(ValueError):
+class ExpectedDimensionalityError(ValueError):
     pass
 
 
@@ -339,7 +339,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
             dim_name = str(valid_unit.dimensionality)
             expected_name = str(expected_dimensionality)
 
-            raise DimensionalityError(
+            raise ExpectedDimensionalityError(
                 f'Quantity with unit "{valid_unit}" has incorrect '
                 f'dimensionality {dim_name}, '
                 f'expected {expected_name}'
@@ -616,12 +616,20 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
     def __mul__(self, other: Quantity[DT_]) -> Quantity[DT__]:
         ...
 
-    def __mul__(self, other: Union[MagnitudeValue, Quantity]) -> Quantity:
+    def __mul__(self, other):
         return super().__mul__(other)
 
-    def __rmul__(self,  # type: ignore[override]
-                 other: MagnitudeValue) -> Quantity[DT]:
-        return self.__mul__(other)
+    def __rmul__(self, other: MagnitudeValue  # type: ignore[override]
+                 ) -> Quantity[DT]:
+        return super().__rmul__(other)
+
+    @overload
+    def __truediv__(self, other: Quantity[DT]) -> Quantity[Dimensionless]:
+        ...
+
+    @overload
+    def __truediv__(self: Quantity[Dimensionless], other: Quantity[DT_]) -> Quantity[DT__]:
+        ...
 
     @overload
     def __truediv__(self, other: Quantity[Dimensionless]) -> Quantity[DT]:
@@ -635,11 +643,43 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
     def __truediv__(self, other: Quantity[DT_]) -> Quantity[DT__]:
         ...
 
-    def __truediv__(self, other: Union[MagnitudeValue, Quantity]) -> Quantity:
+    def __truediv__(self, other):
         return super().__truediv__(other)
 
     def __rtruediv__(self, other: MagnitudeValue) -> Quantity[DT_]:
         return super().__rtruediv__(other)
+
+    @overload
+    def __floordiv__(self: Quantity[Dimensionless], other: MagnitudeValue) -> Quantity[Dimensionless]:
+        ...
+
+    @overload
+    def __floordiv__(self, other: Quantity[DT]) -> Quantity[Dimensionless]:
+        ...
+
+    def __floordiv__(self, other):
+        return super().__floordiv__(other)
+
+    def __rfloordiv__(self: Quantity[Dimensionless], other: MagnitudeValue) -> Quantity[Dimensionless]:
+        return super().__rfloordiv__(other)
+
+    @overload
+    def __pow__(self: Quantity[Dimensionless], other: MagnitudeValue) -> Quantity[Dimensionless]:
+        ...
+
+    @overload
+    def __pow__(self, other: Quantity[Dimensionless]) -> Quantity[DT_]:
+        ...
+
+    @overload
+    def __pow__(self, other: MagnitudeValue) -> Quantity[DT_]:
+        ...
+
+    def __pow__(self, other):
+        return super().__pow__(other)
+
+    def __rpow__(self: Quantity[Dimensionless], other: MagnitudeValue) -> MagnitudeValue:
+        return super().__rpow__(other)
 
     @overload
     def __add__(self: Quantity[Dimensionless], other: MagnitudeValue) -> Quantity[Dimensionless]:
@@ -649,7 +689,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
     def __add__(self, other: Quantity[DT]) -> Quantity[DT]:
         ...
 
-    def __add__(self, other: Union[MagnitudeValue, Quantity[DT]]) -> Quantity[DT]:
+    def __add__(self, other):
         return super().__add__(other)
 
     def __radd__(self: Quantity[Dimensionless],  # type: ignore[override]
@@ -664,40 +704,57 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
     def __sub__(self, other: Quantity[DT]) -> Quantity[DT]:
         ...
 
-    def __sub__(self, other: Union[MagnitudeValue, Quantity[DT]]) -> Quantity[DT]:
+    def __sub__(self, other):
         return super().__sub__(other)
 
     def __rsub__(self: Quantity[Dimensionless], other: MagnitudeValue) -> Quantity[Dimensionless]:
         return super().__rsub__(other)
 
-    @overload
-    def __pow__(self: Quantity[Dimensionless], other: MagnitudeValue) -> Quantity[Dimensionless]:
+    @overload  # type: ignore[override]
+    def __gt__(self: Quantity[Dimensionless], other: MagnitudeValue) -> bool:
         ...
 
     @overload
-    def __pow__(self, other: MagnitudeValue) -> Quantity[DT_]:
+    def __gt__(self, other: Quantity[DT]) -> bool:
         ...
 
-    @overload
-    def __pow__(self, other: Quantity[DT_]) -> Quantity[DT__]:
-        ...
-
-    def __pow__(self, other: Union[MagnitudeValue, Quantity]) -> Quantity:
-        return super().__pow__(other)
-
-    def __gt__(self, other: Quantity[DT]) -> bool:  # type: ignore[override]
+    def __gt__(self, other):
         return super().__gt__(other)
 
-    def __ge__(self, other: Quantity[DT]) -> bool:  # type: ignore[override]
+    @overload  # type: ignore[override]
+    def __ge__(self: Quantity[Dimensionless], other: MagnitudeValue) -> bool:
+        ...
+
+    @overload
+    def __ge__(self, other: Quantity[DT]) -> bool:
+        ...
+
+    def __ge__(self, other):
         return super().__ge__(other)
 
-    def __lt__(self, other: Quantity[DT]) -> bool:  # type: ignore[override]
+    @overload  # type: ignore[override]
+    def __lt__(self: Quantity[Dimensionless], other: MagnitudeValue) -> bool:
+        ...
+
+    @overload
+    def __lt__(self, other: Quantity[DT]) -> bool:
+        ...
+
+    def __lt__(self, other):
         return super().__lt__(other)
 
-    def __le__(self, other: Quantity[DT]) -> bool:  # type: ignore[override]
+    @overload  # type: ignore[override]
+    def __le__(self: Quantity[Dimensionless], other: MagnitudeValue) -> bool:
         return super().__le__(other)
 
-    def __eq__(self, other: Quantity) -> bool:  # type: ignore[override]
+    @overload
+    def __le__(self, other: Quantity[DT]) -> bool:
+        return super().__le__(other)
+
+    def __le__(self, other):
+        return super().__le__(other)
+
+    def __eq__(self, other: Any) -> bool:  # type: ignore[override]
         return super().__eq__(other)
 
 
