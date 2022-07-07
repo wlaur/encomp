@@ -25,7 +25,7 @@ MagnitudeValue = Union[float, int]
 Magnitude = Union[MagnitudeValue,
                   list[MagnitudeValue],
                   tuple[MagnitudeValue, ...],
-                  np.ndarray[Any, Any],
+                  np.ndarray,
                   pd.Series]
 
 
