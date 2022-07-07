@@ -6,6 +6,7 @@ from encomp.utypes import (Dimensionless,
                            NormalVolumeFlow,
                            MassFlow,
                            Time,
+                           Length,
                            Mass,
                            Temperature)
 
@@ -32,6 +33,8 @@ def test_quantity_reveal_type() -> None:
     # the type will be correct at runtime
     unknown = Q(25, 'bar/week')  # E: Need type annotation for "unknown"
 
+    # TODO: mypy infers the dimensionality type as Any, but pylance
+    # correctly identifies it as Unknown
     reveal_type(unknown)  # R: encomp.units.Quantity[Any]
 
 
@@ -52,12 +55,13 @@ def test_quantity_construction() -> None:
 
         # autopep8: on
 
-    mf = Q[MassFlow](25, 'kg/s')
-    e = Q(25, 'kJ')  # E: Need type annotation for "e"
+    mf_ = Q(25, 'kg/s')
+    mf = Q[MassFlow](25, 'kg/week')
+    e = Q(25, 'kJ')
 
+    reveal_type(mf_)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
     reveal_type(mf)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
-
-    reveal_type(e)  # R: encomp.units.Quantity[Any]
+    reveal_type(e)  # R: encomp.units.Quantity[encomp.utypes.Energy]
 
 
 @pytest.mark.mypy_testing
@@ -73,10 +77,11 @@ def test_quantity_mul_types() -> None:
 
     # multiplying 2 Quantities creates a new dimensionality
     # that is only known at runtime
-    p1 = m * m  # E: Need type annotation for "p1"
-    p2 = m * n  # E: Need type annotation for "p2"
-    p3 = n * m  # E: Need type annotation for "p3"
-    p4 = n * n  # E: Need type annotation for "p4"
+    # the type checker will assign the dimensionality Unknown
+    p1 = m * m
+    p2 = m * n
+    p3 = n * m
+    p4 = n * n
 
     # scalar and Q[Dimensionless] multiplication preserves dimensionality
 
@@ -103,9 +108,51 @@ def test_quantity_mul_types() -> None:
 
     d_custom = Q[CustomDimensionless](0.5)
 
-    # NOTE: this does not work for a custom dimensionless quantity
-    k7 = m * d_custom  # E: Need type annotation for "k7"
-    k8 = d_custom * m  # E: Need type annotation for "k8"
+    k7 = m * d_custom
+    k8 = d_custom * m
+
+    reveal_type(k7)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+    reveal_type(k8)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+
+    # alternative way of specifying the dimensionality
+    # NOTE: the _dt parameter is ignored at runtime
+    d_custom_ = Q(0.6, _dt=CustomDimensionless)
+    k9 = m * d_custom_
+    k10 = d_custom * m
+
+    # TODO: this does not work (Unknown instead of MassFlow)
+    reveal_type(k9)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
+
+    # ... but this does work?
+    reveal_type(k10)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+
+
+@pytest.mark.mypy_testing
+def test_quantity_misc_types() -> None:
+
+    # autopep8: off
+
+    # don't mix the __class_getitem__ and _dt parameter
+    Q[Temperature](25, 'degC', _dt=Mass) # E: Argument "_dt" to "Quantity" has incompatible type "Type[Mass]"; expected "Type[Temperature]"
+
+    with pytest.raises(ExpectedDimensionalityError):
+
+        _cls = Q[Temperature]
+
+        # this raises a runtime error, since bar is not a Temperature unit
+        a = _cls(25, 'bar')
+
+        # the literal "bar" is correctly identified as a Pressure unit
+        reveal_type(a)  # R: encomp.units.Quantity[encomp.utypes.Pressure]
+
+
+        # this cannot be detected, however the variable b has type Q[Temperature]
+        # this will raise an error at runtime
+        b = Q[Mass](25, 'C')
+
+        reveal_type(b) # R: encomp.units.Quantity[encomp.utypes.Temperature]
+
+    # autopep8: on
 
 
 @pytest.mark.mypy_testing
@@ -121,13 +168,20 @@ def test_quantity_div_types() -> None:
 
     # dividing 2 different Quantities creates a new dimensionality
     # that is only known at runtime
-    p1 = m / n  # E: Need type annotation for "p1"
-    p2 = n / m  # E: Need type annotation for "p2"
+    p1 = m / n
+    p2 = n / m
+
+    reveal_type(p1)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
+    reveal_type(p2)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
 
     # scalar/dimensionless divided by Quantity also creates a new, unknown dimensionality
-    p3 = s_int / m  # E: Need type annotation for "p3"
-    p4 = s_float / m  # E: Need type annotation for "p4"
-    p5 = d / m  # E: Need type annotation for "p5"
+    p3 = s_int / m
+    p4 = s_float / m
+    p5 = d / m
+
+    reveal_type(p3)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
+    reveal_type(p4)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
+    reveal_type(p5)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
 
     # quantity divided by scalar/dimensionless preserves dimensionality
     p6 = m / d
@@ -153,6 +207,11 @@ def test_quantity_div_types() -> None:
     reveal_type(p11)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
     reveal_type(p12)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
     reveal_type(p13)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+
+    # in case the dimensionalities are Unknown, division will output Unknown
+    unknown = 1 / m**2
+
+    reveal_type(unknown / unknown)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
 
 
 @pytest.mark.mypy_testing
@@ -229,6 +288,12 @@ def test_quantity_pow_types() -> None:
 
         # autopep8: on
 
+    unknown = 1 / m
+
+    p8 = unknown**2.5
+
+    reveal_type(p8)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
+
 
 @pytest.mark.mypy_testing
 def test_quantity_add_types() -> None:
@@ -270,6 +335,14 @@ def test_quantity_add_types() -> None:
     reveal_type(p8)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
     reveal_type(p9)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
 
+    # unknown dimensionalities cannot be added
+    # TODO: is it possible to have an error instead of dimensionality Impossible?
+
+    unknown = 1 / m
+
+    p10 = unknown + unknown
+    reveal_type(p10)  # R: encomp.units.Quantity[encomp.utypes.Impossible]
+
 
 @pytest.mark.mypy_testing
 def test_quantity_sub_types() -> None:
@@ -310,6 +383,14 @@ def test_quantity_sub_types() -> None:
     reveal_type(p7)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
     reveal_type(p8)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
     reveal_type(p9)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+
+    # unknown dimensionalities cannot be subtracted
+    # TODO: is it possible to have an error instead of dimensionality Impossible?
+
+    unknown = 1 / m
+
+    p10 = unknown - unknown
+    reveal_type(p10)  # R: encomp.units.Quantity[encomp.utypes.Impossible]
 
 
 @pytest.mark.mypy_testing

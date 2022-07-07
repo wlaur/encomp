@@ -105,9 +105,8 @@ def test_quantity_custom_mul_div_types() -> None:
     reveal_type(t * (e / t))  # R: encomp.units.Quantity[encomp.utypes.Energy]
     reveal_type(e / t * t)  # R: encomp.units.Quantity[encomp.utypes.Energy]
 
-    # TODO: deal with this, the Quantity[Any] case is caught incorrectly in the __truediv__ overloads
-    # u = e * t
-    # reveal_type(u / t)  # R: encomp.units.Quantity[encomp.utypes.Energy]
+    u = e * t
+    reveal_type(u / t)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
 
 
 @pytest.mark.mypy_testing

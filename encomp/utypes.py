@@ -9,7 +9,7 @@ Some commonly used derived dimensionalities (like density) are defined for conve
 
 from __future__ import annotations
 
-from typing import TypeVar, Union, Any, Annotated
+from typing import TypeVar, Union, Any, Annotated, Optional, Literal
 from typing import Union
 from abc import ABC
 
@@ -17,8 +17,6 @@ from abc import ABC
 import numpy as np
 import pandas as pd
 from pint.unit import UnitsContainer
-
-DimensionalityName = Annotated[str, 'Dimensionality name']
 
 
 # type alias for the magnitude input to Quantity
@@ -33,10 +31,68 @@ Magnitude = Union[MagnitudeValue,
 
 _BASE_SI_UNITS: tuple[str, ...] = ('m', 'kg', 's', 'K', 'mol', 'A', 'cd')
 
+# these string literals are used to infer the dimensionality of commonly created quantities
+DimensionlessUnits = Literal['', '%']
+LengthUnits = Literal['m', 'meter', 'km', 'cm', 'mm', 'um']
+MassUnits = Literal['kg', 'g', 'ton', 'tonne', 't', 'mg', 'ug']
+TimeUnits = Literal['s', 'second', 'min', 'minute', 'h', 'hr',
+                    'hour', 'd', 'day', 'w', 'week', 'y', 'yr',
+                    'a', 'year', 'ms']
+
+TemperatureUnits = Literal['C', 'degC', '°C', 'K', 'F', 'degF', '°F']
+SubstanceUnits = Literal['mol', 'kmol']
+CurrentUnits = Literal['A', 'mA']
+LuminosityUnits = Literal['lm']
+
+AreaUnits = Literal['m2', 'm^2', 'm**2', 'm²', 'cm2', 'cm^2', 'cm**2', 'cm²']
+VolumeUnits = Literal['L', 'l', 'liter', 'm3', 'm^3', 'm³', 'm**3',
+                      'cm3', 'cm^3', 'cm³', 'cm**3']
+NormalVolumeUnits = Literal['normal liter', 'Nm3',
+                            'nm3', 'Nm^3', 'nm^3', 'Nm³',
+                            'nm³', 'Nm**3', 'nm**3']
+
+PressureUnits = Literal['bar', 'kPa', 'Pa', 'MPa', 'mbar', 'mmHg']
+
+MassFlowUnits = Literal['kg/s', 'kg/h', 'kg/hr', 'g/s', 'g/h', 'g/hr',
+                        'ton/h', 't/h', 'ton/hr',
+                        't/hr', 't/d', 'ton/day', 't/w', 'ton/week', 't/y',
+                        't/a', 't/year', 'ton/y', 'ton/a', 'ton/year']
+
+VolumeFlowUnits = Literal['m3/s', 'm3/h', 'm3/hr',
+                          'm**3/s', 'm**3/h', 'm**3/hr',
+                          'm^3/s', 'm^3/h', 'm^3/hr',
+                          'm³/s', 'm³/h', 'm³/hr',
+                          'liter/second', 'l/s', 'L/s',
+                          'liter/hour', 'l/h', 'L/h', 'L/hr', 'l/hr']
+
+NormalVolumeFlowUnits = Literal['Nm3/s', 'Nm3/h', 'Nm3/hr',
+                                'nm3/s', 'nm3/h', 'nm3/hr',
+                                'Nm^3/s', 'Nm^3/h', 'Nm^3/hr',
+                                'nm^3/s', 'nm^3/h', 'nm^3/hr',
+                                'Nm³/s', 'Nm³/h', 'Nm³/hr',
+                                'nm³/s', 'nm³/h', 'nm³/hr',
+                                'Nm**3/s', 'Nm**3/h', 'Nm**3/hr'
+                                'nm**3/s', 'nm**3/h', 'nm**3/hr']
+
+DensityUnits = Literal['kg/m3', 'kg/m**3',
+                       'kg/m^3', 'kg/m³', 'g/l', 'g/L', 'gram/liter']
+SpecificVolumeUnits = Literal['m3/kg', 'm^3/kg', 'm³/kg', 'l/g', 'L/g']
+
+EnergyUnits = Literal['J', 'kJ', 'MJ', 'GJ', 'PJ', 'kWh', 'MWh', 'Wh', 'GWh']
+PowerUnits = Literal['W', 'kW', 'MW', 'GW', 'mW']
+
+VelocityUnits = Literal['m/s', 'km/s', 'm/min',
+                        'cm/s', 'cm/min', 'km/h', 'kmh', 'kph']
+DynamicViscosityUnits = Literal['Pa*s', 'Pa s', 'cP']
+
+KinematicViscosityUnits = Literal['m2/s', 'm**2/s', 'm^2/s',
+                                  'm²/s', 'cSt', 'cm2/s',
+                                  'cm**2/s', 'cm^2/s', 'cm²/s']
+
 
 class Dimensionality(ABC):
 
-    dimensions: UnitsContainer
+    dimensions: Optional[UnitsContainer]
 
     # keeps track of all the dimensionalities that have been
     # used in the current process
@@ -54,6 +110,11 @@ class Dimensionality(ABC):
                 'Subtypes of Dimensionality must define the '
                 'attribute "dimensions" (an instance of pint.unit.UnitsContainer)'
             )
+
+        # the Unknown and Impossible dimensionalities subclass has dimensions=None
+        # it will never be used at runtime, only during type checking
+        if cls.dimensions is None:
+            return
 
         if not isinstance(cls.dimensions, UnitsContainer):
             raise TypeError(
@@ -96,12 +157,11 @@ class Dimensionality(ABC):
 
         return _Dimensionality
 
+
 # type variables that represent a certain dimensionality
-# the DT_ type is used to signify different dimensionalities than DT,
-# and DT__  signifies different than DT and DT__
+# the DT_ type is used to signify a different dimensionality than DT
 DT = TypeVar('DT', bound=Dimensionality)
 DT_ = TypeVar('DT_', bound=Dimensionality)
-DT__ = TypeVar('DT__', bound=Dimensionality)
 
 _DimensionlessUC = UnitsContainer({})
 _NormalUC = UnitsContainer({'[normal]': 1})
@@ -114,8 +174,15 @@ _CurrentUC = UnitsContainer({'[current]': 1})
 _LuminosityUC = UnitsContainer({'[luminosity]': 1})
 
 
-# NOTE: each subclass defintion will create an entry in Dimensionality._registry
+# NOTE: each subclass definition will create an entry in Dimensionality._registry
 # reloading (re-importing) this module will clear and reset the registry
+
+class Unknown(Dimensionality):
+    dimensions = None
+
+class Impossible(Dimensionality):
+    dimensions = None
+
 
 class Dimensionless(Dimensionality):
     dimensions = _DimensionlessUC
@@ -249,6 +316,7 @@ _MassPerEnergyUC = _MassUC / _EnergyUC
 _CurrencyUC = _DimensionlessUC
 _CurrencyPerEnergyUC = _CurrencyUC / _EnergyUC
 
+
 class HeatingValue(Dimensionality):
     dimensions = _HeatingValueUC
 
@@ -287,6 +355,7 @@ class MassPerEnergy(Dimensionality):
 
 class Currency(Dimensionality):
     dimensions = _CurrencyUC
+
 
 class CurrencyPerEnergy(Dimensionality):
     dimensions = _CurrencyPerEnergyUC
