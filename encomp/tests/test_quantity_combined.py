@@ -122,11 +122,11 @@ def test_quantity_custom_pow_types() -> None:
 
     # this works with pylance but not mypy for some reason...
     exp = 2
-    reveal_type(s**exp)  # R: encomp.units.Quantity[<nothing>]
+    reveal_type(s**exp)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
 
     # this does not work, only int literals can be detected by mypy
     exp_ = int(3.0)
-    reveal_type(s**exp_)  # R: encomp.units.Quantity[<nothing>]
+    reveal_type(s**exp_)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
 
 
 @pytest.mark.mypy_testing
@@ -138,13 +138,15 @@ def test_convert_mass_flow_types() -> None:
 
     reveal_type(vf)  # R: encomp.units.Quantity[encomp.utypes.VolumeFlow]
 
-    v = Q[Volume](25, 'liter')
+    v = Q(25, 'liter')
 
     m = convert_volume_mass(v, Q(25, 'g/liter'))
 
     reveal_type(m)  # R: encomp.units.Quantity[encomp.utypes.Mass]
 
-    # vf = Q(25, 'liter/day')  # E: Need type annotation for "vf"
+    p1 = Q(25, 'liter/week')  # E: Need type annotation for "p1"
 
-    # # TODO: output is incorrect, should be Union[...]
-    # unknown_output = convert_volume_mass(vf)
+    unknown_output = convert_volume_mass(p1)
+
+    # mypy does not identify this as Union[...], but pylance does
+    reveal_type(unknown_output)  # R: encomp.units.Quantity[Any]

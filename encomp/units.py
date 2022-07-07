@@ -1013,11 +1013,11 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         ...
 
     @overload
-    def __pow__(self, other: Quantity[Dimensionless]) -> Quantity[DT_]:
+    def __pow__(self, other: Quantity[Dimensionless]) -> Quantity[Unknown]:
         ...
 
     @overload
-    def __pow__(self, other: MagnitudeValue) -> Quantity[DT_]:
+    def __pow__(self, other: MagnitudeValue) -> Quantity[Unknown]:
         ...
 
     def __pow__(self, other):
@@ -1249,7 +1249,12 @@ def convert_volume_mass(inp: Quantity[VolumeFlow],
 
 @overload
 def convert_volume_mass(inp: Quantity,
-                        rho: Optional[Quantity[Density]] = None) -> Union[Quantity[Mass], Quantity[MassFlow], Quantity[Volume], Quantity[VolumeFlow]]:
+                        rho: Optional[Quantity[Density]] = None
+                        ) -> Union[Quantity[Mass],
+                                   Quantity[MassFlow],
+                                   Quantity[Volume],
+                                   Quantity[VolumeFlow]
+                                   ]:
     ...
 
 

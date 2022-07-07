@@ -29,7 +29,7 @@ def test_quantity_reveal_type() -> None:
 
     reveal_type(T)  # R: encomp.units.Quantity[encomp.utypes.Temperature]
 
-    # if the dimensionality is omitted, the inferred type is Quantity[Any]
+    # if the dimensionality is omitted, the inferred type is Quantity[Unknown]
     # the type will be correct at runtime
     unknown = Q(25, 'bar/week')  # E: Need type annotation for "unknown"
 
@@ -211,7 +211,11 @@ def test_quantity_div_types() -> None:
     # in case the dimensionalities are Unknown, division will output Unknown
     unknown = 1 / m**2
 
-    reveal_type(unknown / unknown)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
+    # autopep8: off
+
+    reveal_type(unknown / unknown) # R: encomp.units.Quantity[encomp.utypes.Unknown]
+
+    # autopep8: on
 
 
 @pytest.mark.mypy_testing
@@ -247,7 +251,9 @@ def test_quantity_floordiv_types() -> None:
     with pytest.raises(DimensionalityError):
 
         # autopep8: off
+
         p8 = m // n  # E: Unsupported operand types for // ("Quantity[MassFlow]" and "Quantity[NormalVolumeFlow]")
+
         # autopep8: on
 
 
@@ -273,9 +279,13 @@ def test_quantity_pow_types() -> None:
     reveal_type(p3)  # R: builtins.float
     reveal_type(p4)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
 
-    p5 = m**s_int  # E: Need type annotation for "p5"
-    p6 = m**s_float  # E: Need type annotation for "p6"
-    p7 = m**d  # E: Need type annotation for "p7"
+    p5 = m**s_int
+    p6 = m**s_float
+    p7 = m**d
+
+    reveal_type(p5)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
+    reveal_type(p6)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
+    reveal_type(p7)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
 
     with pytest.raises(DimensionalityError):
 
