@@ -56,6 +56,10 @@ def test_water_init_hints() -> None:
     Water(T=Q(25, 'C'),  Q=Q(50, '%'))
     Water(Q=Q(50, '%'), P=Q(25, 'kPa'))
 
+    # TODO: implement more overload variants,
+    # or try to allow any other inputs in case they are not P/T/Q
+    # Water(H=Q(2800, 'kJ/kg'), S=Q(7300, 'J/kg/K'))
+
     # autopep8: off
 
     # TODO: mypy also outputs a list of possible overload variants, how to

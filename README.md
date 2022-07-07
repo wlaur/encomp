@@ -60,7 +60,7 @@ conda install conda-forge::coolprop
 To use `encomp` from a Jupyter Notebook, import the `encomp.notebook` module:
 
 ```python
-# imports commonly used functions, registers Notebook magics
+# imports commonly used functions and registers Notebook magics
 from encomp.notebook import *
 ```
 
@@ -75,7 +75,7 @@ This class is used to construct objects with a _magnitude_ and _unit_.
 Some examples:
 
 ```python
-from encomp.units import Q
+from encomp.units import Quantity as Q
 
 # converts 1 bar to kPa, displays it in case it's the cell output
 Q(1, 'bar').to('kPa')
@@ -92,7 +92,7 @@ Q(0.1) == Q(10, '%')
 
 The `Quantity` class can also be used to restrict function and class attribute types.
 Each _dimensionality_ (for example _pressure_, _length_, _time_, _dimensionless_) is represented by a subclass of `Quantity`.
-It is possible to use type annotations to restrict the dimensionalities of function parameters and return values.
+It is possible to use type annotations to restrict the dimensionalities of function parameters and return values at runtime.
 
 In case the `ENCOMP_TYPE_CHECKING` environment variable is set to `True`, the `typeguard.typechecked` decorator is automatically applied to all functions and methods inside the main `encomp` library.
 To use it on your own functions, apply the decorator explicitly:
@@ -100,11 +100,11 @@ To use it on your own functions, apply the decorator explicitly:
 ```python
 from typeguard import typechecked
 
-# the full class name is used for annotations, for the sake of clarity
-from encomp.units import Q, Quantity
+from encomp.units import Quantity as Q
+from encomp.utypes import Temperature, Length, Pressure
 
 @typechecked
-def some_func(T: Quantity['Temperature']) -> tuple[Quantity['Length'], Quantity['Pressure']]:
+def some_func(T: Q[Temperature]) -> tuple[Q[Length], Q[Pressure]]:
     return T * Q(12.4, 'm/K'), Q(1, 'bar')
 
 some_func(Q(12, 'delta_degC'))  # the dimensionalities check out
@@ -112,20 +112,27 @@ some_func(Q(26, 'kW'))  # raises an exception:
 # TypeError: type of argument "T" must be Quantity[Temperature]; got Quantity[Power] instead
 ```
 
-The dimensionality of a quantity can be specified with string values like `'Temperature'` or `pint.UnitsContainer` objects.
-To create a new dimensionality (for example temperature difference per length), combine the `pint.UnitsContainer` objects defined in `encomp.utypes` using `*` and `/`.
+The dimensionality of a quantity can be explicitly specified by providing an `encomp.utypes.Dimensionality` subtype.
+To create a new dimensionality (for example temperature difference per length), combine the `pint.UnitsContainer` objects stored in the `dimensions` attribute.
 
 ```python
-from encomp.units import Q, Quantity
-from encomp.utypes import Temperature, Length, Volume
+from encomp.units import Quantity as Q
+from encomp.utypes import Temperature, Length, Volume, Dimensionality
 
-qty = Quantity[Temperature / Length](1, 'delta_degC / km')
+class TemperaturePerLength(Dimensionality):
+    dimensions = Temperature.dimensions / Length.dimensions
 
-# raises an exception since liter is Length**3 and the Quantity expects Length**2
-another_qty = Quantity[Temperature / Length**2](1, 'delta_degC / liter')
+qty = Q[TemperaturePerLength](1, 'delta_degC / km')
+
+# raises an exception since liter is Length**3 and the Quantity expects Length**1
+another_qty = Q[TemperaturePerLength](1, 'delta_degC / liter')
 
 # create a new subclass of Quantity with restricted input units
-CustomCoolingCapacity = Quantity[Temperature / Volume]
+
+class CustomDimensionality(Dimensionality):
+    dimensions = Temperature.dimensions / Volume.dimensions
+
+CustomCoolingCapacity = Q[CustomDimensionality]
 
 # Quantity handles a wide range of input formats and unit names
 assert CustomCoolingCapacity(3, '°F per yard³') == Q('3 degree_Fahrenheit per yard cubed')
@@ -141,7 +148,7 @@ CoolProp property names and codes are used throughout.
 Use the `.search()` method to find the correct name.
 
 ```python
-from encomp.units import Q
+from encomp.units import Quantity as Q
 from encomp.fluids import Fluid
 
 air = Fluid('air', T=Q(25, 'degC'), P=Q(2, 'bar'))
@@ -160,7 +167,7 @@ air.Dmolar # 80.73061937328056 mole/meter3
 The fluid name `'water'` (or the alias class `Water`) uses _IAPWS_ to evaluate steam and water properties.
 
 ```python
-from encomp.units import Q
+from encomp.units import Quantity as Q
 from encomp.fluids import Fluid, Water
 
 Fluid('water', P=Q(25, 'bar'), T=Q(550, 'C'))
@@ -178,7 +185,7 @@ Water(H=Q(2800, 'kJ/kg'), S=Q(7300, 'J/kg/K'))
 The `HumidAir` class requires three input points (``R`` means relative humidity):
 
 ```python
-from encomp.units import Q
+from encomp.units import Quantity as Q
 from encomp.fluids import HumidAir
 
 HumidAir(P=Q(1, 'bar'), T=Q(100, 'degC'), R=Q(0.5))
@@ -194,22 +201,6 @@ See the file `.env.example` in the base of this repository for examples.
 
 ## TODO
 
-- Would be nice to see issues with dimensionality directly in the IDE
-  - Might not be possible since the subclass `Quantity['Temperature']` is constructed at runtime
-- Combine EPANET (`wntr`) for pressure / flow simulation with energy systems simulations (`omeof`)
-
-Ensure compatibility with
-
-- numpy
-- pandas
-- nbconvert (HTML and Latex/PDF output)
-
-  - figure out how to typeset using SIUNITX
-  - look into JupyterBook and similar projects
-
-- http://www.thermocycle.net/
-- https://github.com/topics/process-engineering
-- https://github.com/oemof/tespy
-- https://github.com/oemof
-- https://python-control.readthedocs.io/en/0.9.0/index.html
-- https://ruralwater.readthedocs.io/en/dev/readme.html
+- Possible to use a secondary type variable / generic to figure out the magnitude type?
+- Add more overloads for `Water`, `Fluid` `__init__` methods
+- Document the `Quantity[Dimensionality]` type system
