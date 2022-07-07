@@ -792,11 +792,20 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
 
     @classmethod
     def __get_validators__(cls):
+
+        # used by pydantic.BaseModel to validate fields
         yield cls.validate
 
     @classmethod
     def validate(cls, qty: Quantity[DT]) -> Quantity[DT]:
-        return cls(qty.m, qty.u)
+
+        if not isinstance(qty, Quantity):
+            raise TypeError(
+                'Expexted instance of Quantity, '
+                f'got {qty} ({type(qty)})'
+            )
+
+        return cls(qty.m, qty.u)  # type: ignore
 
     @overload
     def __mul__(self: Quantity[Unknown], other) -> Quantity[Unknown]:
