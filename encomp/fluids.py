@@ -10,9 +10,10 @@ Uses CoolProp as backend.
 """
 
 import warnings
-from typing import Annotated, Union, Callable
-import numpy as np
+from typing import Annotated, Union, Callable, Literal, overload
 
+import numpy as np
+import pandas as pd
 
 try:
     from CoolProp.CoolProp import PropsSI
@@ -33,10 +34,18 @@ except ImportError:
 
 from encomp.structures import flatten
 from encomp.units import Quantity, Unit
+from encomp.utypes import (Unknown,
+                           Pressure,
+                           Temperature,
+                           Dimensionless,
+                           Density,
+                           SpecificEnthalpy,
+                           SpecificEntropy,
+                           DynamicViscosity)
 
-# type alias for a CoolProp property name
 CProperty = Annotated[str, 'CoolProp property name']
 CName = Annotated[str, 'CoolProp fluid name']
+UnitString = Annotated[str, 'Unit string']
 
 
 class CoolPropFluid:
@@ -75,7 +84,7 @@ class CoolPropFluid:
     # unit and description for properties in function PropsSI
     # (name1, name2, ...): (unit, description)
     # names are case-sensitive
-    PROPERTY_MAP: dict[tuple[str, ...], tuple[str, str]] = {
+    PROPERTY_MAP: dict[tuple[CProperty, ...], tuple[UnitString, str]] = {
         ('DELTA', 'Delta'):                             ('dimensionless', 'Reduced density (rho/rhoc)'),
         ('DMOLAR', 'Dmolar'):                           ('mol/m³', 'Molar density'),
         ('D', 'DMASS', 'Dmass'):                        ('kg/m³', 'Mass density'),
@@ -139,8 +148,8 @@ class CoolPropFluid:
         ('Z', ):                                        ('dimensionless', 'Compressibility factor')
     }
 
-    ALL_PROPERTIES: set[str] = set(flatten(list(PROPERTY_MAP)))
-    REPR_PROPERTIES: tuple[tuple[str, str], ...] = (
+    ALL_PROPERTIES: set[CProperty] = set(flatten(list(PROPERTY_MAP)))
+    REPR_PROPERTIES: tuple[tuple[CProperty, str], ...] = (
         ('P', '.0f'),
         ('T', '.1f'),
         ('D', '.1f'),
@@ -149,7 +158,7 @@ class CoolPropFluid:
 
     # preferred return units
     # key is the first name in the tuple used in PROPERTY_MAP
-    RETURN_UNITS: dict[str, str] = {
+    RETURN_UNITS: dict[CProperty, UnitString] = {
         'P': 'kPa',
         'T': '°C',
         'TMAX': '°C',
@@ -165,7 +174,7 @@ class CoolPropFluid:
     _EPS: float = 1e-9
 
     # skip checking for zero for these properties
-    _SKIP_ZERO_CHECK: tuple[str, ...] = ('PHASE', )
+    _SKIP_ZERO_CHECK: tuple[CProperty, ...] = ('PHASE', )
 
     def __init__(self, name: CName):
         """
@@ -296,18 +305,20 @@ class CoolPropFluid:
         self.points: list[tuple[CProperty, Quantity]] = []
 
     @classmethod
-    def get_prop_key(cls, prop: CProperty) -> tuple[str, ...]:
+    def get_prop_key(cls, prop: CProperty) -> tuple[CProperty, ...]:
 
         if prop not in cls.ALL_PROPERTIES:
             raise ValueError(
-                f'Property "{prop}" is not a valid CoolProp property name')
+                f'Property "{prop}" is not a valid CoolProp property name'
+            )
 
         for names in cls.PROPERTY_MAP:
             if prop in names:
                 return names
 
         raise ValueError(
-            f'Property "{prop}" is not a valid CoolProp property name')
+            f'Property "{prop}" is not a valid CoolProp property name'
+        )
 
     @classmethod
     def get_coolprop_unit(cls, prop: CProperty) -> Unit:
@@ -318,7 +329,7 @@ class CoolPropFluid:
             unit_str = cls.PROPERTY_MAP[key][0]
             return Quantity.get_unit(unit_str)
 
-        raise ValueError(f'Key {key} does not exist')
+        raise ValueError(f'Could not get unit, key "{key}" does not exist')
 
     @classmethod
     def is_valid_prop(cls, prop: CProperty) -> bool:
@@ -331,7 +342,7 @@ class CoolPropFluid:
             return False
 
     @classmethod
-    def check_inputs(cls, kwargs: dict) -> None:
+    def check_inputs(cls, kwargs: dict[CProperty, Quantity]) -> None:
         """
         Checks the input ``kwargs`` and raises ``ValueError``
         in case any of the names are not CoolProp property names.
@@ -349,10 +360,12 @@ class CoolPropFluid:
 
         invalid = [key for key in kwargs if not cls.is_valid_prop(key)]
 
-        if invalid:
-            raise ValueError(f'Invalid CoolProp property name{"s" if len(invalid) > 1 else ""}: '
-                             f'{", ".join(invalid)}\n'
-                             f'Valid names:\n{", ".join(sorted(cls.ALL_PROPERTIES))}')
+        if len(invalid):
+            raise ValueError(
+                f'Invalid CoolProp property name{"s" if len(invalid) > 1 else ""}: '
+                f'{", ".join(invalid)}\n'
+                f'Valid names:\n{", ".join(sorted(cls.ALL_PROPERTIES))}'
+            )
 
     @classmethod
     def describe(cls, prop: CProperty) -> str:
@@ -370,7 +383,8 @@ class CoolPropFluid:
 
             return f'{", ".join(key)}: {description} [{unit_repr}]'
 
-        raise ValueError(f'Key {key} does not exist')
+        raise ValueError(
+            f'Could not get description, key "{key}" does not exist')
 
     @classmethod
     def search(cls, inp: str) -> list[str]:
@@ -420,7 +434,9 @@ class CoolPropFluid:
                 'ensure that the name is a valid CoolProp fluid name') from e
 
         warnings.warn(
-            f'CoolProp could not calculate "{prop}" for fluid "{self.name}", output is NaN: {msg}')
+            f'CoolProp could not calculate "{prop}" for fluid "{self.name}", '
+            f'output is NaN: {msg}'
+        )
 
     def evaluate(
             self,
@@ -434,7 +450,9 @@ class CoolPropFluid:
 
         # at this point, the output will be a vector of at least length 1
 
-        def single_element_vector_to_float(x: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
+        def single_element_vector_to_float(
+            x: Union[float, np.ndarray]
+        ) -> Union[float, np.ndarray]:
 
             if isinstance(x, float):
                 return x
@@ -455,7 +473,7 @@ class CoolPropFluid:
                   if isinstance(v, np.ndarray)]
 
         # the sizes list is empty if all inputs were 1-element vectors
-        if sizes:
+        if len(sizes):
 
             N = sizes[0]
             shape = shapes[0]
@@ -606,7 +624,9 @@ class CoolPropFluid:
                            output: CProperty) -> Quantity:
 
         unit_output = self.get_coolprop_unit(output)
-        qty = Quantity(val, unit_output)
+
+        # this Quantity is not known until runtime
+        qty: Quantity[Unknown] = Quantity(val, unit_output)
 
         # value with dimensions present in CoolProp (pressure, temperature, etc...) cannot be zero
         # CoolProp uses 0.0 for missing data, change this to NaN
@@ -643,6 +663,20 @@ class CoolPropFluid:
 
         val = qty.to(unit).m
 
+        # TODO: this type check is probably unnecessary
+
+        if isinstance(val, int):
+            val = float(val)
+
+        if isinstance(val, tuple):
+            val = np.array(val)
+
+        if isinstance(val, list):
+            val = np.array(val)
+
+        if isinstance(val, pd.Series):
+            val = val.values
+
         return val
 
     def get(self,
@@ -678,7 +712,15 @@ class CoolPropFluid:
 
 class Fluid(CoolPropFluid):
 
-    def __init__(self, name: CName, **kwargs: Quantity):
+    @overload
+    def __init__(self, name: CName, *, P: Quantity[Pressure] = ..., T: Quantity[Temperature] = ...) -> None:
+        ...
+
+    @overload
+    def __init__(self, name: CName, /, **kwargs: Quantity) -> None:
+        ...
+
+    def __init__(self, name, **kwargs):
         """
         Represents a fluid at a fixed state, for example at a
         specific temperature and pressure.
@@ -730,6 +772,7 @@ class Fluid(CoolPropFluid):
 
     @property
     def phase(self) -> str:
+
         phase_idx = self.get('PHASE')
 
         # self.get() returns a dimensionless Quantity
@@ -739,10 +782,63 @@ class Fluid(CoolPropFluid):
 
             if len(set(phase_idx_val)) == 1:
                 phase_idx_val = float(phase_idx_val[0])
+                return self.PHASES.get(phase_idx_val, 'N/A')
+
             else:
                 return 'Variable'
 
-        return self.PHASES.get(phase_idx_val, 'N/A')
+        elif isinstance(phase_idx_val, (int, float)):
+
+            return self.PHASES.get(float(phase_idx_val), 'N/A')
+
+        raise TypeError(
+            f'Cannot determine phase of {self} when '
+            f'{phase_idx=}'
+        )
+
+    @overload
+    def __getattr__(self, attr: Literal['P']  # type: ignore
+                    ) -> Quantity[Pressure]:
+        ...
+
+    @overload
+    def __getattr__(self, attr: Literal['T']  # type: ignore
+                    ) -> Quantity[Temperature]:
+        ...
+
+    @overload
+    def __getattr__(self, attr: Literal['Q']  # type: ignore
+                    ) -> Quantity[Dimensionless]:
+        ...
+
+    @overload
+    def __getattr__(self, attr: Literal['D']  # type: ignore
+                    ) -> Quantity[Density]:
+        ...
+
+    @overload
+    def __getattr__(self, attr: Literal['H']  # type: ignore
+                    ) -> Quantity[SpecificEnthalpy]:
+        ...
+
+    @overload
+    def __getattr__(self, attr: Literal['S']  # type: ignore
+                    ) -> Quantity[SpecificEntropy]:
+        ...
+
+    @overload
+    def __getattr__(self, attr: Literal['V']  # type: ignore
+                    ) -> Quantity[DynamicViscosity]:
+        ...
+
+    @overload
+    def __getattr__(self, attr: Literal['Z']  # type: ignore
+                    ) -> Quantity[Dimensionless]:
+        ...
+
+    @overload
+    def __getattr__(self, attr) -> Quantity[Unknown]:
+        ...
 
     def __getattr__(self, attr):
 
@@ -872,7 +968,19 @@ class Water(Fluid):
         ('V', '.1f')
     )
 
-    def __init__(self, **kwargs: Quantity):
+    @overload
+    def __init__(self, *, P: Quantity[Pressure] = ..., T: Quantity[Temperature] = ...) -> None:
+        ...
+
+    @overload
+    def __init__(self, *, P: Quantity[Pressure] = ..., Q: Quantity[Dimensionless] = ...) -> None:
+        ...
+
+    @overload
+    def __init__(self, *, T: Quantity[Temperature] = ..., Q: Quantity[Dimensionless] = ...) -> None:
+        ...
+
+    def __init__(self, **kwargs):
         """
         Convenience class to access water and steam properties via CoolProp.
 

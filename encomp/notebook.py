@@ -40,6 +40,16 @@ from encomp.misc import grid_dimensions
 from encomp.sympy import sp
 from encomp.units import Quantity, wraps
 from encomp.units import Quantity as Q
+from encomp.utypes import (Dimensionality,
+                           Dimensionless,
+                           Mass,
+                           Length,
+                           Area,
+                           Volume,
+                           Velocity,
+                           Time,
+                           MassFlow,
+                           VolumeFlow)
 from encomp.fluids import Fluid, Water, HumidAir
 
 
@@ -53,9 +63,9 @@ if __INTERACTIVE__:
     # loads Jupyter Notebook magics: %%markdown, %%output, %%write and %read
     import encomp.magics
 
-    plt.style.use('seaborn-notebook')
-    matplotlib.rcParams['font.sans-serif'] = 'Arial'
-    matplotlib.rcParams['font.family'] = 'sans-serif'
+    plt.style.use('seaborn-notebook')  # type: ignore
+    matplotlib.rcParams['font.sans-serif'] = 'Arial'  # type: ignore
+    matplotlib.rcParams['font.family'] = 'sans-serif'  # type: ignore
 
     from matplotlib_inline.backend_inline import set_matplotlib_formats
     set_matplotlib_formats(SETTINGS.matplotlib_notebook_format)
@@ -133,7 +143,7 @@ class Graphic:
 
             if isinstance(n, Path):
                 n = Graphic.get_path(n)
-                self.data.append(n)
+                self.data.append(n)  # type: ignore
                 continue
 
             if isinstance(n, str):
@@ -147,7 +157,7 @@ class Graphic:
                 # file paths as strings
                 try:
                     n = Graphic.get_path(n)
-                    self.data.append(n)
+                    self.data.append(n)  # type: ignore
                     continue
 
                 except Exception:

@@ -2,10 +2,10 @@
 Contains constants used elsewhere in the library.
 """
 
-from pydantic.dataclasses import dataclass
+from dataclasses import dataclass
 
 from encomp.units import Quantity as Q
-from encomp.utypes import Density, Temperature, Pressure
+from encomp.utypes import Unknown, Temperature, Pressure
 
 
 @dataclass
@@ -15,9 +15,8 @@ class Constants:
     Use a single instance of this class to refer to these constants.
     """
 
-    R: Q = Q(8.3144598, 'kg*m²/K/mol/s²')
-    SIGMA: Q = Q(5.670374419e-8, 'W/m**2/K**4')
-
+    R: Q[Unknown] = Q(8.3144598, 'kg*m²/K/mol/s²')
+    SIGMA: Q[Unknown] = Q(5.670374419e-8, 'W/m**2/K**4')
 
     normal_conditions_pressure = Q[Pressure](1, 'atm')
     normal_conditions_temperature = Q[Temperature](0, '°C').to('K')

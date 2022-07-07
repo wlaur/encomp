@@ -53,7 +53,8 @@ def ideal_gas_density(T: Quantity[Temperature],
     """
 
     # directly from ideal gas law
-    rho = (P * M) / (R * T.to('K'))
+    # override the inferred type here since it's sure to be Density
+    rho: Quantity[Density] = (P * M) / (R * T.to('K'))  # type: ignore
 
     return rho.to('kg/m³')
 
@@ -91,15 +92,17 @@ def convert_gas_volume(
         Volume or volume flow :math:`V_2` at condition 2
     """
 
-    n_s_conditions = {'N': (CONSTANTS.normal_conditions_pressure,
-                            CONSTANTS.normal_conditions_temperature),
-                      'S': (CONSTANTS.standard_conditions_pressure,
-                            CONSTANTS.standard_conditions_temperature)}
+    n_s_conditions = {
+        'N': (CONSTANTS.normal_conditions_pressure,
+              CONSTANTS.normal_conditions_temperature),
+        'S': (CONSTANTS.standard_conditions_pressure,
+              CONSTANTS.standard_conditions_temperature)
+    }
 
-    if isinstance(condition_1, str) and condition_1 in n_s_conditions:
+    if condition_1 == 'N' or condition_1 == 'S':
         condition_1 = n_s_conditions[condition_1]
 
-    if isinstance(condition_2, str) and condition_2 in n_s_conditions:
+    if condition_2 == 'N' or condition_2 == 'S':
         condition_2 = n_s_conditions[condition_2]
 
     if isinstance(condition_1, tuple):
@@ -117,7 +120,9 @@ def convert_gas_volume(
 
     # from ideal gas law PV = nRT: n and R are constant
     # also considers compressibility factor Z
-    V2: Quantity = V1 * (P1 / P2) * (T2 / T1) * (Z2 / Z1)
+
+    # TODO: issue with mypy for Z2 / Z1 (seems like a bug)
+    V2 = V1 * (P1 / P2) * (T2 / T1) * (Z2 / Z1)  # type: ignore
 
     # volume at P2, T2 in same units as V1
     return V2.to(V1.u)
@@ -147,7 +152,7 @@ def mass_to_normal_volume(mass: Union[Quantity[Mass],
                 P=CONSTANTS.normal_conditions_pressure,
                 T=CONSTANTS.normal_conditions_temperature).D
 
-    return convert_volume_mass(mass, rho=rho)
+    return convert_volume_mass(mass, rho=rho)  # type: ignore
 
 
 def mass_to_actual_volume(mass: Union[Quantity[Mass],
@@ -177,7 +182,7 @@ def mass_to_actual_volume(mass: Union[Quantity[Mass],
                 P=condition[0],
                 T=condition[1]).D
 
-    return convert_volume_mass(mass, rho=rho)
+    return convert_volume_mass(mass, rho=rho)  # type: ignore
 
 
 def mass_from_normal_volume(volume: Union[Quantity[Volume],
@@ -204,7 +209,7 @@ def mass_from_normal_volume(volume: Union[Quantity[Volume],
                 P=CONSTANTS.normal_conditions_pressure,
                 T=CONSTANTS.normal_conditions_temperature).D
 
-    return convert_volume_mass(volume, rho=rho)
+    return convert_volume_mass(volume, rho=rho)  # type: ignore
 
 
 def mass_from_actual_volume(volume: Union[Quantity[Volume],
@@ -234,7 +239,7 @@ def mass_from_actual_volume(volume: Union[Quantity[Volume],
                 P=condition[0],
                 T=condition[1]).D
 
-    return convert_volume_mass(volume, rho=rho)
+    return convert_volume_mass(volume, rho=rho)  # type: ignore
 
 
 def actual_volume_to_normal_volume(volume: Union[Quantity[Volume],

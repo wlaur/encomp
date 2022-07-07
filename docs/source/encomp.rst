@@ -68,14 +68,6 @@ encomp.notebook module
    :undoc-members:
    :show-inheritance:
 
-encomp.pumps module
--------------------
-
-.. automodule:: encomp.pumps
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 encomp.serialize module
 -----------------------
 

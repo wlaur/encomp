@@ -607,7 +607,10 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
 
         return super().ito(unit)
 
-    def check(self, unit: Union[Quantity, UnitsContainer, Unit, str, Dimensionality]) -> bool:
+    def check(self,
+              unit: Union[Quantity, UnitsContainer, Unit,
+                          str, Dimensionality, type[Dimensionality]]
+              ) -> bool:
 
         # TODO: fix typing for this method, remove type: ignore
 
@@ -1002,23 +1005,28 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         return super().__rfloordiv__(other)
 
     @overload
-    def __pow__(self, other: Literal[1]) -> Quantity[DT]:
+    def __pow__(self, other: Literal[1]  # type: ignore
+                ) -> Quantity[DT]:
         ...
 
     @overload
-    def __pow__(self: Quantity[Length], other: Literal[2]) -> Quantity[Area]:
+    def __pow__(self: Quantity[Length], other: Literal[2]  # type: ignore
+                ) -> Quantity[Area]:
         ...
 
     @overload
-    def __pow__(self: Quantity[Length], other: Literal[3]) -> Quantity[Volume]:
+    def __pow__(self: Quantity[Length], other: Literal[3]  # type: ignore
+                ) -> Quantity[Volume]:
         ...
 
     @overload
-    def __pow__(self: Quantity[Unknown], other: MagnitudeValue) -> Quantity[Unknown]:
+    def __pow__(self: Quantity[Unknown], other: MagnitudeValue  # type: ignore
+                ) -> Quantity[Unknown]:
         ...
 
     @overload
-    def __pow__(self: Quantity[Dimensionless], other: MagnitudeValue) -> Quantity[Dimensionless]:
+    def __pow__(self: Quantity[Dimensionless], other: MagnitudeValue  # type: ignore
+                ) -> Quantity[Dimensionless]:
         ...
 
     @overload

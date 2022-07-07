@@ -2,7 +2,7 @@
 Data structures and related functions.
 """
 
-from typing import Sequence, Iterator, Optional, Any
+from typing import Sequence, Iterator, Optional, Any, Union
 
 
 def divide_chunks(container: Sequence[Any], N: int) -> Iterator[Any]:
@@ -39,7 +39,7 @@ def divide_chunks(container: Sequence[Any], N: int) -> Iterator[Any]:
         yield container[i:i + N]
 
 
-def flatten(container: Sequence[Any],
+def flatten(container: Sequence[Union[Any, Sequence[Any]]],
             max_depth: Optional[int] = None, *,
             depth: int = 0) -> Iterator[Any]:
     """
@@ -61,7 +61,7 @@ def flatten(container: Sequence[Any],
 
     Parameters
     ----------
-    container : Sequence[Any]
+    container : Sequence[Union[Any, Sequence[Any]]]
         The container to be flattened. Note that it is not possible
         to construct nested sets, so the ``Sequence`` type is appropriate here.
     max_depth : int, optional
@@ -83,11 +83,16 @@ def flatten(container: Sequence[Any],
 
     for obj in container:
 
+        if isinstance(obj, str):
+            yield obj
+            continue
+
         # check if this object can be flattened further
-        if isinstance(obj, Sequence) and not isinstance(obj, str):
+        if isinstance(obj, Sequence):
 
             for sub_obj in flatten(obj, max_depth=max_depth, depth=depth):
                 yield sub_obj
 
-        else:
-            yield obj
+            continue
+
+        yield obj

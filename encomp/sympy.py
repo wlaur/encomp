@@ -25,7 +25,10 @@ from symbolic_equation import Eq as Eq_symbolic
 from encomp.settings import SETTINGS
 from encomp.units import Quantity
 
-_IDENTIFIER_MAP: dict[str, sp.Symbol] = {}
+
+# TODO: what is this map used for?
+# to_identifier already uses lru_cache
+_IDENTIFIER_MAP: dict[str, str] = {}
 
 
 @lru_cache()
@@ -51,7 +54,7 @@ def to_identifier(s: Union[sp.Symbol, str]) -> str:
 
     s_inp = s
 
-    if s in _IDENTIFIER_MAP:
+    if isinstance(s, str) and s in _IDENTIFIER_MAP:
         return _IDENTIFIER_MAP[s]
 
     # assume that input strings are already identifiers
@@ -80,7 +83,7 @@ def to_identifier(s: Union[sp.Symbol, str]) -> str:
         raise ValueError(
             f'Symbol could not be converted to a valid Python identifer: {s_orig}')
 
-    _IDENTIFIER_MAP[s_inp] = s
+    _IDENTIFIER_MAP[str(s_inp)] = s
 
     return s
 
@@ -346,7 +349,7 @@ def get_lambda(e: sp.Basic, *,
     return fcn, args
 
 
-def get_lambda_matrix(M: sp.Matrix) -> tuple[str, list[str]]:
+def get_lambda_matrix(M: sp.MutableDenseMatrix) -> tuple[str, list[str]]:
     """
     Converts the input matrix into a lambda function that returns
     an array.
@@ -356,7 +359,7 @@ def get_lambda_matrix(M: sp.Matrix) -> tuple[str, list[str]]:
 
     Parameters
     ----------
-    M : sp.Matrix
+    M : sp.MutableDenseMatrix
         Input matrix
 
     Returns
@@ -368,7 +371,6 @@ def get_lambda_matrix(M: sp.Matrix) -> tuple[str, list[str]]:
     args = set()
 
     nrows, ncols = M.shape
-
     arr = np.zeros((nrows, ncols), dtype=object)
 
     for i in range(nrows):
@@ -380,9 +382,14 @@ def get_lambda_matrix(M: sp.Matrix) -> tuple[str, list[str]]:
             if isinstance(fcn_str, str):
 
                 # remove the "lambda x, y, x:" part and extra parens,
-                # the are added later
-                fcn_str = fcn_str.split(
-                    ':', 1)[-1].strip().removeprefix('(').removesuffix(')')
+                # they are added back later
+                fcn_str = (
+                    fcn_str
+                    .split(':', 1)[-1]
+                    .strip()
+                    .removeprefix('(')
+                    .removesuffix(')')
+                )
 
                 arr[i, j] = fcn_str
 
@@ -767,15 +774,16 @@ def append(self, s: Union[str, int],
 # these methods (potentially) return a new sp.Symbol object
 # sympy keeps an internal symbol register: two symbols with the same
 # name and assumptions refer to the same Python object
-sp.Symbol.decorate = decorate
-sp.Symbol.append = append
+
+sp.Symbol.decorate = decorate  # type: ignore
+sp.Symbol.append = append  # type: ignore
 
 # shorthand to add suffixes to an existing symbol
-sp.Symbol._ = lambda s, x: s.append(x, where='sub')
-sp.Symbol.__ = lambda s, x: s.append(x, where='sup')
+sp.Symbol._ = lambda s, x: s.append(x, where='sub')  # type: ignore
+sp.Symbol.__ = lambda s, x: s.append(x, where='sup')  # type: ignore
 
 # shorthand to add Delta before a symbol
-sp.Symbol.delta = lambda s: s.decorate(prefix='\\Delta')
+sp.Symbol.delta = lambda s: s.decorate(prefix='\\Delta')  # type: ignore
 
 
 def display_equation(eqn: sp.Equality,

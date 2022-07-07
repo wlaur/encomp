@@ -17,7 +17,6 @@ from encomp.utypes import (Mass,
                            HeatCapacity,
                            ThermalConductivity,
                            HeatTransferCoefficient,
-                           Temperature,
                            HeatCapacity)
 
 
@@ -97,6 +96,8 @@ def heat_balance(
     else:
         unit_idx = 0
 
+    ret: Quantity
+
     if 'Q_h' not in vals:
         ret = cp * vals['m'] * vals['dT']
         unit = units['Q_h'][unit_idx]
@@ -110,26 +111,30 @@ def heat_balance(
         unit = units['dT'][0]
 
         if not ret.check(Temperature):
-            raise ValueError(f'Both units must be per unit time in case one '
-                             f'of them is: {vals}')
+            raise ValueError(
+                f'Both units must be per unit time in case one '
+                f'of them is: {vals}'
+            )
 
         ret.ito('delta_degC')
 
     else:
         raise ValueError(f'Incorrect input to heat_balance: {vals}')
 
-    return ret.to(unit)
+    return ret.to(unit)  # type: ignore
 
 
-def intermediate_temperatures(T_b: Quantity[Temperature],
-                              T_s: Quantity[Temperature],
-                              k: Quantity[ThermalConductivity],
-                              d: Quantity[Length],
-                              h_in: Quantity[HeatTransferCoefficient],
-                              h_out: Quantity[HeatTransferCoefficient],
-                              epsilon: float,
-                              tol: float = 1e-6) -> tuple[Quantity[Temperature],
-                                                          Quantity[Temperature]]:
+def intermediate_temperatures(
+    T_b: Quantity[Temperature],
+    T_s: Quantity[Temperature],
+    k: Quantity[ThermalConductivity],
+    d: Quantity[Length],
+    h_in: Quantity[HeatTransferCoefficient],
+    h_out: Quantity[HeatTransferCoefficient],
+    epsilon: float,
+    tol: float = 1e-6
+) -> tuple[Quantity[Temperature],
+           Quantity[Temperature]]:
     """
     Solves a nonlinear system of equations to find intermediate
     temperatures of a barrier with the following modes of heat transfer:
@@ -180,7 +185,7 @@ def intermediate_temperatures(T_b: Quantity[Temperature],
     h_in_val = h_in.to('W/m²/K').m
     h_out_val = h_out.to('W/m²/K').m
 
-    if abs(d_val - 0) < tol:
+    if abs(d_val - 0) < tol:  # type: ignore
         d_val = tol
 
     # system of coupled equations: heat transfer rate through all layers is identical
@@ -198,6 +203,12 @@ def intermediate_temperatures(T_b: Quantity[Temperature],
         return [eq1, eq2]
 
     # use the boundary temperatures as initial guesses
-    T1_val, T2_val = fsolve(fun, [T_b_val, T_s_val])
+    _ret = fsolve(fun, [T_b_val, T_s_val])
 
-    return Quantity(T1_val, 'K').to('degC'), Quantity(T2_val, 'K').to('degC')
+    T1_val: float = _ret[0]
+    T2_val: float = _ret[1]
+
+    T1 = Quantity(T1_val, 'K').to('degC')
+    T2 = Quantity(T2_val, 'K').to('degC')
+
+    return T1, T2

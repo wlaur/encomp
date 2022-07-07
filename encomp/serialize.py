@@ -210,7 +210,7 @@ def custom_serializer(obj: Any) -> JSON:
 
         return {
             'type': 'Series',
-            'data': obj.to_json(orient='split',
+            'data': obj.to_json(orient='split',  # type: ignore
                                 default_handler=custom_serializer)
         }
 
@@ -218,7 +218,7 @@ def custom_serializer(obj: Any) -> JSON:
 
         return {
             'type': 'DataFrame',
-            'data': obj.to_json(orient='split',
+            'data': obj.to_json(orient='split',  # type: ignore
                                 default_handler=custom_serializer)
         }
 
@@ -294,6 +294,7 @@ def decode(inp: JSON,
     class constructor parameter.
 
     .. warning::
+
         Dictionary keys are always strings in JSON.
         This function cannot determine if the key ``"2.0"``
         was originally a string or float, all keys in
@@ -338,7 +339,7 @@ def decode(inp: JSON,
             # not necessary to pass on the custom kwarg,
             # the Quantity magnitude cannot be a custom class
             m = decode(inp['_magnitude'])
-            units = inp['_units']
+            units: str = inp['_units']  # type: ignore
             return Quantity(m, units)
 
         # check if this dict is output from custom_serializer
@@ -348,7 +349,7 @@ def decode(inp: JSON,
 
             if inp['type'] == 'Quantity':
 
-                val, unit = inp['data']
+                val, unit = inp['data']  # type: ignore
 
                 # not necessary to pass on the custom kwarg
                 val = decode(val)
@@ -367,7 +368,7 @@ def decode(inp: JSON,
                         pass
 
             if inp['type'] == 'Path':
-                return Path(inp['data'])
+                return Path(inp['data'])  # type: ignore
 
             if inp['type'] == 'Series':
                 return pd.read_json(inp['data'],
@@ -380,11 +381,11 @@ def decode(inp: JSON,
             if inp['type'] == 'ndarray':
 
                 # not necessary to pass on the custom kwarg
-                data = [decode(x) for x in inp['data']]
+                data = [decode(x) for x in inp['data']]  # type: ignore
                 return np.array(data)
 
             if inp['type'] == 'Decimal':
-                return Decimal(inp['data'])
+                return Decimal(inp['data'])  # type: ignore
 
             if inp['type'] == 'AffineScalarFunc':
                 return ufloat(*inp['data'])
@@ -397,7 +398,7 @@ def decode(inp: JSON,
 
             if inp['type'] in custom_dict:
 
-                custom_class = custom_dict[inp['type']]
+                custom_class = custom_dict[inp['type']]  # type: ignore
 
                 if not hasattr(custom_class, 'from_dict'):
 
@@ -465,7 +466,7 @@ def save(names: dict[str, Any],
         a: b for a, b in names.items() if
         not a.startswith('_') and
         not inspect.ismodule(b) and
-        not isinstance(b, Callable) and
+        not isinstance(b, Callable) and  # type: ignore
         a not in skip
     }
 

@@ -180,6 +180,7 @@ _LuminosityUC = UnitsContainer({'[luminosity]': 1})
 class Unknown(Dimensionality):
     dimensions = None
 
+
 class Impossible(Dimensionality):
     dimensions = None
 
@@ -308,6 +309,7 @@ _HeatingValueUC = _EnergyUC / _MassUC
 _LowerHeatingValueUC = _EnergyUC / _MassUC
 _HigherHeatingValueUC = _EnergyUC / _MassUC
 _SpecificEnthalpyUC = _EnergyUC / _MassUC
+_SpecificEntropyUC = _SpecificEnthalpyUC / _TemperatureUC
 _HeatCapacityUC = _EnergyUC / _MassUC / _TemperatureUC
 _ThermalConductivityUC = _PowerUC / _LengthUC / _TemperatureUC
 _HeatTransferCoefficientUC = _PowerUC / _AreaUC / _TemperatureUC
@@ -331,6 +333,10 @@ class HigherHeatingValue(Dimensionality):
 
 class SpecificEnthalpy(Dimensionality):
     dimensions = _SpecificEnthalpyUC
+
+
+class SpecificEntropy(Dimensionality):
+    dimensions = _SpecificEntropyUC
 
 
 class HeatCapacity(Dimensionality):
