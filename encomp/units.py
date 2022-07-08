@@ -874,6 +874,11 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         ...
 
     @overload
+    def __mul__(self: Quantity[Density], other: Quantity[Volume]  # type: ignore
+                ) -> Quantity[Mass]:
+        ...
+
+    @overload
     def __mul__(self: Quantity[Dimensionless], other: Quantity[DT_]  # type: ignore
                 ) -> Quantity[DT_]:
         ...

@@ -5,7 +5,7 @@ Functions related to gases: normal volume to mass conversion, compressibility, e
     Implement for humid air also
 """
 
-from typing import Union, Literal
+from typing import Union, Literal, cast
 
 from encomp.constants import CONSTANTS
 from encomp.units import Quantity, convert_volume_mass
@@ -54,7 +54,7 @@ def ideal_gas_density(T: Quantity[Temperature],
 
     # directly from ideal gas law
     # override the inferred type here since it's sure to be Density
-    rho: Quantity[Density] = (P * M) / (R * T.to('K'))  # type: ignore
+    rho = cast(Quantity[Density], (P * M) / (R * T.to('K')))
 
     return rho.to('kg/m³')
 

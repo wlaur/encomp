@@ -10,7 +10,7 @@ Uses CoolProp as backend.
 """
 
 import warnings
-from typing import Annotated, Union, Callable, Literal, overload
+from typing import Annotated, Union, Callable, cast
 
 import numpy as np
 import pandas as pd
@@ -38,9 +38,26 @@ from encomp.utypes import (Unknown,
                            Pressure,
                            Temperature,
                            Dimensionless,
+                           MolarDensity,
                            Density,
+                           SpecificHeatCapacity,
                            SpecificEnthalpy,
+                           MolarSpecificEnthalpy,
                            SpecificEntropy,
+                           MolarSpecificEntropy,
+                           SpecificInternalEnergy,
+                           MolarSpecificInternalEnergy,
+                           SpecificHeatPerDryAir,
+                           SpecificHeatPerHumidAir,
+                           MixtureEnthalpyPerDryAir,
+                           MixtureEnthalpyPerHumidAir,
+                           MixtureEntropyPerDryAir,
+                           MixtureEntropyPerHumidAir,
+                           MixtureVolumePerDryAir,
+                           MixtureVolumePerHumidAir,
+                           Velocity,
+                           ThermalConductivity,
+                           MolarMass,
                            DynamicViscosity)
 
 CProperty = Annotated[str, 'CoolProp property name']
@@ -712,15 +729,7 @@ class CoolPropFluid:
 
 class Fluid(CoolPropFluid):
 
-    @overload
-    def __init__(self, name: CName, *, P: Quantity[Pressure] = ..., T: Quantity[Temperature] = ...) -> None:
-        ...
-
-    @overload
-    def __init__(self, name: CName, /, **kwargs: Quantity) -> None:
-        ...
-
-    def __init__(self, name, **kwargs):
+    def __init__(self, name: CName, **kwargs: Quantity):
         """
         Represents a fluid at a fixed state, for example at a
         specific temperature and pressure.
@@ -752,30 +761,10 @@ class Fluid(CoolPropFluid):
             self.point_2
         ]
 
-    def get(self, output: CProperty, *args) -> Quantity:
-        """
-        Uses the constant fixed points to call
-        :py:meth:`encomp.fluids.CoolPropFluid.get`.
-
-        Parameters
-        ----------
-        output : CProperty
-            Name of the output property
-
-        Returns
-        -------
-        Quantity
-            Value (and unit) of the output property
-        """
-
-        return super().get(output, *self.points)
-
     @property
     def phase(self) -> str:
 
-        phase_idx = self.get('PHASE')
-
-        # self.get() returns a dimensionless Quantity
+        phase_idx = self.PHASE
         phase_idx_val = phase_idx.m
 
         if isinstance(phase_idx_val, np.ndarray):
@@ -796,64 +785,155 @@ class Fluid(CoolPropFluid):
             f'{phase_idx=}'
         )
 
-    @overload
-    def __getattr__(self, attr: Literal['P']  # type: ignore
-                    ) -> Quantity[Pressure]:
-        ...
+    @property
+    def PHASE(self) -> Quantity[Dimensionless]:
+        return cast(Quantity[Dimensionless], self.__getattr__('PHASE'))
 
-    @overload
-    def __getattr__(self, attr: Literal['T']  # type: ignore
-                    ) -> Quantity[Temperature]:
-        ...
+    @property
+    def PRANDTL(self) -> Quantity[Dimensionless]:
+        return cast(Quantity[Dimensionless], self.__getattr__('PRANDTL'))
 
-    @overload
-    def __getattr__(self, attr: Literal['Q']  # type: ignore
-                    ) -> Quantity[Dimensionless]:
-        ...
+    @property
+    def P(self) -> Quantity[Pressure]:
+        return cast(Quantity[Pressure], self.__getattr__('P'))
 
-    @overload
-    def __getattr__(self, attr: Literal['D']  # type: ignore
-                    ) -> Quantity[Density]:
-        ...
+    @property
+    def PCRIT(self) -> Quantity[Pressure]:
+        return cast(Quantity[Pressure], self.__getattr__('PCRIT'))
 
-    @overload
-    def __getattr__(self, attr: Literal['H']  # type: ignore
-                    ) -> Quantity[SpecificEnthalpy]:
-        ...
+    @property
+    def PMAX(self) -> Quantity[Pressure]:
+        return cast(Quantity[Pressure], self.__getattr__('PMAX'))
 
-    @overload
-    def __getattr__(self, attr: Literal['S']  # type: ignore
-                    ) -> Quantity[SpecificEntropy]:
-        ...
+    @property
+    def PMIN(self) -> Quantity[Pressure]:
+        return cast(Quantity[Pressure], self.__getattr__('PMIN'))
 
-    @overload
-    def __getattr__(self, attr: Literal['V']  # type: ignore
-                    ) -> Quantity[DynamicViscosity]:
-        ...
+    @property
+    def PTRIPLE(self) -> Quantity[Pressure]:
+        return cast(Quantity[Pressure], self.__getattr__('PTRIPLE'))
 
-    @overload
-    def __getattr__(self, attr: Literal['Z']  # type: ignore
-                    ) -> Quantity[Dimensionless]:
-        ...
+    @property
+    def P_REDUCING(self) -> Quantity[Pressure]:
+        return cast(Quantity[Pressure], self.__getattr__('P_REDUCING'))
 
-    @overload
-    def __getattr__(self, attr) -> Quantity[Unknown]:
-        ...
+    @property
+    def T(self) -> Quantity[Temperature]:
+        return cast(Quantity[Temperature], self.__getattr__('T'))
 
-    def __getattr__(self, attr):
+    @property
+    def TCRIT(self) -> Quantity[Temperature]:
+        return cast(Quantity[Temperature], self.__getattr__('TCRIT'))
+
+    @property
+    def TMAX(self) -> Quantity[Temperature]:
+        return cast(Quantity[Temperature], self.__getattr__('TMAX'))
+
+    @property
+    def TMIN(self) -> Quantity[Temperature]:
+        return cast(Quantity[Temperature], self.__getattr__('TMIN'))
+
+    @property
+    def TTRIPLE(self) -> Quantity[Temperature]:
+        return cast(Quantity[Temperature], self.__getattr__('TTRIPLE'))
+
+    @property
+    def T_FREEZING(self) -> Quantity[Temperature]:
+        return cast(Quantity[Temperature], self.__getattr__('T_FREEZING'))
+
+    @property
+    def T_REDUCING(self) -> Quantity[Temperature]:
+        return cast(Quantity[Temperature], self.__getattr__('T_REDUCING'))
+
+    @property
+    def Q(self) -> Quantity[Dimensionless]:
+        return cast(Quantity[Dimensionless], self.__getattr__('Q'))
+
+    @property
+    def H(self) -> Quantity[SpecificEnthalpy]:
+        return cast(Quantity[SpecificEnthalpy], self.__getattr__('H'))
+
+    @property
+    def HMOLAR(self) -> Quantity[MolarSpecificEnthalpy]:
+        return cast(Quantity[MolarSpecificEnthalpy], self.__getattr__('HMOLAR'))
+
+    @property
+    def S(self) -> Quantity[SpecificEntropy]:
+        return cast(Quantity[SpecificEntropy], self.__getattr__('S'))
+
+    @property
+    def SMOLAR(self) -> Quantity[MolarSpecificEntropy]:
+        return cast(Quantity[MolarSpecificEntropy], self.__getattr__('SMOLAR'))
+
+    @property
+    def U(self) -> Quantity[SpecificInternalEnergy]:
+        return cast(Quantity[SpecificInternalEnergy], self.__getattr__('U'))
+
+    @property
+    def UMOLAR(self) -> Quantity[MolarSpecificInternalEnergy]:
+        return cast(Quantity[MolarSpecificInternalEnergy], self.__getattr__('UMOLAR'))
+
+    @property
+    def V(self) -> Quantity[DynamicViscosity]:
+        return cast(Quantity[DynamicViscosity], self.__getattr__('V'))
+
+    @property
+    def Z(self) -> Quantity[Dimensionless]:
+        return cast(Quantity[Dimensionless], self.__getattr__('Z'))
+
+    @property
+    def DELTA(self) -> Quantity[Dimensionless]:
+        return cast(Quantity[Dimensionless], self.__getattr__('DELTA'))
+
+    @property
+    def D(self) -> Quantity[Density]:
+        return cast(Quantity[Density], self.__getattr__('D'))
+
+    @property
+    def RHOMASS_REDUCING(self) -> Quantity[Density]:
+        return cast(Quantity[Density], self.__getattr__('RHOMASS_REDUCING'))
+
+    @property
+    def RHOMOLAR_CRITICAL(self) -> Quantity[MolarDensity]:
+        return cast(Quantity[MolarDensity], self.__getattr__('RHOMOLAR_CRITICAL'))
+
+    @property
+    def RHOMOLAR_REDUCING(self) -> Quantity[MolarDensity]:
+        return cast(Quantity[MolarDensity], self.__getattr__('RHOMOLAR_REDUCING'))
+
+    @property
+    def DMOLAR(self) -> Quantity[MolarDensity]:
+        return cast(Quantity[MolarDensity], self.__getattr__('DMOLAR'))
+
+    @property
+    def A(self) -> Quantity[Velocity]:
+        return cast(Quantity[Velocity], self.__getattr__('D'))
+
+    @property
+    def L(self) -> Quantity[ThermalConductivity]:
+        return cast(Quantity[ThermalConductivity], self.__getattr__('L'))
+
+    @property
+    def C(self) -> Quantity[SpecificHeatCapacity]:
+        return cast(Quantity[SpecificHeatCapacity], self.__getattr__('C'))
+
+    @property
+    def M(self) -> Quantity[MolarMass]:
+        return cast(Quantity[MolarMass], self.__getattr__('M'))
+
+    def __getattr__(self, attr: CProperty) -> Quantity[Unknown]:
 
         if attr not in self.ALL_PROPERTIES:
             raise AttributeError(attr)
 
-        # this is called in case attr does not exist
-        return self.get(attr)
+        return super().get(attr, *self.points)
 
     def __repr__(self) -> str:
 
         props = []
 
         for p, fmt in self.REPR_PROPERTIES:
-            props.append(f'{p}={self.get(p):{fmt}}')
+            props.append(f'{p}={self.__getattr__(p):{fmt}}')
 
         props_str = ', '.join(props)
 
@@ -862,14 +942,73 @@ class Fluid(CoolPropFluid):
         return s
 
 
-class HumidAir(Fluid):
+class Water(Fluid):
+
+    REPR_PROPERTIES: tuple[tuple[str, str], ...] = (
+        ('P', '.0f'),
+        ('T', '.1f'),
+        ('D', '.1f'),
+        ('V', '.1f')
+    )
+
+    def __init__(self, **kwargs: Quantity):
+        """
+        Convenience class to access water and steam properties via CoolProp.
+
+        Parameters
+        ----------
+        kwargs: Quantity
+            Values for the two fixed points. The name of the keyword argument is the
+            CoolProp property name.
+        """
+
+        self.name = 'Water'
+
+        self.check_inputs(kwargs)
+
+        if len(kwargs) != 2:
+
+            if set(kwargs) == {'P', 'T', 'Q'}:
+
+                raise ValueError(
+                    'Cannot set both P, T and vapor quality Q. Remove one of P, T to '
+                    'get properties of saturated steam.')
+
+            raise ValueError(
+                f'Exactly two fixed points are required, passed {list(kwargs)}')
+
+        kwargs_list = list(kwargs.items())
+
+        self.point_1 = kwargs_list[0]
+        self.point_2 = kwargs_list[1]
+
+        self.points = [
+            self.point_1,
+            self.point_2
+        ]
+
+    def __repr__(self) -> str:
+
+        repr_properties = self.REPR_PROPERTIES
+
+        props_str = ', '.join(
+            f'{p}={self.__getattr__(p):{fmt}}'
+            for p, fmt in repr_properties
+        )
+
+        s = f'<{self.__class__.__name__} ({self.phase}), {props_str}>'
+
+        return s
+
+
+class HumidAir(CoolPropFluid):
 
     BACKEND = HAPropsSI
     APPEND_NAME_TO_CP_INPUTS = False
     EVALUATE_INVALID_SEPARATELY = True
 
     # unit and description for properties in function HAPropsSI
-    PROPERTY_MAP: dict[tuple[str, ...], tuple[str, str]] = {
+    PROPERTY_MAP: dict[tuple[CProperty, ...], tuple[str, str]] = {
 
         ('B', 'Twb', 'T_wb', 'WetBulb'):  ('K', 'Wet-Bulb Temperature'),
         ('C', 'cp'):                      ('J/kg/K', 'Mixture specific heat per unit dry air'),
@@ -894,12 +1033,12 @@ class HumidAir(Fluid):
         ('Z', ):                          ('dimensionless', 'Compressibility factor')
     }
 
-    ALL_PROPERTIES: set[str] = set(flatten(list(PROPERTY_MAP)))
+    ALL_PROPERTIES: set[CProperty] = set(flatten(list(PROPERTY_MAP)))
 
     # HAPropsSI has different parameter names
     # density is not defined, need to use either Vda (volume per dry air)
     # or Vha (per humid air)
-    RETURN_UNITS: dict[str, str] = {
+    RETURN_UNITS: dict[CProperty, str] = {
         'P': 'kPa',
         'P_w': 'kPa',
         'M': 'cP',
@@ -908,7 +1047,7 @@ class HumidAir(Fluid):
         'B': '°C',
     }
 
-    REPR_PROPERTIES: tuple[tuple[str, str], ...] = (
+    REPR_PROPERTIES: tuple[tuple[CProperty, str], ...] = (
         ('P', '.0f'),
         ('T', '.1f'),
         ('R', '.2f'),
@@ -949,80 +1088,97 @@ class HumidAir(Fluid):
             self.point_3
         ]
 
+    @property
+    def psi_w(self) -> Quantity[Dimensionless]:
+        return cast(Quantity[Dimensionless], self.__getattr__('psi_w'))
+
+    @property
+    def W(self) -> Quantity[Dimensionless]:
+        return cast(Quantity[Dimensionless], self.__getattr__('W'))
+
+    @property
+    def Z(self) -> Quantity[Dimensionless]:
+        return cast(Quantity[Dimensionless], self.__getattr__('Z'))
+
+    @property
+    def R(self) -> Quantity[Dimensionless]:
+        return cast(Quantity[Dimensionless], self.__getattr__('R'))
+
+    @property
+    def P(self) -> Quantity[Pressure]:
+        return cast(Quantity[Pressure], self.__getattr__('P'))
+
+    @property
+    def P_w(self) -> Quantity[Pressure]:
+        return cast(Quantity[Pressure], self.__getattr__('P_w'))
+
+    @property
+    def B(self) -> Quantity[Temperature]:
+        return cast(Quantity[Temperature], self.__getattr__('B'))
+
+    @property
+    def T(self) -> Quantity[Temperature]:
+        return cast(Quantity[Temperature], self.__getattr__('T'))
+
+    @property
+    def D(self) -> Quantity[Temperature]:
+        return cast(Quantity[Temperature], self.__getattr__('D'))
+
+    @property
+    def K(self) -> Quantity[ThermalConductivity]:
+        return cast(Quantity[ThermalConductivity], self.__getattr__('K'))
+
+    @property
+    def M(self) -> Quantity[DynamicViscosity]:
+        return cast(Quantity[DynamicViscosity], self.__getattr__('M'))
+
+    @property
+    def C(self) -> Quantity[SpecificHeatPerDryAir]:
+        return cast(Quantity[SpecificHeatPerDryAir], self.__getattr__('C'))
+
+    @property
+    def Cha(self) -> Quantity[SpecificHeatPerHumidAir]:
+        return cast(Quantity[SpecificHeatPerHumidAir], self.__getattr__('Cha'))
+
+    @property
+    def H(self) -> Quantity[MixtureEnthalpyPerDryAir]:
+        return cast(Quantity[MixtureEnthalpyPerDryAir], self.__getattr__('H'))
+
+    @property
+    def Hha(self) -> Quantity[MixtureEnthalpyPerHumidAir]:
+        return cast(Quantity[MixtureEnthalpyPerHumidAir], self.__getattr__('Hha'))
+
+    @property
+    def S(self) -> Quantity[MixtureEntropyPerDryAir]:
+        return cast(Quantity[MixtureEntropyPerDryAir], self.__getattr__('S'))
+
+    @property
+    def Sha(self) -> Quantity[MixtureEntropyPerHumidAir]:
+        return cast(Quantity[MixtureEntropyPerHumidAir], self.__getattr__('Sha'))
+
+    @property
+    def V(self) -> Quantity[MixtureVolumePerDryAir]:
+        return cast(Quantity[MixtureVolumePerDryAir], self.__getattr__('V'))
+
+    @property
+    def Vha(self) -> Quantity[MixtureVolumePerHumidAir]:
+        return cast(Quantity[MixtureVolumePerHumidAir], self.__getattr__('Vha'))
+
+    def __getattr__(self, attr: CProperty) -> Quantity[Unknown]:
+
+        if attr not in self.ALL_PROPERTIES:
+            raise AttributeError(attr)
+
+        # this is called in case attr does not exist
+        return super().get(attr, *self.points)
+
     def __repr__(self) -> str:
 
-        props_str = ', '.join(f'{p}={self.get(p):{fmt}}'
-                              for p, fmt in self.REPR_PROPERTIES)
+        props_str = ', '.join(
+            f'{p}={self.__getattr__(p):{fmt}}'
+            for p, fmt in self.REPR_PROPERTIES
+        )
 
         s = f'<{self.__class__.__name__}, {props_str}>'
-
-        return s
-
-
-class Water(Fluid):
-
-    REPR_PROPERTIES: tuple[tuple[str, str], ...] = (
-        ('P', '.0f'),
-        ('T', '.1f'),
-        ('D', '.1f'),
-        ('V', '.1f')
-    )
-
-    @overload
-    def __init__(self, *, P: Quantity[Pressure] = ..., T: Quantity[Temperature] = ...) -> None:
-        ...
-
-    @overload
-    def __init__(self, *, P: Quantity[Pressure] = ..., Q: Quantity[Dimensionless] = ...) -> None:
-        ...
-
-    @overload
-    def __init__(self, *, T: Quantity[Temperature] = ..., Q: Quantity[Dimensionless] = ...) -> None:
-        ...
-
-    def __init__(self, **kwargs):
-        """
-        Convenience class to access water and steam properties via CoolProp.
-
-        Parameters
-        ----------
-        kwargs: Quantity
-            Values for the two fixed points. The name of the keyword argument is the
-            CoolProp property name.
-        """
-
-        self.name = 'Water'
-
-        self.check_inputs(kwargs)
-
-        if len(kwargs) != 2:
-
-            if set(kwargs) == {'P', 'T', 'Q'}:
-
-                raise ValueError(
-                    'Cannot set both P, T and vapor quality Q. Remove one of P, T to '
-                    'get properties of saturated steam.')
-
-            raise ValueError(
-                f'Exactly two fixed points are required, passed {list(kwargs)}')
-
-        kwargs_list = list(kwargs.items())
-
-        self.point_1 = kwargs_list[0]
-        self.point_2 = kwargs_list[1]
-
-        self.points = [
-            self.point_1,
-            self.point_2
-        ]
-
-    def __repr__(self) -> str:
-
-        repr_properties = self.REPR_PROPERTIES
-
-        props_str = ', '.join(f'{p}={self.get(p):{fmt}}'
-                              for p, fmt in repr_properties)
-
-        s = f'<{self.__class__.__name__} ({self.phase}), {props_str}>'
 
         return s

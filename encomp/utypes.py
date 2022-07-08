@@ -238,6 +238,7 @@ _DynamicViscosityUC = _MassUC / _LengthUC / _TimeUC
 _KinematicViscosityUC = _LengthUC**2 / _TimeUC
 _FrequencyUC = 1 / _TimeUC
 _MolarMassUC = _MassUC / _SubstanceUC
+_MolarDensityUC = _SubstanceUC / _VolumeUC
 
 
 class Area(Dimensionality):
@@ -304,12 +305,23 @@ class MolarMass(Dimensionality):
     dimensions = _MolarMassUC
 
 
+class MolarDensity(Dimensionality):
+    dimensions = _MolarDensityUC
+
+
 # # these dimensionalities might have different names depending on the context
 _HeatingValueUC = _EnergyUC / _MassUC
 _LowerHeatingValueUC = _EnergyUC / _MassUC
 _HigherHeatingValueUC = _EnergyUC / _MassUC
+_SpecificHeatCapacityUC = _EnergyUC / _MassUC / _TemperatureUC
+
 _SpecificEnthalpyUC = _EnergyUC / _MassUC
+_MolarSpecificEnthalpyUC = _EnergyUC / _SubstanceUC
 _SpecificEntropyUC = _SpecificEnthalpyUC / _TemperatureUC
+_MolarSpecificEntropyUC = _SpecificEnthalpyUC / _SubstanceUC
+_SpecificInternalEnergyUC = _EnergyUC / _MassUC
+_MolarSpecificInternalEnergyUC = _EnergyUC / _SubstanceUC
+
 _HeatCapacityUC = _EnergyUC / _MassUC / _TemperatureUC
 _ThermalConductivityUC = _PowerUC / _LengthUC / _TemperatureUC
 _HeatTransferCoefficientUC = _PowerUC / _AreaUC / _TemperatureUC
@@ -317,6 +329,16 @@ _MassPerNormalVolumeUC = _MassUC / _NormalVolumeUC
 _MassPerEnergyUC = _MassUC / _EnergyUC
 _CurrencyUC = _DimensionlessUC
 _CurrencyPerEnergyUC = _CurrencyUC / _EnergyUC
+
+# related to CoolProp humid air
+_SpecificHeatPerDryAirUC = _EnergyUC / _MassUC / _TemperatureUC
+_SpecificHeatPerHumidAirUC = _EnergyUC / _MassUC / _TemperatureUC
+_MixtureEnthalpyPerDryAirUC = _EnergyUC / _MassUC
+_MixtureEnthalpyPerHumidAirUC = _EnergyUC / _MassUC
+_MixtureEntropyPerDryAirUC = _EnergyUC / _MassUC / _TemperatureUC
+_MixtureEntropyPerHumidAirUC = _EnergyUC / _MassUC / _TemperatureUC
+_MixtureVolumePerDryAirUC = _VolumeUC / _MassUC
+_MixtureVolumePerHumidAirUC = _VolumeUC / _MassUC
 
 
 class HeatingValue(Dimensionality):
@@ -331,12 +353,32 @@ class HigherHeatingValue(Dimensionality):
     dimensions = _HigherHeatingValueUC
 
 
+class SpecificHeatCapacity(Dimensionality):
+    dimensions = _SpecificHeatCapacityUC
+
+
 class SpecificEnthalpy(Dimensionality):
     dimensions = _SpecificEnthalpyUC
 
 
+class MolarSpecificEnthalpy(Dimensionality):
+    dimensions = _MolarSpecificEnthalpyUC
+
+
 class SpecificEntropy(Dimensionality):
     dimensions = _SpecificEntropyUC
+
+
+class MolarSpecificEntropy(Dimensionality):
+    dimensions = _MolarSpecificEntropyUC
+
+
+class SpecificInternalEnergy(Dimensionality):
+    dimensions = _SpecificInternalEnergyUC
+
+
+class MolarSpecificInternalEnergy(Dimensionality):
+    dimensions = _MolarSpecificInternalEnergyUC
 
 
 class HeatCapacity(Dimensionality):
@@ -365,3 +407,35 @@ class Currency(Dimensionality):
 
 class CurrencyPerEnergy(Dimensionality):
     dimensions = _CurrencyPerEnergyUC
+
+
+class SpecificHeatPerDryAir(Dimensionality):
+    dimensions = _SpecificHeatPerDryAirUC
+
+
+class SpecificHeatPerHumidAir(Dimensionality):
+    dimensions = _SpecificHeatPerHumidAirUC
+
+
+class MixtureEnthalpyPerDryAir(Dimensionality):
+    dimensions = _MixtureEnthalpyPerDryAirUC
+
+
+class MixtureEnthalpyPerHumidAir(Dimensionality):
+    dimensions = _MixtureEnthalpyPerHumidAirUC
+
+
+class MixtureEntropyPerDryAir(Dimensionality):
+    dimensions = _MixtureEntropyPerDryAirUC
+
+
+class MixtureEntropyPerHumidAir(Dimensionality):
+    dimensions = _MixtureEntropyPerHumidAirUC
+
+
+class MixtureVolumePerDryAir(Dimensionality):
+    dimensions = _MixtureVolumePerDryAirUC
+
+
+class MixtureVolumePerHumidAir(Dimensionality):
+    dimensions = _MixtureVolumePerHumidAirUC
