@@ -8,17 +8,19 @@ The Quantity class
 ------------------
 
 The purpose of the :py:class:`encomp.units.Quantity` class is to store information about the *magnitude*, *dimensionality* and *units* of a physical quantity.
+Additionally, static type checkers like ``mypy`` can be used to catch dimensionality-related errors in calculations.
 
 
 .. note::
-    The shorthand ``Q`` is used as an alias for ``Quantity``
+    The shorthand ``Q`` is used as an alias for ``Quantity``.
+    Import the class with ``from encomp.units import Quantity as Q``
 
 To get started, import the class:
 
 
 .. code-block:: python
 
-    from encomp.units import Q
+    from encomp.units import Quantity as Q
 
 Create an instance representing an absolute pressure of 1 bar:
 
@@ -33,25 +35,27 @@ Convert the pressure to another unit:
 
 .. code-block:: python
 
+    # pressure_kPa is a new Quantity instance
     pressure_kPa = pressure.to('kPa')
 
-Refer to the default ``pint`` unit definition file (`defaults_en.txt <https://github.com/hgrecco/pint/blob/master/pint/default_en.txt>`_) for a list of accepted unit names.
+Refer to the unit definition file (``encomp/data/units.txt``) for a list of accepted unit names.
+This definition file is based on the ``defaults_en.txt`` file from ``pint`` and has been slightly modified.
 
 
 Quantity types
 ~~~~~~~~~~~~~~
 
 The quantity class also contains information about its *dimensionality*.
-It is not possible to create an instance of the base class :py:class:`encomp.units.Quantity`, since this would not have any dimensionality at all (a *dimensionless* quantity still has a dimensionality of 1).
+It is not possible to create an instance of the base class :py:class:`encomp.units.Quantity`, since this would not have any dimensionality at all (a *dimensionless* quantity still has a dimensionality of *1*).
 A unique subclass of :py:class:`encomp.units.Quantity` is created for each new dimensionality.
 The subclasses are cached and reused, which means that the ``is`` operator can be used to check for equality.
 
 .. code-block:: python
 
-    type(pressure) # <class 'encomp.units.Quantity[Pressure]'>
+    type(pressure) # <class 'encomp.units.Quantity[encomp.utypes.Pressure]'>
 
     fraction = Q(5, '%')
-    type(fraction) # <class 'encomp.units.Quantity[Dimensionless]'>
+    type(fraction) # <class 'encomp.units.Quantity[encomp.utypes.Dimensionless]'>
 
     assert type(pressure) is type(pressure_kPa)
 
@@ -59,24 +63,32 @@ The subclasses are cached and reused, which means that the ``is`` operator can b
     assert type(pressure) is not type(length)
 
 
-To create a subclass of :py:class:`encomp.units.Quantity` with a certain dimensionality, enclose the string name of the dimensionality (or a ``UnitsContainer`` object) in square brackets:
+To create a subclass of :py:class:`encomp.units.Quantity` with a certain dimensionality, provide a dimensionality type parameter using square brackets.
+All dimensionality type parameters must inherit from :py:class:`encomp.utypes.Dimensionality`.
+The actual dimensionality (a combination of the seven base dimensions) is specified as a ``pint.unit.UnitsContainer`` instance (class attribute ``dimensions``).
 
 
-.. code-block:: python
-
-    Q['Pressure'] # subclass with dimensionality pressure
-
-    from encomp.utypes import Length, Power
-    Q[Power / Length] # use UnitsContainer objects to combine dimensionalities
-
-The builtin ``isinstance()`` can be used to check dimensionalities of quantity objects, but it's better to use the :py:meth:`encomp.units.Quantity.check` method.
-This method takes a string unit or a ``UnitsContainer`` object as input.
-The module :py:mod:`encomp.utypes` contains ``UnitsContainer`` objects for the most common dimensionalities.
-
+The module :py:mod:`encomp.utypes` contains :py:class:`encomp.utypes.Dimensionality` subclasses for the most common dimensionalities.
 
 .. code-block:: python
 
-    from encomp.utypes import Pressure, Length
+    from encomp.utypes import Pressure, Length, Power, Dimensionality
+
+    Q[Pressure] # subclass with dimensionality pressure
+
+    Pressure.dimensions # <UnitsContainer({'[length]': -1, '[mass]': 1, '[time]': -2})>
+
+    class PowerPerLength(Dimensionality):
+        dimensions = Power.dimensions / Length.dimensions
+
+    Q[PowerPerLength] # new dimensionality
+
+The builtin ``isinstance()`` can be used to check dimensionalities of quantity objects.
+Alteratively, the :py:meth:`encomp.units.Quantity.check` method can be used.
+For more complex types, like ``list[Quantity[Pressure]]``, the :py:func:`encomp.misc.isinstance_types` function must be used instead of ``isinstance()``.
+
+
+.. code-block:: python
 
     pressure.check(Length) # False
     pressure.check('meter') # False
@@ -86,28 +98,19 @@ The module :py:mod:`encomp.utypes` contains ``UnitsContainer`` objects for the m
 
     # alternative using isinstance()
 
-    isinstance(pressure, Q['Pressure']) # True
     isinstance(pressure, Q[Pressure]) # True
-
-    isinstance(pressure, Q['Length']) # False
     isinstance(pressure, Q[Length]) # False
 
-
-To check more complex types, use the function :py:func:`encomp.misc.isinstance_types`.
-This function calls ``typeguard.check_types`` in case ``isinstance()`` cannot be used.
-
-.. code-block:: python
+    # complex types must use isinstance_types
+    # this function can also be used with simple types
 
     from encomp.misc import isinstance_types
 
-    lst = [Q(1, 'bar'), Q(2, 'bar')]
+    isinstance_types([pressure, pressure], list[Q[Pressure]])  # True
+    isinstance_types({1: Q(2, 'm'), 2: Q(25, 'cm')}, dict[int, Q[Length]])  # True
 
-    isinstance_types(lst, list[Q['Pressure']]) # True
-    isinstance_types(lst, list[Q['Length']]) # False
-
-    tup = (Q(25, 'm/s'), Q(1, 'kg'))
-    isinstance_types(tup, tuple[Q['Velocity'], Q['Mass']]) # True
-    isinstance_types(tup, tuple[Q['Velocity'], Q['Power']]) # False
+    # all Quantity[...] objects are subclasses of Quantity
+    isinstance_types(pressure, Q)  # True
 
 
 To check types for functions and methods, use the ``@typeguard.typechecked`` decorator instead of writing explicit checks inside the function body:
@@ -118,21 +121,21 @@ To check types for functions and methods, use the ``@typeguard.typechecked`` dec
     from typeguard import typechecked
 
     @typechecked
-    def func(p1: Q['Pressure']) -> tuple[Q['Length'], Q['Power']]:
+    def func(p1: Q[Pressure]) -> tuple[Q[Length], Q[Power]]:
         return Q(1, 'm'), Q(1, 'kW')
 
 A ``TypeError`` will be raised in case the function ``func`` is called with incorrect units or if the return value(s) have incorrect units.
 
 
-Custom dimensionalities
-~~~~~~~~~~~~~~~~~~~~~~~
+Custom base dimensionalities
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-By default, the seven SI dimensionalities (and combinations of these) are defined, along with some commonly used media (water, air, fuel).
-Additionally, the ``normal`` dimensionality is defined (used to represent normal volume).
+By default, the seven SI dimensionalities (and common combinations of these) are defined, along with some commonly used media (water, air, fuel).
+Additionally, the *normal* dimensionality is defined (used to represent normal volume).
 
-The function :py:func:`encomp.units.define_dimensionality` can be used to define a new, custom dimensionality.
+The function :py:func:`encomp.units.define_dimensionality` can be used to define a new base dimensionality.
 In case the dimensionality already exists, ``DimensionalityRedefinitionError`` is raised.
-
+The new dimensionality will have a single unit with the same name as the dimensionality.
 
 .. code-block:: python
 
@@ -141,6 +144,7 @@ In case the dimensionality already exists, ``DimensionalityRedefinitionError`` i
     define_dimensionality('dry_air')
     define_dimensionality('oxygen')
 
+    # the new dimensionality [dry_air] has a single unit: "dry_air"
     m_air = Q(5, 'kg * dry_air')
     n_O2 = Q(2.4, 'mol * oxygen')
     M_O2 = Q(32, 'g/mol')
@@ -149,8 +153,8 @@ In case the dimensionality already exists, ``DimensionalityRedefinitionError`` i
     ((n_O2 * M_O2) / m_air).to_base_units() # 0.01536 oxygen/air
 
 
-Using multiple magnitudes
-~~~~~~~~~~~~~~~~~~~~~~~~~
+Quantities with vector magnitudes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 Lists, tuples, sets, Numpy arrays and Pandas Series objects can also be used as magnitude.
@@ -170,7 +174,7 @@ In case a tuple or list is given as magnitude when creating a quantity, it will 
 
     arr = np.linspace(0, 1)
     Q(arr, 'bar')
-    # [0.0 0.02040816326530612 0.04081632653061224 ... 0.9795918367346939 1.0] bar
+    # [0.0 0.0204 0.0408 ... 0.9795 1.0] bar
 
 
 
@@ -185,14 +189,28 @@ Pandas ``Series`` objects are converted to ``ndarray`` when constructing the qua
 
     pressure_ = Q(s, 'bar') # pd.Series is converted to np.ndarray
 
+When assigning a quantity to a DataFrame column, make sure to assign the magnitude (in the desired unit) instead of the actual quantity object.
+
+
+.. code-block:: python
+
+    res = Quantity(..., 'ton/h')
+
+    # convert result, and assign the magnitude ("m")
+    df['Result (kg/s)'] = res.to('kg/s').m
+
+
 
 Combining quantities
 ~~~~~~~~~~~~~~~~~~~~
 
-The result from operations on quantities will always match the input dimensionalities.
+The output from operations on quantities will always be consistent with the input dimensionalities.
 Descriptive errors are raised in case of inconsistent or ambiguous operations.
+
+
 In some cases, units will not cancel out automatically.
 Call ``to_base_units()`` to simplify the quantity to base SI units, or ``to()`` in case the desired unit is known.
+The ``to_reduced_units()`` method can be used to cancel units without converting to base SI units.
 
 .. code-block:: python
 
@@ -218,10 +236,9 @@ This is only required when defining the temperature difference directly.
     # the units Δ°C and K don't cancel out automatically
     (Q(4.19, 'kJ/kg/K') * Q(5, 'delta_degC')).to('kJ/kg') # 20.95 kJ/kg
 
-.. tip::
+.. note::
 
-    To raise an error (for example ``pint.errors.OffsetUnitCalculusError``) when doing ambiguous unit conversions, set the environment variable ``ENCOMP_AUTOCONVERT_OFFSET_TO_BASEUNIT`` to ``0``.
-    See :py:class:`encomp.settings.Settings` for instructions on how to set global configuration parameters.
+    To raise an error (for example ``pint.errors.OffsetUnitCalculusError``) when doing ambiguous unit conversions, the environment variable ``ENCOMP_AUTOCONVERT_OFFSET_TO_BASEUNIT`` must be set to ``False`` (this is the default configuration).
 
 
 
@@ -232,7 +249,7 @@ The :py:class:`encomp.fluids.Fluid` class represents a fluid at a fixed point.
 The parent class :py:class:`encomp.fluids.CoolPropFluid` implements an interface to CoolProp.
 All inputs and outputs are :py:class:`encomp.units.Quantity` instances.
 
-To create a new instance, pass the CoolProp fluid name and the fixed point to the class constructor.
+To create a new instance, pass the CoolProp fluid name and the fixed points (for example *P, T*) to the class constructor.
 The documentation for the parent class :py:class:`encomp.fluids.CoolPropFluid` contains a list of fluid and property names.
 All combinations of input parameters are not valid -- in case of incorrect inputs a ``ValueError`` is raised when evaluating the attribute(s).
 The ``__repr__`` of the instance will show ``N/A`` instead of raising an error.
@@ -312,15 +329,14 @@ All property synonyms are valid instance attributes:
     # (22064000.0 <Unit('pascal')>, 22064000.0 <Unit('pascal')>)
 
 
-.. note::
+.. tip::
 
-    The instance attributes don't show up when calling ``dir(fluid_instance)``, since
-    they are only evaluated as needed (using the :py:meth:`encomp.fluids.CoolPropFluid.get` method).
+    Common fluid properties are type hinted using the correct dimensionality.
+    These properties also show up in the autocomplete list when using an IDE.
 
 
-
-Using multiple inputs
-~~~~~~~~~~~~~~~~~~~~~
+Using vector inputs
+~~~~~~~~~~~~~~~~~~~
 
 The CoolProp library supports vector inputs, which means that multiple inputs can be evaluated at the same time.
 The inputs must be instances of :py:class:`encomp.units.Quantity` with one-dimensional Numpy arrays as magnitude.
@@ -339,7 +355,7 @@ All inputs must be the same length (or a single scalar value).
     # different phases
     Water(T=Q(np.linspace(25, 500, 10), '°C'),
           P=Q(np.linspace(0.5, 10, 10), 'bar')).PHASE
-    # [0.0 0.0 5.0 5.0 5.0 5.0 5.0 2.0 2.0 2.0]
+    # array([0., 0., 5., 5., 5., 5., 5., 2., 2., 2.]) <Unit('dimensionless')>
 
     Water.PHASES
     # {0.0: 'Liquid',
@@ -358,7 +374,6 @@ All inputs must be the same length (or a single scalar value).
     # T=[25.0 77.8 130.6 183.3 236.1 288.9 341.7 394.4 447.2 500.0] °C,
     # D=[997.2 973.3 934.5 2.5 2.2 2.0 1.8 1.6 1.5 1.4] kg/m³,
     # V=[0.9 0.4 0.2 0.0 0.0 0.0 0.0 0.0 0.0 0.0] cP>
-
 
 
 
@@ -397,7 +412,7 @@ These methods return new instances of ``sp.Symbol`` with the same assumptions (i
 
 .. tip::
 
-    The assumptions for a ``sp.Symbol`` are accessed with the attribute ``assumptions0`` (note the ``0`` at the end).
+    The assumptions for an ``sp.Symbol`` instance are accessed with the attribute ``assumptions0`` (note the ``0`` at the end).
 
 
 The ``_`` and ``__`` methods will typeset the sub- and superscripts automatically:
@@ -439,8 +454,11 @@ The class method :py:meth:`encomp.units.Quantity.from_expr` is used to convert a
     # 26860.5 kg
 
 
-:py:meth:`encomp.units.Quantity.from_expr` will raise ``KeyError`` in case there is a symbol in the expression that is not an SI unit.
-This does not work with user-defined dimensionalities.
+:py:meth:`encomp.units.Quantity.from_expr` will raise ``KeyError`` in case residual symbols in the expression are not SI units.
+
+.. warning::
+
+    Sympy integration does not work with user-defined dimensionalities (i.e. dimensionalities/units defined using :py:func:`encomp.units.define_dimensionality`).
 
 
 In case the magnitude of a quantity is a Numpy array, :py:meth:`encomp.units.Quantity.from_expr` does not work.

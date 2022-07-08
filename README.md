@@ -37,8 +37,6 @@ Main functionality of the `encomp` library:
 The other modules implement calculations related to process engineering and thermodynamics.
 The module `encomp.serialize` implements custom JSON serialization and decoding for classes used elsewhere in the library.
 
-> This library is under work: all features are not yet implemented.
-
 ## Installation
 
 Install with `pip`:
@@ -57,7 +55,7 @@ conda install conda-forge::coolprop
 
 ## Getting started
 
-To use `encomp` from a Jupyter Notebook, import the `encomp.notebook` module:
+To use `encomp` from a Jupyter Notebook (or REPL), import the `encomp.notebook` module:
 
 ```python
 # imports commonly used functions and registers Notebook magics
@@ -67,12 +65,12 @@ from encomp.notebook import *
 This will import commonly used functions and classes.
 It also registers the `%read` and `%%write` Jupyter magics for reading and writing custom objects from and to JSON.
 
+
 ### The `Quantity` class
 
-The main part of `encomp` is the `encomp.units.Quantity` class (shorthand alias `Q`), which is an extension of `pint.Quantity`.
+The fundamental building block of `encomp` is the `encomp.units.Quantity` class (shorthand alias `Q`), which is an extension of `pint.Quantity`.
 This class is used to construct objects with a _magnitude_ and _unit_.
-
-Some examples:
+Each unit also has a _dimensionality_, and each dimensionality will have multiple associated units.
 
 ```python
 from encomp.units import Quantity as Q
@@ -90,15 +88,72 @@ Q([1, 2, 3], 'bar') * 2 # [2, 4, 6] bar
 Q(0.1) == Q(10, '%')
 ```
 
-The `Quantity` class can also be used to restrict function and class attribute types.
-Each _dimensionality_ (for example _pressure_, _length_, _time_, _dimensionless_) is represented by a subclass of `Quantity`.
-It is possible to use type annotations to restrict the dimensionalities of function parameters and return values at runtime.
 
-In case the `ENCOMP_TYPE_CHECKING` environment variable is set to `True`, the `typeguard.typechecked` decorator is automatically applied to all functions and methods inside the main `encomp` library.
+#### `Quantity` type system
+
+The `Quantity` object has an associated `Dimensionality` type parameter that is dynamically determined based on the unit.
+Each dimensionality (for example _pressure_, _length_, _time_, _dimensionless_) is represented by a subclass of `Quantity`.
+
+Common dimensionalities can be statically determined based on overload variants of the `Quantity.__new__` method (see `encomp.utypes.get_registered_units` for a list of units that support this).
+Additionally, some common operations using ``*``, ``**`` and ``/`` are also defined using overload variants.
+
+
+In case the unit is not registered by default, the type checker will use the dimensionality `Unknown`.
+During runtime, the dimensionality will be evaluated based on the unit that was specified.
+
+The `Unknown` dimensionality is also used for operations using ``*``, ``**`` and ``/`` that are not explicitly defined as overload variants.
+If necessary, the dimensionality of a quantity can be explicitly specified by providing a subclass of `encomp.utypes.Dimensionality` as type parameter.
+
+Most dimensionalities are defined in the `encomp.utypes` module.
+In case a new dimensionality is created, the classname will be `Dimensionality[...]`, for example `Quantity[Dimensionality[[mass] ** 2 / [length] ** 3]]`.
+
+
+```python
+from encomp.units import Quantity as Q
+from encomp.utypes import Volume, MassFlow
+
+# the unit "m" is registered as a Mass unit
+m = Q(12, 'kg')  # Quantity[Mass]
+
+V = Q(25, 'liter')  # Quantity[Volume]
+
+# some common / and * operations are encoded as overloads
+rho = m / V  # Quantity[Density]
+
+# the unit "kg/week" is not registered by default
+# the individual units "kg" and "week" are registered, however
+# the type checker has no way of combining these units
+m_ = Q(25, 'kg/week')  # Quantity[Unknown]
+
+# at runtime, the dimensionality of m_ will be evaluated to MassFlow
+isinstance(m, Q[MassFlow])  # True
+
+# these operations (** and /) is not explicitly defined as overloads
+# at runtime, the type will be evaluated to
+# Quantity[Dimensionality[[mass] ** 2 / [length] ** 3]]
+x = m**2 / V  # Quantity[Unknown]
+
+# the unit name "meter cubed" is not defined using an overload,
+# the type parameter Volume is instead used to infer the type
+y = Q[Volume](15, 'meter cubed')  # Quantity[Volume]
+
+# in case the explicitly defined dimensionality does
+# not match the unit, an error will be raised at runtime
+
+y = Q[MassFlow](15, 'meter cubed')
+# ExpectedDimensionalityError: Quantity with unit "m³" has incorrect dimensionality [length] ** 3, expected [mass] / [time]
+```
+
+#### Runtime type checking
+
+
+The `Quantity` subtypes can be used to restrict function and class attribute types at runtime.
+If the `ENCOMP_TYPE_CHECKING` environment variable is set to `True`, the `typeguard.typechecked` decorator is automatically applied to all functions and methods inside the main `encomp` library.
 To use it on your own functions, apply the decorator explicitly:
 
 ```python
 from typeguard import typechecked
+from typing import TypedDict
 
 from encomp.units import Quantity as Q
 from encomp.utypes import Temperature, Length, Pressure
@@ -110,10 +165,25 @@ def some_func(T: Q[Temperature]) -> tuple[Q[Length], Q[Pressure]]:
 some_func(Q(12, 'delta_degC'))  # the dimensionalities check out
 some_func(Q(26, 'kW'))  # raises an exception:
 # TypeError: type of argument "T" must be Quantity[Temperature]; got Quantity[Power] instead
+
+class OutputDict(TypedDict):
+
+    P: Q[Pressure]
+    T: Q[Temperature]
+
+@typechecked
+def another_func(s: Q[Length]) -> OutputDict:
+    return {
+        'T': Q(25, 'm'),
+        'P': Q(25, 'kPa')
+    }
+
+another_func(Q(25, 'm'))
+# TypeError: type of dict item "T" for the return value must be encomp.units.Quantity[Temperature]; got encomp.units.Quantity[Length] instead
 ```
 
-The dimensionality of a quantity can be explicitly specified by providing an `encomp.utypes.Dimensionality` subtype.
-To create a new dimensionality (for example temperature difference per length), combine the `pint.UnitsContainer` objects stored in the `dimensions` attribute.
+To create a new dimensionality (for example temperature difference per length), combine the `pint.UnitsContainer` objects stored in the `dimensions` class attribute.
+
 
 ```python
 from encomp.units import Quantity as Q
@@ -153,6 +223,7 @@ from encomp.fluids import Fluid
 
 air = Fluid('air', T=Q(25, 'degC'), P=Q(2, 'bar'))
 
+# common fluid properties have type hints, and show up using autocomplete
 air.D # 2.338399526231983 kilogram/meter3
 
 air.search('density')

@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     ignore_ndarray_unit_stripped_warning: bool = True
 
     matplotlib_notebook_format: Literal['retina', 'png', 'svg'] = 'retina'
-    autoconvert_offset_to_baseunit: bool = True
+    autoconvert_offset_to_baseunit: bool = False
     default_unit_format: Literal['~P', '~L', '~H', '~Lx'] = '~P'
 
     class Config:

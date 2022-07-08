@@ -47,6 +47,7 @@ from encomp.utypes import (Dimensionality,
                            Area,
                            Volume,
                            Velocity,
+                           Temperature,
                            Time,
                            MassFlow,
                            VolumeFlow)

@@ -122,7 +122,7 @@ def convert_gas_volume(
     # also considers compressibility factor Z
 
     # TODO: issue with mypy for Z2 / Z1 (seems like a bug)
-    V2 = V1 * (P1 / P2) * (T2 / T1) * (Z2 / Z1)  # type: ignore
+    V2 = V1 * (P1 / P2) * (T2.to('K') / T1.to('K')) * (Z2 / Z1)  # type: ignore
 
     # volume at P2, T2 in same units as V1
     return V2.to(V1.u)

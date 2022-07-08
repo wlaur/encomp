@@ -288,12 +288,12 @@ class CoolPropFluid:
 
         Refer to the CoolProp documentation for more information:
 
-        * http://www.coolprop.org/fluid_properties/PurePseudoPure.html#list-of-fluids
-        * http://www.coolprop.org/fluid_properties/Mixtures.html#binary-pairs
-        * http://www.coolprop.org/fluid_properties/Incompressibles.html#the-different-fluids
-        # table-of-inputs-outputs-to-hapropssi
-        * http://www.coolprop.org/coolprop/HighLevelAPI.html
-        * http://www.coolprop.org/fluid_properties/HumidAir.html
+        - http://www.coolprop.org/fluid_properties/PurePseudoPure.html#list-of-fluids
+        - http://www.coolprop.org/fluid_properties/Mixtures.html#binary-pairs
+        - http://www.coolprop.org/fluid_properties/Incompressibles.html#the-different-fluids
+        - table-of-inputs-outputs-to-hapropssi
+        - http://www.coolprop.org/coolprop/HighLevelAPI.html
+        - http://www.coolprop.org/fluid_properties/HumidAir.html
 
 
         The names ``Water`` and ``HEOS::Water`` uses the formulation defined by IAPWS-95.
@@ -312,9 +312,10 @@ class CoolPropFluid:
 
             Examples:
 
-                * ``INCOMP::MITSW[0.05]``: seawater with 5 mass-percent salt.
-                * ``INCOMP::MPG[0.5]``: 50 % ethylene glycol
-                * ``INCOMP::T66``: Therminol 66 (https://www.therminol.com/product/71093438)
+                - ``INCOMP::MITSW[0.05]``: seawater with 5 mass-percent salt.
+                - ``INCOMP::MPG[0.5]``: 50 % ethylene glycol
+                - ``INCOMP::T66``: Therminol 66 (https://www.therminol.com/product/71093438)
+
 
         """
 

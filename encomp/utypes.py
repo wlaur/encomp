@@ -9,7 +9,7 @@ Some commonly used derived dimensionalities (like density) are defined for conve
 
 from __future__ import annotations
 
-from typing import TypeVar, Union, Any, Annotated, Optional, Literal
+from typing import TypeVar, Union, Optional, Literal, _LiteralGenericAlias
 from typing import Union
 from abc import ABC
 
@@ -39,7 +39,10 @@ TimeUnits = Literal['s', 'second', 'min', 'minute', 'h', 'hr',
                     'hour', 'd', 'day', 'w', 'week', 'y', 'yr',
                     'a', 'year', 'ms']
 
-TemperatureUnits = Literal['C', 'degC', '°C', 'K', 'F', 'degF', '°F']
+TemperatureUnits = Literal['C', 'degC', '°C', 'K', 'F', 'degF', '°F',
+                           'delta_C', 'delta_degC', 'Δ°C',
+                           'delta_F', 'delta_degF', 'Δ°F']
+
 SubstanceUnits = Literal['mol', 'kmol']
 CurrentUnits = Literal['A', 'mA']
 LuminosityUnits = Literal['lm']
@@ -89,6 +92,17 @@ KinematicViscosityUnits = Literal['m2/s', 'm**2/s', 'm^2/s',
                                   'm²/s', 'cSt', 'cm2/s',
                                   'cm**2/s', 'cm^2/s', 'cm²/s']
 
+
+def get_registered_units() -> dict[str, tuple[str, ...]]:
+
+    ret = {}
+
+    for k, v in globals().items():
+        if isinstance(v, _LiteralGenericAlias):
+            if k.endswith('Units'):
+                ret[k.removesuffix('Units')] = v.__args__
+
+    return ret
 
 class Dimensionality(ABC):
 
