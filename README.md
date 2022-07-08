@@ -112,6 +112,8 @@ In case a new dimensionality is created, the classname will be `Dimensionality[.
 from encomp.units import Quantity as Q
 from encomp.utypes import Volume, MassFlow
 
+# the types are determined by a static type checker like mypy
+
 # the unit "m" is registered as a Mass unit
 m = Q(12, 'kg')  # Quantity[Mass]
 
@@ -128,7 +130,7 @@ m_ = Q(25, 'kg/week')  # Quantity[Unknown]
 # at runtime, the dimensionality of m_ will be evaluated to MassFlow
 isinstance(m, Q[MassFlow])  # True
 
-# these operations (** and /) is not explicitly defined as overloads
+# these operations (** and /) are not explicitly defined as overloads
 # at runtime, the type will be evaluated to
 # Quantity[Dimensionality[[mass] ** 2 / [length] ** 3]]
 x = m**2 / V  # Quantity[Unknown]
@@ -141,7 +143,8 @@ y = Q[Volume](15, 'meter cubed')  # Quantity[Volume]
 # not match the unit, an error will be raised at runtime
 
 y = Q[MassFlow](15, 'meter cubed')
-# ExpectedDimensionalityError: Quantity with unit "m³" has incorrect dimensionality [length] ** 3, expected [mass] / [time]
+# ExpectedDimensionalityError: Quantity with unit "m³" has incorrect dimensionality
+# [length] ** 3, expected [mass] / [time]
 ```
 
 #### Runtime type checking
@@ -164,7 +167,8 @@ def some_func(T: Q[Temperature]) -> tuple[Q[Length], Q[Pressure]]:
 
 some_func(Q(12, 'delta_degC'))  # the dimensionalities check out
 some_func(Q(26, 'kW'))  # raises an exception:
-# TypeError: type of argument "T" must be Quantity[Temperature]; got Quantity[Power] instead
+# TypeError: type of argument "T" must be Quantity[Temperature];
+# got Quantity[Power] instead
 
 class OutputDict(TypedDict):
 
@@ -179,7 +183,8 @@ def another_func(s: Q[Length]) -> OutputDict:
     }
 
 another_func(Q(25, 'm'))
-# TypeError: type of dict item "T" for the return value must be encomp.units.Quantity[Temperature]; got encomp.units.Quantity[Length] instead
+# TypeError: type of dict item "T" for the return value must be
+# encomp.units.Quantity[Temperature]; got encomp.units.Quantity[Length] instead
 ```
 
 To create a new dimensionality (for example temperature difference per length), combine the `pint.UnitsContainer` objects stored in the `dimensions` class attribute.
@@ -204,14 +209,14 @@ class CustomDimensionality(Dimensionality):
 
 CustomCoolingCapacity = Q[CustomDimensionality]
 
-# Quantity handles a wide range of input formats and unit names
+# the underlying pint library handles a wide range of input formats and unit names
 assert CustomCoolingCapacity(3, '°F per yard³') == Q('3 degree_Fahrenheit per yard cubed')
 ```
 
 ### The `Fluid` class
 
 The class `encomp.fluids.Fluid` is a wrapper around the _CoolProp_ library.
-The class takes two input points (three for humid air) that fix the state of the fluid.
+The class uses two input points (three for humid air) that fix the state of the fluid.
 Other fluid parameters can be evaluated using attribute access.
 The outputs and inputs are `Quantity` objects.
 CoolProp property names and codes are used throughout.
@@ -235,7 +240,7 @@ air.search('density')
 air.Dmolar # 80.73061937328056 mole/meter3
 ```
 
-The fluid name `'water'` (or the alias class `Water`) uses _IAPWS_ to evaluate steam and water properties.
+The fluid name `'water'` (or the subclass `Water`) uses _IAPWS_ to evaluate steam and water properties.
 
 ```python
 from encomp.units import Quantity as Q
@@ -273,5 +278,4 @@ See the file `.env.example` in the base of this repository for examples.
 ## TODO
 
 - Possible to use a secondary type variable / generic to figure out the magnitude type?
-- Add more overloads for `Water`, `Fluid` `__init__` methods
 - Document the `Quantity[Dimensionality]` type system
