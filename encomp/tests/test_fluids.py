@@ -27,13 +27,15 @@ def test_Fluid():
     Water(P=Q(1, 'bar'), T=Q(0.9, 'degC'))
     Water(T=Q(1, 'bar'), Q=Q(0.9, ''))
 
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
 
         # cannot fix all of P, T, Q
         Water(P=Q(1, 'bar'), T=Q(150, 'degC'), Q=(0.4, ''))
 
+    with pytest.raises(ValueError):
+
         # incorrect argument name
-        Water(T=Q(1, 'bar'), P=Q(9, 'degC'))
+        Water(T=Q(1, 'bar'), p=Q(9, 'degC'))
 
     Fluid('water', T=Q([25, 95], 'C'), P=Q([1, 2], 'bar')).H
     Fluid('water', T=Q([25, np.nan], 'C'), P=Q([1, 2], 'bar')).H
@@ -140,6 +142,9 @@ def test_Fluid():
 
         Fluid('water', T=Q([np.nan, np.nan], 'C'),
               P=Q([np.nan, np.nan, np.nan], 'bar')).H
+
+    with pytest.raises(ValueError):
+
         Fluid('water', T=Q([np.nan, np.nan], 'C'), P=Q([], 'bar')).H
 
 

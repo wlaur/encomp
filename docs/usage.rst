@@ -376,6 +376,55 @@ All inputs must be the same length (or a single scalar value).
     # V=[0.9 0.4 0.2 0.0 0.0 0.0 0.0 0.0 0.0 0.0] cP>
 
 
+Currency units
+~~~~~~~~~~~~~~
+
+Engineering calculations will often involve economic aspects.
+To aid in this, the dimensionality _currency_ can be used to represent an arbitrary currency.
+By default, the currencies ``SEK, EUR, USD`` are defined.
+
+
+.. code-block:: python
+
+    mf = Q(25, 'kg/s')
+    t = Q(365, 'd')
+
+    price = Q(25, 'EUR/ton')
+
+    yearly_cost = mf * t * price  # Quantity[Currency]
+
+    # SI prefixes can be used
+    print(yearly_cost.to('MEUR'))
+
+    # NOTE: this is only an approximation,
+    # uses exchange rate 10 SEK = 1 EUR
+    print(yearly_cost.to('MSEK'))
+
+    weekly_cost = (
+        Q(145, 'GWh/year')) *
+        Q(1, 'week') *
+        Q(25, 'EUR/MWh')
+    )
+
+    print(weekly_cost.to('MEUR'))
+
+
+.. warning::
+
+    Do not use this system for currency conversions.
+    The scaling factors between the default currencies are approximations (``10 SEK = 1 EUR = 1 USD``).
+
+    Refer to the `pint documentation <https://pint.readthedocs.io/en/stable/currencies.html?highlight=currency#using-pint-for-currency-conversions>`_ for instructions on how to implement a registry context that handles currency conversion correctly.
+
+
+
+Handling unit-related errors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use ``pint.errors.DimensionalityError`` to catch all unit-related errors.
+This error can also be imported from the :py:mod:`encomp.units` module.
+
+
 
 Sympy functionality
 -------------------

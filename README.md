@@ -278,4 +278,6 @@ See the file `.env.example` in the base of this repository for examples.
 ## TODO
 
 - Possible to use a secondary type variable / generic to figure out the magnitude type?
+  - This could use `TypeVarTuple` (import from `typing_extensions` until Python 3.11)
+  - Not supported by `mypy` yet, need to wait with this
 - Document the `Quantity[Dimensionality]` type system

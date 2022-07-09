@@ -22,12 +22,17 @@ import pandas as pd
 import pint
 from pint.unit import UnitsContainer, Unit
 from pint.registry import UnitRegistry
-from pint.errors import DimensionalityError  # noqa
+from pint.errors import DimensionalityError
 
 from encomp.settings import SETTINGS
 
 from encomp.utypes import (_BASE_SI_UNITS,
                            DimensionlessUnits,
+                           CurrencyUnits,
+                           CurrencyPerEnergyUnits,
+                           CurrencyPerMassUnits,
+                           CurrencyPerVolumeUnits,
+                           CurrencyPerTimeUnits,
                            LengthUnits,
                            MassUnits,
                            TimeUnits,
@@ -50,17 +55,21 @@ from encomp.utypes import (_BASE_SI_UNITS,
                            DynamicViscosityUnits,
                            KinematicViscosityUnits)
 
-from encomp.utypes import (Magnitude,
-                           MagnitudeValue,
+from encomp.utypes import (MagnitudeInput,
+                           MagnitudeScalar,
+                           Magnitude,
                            DT,
                            DT_,
                            Dimensionality,
                            Unknown,
                            Impossible,
                            Dimensionless,
-                           Substance,
                            Currency,
                            CurrencyPerEnergy,
+                           CurrencyPerMass,
+                           CurrencyPerVolume,
+                           CurrencyPerTime,
+                           Substance,
                            Density,
                            Energy,
                            Power,
@@ -89,7 +98,33 @@ if SETTINGS.ignore_ndarray_unit_stripped_warning:
         message='The unit of the quantity is stripped when downcasting to ndarray.')
 
 
-class ExpectedDimensionalityError(ValueError):
+# custom errors inherit from pint.errors.DimensionalityError
+# this makes it possible to use
+# try:
+#     ...
+# except DimensionalityError:
+#     ...
+# to catch all unit/dimensionality-related errors
+class _DimensionalityError(DimensionalityError):
+
+    def __init__(self, msg=''):
+
+        self.msg = msg
+        super().__init__(None, None, dim1=None, dim2=None, extra_msg=msg)
+
+    def __str__(self) -> str:
+        return self.msg
+
+
+class ExpectedDimensionalityError(_DimensionalityError):
+    pass
+
+
+class DimensionalityTypeError(_DimensionalityError):
+    pass
+
+
+class DimensionalityComparisonError(_DimensionalityError):
     pass
 
 
@@ -147,14 +182,102 @@ ureg = CustomRegistry()
 
 
 # if False, degC must be explicitly converted to K when multiplying
+# this is False by default, there's no reason to set this to True
 ureg.autoconvert_offset_to_baseunit = SETTINGS.autoconvert_offset_to_baseunit
-
 
 # enable support for matplotlib axis ticklabels etc...
 try:
     ureg.setup_matplotlib()
 except ImportError:
     pass
+
+ureg.default_format = SETTINGS.default_unit_format
+
+try:
+    ureg._registry.default_format = SETTINGS.default_unit_format
+except Exception:
+    pass
+
+
+# shorthand for the @wraps(ret, args, strict=True|False) decorator
+wraps = ureg.wraps
+check = ureg.check
+
+
+def define_dimensionality(name: str, symbol: str = None) -> None:
+    """
+    Defines a new dimensionality that can be combined with existing
+    dimensionalities. In case the dimensionality is already defined,
+    ``DimensionalityRedefinitionError`` will be raised.
+
+    This can be used to define a new dimensionality for an amount
+    of some specific substance. For instance, if the dimensionalities
+    "air" and "fuel" are defined, the unit ``(kg air) / (kg fuel)`` has
+    the simplified dimensionality of ``[air] / [fuel]``.
+
+    .. note::
+        Make sure to only define new custom dimensions using this function,
+        since the unit needs to be appended to the ``_CUSTOM_DIMENSIONS`` list as well.
+
+    Parameters
+    ----------
+    name : str
+        Name of the dimensionality
+    symbol : str, optional
+        Optional (short) symbol, by default None
+    """
+
+    if name in _CUSTOM_DIMENSIONS:
+        raise DimensionalityRedefinitionError(
+            'Cannot define new dimensionality with '
+            f'name: {name}, a dimensionality with this name was already defined')
+
+    definition_str = f'{name} = [{name}]'
+
+    if symbol is not None:
+        definition_str = f'{definition_str} = {symbol}'
+
+    ureg.define(definition_str)
+
+    _CUSTOM_DIMENSIONS.append(name)
+
+
+# define commonly used media as dimensionalities
+# "normal" is used to signify normal volume, e.g. "Nm³/s"
+for dimensionality_name in (
+    'normal',
+    'air',
+    'water',
+    'fuel'
+):
+
+    try:
+        define_dimensionality(dimensionality_name)
+    except pint.errors.DefinitionSyntaxError as e:
+        pass
+
+
+# "currency" is used to represent some unspecified currency
+# note that it's not possible to convert different currencies using this system
+# the default currencies will have an approximate scaling factor
+# NOTE: actual currency operations should use decimal.Decimal or similar
+# to account for rounding etc.
+# Quantity supports Decimal magnitudes, but it's not included in the type hints
+# unit conversions do not work with Decimal magnitudes (scaling factors are floats)
+
+_currency_definition = """
+currency = [currency]
+SEK = 1 * currency
+EUR = 10 * currency
+USD = 10 * currency
+"""
+
+for n in _currency_definition.split('\n'):
+    if not n.strip():
+        continue
+    ureg.define(n)
+
+_CUSTOM_DIMENSIONS.append('currency')
 
 
 def _load_additional_units() -> None:
@@ -182,14 +305,6 @@ if (
     _load_additional_units()
 
 
-ureg.default_format = SETTINGS.default_unit_format
-
-try:
-    ureg._registry.default_format = SETTINGS.default_unit_format
-except Exception:
-    pass
-
-
 class Quantity(pint.quantity.Quantity, Generic[DT]):
     """
     Subclass of ``pint.quantity.Quantity`` with additional functionality
@@ -206,6 +321,10 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
 
     """
 
+    # override the _MagnitudeType typevar since this cannot be a Generic
+    # only one generic type variable can be used in this class
+    _magnitude: Magnitude
+
     _REGISTRY: CustomRegistry = ureg  # type: ignore
 
     _DIMENSIONAL_SUBCLASSES: dict[type[Dimensionality], type[Quantity]] = {}
@@ -214,7 +333,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
     # if None the dimensionality is not checked
     # subclasses of Quantity have this class attribute set, which
     # will restrict the dimensionality when creating the object
-    _expected_dimensionality: Optional[UnitsContainer] = None
+    _dimensionality_type: Optional[type[Dimensionality]] = None
 
     _dimension_symbol_map: Optional[dict[sp.Basic, Unit]] = None
 
@@ -267,8 +386,9 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
             quantity_name,
             (Quantity,),
             {
-                '_expected_dimensionality': dim.dimensions,
-                '__class__': Quantity
+                '_dimensionality_type': dim,
+                '__class__': Quantity,
+
             }
         )
 
@@ -337,125 +457,155 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         return len(self._magnitude)
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str]  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str]  # type: ignore
                 ) -> Quantity[Dimensionless]:
         ...
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str],  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: DimensionlessUnits
                 ) -> Quantity[Dimensionless]:
         ...
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str],  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
+                unit: CurrencyUnits
+                ) -> Quantity[Currency]:
+        ...
+
+    @overload
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
+                unit: CurrencyPerEnergyUnits
+                ) -> Quantity[CurrencyPerEnergy]:
+        ...
+
+    @overload
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
+                unit: CurrencyPerVolumeUnits
+                ) -> Quantity[CurrencyPerVolume]:
+        ...
+
+    @overload
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
+                unit: CurrencyPerMassUnits
+                ) -> Quantity[CurrencyPerMass]:
+        ...
+
+    @overload
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
+                unit: CurrencyPerTimeUnits
+                ) -> Quantity[CurrencyPerTime]:
+        ...
+
+    @overload
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: LengthUnits) -> Quantity[Length]:
         ...
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str],  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: MassUnits) -> Quantity[Mass]:
         ...
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str],  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: TimeUnits) -> Quantity[Time]:
         ...
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str],  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: TemperatureUnits) -> Quantity[Temperature]:
         ...
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str],  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: SubstanceUnits) -> Quantity[Substance]:
         ...
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str],  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: CurrentUnits) -> Quantity[Current]:
         ...
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str],  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: LuminosityUnits) -> Quantity[Luminosity]:
         ...
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str],  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: AreaUnits) -> Quantity[Area]:
         ...
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str],  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: VolumeUnits) -> Quantity[Volume]:
         ...
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str],  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: NormalVolumeUnits) -> Quantity[NormalVolume]:
         ...
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str],  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: PressureUnits) -> Quantity[Pressure]:
         ...
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str],  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: MassFlowUnits) -> Quantity[MassFlow]:
         ...
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str],  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: VolumeFlowUnits) -> Quantity[VolumeFlow]:
         ...
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str],  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: NormalVolumeFlowUnits) -> Quantity[NormalVolumeFlow]:
         ...
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str],  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: DensityUnits) -> Quantity[Density]:
         ...
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str],  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: SpecificVolumeUnits) -> Quantity[SpecificVolume]:
         ...
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str],  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: EnergyUnits) -> Quantity[Energy]:
         ...
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str],  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: PowerUnits) -> Quantity[Power]:
         ...
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str],  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: VelocityUnits) -> Quantity[Velocity]:
         ...
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str],  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: DynamicViscosityUnits) -> Quantity[DynamicViscosity]:
         ...
 
     @overload
-    def __new__(cls, val: Union[Magnitude, Quantity[DT], str],  # type: ignore
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: KinematicViscosityUnits) -> Quantity[KinematicViscosity]:
         ...
 
     @overload
     def __new__(
         cls,
-        val: Union[Magnitude, Quantity[DT], str],
+        val: Union[MagnitudeInput, Quantity[DT], str],
         unit: Union[Unit, UnitsContainer,
                     str, Quantity[DT], None] = None,
 
@@ -467,7 +617,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
 
     def __new__(  # type: ignore
         cls,
-        val: Union[Magnitude, Quantity[DT], str],
+        val: Union[MagnitudeInput, Quantity[DT], str],
         unit: Union[Unit, UnitsContainer, str, Quantity[DT], None] = None,
 
         # this is a hack to force the type checker to default to Unknown
@@ -507,7 +657,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
 
         valid_unit = cls._validate_unit(unit)
 
-        if cls._expected_dimensionality is None:
+        if cls._dimensionality_type is None:
 
             # in case this Quantity was initialized without specifying
             # the dimensionality, check the dimensionality and return the
@@ -527,17 +677,13 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
             subcls = cls._get_dimensional_subclass(dim)
             return subcls(val, valid_unit)
 
-        expected_dimensionality = cls._expected_dimensionality
+        expected_dimensionality = cls._dimensionality_type
 
-        if valid_unit.dimensionality != expected_dimensionality:
-
-            dim_name = str(valid_unit.dimensionality)
-            expected_name = str(expected_dimensionality)
-
+        if valid_unit.dimensionality != expected_dimensionality.dimensions:
             raise ExpectedDimensionalityError(
                 f'Quantity with unit "{valid_unit}" has incorrect '
-                f'dimensionality {dim_name}, '
-                f'expected {expected_name}'
+                f'dimensionality {valid_unit.dimensionality}, '
+                f'expected {expected_dimensionality.dimensions}'
             )
 
         # numpy array magnitudes must be copied
@@ -571,7 +717,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
 
     @property
     def m(self) -> Magnitude:
-        return super().m
+        return self._magnitude
 
     def to_reduced_units(self) -> Quantity[DT]:
         return super().to_reduced_units()  # type: ignore
@@ -810,6 +956,65 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
 
         return cls(qty.m, qty.u)  # type: ignore
 
+    def check_compatibility(self, other: Union[Quantity, MagnitudeScalar]) -> None:
+
+        if not isinstance(other, Quantity):
+
+            if not self.dimensionless:
+                raise DimensionalityTypeError(
+                    f'Cannot add {other} ({type(other)}) to dimensional '
+                    f'quantity {self} ({type(self)})'
+                )
+
+            return
+
+        dim = self._dimensionality_type
+        other_dim = other._dimensionality_type
+
+        # this never happens at runtime
+        if dim is None or other_dim is None:
+            raise DimensionalityTypeError(
+                f'One or both dimensionalities are None: {type(self)} and {type(other)}'
+            )
+
+        # if the dimensionality of self is a subclass of the
+        # dimensionality of other or vice versa
+        if issubclass(dim, other_dim) or issubclass(other_dim, dim):
+
+            # verify that the actual dimensions also match
+            # this is also verified in the Dimensionality.__init_subclass__ method
+            if dim.dimensions != other_dim.dimensions:
+                raise DimensionalityTypeError(
+                    f'Quantities with inherited dimensionalities do not match: '
+                    f'{type(self)} and {type(other)} with dimensions '
+                    f'{dim.dimensions} and {other_dim.dimensions}'
+                )
+
+            else:
+                return
+
+        # normal case, check that the types of Quantity is the same
+        if not type(self) is type(other):
+
+            # different error message if the actual dimensions match, but not the type
+            if self._dimensionality_type is None or other._dimensionality_type is None:
+                raise DimensionalityTypeError(
+                    f'One or both quantities are missing dimensionalities: '
+                    f'{type(self)} and {type(other)}. '
+                )
+
+            if self._dimensionality_type.dimensions == other._dimensionality_type.dimensions:
+                raise DimensionalityTypeError(
+                    f'Quantities with different dimensionalities are not compatible: '
+                    f'{type(self)} and {type(other)}. The actual dimensions match, '
+                    'but the dimensionalities have different types.'
+                )
+
+            raise DimensionalityTypeError(
+                f'Quantities with different dimensionalities are not compatible: '
+                f'{type(self)} and {type(other)}. '
+            )
+
     @overload
     def __mul__(self: Quantity[Unknown], other) -> Quantity[Unknown]:
         ...
@@ -879,6 +1084,46 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         ...
 
     @overload
+    def __mul__(self: Quantity[CurrencyPerEnergy], other: Quantity[Energy]  # type: ignore
+                ) -> Quantity[Currency]:
+        ...
+
+    @overload
+    def __mul__(self: Quantity[CurrencyPerMass], other: Quantity[Mass]  # type: ignore
+                ) -> Quantity[Currency]:
+        ...
+
+    @overload
+    def __mul__(self: Quantity[CurrencyPerVolume], other: Quantity[Volume]  # type: ignore
+                ) -> Quantity[Currency]:
+        ...
+
+    @overload
+    def __mul__(self: Quantity[CurrencyPerTime], other: Quantity[Time]  # type: ignore
+                ) -> Quantity[Currency]:
+        ...
+
+    @overload
+    def __mul__(self: Quantity[Energy], other: Quantity[CurrencyPerEnergy]  # type: ignore
+                ) -> Quantity[Currency]:
+        ...
+
+    @overload
+    def __mul__(self: Quantity[Mass], other: Quantity[CurrencyPerMass]  # type: ignore
+                ) -> Quantity[Currency]:
+        ...
+
+    @overload
+    def __mul__(self: Quantity[Volume], other: Quantity[CurrencyPerVolume]  # type: ignore
+                ) -> Quantity[Currency]:
+        ...
+
+    @overload
+    def __mul__(self: Quantity[Time], other: Quantity[CurrencyPerTime]  # type: ignore
+                ) -> Quantity[Currency]:
+        ...
+
+    @overload
     def __mul__(self: Quantity[Dimensionless], other: Quantity[DT_]  # type: ignore
                 ) -> Quantity[DT_]:
         ...
@@ -889,7 +1134,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         ...
 
     @overload
-    def __mul__(self, other: MagnitudeValue) -> Quantity[DT]:
+    def __mul__(self, other: MagnitudeScalar) -> Quantity[DT]:
         ...
 
     @overload
@@ -899,7 +1144,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
     def __mul__(self, other):
         return super().__mul__(other)
 
-    def __rmul__(self, other: MagnitudeValue  # type: ignore[override]
+    def __rmul__(self, other: MagnitudeScalar  # type: ignore[override]
                  ) -> Quantity[DT]:
         return super().__rmul__(other)
 
@@ -972,6 +1217,21 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         ...
 
     @overload
+    def __truediv__(self: Quantity[Currency], other: Quantity[Mass]  # type: ignore
+                    ) -> Quantity[CurrencyPerMass]:
+        ...
+
+    @overload
+    def __truediv__(self: Quantity[Currency], other: Quantity[Volume]  # type: ignore
+                    ) -> Quantity[CurrencyPerVolume]:
+        ...
+
+    @overload
+    def __truediv__(self: Quantity[Currency], other: Quantity[Time]  # type: ignore
+                    ) -> Quantity[CurrencyPerTime]:
+        ...
+
+    @overload
     def __truediv__(self: Quantity[Dimensionless], other: Quantity[DT_]  # type: ignore
                     ) -> Quantity[Unknown]:
         ...
@@ -982,7 +1242,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         ...
 
     @overload
-    def __truediv__(self, other: MagnitudeValue) -> Quantity[DT]:
+    def __truediv__(self, other: MagnitudeScalar) -> Quantity[DT]:
         ...
 
     @overload
@@ -992,11 +1252,11 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
     def __truediv__(self, other):
         return super().__truediv__(other)
 
-    def __rtruediv__(self, other: MagnitudeValue) -> Quantity[Unknown]:
+    def __rtruediv__(self, other: MagnitudeScalar) -> Quantity[Unknown]:
         return super().__rtruediv__(other)
 
     @overload
-    def __floordiv__(self: Quantity[Dimensionless], other: MagnitudeValue) -> Quantity[Dimensionless]:
+    def __floordiv__(self: Quantity[Dimensionless], other: MagnitudeScalar) -> Quantity[Dimensionless]:
         ...
 
     @overload
@@ -1006,7 +1266,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
     def __floordiv__(self, other):
         return super().__floordiv__(other)
 
-    def __rfloordiv__(self: Quantity[Dimensionless], other: MagnitudeValue) -> Quantity[Dimensionless]:
+    def __rfloordiv__(self: Quantity[Dimensionless], other: MagnitudeScalar) -> Quantity[Dimensionless]:
         return super().__rfloordiv__(other)
 
     @overload
@@ -1025,12 +1285,12 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         ...
 
     @overload
-    def __pow__(self: Quantity[Unknown], other: MagnitudeValue  # type: ignore
+    def __pow__(self: Quantity[Unknown], other: MagnitudeScalar  # type: ignore
                 ) -> Quantity[Unknown]:
         ...
 
     @overload
-    def __pow__(self: Quantity[Dimensionless], other: MagnitudeValue  # type: ignore
+    def __pow__(self: Quantity[Dimensionless], other: MagnitudeScalar  # type: ignore
                 ) -> Quantity[Dimensionless]:
         ...
 
@@ -1039,13 +1299,13 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         ...
 
     @overload
-    def __pow__(self, other: MagnitudeValue) -> Quantity[Unknown]:
+    def __pow__(self, other: MagnitudeScalar) -> Quantity[Unknown]:
         ...
 
     def __pow__(self, other):
         return super().__pow__(other)
 
-    def __rpow__(self: Quantity[Dimensionless], other: MagnitudeValue) -> MagnitudeValue:
+    def __rpow__(self: Quantity[Dimensionless], other: MagnitudeScalar) -> MagnitudeScalar:
         return super().__rpow__(other)
 
     @overload
@@ -1053,7 +1313,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         ...
 
     @overload
-    def __add__(self: Quantity[Dimensionless], other: MagnitudeValue) -> Quantity[Dimensionless]:
+    def __add__(self: Quantity[Dimensionless], other: MagnitudeScalar) -> Quantity[Dimensionless]:
         ...
 
     @overload
@@ -1061,10 +1321,14 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         ...
 
     def __add__(self, other):
+
+        self.check_compatibility(other)
+
         return super().__add__(other)
 
     def __radd__(self: Quantity[Dimensionless],  # type: ignore[override]
-                 other: MagnitudeValue) -> Quantity[Dimensionless]:
+                 other: MagnitudeScalar) -> Quantity[Dimensionless]:
+
         return super().__radd__(other)
 
     @overload
@@ -1072,7 +1336,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         ...
 
     @overload
-    def __sub__(self: Quantity[Dimensionless], other: MagnitudeValue) -> Quantity[Dimensionless]:
+    def __sub__(self: Quantity[Dimensionless], other: MagnitudeScalar) -> Quantity[Dimensionless]:
         ...
 
     @overload
@@ -1080,13 +1344,16 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         ...
 
     def __sub__(self, other):
+
+        self.check_compatibility(other)
+
         return super().__sub__(other)
 
-    def __rsub__(self: Quantity[Dimensionless], other: MagnitudeValue) -> Quantity[Dimensionless]:
+    def __rsub__(self: Quantity[Dimensionless], other: MagnitudeScalar) -> Quantity[Dimensionless]:
         return super().__rsub__(other)
 
     @overload  # type: ignore[override]
-    def __gt__(self: Quantity[Dimensionless], other: MagnitudeValue) -> bool:
+    def __gt__(self: Quantity[Dimensionless], other: MagnitudeScalar) -> bool:
         ...
 
     @overload
@@ -1094,10 +1361,14 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         ...
 
     def __gt__(self, other):
-        return super().__gt__(other)
+
+        try:
+            return super().__gt__(other)
+        except ValueError as e:
+            raise DimensionalityComparisonError(str(e)) from e
 
     @overload  # type: ignore[override]
-    def __ge__(self: Quantity[Dimensionless], other: MagnitudeValue) -> bool:
+    def __ge__(self: Quantity[Dimensionless], other: MagnitudeScalar) -> bool:
         ...
 
     @overload
@@ -1105,10 +1376,14 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         ...
 
     def __ge__(self, other):
-        return super().__ge__(other)
+
+        try:
+            return super().__ge__(other)
+        except ValueError as e:
+            raise DimensionalityComparisonError(str(e)) from e
 
     @overload  # type: ignore[override]
-    def __lt__(self: Quantity[Dimensionless], other: MagnitudeValue) -> bool:
+    def __lt__(self: Quantity[Dimensionless], other: MagnitudeScalar) -> bool:
         ...
 
     @overload
@@ -1116,18 +1391,26 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         ...
 
     def __lt__(self, other):
-        return super().__lt__(other)
+
+        try:
+            return super().__lt__(other)
+        except ValueError as e:
+            raise DimensionalityComparisonError(str(e)) from e
 
     @overload  # type: ignore[override]
-    def __le__(self: Quantity[Dimensionless], other: MagnitudeValue) -> bool:
-        return super().__le__(other)
+    def __le__(self: Quantity[Dimensionless], other: MagnitudeScalar) -> bool:
+        ...
 
     @overload
     def __le__(self, other: Quantity[DT]) -> bool:
-        return super().__le__(other)
+        ...
 
     def __le__(self, other):
-        return super().__le__(other)
+
+        try:
+            return super().__le__(other)
+        except ValueError as e:
+            raise DimensionalityComparisonError(str(e)) from e
 
     def __eq__(self, other: Any) -> bool:  # type: ignore[override]
         return super().__eq__(other)
@@ -1147,64 +1430,6 @@ try:
     ureg._registry.Quantity = Quantity
 except Exception:
     pass
-
-
-# shorthand for the @wraps(ret, args, strict=True|False) decorator
-wraps = ureg.wraps
-check = ureg.check
-
-
-def define_dimensionality(name: str, symbol: str = None) -> None:
-    """
-    Defines a new dimensionality that can be combined with existing
-    dimensionalities. In case the dimensionality is already defined,
-    ``DimensionalityRedefinitionError`` will be raised.
-
-    This can be used to define a new dimensionality for an amount
-    of some specific substance. For instance, if the dimensionalities
-    "air" and "fuel" are defined, the unit ``(kg air) / (kg fuel)`` has
-    the simplified dimensionality of ``[air] / [fuel]``.
-
-    .. note::
-        Make sure to only define new custom dimensions using this function,
-        since the unit needs to be appended to the ``_CUSTOM_DIMENSIONS`` list as well.
-
-    Parameters
-    ----------
-    name : str
-        Name of the dimensionality
-    symbol : str, optional
-        Optional (short) symbol, by default None
-    """
-
-    if name in _CUSTOM_DIMENSIONS:
-        raise DimensionalityRedefinitionError(
-            'Cannot define new dimensionality with '
-            f'name: {name}, a dimensionality with this name was already defined')
-
-    definition_str = f'{name} = [{name}]'
-
-    if symbol is not None:
-        definition_str = f'{definition_str} = {symbol}'
-
-    ureg.define(definition_str)
-
-    _CUSTOM_DIMENSIONS.append(name)
-
-
-# define commonly used media as dimensionalities
-# "normal" is used to signify normal volume, e.g. "Nm³/s"
-for dimensionality_name in (
-    'normal',
-    'air',
-    'water',
-    'fuel'
-):
-
-    try:
-        define_dimensionality(dimensionality_name)
-    except pint.errors.DefinitionSyntaxError as e:
-        pass
 
 
 def set_quantity_format(fmt: str = 'compact') -> None:

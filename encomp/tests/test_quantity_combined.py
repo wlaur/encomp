@@ -105,7 +105,11 @@ def test_quantity_custom_mul_div_types() -> None:
     reveal_type(t * (e / t))  # R: encomp.units.Quantity[encomp.utypes.Energy]
     reveal_type(e / t * t)  # R: encomp.units.Quantity[encomp.utypes.Energy]
 
+    # Energy * Time is an Unknown dimensionality
     u = e * t
+    reveal_type(u)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
+
+    # Unknown divided by anything is also Unknown
     reveal_type(u / t)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
 
 

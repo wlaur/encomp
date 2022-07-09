@@ -9,7 +9,8 @@ Some commonly used derived dimensionalities (like density) are defined for conve
 
 from __future__ import annotations
 
-from typing import TypeVar, Union, Optional, Literal, _LiteralGenericAlias
+from typing import TypeVar, Union, Optional, Literal
+from typing import _LiteralGenericAlias  # type: ignore
 from typing import Union
 from abc import ABC
 
@@ -19,25 +20,59 @@ import pandas as pd
 from pint.unit import UnitsContainer
 
 
-# type alias for the magnitude input to Quantity
-MagnitudeValue = Union[float, int]
+MagnitudeScalar = Union[float, int]
 
-Magnitude = Union[MagnitudeValue,
-                  list[MagnitudeValue],
-                  tuple[MagnitudeValue, ...],
-                  np.ndarray,
-                  pd.Series]
+MagnitudeInput = Union[MagnitudeScalar,
+                       list[MagnitudeScalar],
+                       tuple[MagnitudeScalar, ...],
+                       np.ndarray,
+                       pd.Series]
 
+# the actual Quantity._magnitude attribute is scalar or np.ndarray
+# list, tuple, Series will be converted
+Magnitude = Union[MagnitudeScalar, np.ndarray]
 
 _BASE_SI_UNITS: tuple[str, ...] = ('m', 'kg', 's', 'K', 'mol', 'A', 'cd')
 
 # these string literals are used to infer the dimensionality of commonly created quantities
 DimensionlessUnits = Literal['', '%']
+CurrencyUnits = Literal['SEK', 'EUR', 'USD',
+                        'kSEK', 'kEUR', 'kUSD',
+                        'MSEK', 'MEUR', 'MUSD']
+
+CurrencyPerEnergyUnits = Literal['SEK/MWh', 'EUR/MWh',
+                                 'SEK/kWh', 'EUR/kWh',
+                                 'SEK/GWh', 'EUR/GWh',
+                                 'SEK/TWh', 'EUR/TWh']
+
+CurrencyPerMassUnits = Literal['SEK/kg', 'EUR/kg',
+                               'SEK/t', 'EUR/t',
+                               'SEK/ton', 'EUR/ton',
+                               'SEK/g', 'EUR/g',
+                               'SEK/mg', 'EUR/mg',
+                               'SEK/ug', 'EUR/ug']
+
+CurrencyPerVolumeUnits = Literal['SEK/L', 'EUR/L',
+                                 'SEK/l', 'EUR/l',
+                                 'SEK/liter', 'EUR/liter',
+                                 'SEK/m3', 'EUR/m3'
+                                 'SEK/m^3', 'EUR/m^3'
+                                 'SEK/m**3', 'EUR/m**3'
+                                 'SEK/m³', 'EUR/m³']
+
+CurrencyPerTimeUnits = Literal['SEK/h', 'EUR/h',  'SEK/hr', 'EUR/hr',
+                               'SEK/hour', 'EUR/hour', 'SEK/d', 'EUR/d',
+                               'SEK/day', 'EUR/day', 'SEK/w', 'EUR/w',
+                               'SEK/week', 'EUR/week', 'SEK/y', 'EUR/y',
+                               'SEK/yr', 'EUR/yr', 'SEK/year', 'EUR/year'
+                               'SEK/a', 'EUR/a']
+
+
 LengthUnits = Literal['m', 'meter', 'km', 'cm', 'mm', 'um']
 MassUnits = Literal['kg', 'g', 'ton', 'tonne', 't', 'mg', 'ug']
 TimeUnits = Literal['s', 'second', 'min', 'minute', 'h', 'hr',
                     'hour', 'd', 'day', 'w', 'week', 'y', 'yr',
-                    'a', 'year', 'ms']
+                    'a', 'year', 'ms', 'us']
 
 TemperatureUnits = Literal['C', 'degC', '°C', 'K', 'F', 'degF', '°F',
                            'delta_C', 'delta_degC', 'Δ°C',
@@ -49,7 +84,9 @@ LuminosityUnits = Literal['lm']
 
 AreaUnits = Literal['m2', 'm^2', 'm**2', 'm²', 'cm2', 'cm^2', 'cm**2', 'cm²']
 VolumeUnits = Literal['L', 'l', 'liter', 'm3', 'm^3', 'm³', 'm**3',
+                      'dm3', 'dm^3', 'dm³', 'dm**3',
                       'cm3', 'cm^3', 'cm³', 'cm**3']
+
 NormalVolumeUnits = Literal['normal liter', 'Nm3',
                             'nm3', 'Nm^3', 'nm^3', 'Nm³',
                             'nm³', 'Nm**3', 'nm**3']
@@ -81,8 +118,14 @@ DensityUnits = Literal['kg/m3', 'kg/m**3',
                        'kg/m^3', 'kg/m³', 'g/l', 'g/L', 'gram/liter']
 SpecificVolumeUnits = Literal['m3/kg', 'm^3/kg', 'm³/kg', 'l/g', 'L/g']
 
-EnergyUnits = Literal['J', 'kJ', 'MJ', 'GJ', 'PJ', 'kWh', 'MWh', 'Wh', 'GWh']
-PowerUnits = Literal['W', 'kW', 'MW', 'GW', 'mW']
+EnergyUnits = Literal['J', 'kJ', 'MJ', 'GJ', 'TJ', 'PJ',
+                      'kWh', 'MWh', 'Wh', 'GWh', 'TWh']
+
+PowerUnits = Literal['W', 'kW', 'MW', 'GW', 'TW', 'mW',
+                     'kWh/d', 'kWh/w', 'kWh/y', 'kWh/yr', 'kWh/year',
+                     'MWh/d', 'MWh/w', 'MWh/y', 'MWh/yr', 'MWh/year',
+                     'GWh/d', 'GWh/w', 'GWh/y', 'GWh/yr', 'GWh/year',
+                     'TWh/d', 'TWh/w', 'TWh/y', 'TWh/yr', 'TWh/year']
 
 VelocityUnits = Literal['m/s', 'km/s', 'm/min',
                         'cm/s', 'cm/min', 'km/h', 'kmh', 'kph']
@@ -104,9 +147,10 @@ def get_registered_units() -> dict[str, tuple[str, ...]]:
 
     return ret
 
+
 class Dimensionality(ABC):
 
-    dimensions: Optional[UnitsContainer]
+    dimensions: Optional[UnitsContainer] = None
 
     # keeps track of all the dimensionalities that have been
     # used in the current process
@@ -136,6 +180,21 @@ class Dimensionality(ABC):
                 'must be an instance of pint.unit.UnitsContainer, '
                 f'passed {cls} with dimensions: {cls.dimensions} ({type(cls.dimensions)})'
             )
+
+        # make sure a subclass of an existing Dimensionality has the same dimensions
+        # the first element in __mro__ is the class that is being created, the
+        # second is the direct parent class
+        # parent must be either Dimensionality or a subclass
+        parent: type[Dimensionality] = cls.__mro__[1]
+
+        if parent.dimensions is not None:
+            if parent.dimensions != cls.dimensions:
+                raise TypeError(
+                    f'Cannot create subclass of {parent} where '
+                    'the dimensions do not match. Tried to '
+                    f'create subclass with {cls.dimensions} but '
+                    f'the parent has dimensions {parent.dimensions}'
+                )
 
         # NOTE: dict keys are class definitions, not class names
         # for example, re-running a notebook cell will
@@ -178,6 +237,7 @@ DT = TypeVar('DT', bound=Dimensionality)
 DT_ = TypeVar('DT_', bound=Dimensionality)
 
 _DimensionlessUC = UnitsContainer({})
+_CurrencyUC = UnitsContainer({'[currency]': 1})
 _NormalUC = UnitsContainer({'[normal]': 1})
 _LengthUC = UnitsContainer({'[length]': 1})
 _MassUC = UnitsContainer({'[mass]': 1})
@@ -341,8 +401,10 @@ _ThermalConductivityUC = _PowerUC / _LengthUC / _TemperatureUC
 _HeatTransferCoefficientUC = _PowerUC / _AreaUC / _TemperatureUC
 _MassPerNormalVolumeUC = _MassUC / _NormalVolumeUC
 _MassPerEnergyUC = _MassUC / _EnergyUC
-_CurrencyUC = _DimensionlessUC
 _CurrencyPerEnergyUC = _CurrencyUC / _EnergyUC
+_CurrencyPerMassUC = _CurrencyUC / _MassUC
+_CurrencyPerVolumeUC = _CurrencyUC / _VolumeUC
+_CurrencyPerTimeUC = _CurrencyUC / _TimeUC
 
 # related to CoolProp humid air
 _SpecificHeatPerDryAirUC = _EnergyUC / _MassUC / _TemperatureUC
@@ -421,6 +483,18 @@ class Currency(Dimensionality):
 
 class CurrencyPerEnergy(Dimensionality):
     dimensions = _CurrencyPerEnergyUC
+
+
+class CurrencyPerMass(Dimensionality):
+    dimensions = _CurrencyPerMassUC
+
+
+class CurrencyPerVolume(Dimensionality):
+    dimensions = _CurrencyPerVolumeUC
+
+
+class CurrencyPerTime(Dimensionality):
+    dimensions = _CurrencyPerVolumeUC
 
 
 class SpecificHeatPerDryAir(Dimensionality):

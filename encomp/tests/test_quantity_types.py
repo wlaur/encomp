@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 import pytest
 
 from encomp.units import DimensionalityError, ExpectedDimensionalityError
@@ -6,10 +8,12 @@ from encomp.utypes import (Dimensionless,
                            NormalVolumeFlow,
                            MassFlow,
                            Time,
-                           Length,
                            Mass,
                            Temperature)
 
+
+if not TYPE_CHECKING:
+    reveal_type = lambda x: x
 
 # it's important that the expected mypy output is a comment on the
 # same line as the expression, disable autopep8 if necessary with
@@ -115,7 +119,7 @@ def test_quantity_mul_types() -> None:
     reveal_type(k8)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
 
     # alternative way of specifying the dimensionality
-    # NOTE: the _dt parameter is ignored at runtime
+    # NOTE: the _dt parameter is ignored at runtime, the subclass will not be validated
     d_custom_ = Q(0.6, _dt=CustomDimensionless)
     k9 = m * d_custom_
     k10 = d_custom * m
@@ -145,6 +149,7 @@ def test_quantity_misc_types() -> None:
         # the literal "bar" is correctly identified as a Pressure unit
         reveal_type(a)  # R: encomp.units.Quantity[encomp.utypes.Pressure]
 
+    with pytest.raises(ExpectedDimensionalityError):
 
         # this cannot be detected, however the variable b has type Q[Temperature]
         # this will raise an error at runtime
@@ -294,6 +299,9 @@ def test_quantity_pow_types() -> None:
         # NOTE: the mypy test plugin cannot handle multiple errors on a single line
 
         m**n  # E: Unsupported operand types for ** ("Quantity[MassFlow]" and "Quantity[NormalVolumeFlow]")
+
+    with pytest.raises(DimensionalityError):
+
         d**n  # E: Unsupported operand types for ** ("Quantity[Dimensionless]" and "Quantity[NormalVolumeFlow]")
 
         # autopep8: on
@@ -328,9 +336,17 @@ def test_quantity_add_types() -> None:
         # autopep8: off
 
         p4 = m + s_int # E: Unsupported operand types for + ("Quantity[MassFlow]" and "int")
+
+    with pytest.raises(DimensionalityError):
+
         p5 = m + s_float # E: Unsupported operand types for + ("Quantity[MassFlow]" and "float")
 
+    with pytest.raises(DimensionalityError):
+
         p4_ = s_int + m # E: Unsupported operand types for + ("int" and "Quantity[MassFlow]")
+
+    with pytest.raises(DimensionalityError):
+
         p5_ = s_float + m # E: Unsupported operand types for + ("float" and "Quantity[MassFlow]")
 
         # autopep8: on
@@ -377,9 +393,17 @@ def test_quantity_sub_types() -> None:
         # autopep8: off
 
         p4 = m - s_int # E: Unsupported operand types for - ("Quantity[MassFlow]" and "int")
+
+    with pytest.raises(DimensionalityError):
+
         p5 = m - s_float # E: Unsupported operand types for - ("Quantity[MassFlow]" and "float")
 
+    with pytest.raises(DimensionalityError):
+
         p4_ = s_int - m # E: Unsupported operand types for - ("int" and "Quantity[MassFlow]")
+
+    with pytest.raises(DimensionalityError):
+
         p5_ = s_float - m # E: Unsupported operand types for - ("float" and "Quantity[MassFlow]")
 
         # autopep8: on
@@ -429,10 +453,22 @@ def test_quantity_comparison_types() -> None:
 
         # autopep8: off
 
-        p6 = m > n # E: Unsupported operand types for > ("Quantity[MassFlow]" and "Quantity[NormalVolumeFlow]")
-        p7 = m > d # E: Unsupported operand types for > ("Quantity[MassFlow]" and "Quantity[Dimensionless]")
-        p8 = m > s_int # E: Unsupported operand types for > ("Quantity[MassFlow]" and "int")
-        p9 = m > s_float # E: Unsupported operand types for > ("Quantity[MassFlow]" and "float")
+        p6 = m > n  # E: Unsupported operand types for > ("Quantity[MassFlow]" and "Quantity[NormalVolumeFlow]")
+
+    with pytest.raises(DimensionalityError):
+
+        p7 = m > d  # E: Unsupported operand types for > ("Quantity[MassFlow]" and "Quantity[Dimensionless]")
+
+    with pytest.raises(DimensionalityError):
+
+        p8 = m > s_int  # E: Unsupported operand types for > ("Quantity[MassFlow]" and "int")
+
+    with pytest.raises(DimensionalityError):
+
+        p9 = m > s_float  # E: Unsupported operand types for > ("Quantity[MassFlow]" and "float")
+
+    with pytest.raises(DimensionalityError):
+
         p10 = s_int <= m  # E: Unsupported operand types for <= ("int" and "Quantity[MassFlow]")
 
         # autopep8: on
@@ -452,3 +488,68 @@ def test_quantity_comparison_types() -> None:
     reveal_type(p14)  # R: builtins.bool
     reveal_type(p15)  # R: builtins.bool
     reveal_type(p16)  # R: builtins.bool
+
+
+@pytest.mark.mypy_testing
+def test_quantity_currency_types() -> None:
+
+    # autopep8: off
+
+    p1 = Q(1, 'SEK')
+    p2 = Q(1, 'kEUR')
+    p3 = Q(1, 'MUSD')
+
+    reveal_type(p1)  # R: encomp.units.Quantity[encomp.utypes.Currency]
+    reveal_type(p2)  # R: encomp.units.Quantity[encomp.utypes.Currency]
+    reveal_type(p3)  # R: encomp.units.Quantity[encomp.utypes.Currency]
+
+
+    # NOTE: exchange rates are not implemented here, the defintions use
+    # approximate values (10 SEK = 1 EUR = 1 USD)
+
+    s = p1 + p2 - p3
+
+    reveal_type(s)  # R: encomp.units.Quantity[encomp.utypes.Currency]
+
+    # prefixes k and M can be used (other SI prefixes work but make no sense)
+    reveal_type(p1.to('MSEK'))  # R: encomp.units.Quantity[encomp.utypes.Currency]
+
+
+    p4 = Q(25, 'SEK/MWh')
+    reveal_type(p4)  # R: encomp.units.Quantity[encomp.utypes.CurrencyPerEnergy]
+
+
+
+    p5 = Q(25, 'EUR/t')
+    reveal_type(p5)  # R: encomp.units.Quantity[encomp.utypes.CurrencyPerMass]
+
+    r = (p4 * Q(25, 'kWh')).to('MSEK')
+
+    reveal_type(r)  # R: encomp.units.Quantity[encomp.utypes.Currency]
+
+
+    t = p1 / Q(256, 'L')
+
+    reveal_type(t)  # R: encomp.units.Quantity[encomp.utypes.CurrencyPerVolume]
+
+    p6 = Q(25, 'EUR/h')
+    reveal_type(p6)  # R: encomp.units.Quantity[encomp.utypes.CurrencyPerTime]
+
+    k = p6 * Q(25, 'd')
+    reveal_type(k)  # R: encomp.units.Quantity[encomp.utypes.Currency]
+
+    m = Q(25, 'MSEK') / Q(300, 'd')
+    reveal_type(m)  # R: encomp.units.Quantity[encomp.utypes.CurrencyPerTime]
+
+    r = (Q(25, 'kg/s') * Q(2, 'week')) * Q(25, 'EUR/ton')
+    reveal_type(r.to('MEUR'))  # R: encomp.units.Quantity[encomp.utypes.Currency]
+
+    weekly_cost = (
+        Q(145, 'GWh/year') *
+        Q(1, 'week') *
+        Q(25, 'EUR/MWh')
+    )
+    reveal_type(weekly_cost)  # R: encomp.units.Quantity[encomp.utypes.Currency]
+
+    # autopep8: off
+

@@ -83,7 +83,11 @@ def test_Q():
 
     with pytest.raises(ExpectedDimensionalityError):
         Q[Temperature](1, 'kg')
+
+    with pytest.raises(ExpectedDimensionalityError):
         Q[Pressure](1, 'meter')
+
+    with pytest.raises(ExpectedDimensionalityError):
         Q[Mass](1, P)
 
     # in-place conversion
@@ -526,3 +530,79 @@ def test_convert_volume_mass():
     )
 
     assert m.check(MassFlow)
+
+
+def test_compatibility():
+
+    Q(1) + Q(2)
+
+    Q(1, '%') - Q(2)
+
+    Q(25, 'm') + Q(25, 'cm')
+
+    # this subtype inherits from Dimensionless, which
+    # means that it is compatible (can be added and subtracted)
+
+    class Fraction(Dimensionless):
+        pass
+
+    q1 = Q(2)
+    q2 = Q[Fraction](0.6)
+
+    q1 + q2
+    q2 + q1
+
+    q1 - q2
+    q2 - q1
+
+    # this is a new dimensionality that happens to have
+    # the same dimensions as Dimensionless
+    # however, it is not compatible with Dimensionless or any of its subclasses
+
+    class IncompatibleFraction(Dimensionality):
+        dimensions = Dimensionless.dimensions
+
+    q3 = Q[IncompatibleFraction](0.2)
+
+    with pytest.raises(TypeError):
+        q3 + q1
+
+    with pytest.raises(TypeError):
+        q3 + q2
+
+    with pytest.raises(TypeError):
+        q1 + q3
+
+    with pytest.raises(TypeError):
+        q2 + q3
+
+    s = Q(25, 'm')
+
+    # this dimensionality means something specific,
+    # it cannot be added to a normal length
+    class DistanceAlongPath(Dimensionality):
+        dimensions = Length.dimensions
+
+    # need to override the overload based on unit "km"
+    # this is not very elegant
+    d = Q[DistanceAlongPath](25, str('km'))
+    d2 = Q[DistanceAlongPath](5, str('km'))
+
+    d + d
+    d - d
+    d + d2
+    d2 - d
+
+    with pytest.raises(TypeError):
+        s + d
+
+    with pytest.raises(TypeError):
+        d - s
+
+    assert str(
+        (Q(25, 'MSEK/GWh') * Q(25, 'kWh')).to_reduced_units()
+    ) == '0.000625 MSEK'
+
+    assert str(
+        (Q(25, 'MSEK/GWh') * Q(25, 'kWh')).to_base_units()
+    ) == '625.0 currency'

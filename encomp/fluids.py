@@ -10,10 +10,9 @@ Uses CoolProp as backend.
 """
 
 import warnings
-from typing import Annotated, Union, Callable, cast
+from typing import Annotated, Callable, cast
 
 import numpy as np
-import pandas as pd
 
 try:
     from CoolProp.CoolProp import PropsSI
@@ -34,7 +33,8 @@ except ImportError:
 
 from encomp.structures import flatten
 from encomp.units import Quantity, Unit
-from encomp.utypes import (Unknown,
+from encomp.utypes import (Magnitude,
+                           Unknown,
                            Pressure,
                            Temperature,
                            Dimensionless,
@@ -459,8 +459,8 @@ class CoolPropFluid:
     def evaluate(
             self,
             output: CProperty,
-            *points: tuple[CProperty, Union[float, np.ndarray]]
-    ) -> Union[float, np.ndarray]:
+            *points: tuple[CProperty, Magnitude]
+    ) -> Magnitude:
 
         # case 1: all inputs are scalar, output is scalar
         if all(isinstance(pt[1], (float, int)) for pt in points):
@@ -469,8 +469,8 @@ class CoolPropFluid:
         # at this point, the output will be a vector of at least length 1
 
         def single_element_vector_to_float(
-            x: Union[float, np.ndarray]
-        ) -> Union[float, np.ndarray]:
+            x: Magnitude
+        ) -> Magnitude:
 
             if isinstance(x, float):
                 return x
@@ -510,7 +510,7 @@ class CoolPropFluid:
             N = 1
             shape = (1, )
 
-        def expand_scalars(x: Union[float, np.ndarray]) -> np.ndarray:
+        def expand_scalars(x: Magnitude) -> np.ndarray:
 
             if isinstance(x, (float, int)):
                 return np.repeat(x, N).astype(float).reshape(shape)
@@ -638,7 +638,7 @@ class CoolPropFluid:
         return validate_output(val)
 
     def construct_quantity(self,
-                           val: Union[float, np.ndarray],
+                           val: Magnitude,
                            output: CProperty) -> Quantity:
 
         unit_output = self.get_coolprop_unit(output)
@@ -660,7 +660,7 @@ class CoolPropFluid:
                 m[m < self._EPS] = np.nan
                 qty = Quantity(m, unit_output)
 
-            elif isinstance(qty.m, (float, int)):
+            else:
 
                 if qty.m < self._EPS:
                     qty = Quantity(np.nan, unit_output)
@@ -675,27 +675,11 @@ class CoolPropFluid:
 
     def to_numeric(self,
                    prop: CProperty,
-                   qty: Quantity) -> Union[float, np.ndarray]:
+                   qty: Quantity) -> Magnitude:
 
         unit = self.get_coolprop_unit(prop)
 
-        val = qty.to(unit).m
-
-        # TODO: this type check is probably unnecessary
-
-        if isinstance(val, int):
-            val = float(val)
-
-        if isinstance(val, tuple):
-            val = np.array(val)
-
-        if isinstance(val, list):
-            val = np.array(val)
-
-        if isinstance(val, pd.Series):
-            val = val.values
-
-        return val
+        return qty.to(unit).m
 
     def get(self,
             output: CProperty,

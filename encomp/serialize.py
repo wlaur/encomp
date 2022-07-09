@@ -67,7 +67,7 @@ from decimal import Decimal
 from uncertainties import ufloat
 from uncertainties.core import AffineScalarFunc
 
-from encomp.units import Quantity, Magnitude, Unit
+from encomp.units import Quantity, MagnitudeInput, Unit
 from encomp.misc import isinstance_types
 
 # type alias for objects that can be serialized using json.dumps()
@@ -355,7 +355,7 @@ def decode(inp: JSON,
                 val = decode(val)
 
                 # check if this list has types that matches a serialized Quantity
-                if (isinstance_types(val, Magnitude) and
+                if (isinstance_types(val, MagnitudeInput) and
                         isinstance_types(unit, Union[Unit, str])):
 
                     if unit == '':
