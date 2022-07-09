@@ -124,7 +124,7 @@ rho = m / V  # Quantity[Density]
 
 # the unit "kg/week" is not registered by default
 # the individual units "kg" and "week" are registered, however
-# the type checker has no way of combining these units
+# the type checker does not know how to combine these units
 m_ = Q(25, 'kg/week')  # Quantity[Unknown]
 
 # at runtime, the dimensionality of m_ will be evaluated to MassFlow
