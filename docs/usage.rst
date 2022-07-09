@@ -68,7 +68,7 @@ All dimensionality type parameters must inherit from :py:class:`encomp.utypes.Di
 The actual dimensionality (a combination of the seven base dimensions) is specified as a ``pint.unit.UnitsContainer`` instance (class attribute ``dimensions``).
 
 
-The module :py:mod:`encomp.utypes` contains :py:class:`encomp.utypes.Dimensionality` subclasses for the most common dimensionalities.
+The module :py:mod:`encomp.utypes` contains :py:class:`encomp.utypes.Dimensionality` subclasses for some common dimensionalities.
 
 .. code-block:: python
 
@@ -241,6 +241,55 @@ This is only required when defining the temperature difference directly.
     To raise an error (for example ``pint.errors.OffsetUnitCalculusError``) when doing ambiguous unit conversions, the environment variable ``ENCOMP_AUTOCONVERT_OFFSET_TO_BASEUNIT`` must be set to ``False`` (this is the default configuration).
 
 
+Currency units
+~~~~~~~~~~~~~~
+
+Engineering calculations will often involve economic aspects.
+To aid in this, the dimensionality ``Currency`` can be used to represent an arbitrary currency.
+By default, the currencies ``SEK, EUR, USD`` are defined.
+
+
+.. code-block:: python
+
+    mf = Q(25, 'kg/s')
+    t = Q(365, 'd')
+
+    price = Q(25, 'EUR/ton')
+
+    yearly_cost = mf * t * price  # Quantity[Currency]
+
+    # SI prefixes can be used
+    print(yearly_cost.to('MEUR'))
+
+    # NOTE: this is only an approximation,
+    # uses exchange rate 10 SEK = 1 EUR
+    print(yearly_cost.to('MSEK'))
+
+    weekly_cost = (
+        Q(145, 'GWh/year')) *
+        Q(1, 'week') *
+        Q(25, 'EUR/MWh')
+    )
+
+    print(weekly_cost.to('MEUR'))
+
+
+.. warning::
+
+    Do not use this system for currency conversions.
+    The scaling factors between the default currencies are approximations (``10 SEK = 1 EUR = 1 USD``).
+
+    Refer to the `pint documentation <https://pint.readthedocs.io/en/stable/currencies.html?highlight=currency#using-pint-for-currency-conversions>`_ for instructions on how to implement a registry context that handles currency conversion correctly.
+
+
+
+Handling unit-related errors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use ``pint.errors.DimensionalityError`` to catch all unit-related errors.
+This error can also be imported from the :py:mod:`encomp.units` module.
+
+
 
 The Fluid class
 ---------------
@@ -375,54 +424,6 @@ All inputs must be the same length (or a single scalar value).
     # D=[997.2 973.3 934.5 2.5 2.2 2.0 1.8 1.6 1.5 1.4] kg/m³,
     # V=[0.9 0.4 0.2 0.0 0.0 0.0 0.0 0.0 0.0 0.0] cP>
 
-
-Currency units
-~~~~~~~~~~~~~~
-
-Engineering calculations will often involve economic aspects.
-To aid in this, the dimensionality _currency_ can be used to represent an arbitrary currency.
-By default, the currencies ``SEK, EUR, USD`` are defined.
-
-
-.. code-block:: python
-
-    mf = Q(25, 'kg/s')
-    t = Q(365, 'd')
-
-    price = Q(25, 'EUR/ton')
-
-    yearly_cost = mf * t * price  # Quantity[Currency]
-
-    # SI prefixes can be used
-    print(yearly_cost.to('MEUR'))
-
-    # NOTE: this is only an approximation,
-    # uses exchange rate 10 SEK = 1 EUR
-    print(yearly_cost.to('MSEK'))
-
-    weekly_cost = (
-        Q(145, 'GWh/year')) *
-        Q(1, 'week') *
-        Q(25, 'EUR/MWh')
-    )
-
-    print(weekly_cost.to('MEUR'))
-
-
-.. warning::
-
-    Do not use this system for currency conversions.
-    The scaling factors between the default currencies are approximations (``10 SEK = 1 EUR = 1 USD``).
-
-    Refer to the `pint documentation <https://pint.readthedocs.io/en/stable/currencies.html?highlight=currency#using-pint-for-currency-conversions>`_ for instructions on how to implement a registry context that handles currency conversion correctly.
-
-
-
-Handling unit-related errors
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Use ``pint.errors.DimensionalityError`` to catch all unit-related errors.
-This error can also be imported from the :py:mod:`encomp.units` module.
 
 
 
