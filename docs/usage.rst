@@ -8,7 +8,8 @@ The Quantity class
 ------------------
 
 The purpose of the :py:class:`encomp.units.Quantity` class is to store information about the *magnitude*, *dimensionality* and *units* of a physical quantity.
-Additionally, static type checkers like ``mypy`` can be used to catch dimensionality-related errors in calculations.
+Each dimensionality is represented as a separate subclass.
+This means that static type checkers like ``mypy`` can be used to catch dimensionality-related errors before the code is executed..
 
 
 .. note::
@@ -39,16 +40,15 @@ Convert the pressure to another unit:
     pressure_kPa = pressure.to('kPa')
 
 Refer to the unit definition file (``encomp/data/units.txt``) for a list of accepted unit names.
-This definition file is based on the ``defaults_en.txt`` file from ``pint`` and has been slightly modified.
+This definition file is based on the ``defaults_en.txt`` file from ``pint``, with some slight modifications.
 
 
 Quantity types
 ~~~~~~~~~~~~~~
 
-The quantity class also contains information about its *dimensionality*.
+The quantity class also contains information about *dimensionality*.
 It is not possible to create an instance of the base class :py:class:`encomp.units.Quantity`, since this would not have any dimensionality at all (a *dimensionless* quantity still has a dimensionality of *1*).
-A unique subclass of :py:class:`encomp.units.Quantity` is created for each new dimensionality.
-The subclasses are cached and reused, which means that the ``is`` operator can be used to check for equality.
+Each new dimensionality is represented by a unique subclass of :py:class:`encomp.units.Quantity`.
 
 .. code-block:: python
 
@@ -63,9 +63,13 @@ The subclasses are cached and reused, which means that the ``is`` operator can b
     assert type(pressure) is not type(length)
 
 
-To create a subclass of :py:class:`encomp.units.Quantity` with a certain dimensionality, provide a dimensionality type parameter using square brackets.
+To create a subclass of :py:class:`encomp.units.Quantity` with a certain dimensionality, provide a dimensionality *type parameter* using square brackets.
 All dimensionality type parameters must inherit from :py:class:`encomp.utypes.Dimensionality`.
 The actual dimensionality (a combination of the seven base dimensions) is specified as a ``pint.unit.UnitsContainer`` instance (class attribute ``dimensions``).
+
+.. note::
+
+    The dimensionality type parameters must be a subclass or :py:class:`encomp.utypes.Dimensionality`, but not an instance of this subclass. ``Q[Power]`` creates a subclass of ``Quantity`` with dimensionality *power*, but ``Q[Power()]`` will raise a ``TypeError``.
 
 
 The module :py:mod:`encomp.utypes` contains :py:class:`encomp.utypes.Dimensionality` subclasses for some common dimensionalities.
@@ -130,11 +134,11 @@ A ``TypeError`` will be raised in case the function ``func`` is called with inco
 Custom base dimensionalities
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-By default, the seven SI dimensionalities (and common combinations of these) are defined, along with some commonly used media (water, air, fuel).
-Additionally, the *normal* dimensionality is defined (used to represent normal volume).
+By default, the seven SI dimensionalities (and common combinations of these) are defined, along with some commonly used media (*water*, *air*, *fuel*).
+Additionally, the *normal* dimensionality (used to represent normal volume) and *currency* are defined.
 
 The function :py:func:`encomp.units.define_dimensionality` can be used to define a new base dimensionality.
-In case the dimensionality already exists, ``DimensionalityRedefinitionError`` is raised.
+In case the dimensionality already exists, :py:class:`encomp.units.DimensionalityRedefinitionError` is raised.
 The new dimensionality will have a single unit with the same name as the dimensionality.
 
 .. code-block:: python
@@ -188,6 +192,7 @@ Pandas ``Series`` objects are converted to ``ndarray`` when constructing the qua
     s = pd.Series(arr, name='series_name')
 
     pressure_ = Q(s, 'bar') # pd.Series is converted to np.ndarray
+    # "series_name" will no longer be associated with pressure_ or pressure_.m
 
 When assigning a quantity to a DataFrame column, make sure to assign the magnitude (in the desired unit) instead of the actual quantity object.
 
@@ -209,8 +214,8 @@ Descriptive errors are raised in case of inconsistent or ambiguous operations.
 
 
 In some cases, units will not cancel out automatically.
-Call ``to_base_units()`` to simplify the quantity to base SI units, or ``to()`` in case the desired unit is known.
-The ``to_reduced_units()`` method can be used to cancel units without converting to base SI units.
+Call :py:meth:`encomp.units.Quantity.to_base_units` to simplify the quantity to base SI units, or :py:meth:`encomp.units.Quantity.to` in case the desired unit is known.
+The :py:meth:`encomp.units.Quantity.to_reduced_units` method can be used to cancel units without converting to base SI units.
 
 .. code-block:: python
 
@@ -226,19 +231,26 @@ This is only required when defining the temperature difference directly.
     dT = Q(5, 'delta_degC') # 5 Δ°C
     dT.to('degC') # -268.15 °C, same as converting 5 K to °C
 
-    # 5°C is converted to 278.15 K before multiplying
-    Q(4.19, 'kJ/kg/K') * Q(5, '°C') # 1165.4485 kJ/kg
+    Q(25, 'degC') - Q(36, 'degC') # -11 Δ°C
+
+
+    Q(4.19, 'kJ/kg/K') * Q(5, '°C') # raises OffsetUnitCalculusError
+
+    # this is not the result we're after, °C is offset by 273.15 K
+    Q(4.19, 'kJ/kg/K') * Q(5, '°C').to('K') # 1165.4485 kJ/kg
 
     # the degree step for °C is equal to 1 K
     Q(4.19, 'kJ/kg/K') * Q(5, 'delta_degC') # 20.95 kJ Δ°C/(K kg)
     Q(4.19, 'kJ/kg/K') * Q(5, 'K') # 20.95 kJ/kg
 
-    # the units Δ°C and K don't cancel out automatically
+    # the units Δ°C and K don't cancel out automatically,
+    # use the to() method to convert to the desired output unit
     (Q(4.19, 'kJ/kg/K') * Q(5, 'delta_degC')).to('kJ/kg') # 20.95 kJ/kg
 
 .. note::
 
-    To raise an error (for example ``pint.errors.OffsetUnitCalculusError``) when doing ambiguous unit conversions, the environment variable ``ENCOMP_AUTOCONVERT_OFFSET_TO_BASEUNIT`` must be set to ``False`` (this is the default configuration).
+    ``pint.errors.OffsetUnitCalculusError`` is raised when doing ambiguous unit conversions.
+    The environment variable ``ENCOMP_AUTOCONVERT_OFFSET_TO_BASEUNIT`` can be set to ``True`` to disable this error (this is not recommended).
 
 
 Currency units
@@ -298,9 +310,14 @@ The :py:class:`encomp.fluids.Fluid` class represents a fluid at a fixed point.
 The parent class :py:class:`encomp.fluids.CoolPropFluid` implements an interface to CoolProp.
 All inputs and outputs are :py:class:`encomp.units.Quantity` instances.
 
+
+.. note::
+
+    All input and output parameter names follow the conventions used in CoolProp.
+
 To create a new instance, pass the CoolProp fluid name and the fixed points (for example *P, T*) to the class constructor.
 The documentation for the parent class :py:class:`encomp.fluids.CoolPropFluid` contains a list of fluid and property names.
-All combinations of input parameters are not valid -- in case of incorrect inputs a ``ValueError`` is raised when evaluating the attribute(s).
+All combinations of input parameters are not valid -- in case of incorrect inputs, a ``ValueError`` is raised when evaluating an attribute (i.e. not when the instance is created).
 The ``__repr__`` of the instance will show ``N/A`` instead of raising an error.
 
 
@@ -323,6 +340,8 @@ The ``__repr__`` of the instance will show ``N/A`` instead of raising an error.
 If the convenience class :py:class:`encomp.fluids.Water` is used, the fluid name can be omitted.
 :py:class:`encomp.fluids.Water` uses ``IAPWS-95``.
 To use ``IAPWS-97`` instead, create an instance of :py:class:`encomp.fluids.Fluid` with name ``IF97::Water``.
+
+
 The :py:class:`encomp.fluids.HumidAir` class has a different set of input and output properties.
 
 .. code-block:: python
@@ -508,7 +527,8 @@ The class method :py:meth:`encomp.units.Quantity.from_expr` is used to convert a
 
 .. warning::
 
-    Sympy integration does not work with user-defined dimensionalities (i.e. dimensionalities/units defined using :py:func:`encomp.units.define_dimensionality`).
+    Sympy integration only works with the seven SI dimensionalities.
+    It does not work with user-defined dimensionalities (i.e. dimensionalities/units defined using :py:func:`encomp.units.define_dimensionality`).
 
 
 In case the magnitude of a quantity is a Numpy array, :py:meth:`encomp.units.Quantity.from_expr` does not work.

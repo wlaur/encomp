@@ -40,17 +40,7 @@ from encomp.misc import grid_dimensions
 from encomp.sympy import sp
 from encomp.units import Quantity, wraps
 from encomp.units import Quantity as Q
-from encomp.utypes import (Dimensionality,
-                           Dimensionless,
-                           Mass,
-                           Length,
-                           Area,
-                           Volume,
-                           Velocity,
-                           Temperature,
-                           Time,
-                           MassFlow,
-                           VolumeFlow)
+from encomp.utypes import *
 from encomp.fluids import Fluid, Water, HumidAir
 
 
@@ -164,7 +154,7 @@ class Graphic:
                 except Exception:
                     pass
 
-        for i, n in enumerate(self.data):
+        for i, n in enumerate(self.data):  # type: ignore
 
             if isinstance(n, str) and n.lower().endswith('.svg'):
 
@@ -242,7 +232,7 @@ class Graphic:
         raise NotImplementedError('TODO: implement this for PDF output')
 
     @staticmethod
-    def get_path(p: Union[str, Path]) -> Path:
+    def get_path(p: Union[str, Path]) -> str:
 
         # use file paths relative to the current directory
         cwd = Path('.').absolute()
