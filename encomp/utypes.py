@@ -579,7 +579,7 @@ class CurrencyPerVolume(Dimensionality):
 
 
 class CurrencyPerTime(Dimensionality):
-    dimensions = _CurrencyPerVolumeUC
+    dimensions = _CurrencyPerTimeUC
 
 
 class SpecificHeatPerDryAir(Dimensionality):
