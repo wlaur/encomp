@@ -119,7 +119,7 @@ m = Q(12, 'kg')  # Quantity[Mass]
 
 V = Q(25, 'liter')  # Quantity[Volume]
 
-# some common / and * operations are encoded as overloads
+# common / and * operations are encoded as overloads
 rho = m / V  # Quantity[Density]
 
 # the unit "kg/week" is not registered by default
@@ -128,9 +128,9 @@ rho = m / V  # Quantity[Density]
 m_ = Q(25, 'kg/week')  # Quantity[Unknown]
 
 # at runtime, the dimensionality of m_ will be evaluated to MassFlow
-isinstance(m, Q[MassFlow])  # True
+isinstance(m_, Q[MassFlow])  # True
 
-# these operations (** and /) are not explicitly defined as overloads
+# these operations (Mass**2 divided by Volume) are not explicitly defined as overloads
 # at runtime, the type will be evaluated to
 # Quantity[Dimensionality[[mass] ** 2 / [length] ** 3]]
 x = m**2 / V  # Quantity[Unknown]
