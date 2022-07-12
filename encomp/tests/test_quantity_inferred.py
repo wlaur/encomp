@@ -74,7 +74,6 @@ def test_quantity_unspecified_type() -> None:
     reveal_type(Q(25, 'kW'))  # R: encomp.units.Quantity[encomp.utypes.Power]
 
 
-
     # when the unit is not a string literal, or if it's not hard-coded
     # to correspond to a specific dimensionality, Unknown will be inferred
     # by the type checker

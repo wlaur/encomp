@@ -247,3 +247,4 @@ def circle_line_intersection(A: Union[tuple[float, float], geometry.Point2D],
         return None
 
     return [(float(p[0]), float(p[1])) for p in points]
+

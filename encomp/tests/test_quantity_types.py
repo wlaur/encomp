@@ -13,7 +13,7 @@ from encomp.utypes import (Dimensionless,
 
 
 if not TYPE_CHECKING:
-    reveal_type = lambda x: x
+    def reveal_type(x): return x
 
 # it's important that the expected mypy output is a comment on the
 # same line as the expression, disable autopep8 if necessary with
@@ -45,27 +45,47 @@ def test_quantity_reveal_type() -> None:
 @pytest.mark.mypy_testing
 def test_quantity_construction() -> None:
 
-    Q(25)
-    Q(25, None)
+    # autopep8: off
 
-    Q[Mass](25, Q[Mass](25, 'kg'))
-    Q[Mass](25, Q[Mass](25, 'kg').u)
+    reveal_type(Q(25))  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+    reveal_type(Q(25, None))  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+
+    reveal_type(Q(25, ''))  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+    reveal_type(Q(25, '-'))  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+    reveal_type(Q(25, 'dimensionless'))  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+
+
+    reveal_type(Q[Mass](25, Q[Mass](25, 'kg')))  # R: encomp.units.Quantity[encomp.utypes.Mass]
+    reveal_type(Q[Mass](25, Q[Mass](25, 'kg').u))  # R: encomp.units.Quantity[encomp.utypes.Mass]
 
     with pytest.raises(ExpectedDimensionalityError):
 
-        # autopep8: off
-
         Q[Mass](25, Q[Time](25, 'sec')) # E: Argument 2 to "Quantity" has incompatible type "Quantity[Time]"; expected "Union[Unit, UnitsContainer, str, Quantity[Mass], None]"
 
-        # autopep8: on
 
     mf_ = Q(25, 'kg/s')
     mf = Q[MassFlow](25, 'kg/week')
     e = Q(25, 'kJ')
 
+
+    # autopep8: off
+
     reveal_type(mf_)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
     reveal_type(mf)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
     reveal_type(e)  # R: encomp.units.Quantity[encomp.utypes.Energy]
+
+
+    reveal_type(Q(25))  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+    reveal_type(Q(Q(25)))  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+    reveal_type(Q(Q(Q(Q(Q(Q(25)))))))  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+    reveal_type(Q(Q(Q(Q(Q(Q(25, '%')))))))  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+
+    reveal_type(Q('25 m'))  # R: encomp.units.Quantity[encomp.utypes.Unknown]
+
+    # cannot analyze string input when type checking
+    reveal_type(Q('25'))  # R: encomp.units.Quantity[encomp.utypes.Unknown]
+
+     # autopep8: on
 
 
 @pytest.mark.mypy_testing

@@ -5,11 +5,15 @@ these types will be enforced everywhere.
 
 The dimensionalities defined in this module can be combined with ``*`` and ``/``.
 Some commonly used derived dimensionalities (like density) are defined for convenience.
+
+This module can be star-imported, variables prefixed with ``_`` will not
+be imported in this case.
 """
 
 from __future__ import annotations
 
-from typing import TypeVar, Union, Optional, Literal
+from typing import TypeVar, Union, Optional
+from typing import Literal as L
 from typing import _LiteralGenericAlias  # type: ignore
 from typing import Union
 from abc import ABC
@@ -35,105 +39,166 @@ Magnitude = Union[MagnitudeScalar, np.ndarray]
 _BASE_SI_UNITS: tuple[str, ...] = ('m', 'kg', 's', 'K', 'mol', 'A', 'cd')
 
 # these string literals are used to infer the dimensionality of commonly created quantities
-DimensionlessUnits = Literal['', '%']
-CurrencyUnits = Literal['SEK', 'EUR', 'USD',
-                        'kSEK', 'kEUR', 'kUSD',
-                        'MSEK', 'MEUR', 'MUSD']
+# they are only used by type checkers and ignored at runtime
+DimensionlessUnits = L['', '%', '-', 'dimensionless', None]
 
-CurrencyPerEnergyUnits = Literal['SEK/MWh', 'EUR/MWh',
-                                 'SEK/kWh', 'EUR/kWh',
-                                 'SEK/GWh', 'EUR/GWh',
-                                 'SEK/TWh', 'EUR/TWh']
+CurrencyUnits = L[
+    'SEK', 'EUR', 'USD',
+    'kSEK', 'kEUR', 'kUSD',
+    'MSEK', 'MEUR', 'MUSD'
+]
 
-CurrencyPerMassUnits = Literal['SEK/kg', 'EUR/kg',
-                               'SEK/t', 'EUR/t',
-                               'SEK/ton', 'EUR/ton',
-                               'SEK/g', 'EUR/g',
-                               'SEK/mg', 'EUR/mg',
-                               'SEK/ug', 'EUR/ug']
+CurrencyPerEnergyUnits = L[
+    'SEK/MWh', 'EUR/MWh',
+    'SEK/kWh', 'EUR/kWh',
+    'SEK/GWh', 'EUR/GWh',
+    'SEK/TWh', 'EUR/TWh'
+]
 
-CurrencyPerVolumeUnits = Literal['SEK/L', 'EUR/L',
-                                 'SEK/l', 'EUR/l',
-                                 'SEK/liter', 'EUR/liter',
-                                 'SEK/m3', 'EUR/m3'
-                                 'SEK/m^3', 'EUR/m^3'
-                                 'SEK/m**3', 'EUR/m**3'
-                                 'SEK/m³', 'EUR/m³']
+CurrencyPerMassUnits = L[
+    'SEK/kg', 'EUR/kg',
+    'SEK/t', 'EUR/t',
+    'SEK/ton', 'EUR/ton',
+    'SEK/g', 'EUR/g',
+    'SEK/mg', 'EUR/mg',
+    'SEK/ug', 'EUR/ug'
+]
 
-CurrencyPerTimeUnits = Literal['SEK/h', 'EUR/h',  'SEK/hr', 'EUR/hr',
-                               'SEK/hour', 'EUR/hour', 'SEK/d', 'EUR/d',
-                               'SEK/day', 'EUR/day', 'SEK/w', 'EUR/w',
-                               'SEK/week', 'EUR/week', 'SEK/y', 'EUR/y',
-                               'SEK/yr', 'EUR/yr', 'SEK/year', 'EUR/year'
-                               'SEK/a', 'EUR/a']
+CurrencyPerVolumeUnits = L[
+    'SEK/L', 'EUR/L',
+    'SEK/l', 'EUR/l',
+    'SEK/liter', 'EUR/liter',
+    'SEK/m3', 'EUR/m3'
+    'SEK/m^3', 'EUR/m^3'
+    'SEK/m**3', 'EUR/m**3'
+    'SEK/m³', 'EUR/m³'
+]
+
+CurrencyPerTimeUnits = L[
+    'SEK/h', 'EUR/h',  'SEK/hr', 'EUR/hr',
+    'SEK/hour', 'EUR/hour', 'SEK/d', 'EUR/d',
+    'SEK/day', 'EUR/day', 'SEK/w', 'EUR/w',
+    'SEK/week', 'EUR/week', 'SEK/y', 'EUR/y',
+    'SEK/yr', 'EUR/yr', 'SEK/year', 'EUR/year'
+    'SEK/a', 'EUR/a'
+]
 
 
-LengthUnits = Literal['m', 'meter', 'km', 'cm', 'mm', 'um']
-MassUnits = Literal['kg', 'g', 'ton', 'tonne', 't', 'mg', 'ug']
-TimeUnits = Literal['s', 'second', 'min', 'minute', 'h', 'hr',
-                    'hour', 'd', 'day', 'w', 'week', 'y', 'yr',
-                    'a', 'year', 'ms', 'us']
+LengthUnits = L['m', 'meter', 'km', 'cm', 'mm', 'um']
 
-TemperatureUnits = Literal['C', 'degC', '°C', 'K', 'F', 'degF', '°F',
-                           'delta_C', 'delta_degC', 'Δ°C',
-                           'delta_F', 'delta_degF', 'Δ°F']
+MassUnits = L['kg', 'g', 'ton', 'tonne', 't', 'mg', 'ug']
 
-SubstanceUnits = Literal['mol', 'kmol']
-CurrentUnits = Literal['A', 'mA']
-LuminosityUnits = Literal['lm']
+TimeUnits = L[
+    's', 'second', 'min',
+    'minute', 'h', 'hr',
+    'hour', 'd', 'day',
+    'w', 'week', 'y', 'yr',
+    'a', 'year', 'ms', 'us'
+]
 
-AreaUnits = Literal['m2', 'm^2', 'm**2', 'm²', 'cm2', 'cm^2', 'cm**2', 'cm²']
-VolumeUnits = Literal['L', 'l', 'liter', 'm3', 'm^3', 'm³', 'm**3',
-                      'dm3', 'dm^3', 'dm³', 'dm**3',
-                      'cm3', 'cm^3', 'cm³', 'cm**3']
+TemperatureUnits = L[
+    'C', 'degC', '°C', 'K',
+    'F', 'degF', '°F',
+    'delta_C', 'delta_degC', 'Δ°C',
+    'delta_F', 'delta_degF', 'Δ°F'
+]
 
-NormalVolumeUnits = Literal['normal liter', 'Nm3',
-                            'nm3', 'Nm^3', 'nm^3', 'Nm³',
-                            'nm³', 'Nm**3', 'nm**3']
+SubstanceUnits = L['mol', 'kmol']
 
-PressureUnits = Literal['bar', 'kPa', 'Pa', 'MPa', 'mbar', 'mmHg']
+CurrentUnits = L['A', 'mA']
 
-MassFlowUnits = Literal['kg/s', 'kg/h', 'kg/hr', 'g/s', 'g/h', 'g/hr',
-                        'ton/h', 't/h', 'ton/hr',
-                        't/hr', 't/d', 'ton/day', 't/w', 'ton/week', 't/y',
-                        't/a', 't/year', 'ton/y', 'ton/a', 'ton/year']
+LuminosityUnits = L['lm']
 
-VolumeFlowUnits = Literal['m3/s', 'm3/h', 'm3/hr',
-                          'm**3/s', 'm**3/h', 'm**3/hr',
-                          'm^3/s', 'm^3/h', 'm^3/hr',
-                          'm³/s', 'm³/h', 'm³/hr',
-                          'liter/second', 'l/s', 'L/s',
-                          'liter/hour', 'l/h', 'L/h', 'L/hr', 'l/hr']
+AreaUnits = L[
+    'm2', 'm^2', 'm**2', 'm²',
+    'cm2', 'cm^2', 'cm**2', 'cm²'
+]
 
-NormalVolumeFlowUnits = Literal['Nm3/s', 'Nm3/h', 'Nm3/hr',
-                                'nm3/s', 'nm3/h', 'nm3/hr',
-                                'Nm^3/s', 'Nm^3/h', 'Nm^3/hr',
-                                'nm^3/s', 'nm^3/h', 'nm^3/hr',
-                                'Nm³/s', 'Nm³/h', 'Nm³/hr',
-                                'nm³/s', 'nm³/h', 'nm³/hr',
-                                'Nm**3/s', 'Nm**3/h', 'Nm**3/hr'
-                                'nm**3/s', 'nm**3/h', 'nm**3/hr']
+VolumeUnits = L[
+    'L', 'l', 'liter',
+    'm3', 'm^3', 'm³', 'm**3',
+    'dm3', 'dm^3', 'dm³', 'dm**3',
+    'cm3', 'cm^3', 'cm³', 'cm**3'
+]
 
-DensityUnits = Literal['kg/m3', 'kg/m**3',
-                       'kg/m^3', 'kg/m³', 'g/l', 'g/L', 'gram/liter']
-SpecificVolumeUnits = Literal['m3/kg', 'm^3/kg', 'm³/kg', 'l/g', 'L/g']
+NormalVolumeUnits = L[
+    'normal liter', 'Nm3',
+    'nm3', 'Nm^3', 'nm^3', 'Nm³',
+    'nm³', 'Nm**3', 'nm**3'
+]
 
-EnergyUnits = Literal['J', 'kJ', 'MJ', 'GJ', 'TJ', 'PJ',
-                      'kWh', 'MWh', 'Wh', 'GWh', 'TWh']
+PressureUnits = L['bar', 'kPa', 'Pa', 'MPa', 'mbar', 'mmHg']
 
-PowerUnits = Literal['W', 'kW', 'MW', 'GW', 'TW', 'mW',
-                     'kWh/d', 'kWh/w', 'kWh/y', 'kWh/yr', 'kWh/year',
-                     'MWh/d', 'MWh/w', 'MWh/y', 'MWh/yr', 'MWh/year',
-                     'GWh/d', 'GWh/w', 'GWh/y', 'GWh/yr', 'GWh/year',
-                     'TWh/d', 'TWh/w', 'TWh/y', 'TWh/yr', 'TWh/year']
+MassFlowUnits = L[
+    'kg/s', 'kg/h', 'kg/hr',
+    'g/s', 'g/h', 'g/hr',
+    'ton/h', 't/h', 'ton/hr',
+    't/hr', 't/d', 'ton/day',
+    't/w', 'ton/week', 't/y',
+    't/a', 't/year', 'ton/y',
+    'ton/a', 'ton/year'
+]
 
-VelocityUnits = Literal['m/s', 'km/s', 'm/min',
-                        'cm/s', 'cm/min', 'km/h', 'kmh', 'kph']
-DynamicViscosityUnits = Literal['Pa*s', 'Pa s', 'cP']
+VolumeFlowUnits = L[
+    'm3/s', 'm3/h', 'm3/hr',
+    'm**3/s', 'm**3/h', 'm**3/hr',
+    'm^3/s', 'm^3/h', 'm^3/hr',
+    'm³/s', 'm³/h', 'm³/hr',
+    'liter/second', 'l/s', 'L/s',
+    'liter/hour', 'l/h', 'L/h',
+    'L/hr', 'l/hr'
+]
 
-KinematicViscosityUnits = Literal['m2/s', 'm**2/s', 'm^2/s',
-                                  'm²/s', 'cSt', 'cm2/s',
-                                  'cm**2/s', 'cm^2/s', 'cm²/s']
+NormalVolumeFlowUnits = L[
+    'Nm3/s', 'Nm3/h', 'Nm3/hr',
+    'nm3/s', 'nm3/h', 'nm3/hr',
+    'Nm^3/s', 'Nm^3/h', 'Nm^3/hr',
+    'nm^3/s', 'nm^3/h', 'nm^3/hr',
+    'Nm³/s', 'Nm³/h', 'Nm³/hr',
+    'nm³/s', 'nm³/h', 'nm³/hr',
+    'Nm**3/s', 'Nm**3/h', 'Nm**3/hr',
+    'nm**3/s', 'nm**3/h', 'nm**3/hr'
+]
+
+DensityUnits = L[
+    'kg/m3', 'kg/m**3',
+    'kg/m^3', 'kg/m³', 'g/l',
+    'g/L', 'gram/liter'
+]
+
+SpecificVolumeUnits = L[
+    'm3/kg', 'm^3/kg', 'm³/kg',
+    'l/g', 'L/g'
+]
+
+EnergyUnits = L[
+    'J', 'kJ', 'MJ',
+    'GJ', 'TJ', 'PJ',
+                'kWh', 'MWh', 'Wh',
+                'GWh', 'TWh'
+]
+
+PowerUnits = L[
+    'W', 'kW', 'MW', 'GW', 'TW', 'mW',
+    'kWh/d', 'kWh/w', 'kWh/y', 'kWh/yr', 'kWh/year',
+    'MWh/d', 'MWh/w', 'MWh/y', 'MWh/yr', 'MWh/year',
+    'GWh/d', 'GWh/w', 'GWh/y', 'GWh/yr', 'GWh/year',
+    'TWh/d', 'TWh/w', 'TWh/y', 'TWh/yr', 'TWh/year'
+]
+
+VelocityUnits = L[
+    'm/s', 'km/s', 'm/min',
+    'cm/s', 'cm/min',
+    'km/h', 'kmh', 'kph'
+]
+
+DynamicViscosityUnits = L['Pa*s', 'Pa s', 'cP']
+
+KinematicViscosityUnits = L[
+    'm2/s', 'm**2/s', 'm^2/s',
+    'm²/s', 'cSt', 'cm2/s',
+    'cm**2/s', 'cm^2/s', 'cm²/s'
+]
 
 
 def get_registered_units() -> dict[str, tuple[str, ...]]:
@@ -149,6 +214,26 @@ def get_registered_units() -> dict[str, tuple[str, ...]]:
 
 
 class Dimensionality(ABC):
+    r"""
+    Represents the *dimensionality* of a unit, i.e.
+    a combination (product) of the base dimensions (with optional rational exponents).
+
+    A dimension ca be expressed as
+
+    .. math::
+
+        \Pi \, d^n, d \in \{T, L, M ,I, \Theta, N, J, \ldots\}, n \in \mathbb{Q}
+
+    where $\{T, L, M, ...\}$ are the base dimensions (time, length, mass, ...) and $n$ is a rational number.
+
+    Subclasses of this abstract base class are used
+    as type parameters when creating instances of
+    :py:class:`encomp.units.Quantity`.
+
+    The ``dimensions`` class attribute defines the dimensions
+    of the dimensionality using an instance of
+    ``pint.unit.UnitsContainer``.
+    """
 
     dimensions: Optional[UnitsContainer] = None
 
@@ -383,7 +468,7 @@ class MolarDensity(Dimensionality):
     dimensions = _MolarDensityUC
 
 
-# # these dimensionalities might have different names depending on the context
+# these dimensionalities might have different names depending on the context
 _HeatingValueUC = _EnergyUC / _MassUC
 _LowerHeatingValueUC = _EnergyUC / _MassUC
 _HigherHeatingValueUC = _EnergyUC / _MassUC
