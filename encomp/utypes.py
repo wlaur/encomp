@@ -254,7 +254,7 @@ class Dimensionality(ABC):
                 'attribute "dimensions" (an instance of pint.unit.UnitsContainer)'
             )
 
-        # the Unknown and Impossible dimensionalities subclass has dimensions=None
+        # the Unknown dimensionality subclass has dimensions=None
         # it will never be used at runtime, only during type checking
         if cls.dimensions is None:
             return
@@ -337,10 +337,6 @@ _LuminosityUC = UnitsContainer({'[luminosity]': 1})
 # reloading (re-importing) this module will clear and reset the registry
 
 class Unknown(Dimensionality):
-    dimensions = None
-
-
-class Impossible(Dimensionality):
     dimensions = None
 
 

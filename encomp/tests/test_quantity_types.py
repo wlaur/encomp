@@ -381,13 +381,10 @@ def test_quantity_add_types() -> None:
     reveal_type(p8)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
     reveal_type(p9)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
 
-    # unknown dimensionalities cannot be added
-    # TODO: is it possible to have an error instead of dimensionality Impossible?
-
     unknown = 1 / m
 
     p10 = unknown + unknown
-    reveal_type(p10)  # R: encomp.units.Quantity[encomp.utypes.Impossible]
+    reveal_type(p10)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
 
 
 @pytest.mark.mypy_testing
@@ -438,13 +435,10 @@ def test_quantity_sub_types() -> None:
     reveal_type(p8)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
     reveal_type(p9)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
 
-    # unknown dimensionalities cannot be subtracted
-    # TODO: is it possible to have an error instead of dimensionality Impossible?
-
     unknown = 1 / m
 
     p10 = unknown - unknown
-    reveal_type(p10)  # R: encomp.units.Quantity[encomp.utypes.Impossible]
+    reveal_type(p10)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
 
 
 @pytest.mark.mypy_testing
