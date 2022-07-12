@@ -192,11 +192,12 @@ def test_quantity_div_types() -> None:
     s_float = 0.1
 
     # dividing 2 different Quantities creates a new dimensionality
-    # that is only known at runtime
     p1 = m / n
+
+    # this dimensionality is not defined as an overload
     p2 = n / m
 
-    reveal_type(p1)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
+    reveal_type(p1)  # R: encomp.units.Quantity[encomp.utypes.MassPerNormalVolume]
     reveal_type(p2)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
 
     # scalar/dimensionless divided by Quantity also creates a new, unknown dimensionality
@@ -238,9 +239,19 @@ def test_quantity_div_types() -> None:
 
     # autopep8: off
 
-    reveal_type(unknown / unknown) # R: encomp.units.Quantity[encomp.utypes.Unknown]
+    reveal_type(unknown / unknown)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
+
+
+    reveal_type(1.2 / Q(25, 's'))  # R: encomp.units.Quantity[encomp.utypes.Frequency]
+    reveal_type(2 / Q(25, 'kg/liter'))  # R: encomp.units.Quantity[encomp.utypes.SpecificVolume]
+    reveal_type(0.2 / Q(25, 'MWh/kg'))  # R: encomp.units.Quantity[encomp.utypes.MassPerEnergy]
+    reveal_type(1 / (0.2 / Q(25, 'MWh/kg')))  # R: encomp.units.Quantity[encomp.utypes.HeatingValue]
+
+    reveal_type(1 / Q(25, 'kW'))  # R: encomp.units.Quantity[encomp.utypes.Unknown]
+
 
     # autopep8: on
+
 
 
 @pytest.mark.mypy_testing
@@ -556,6 +567,7 @@ def test_quantity_currency_types() -> None:
     reveal_type(m)  # R: encomp.units.Quantity[encomp.utypes.CurrencyPerTime]
 
     r = (Q(25, 'kg/s') * Q(2, 'week')) * Q(25, 'EUR/ton')
+
     reveal_type(r.to('MEUR'))  # R: encomp.units.Quantity[encomp.utypes.Currency]
 
     weekly_cost = (

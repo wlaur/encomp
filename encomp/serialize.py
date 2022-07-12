@@ -67,7 +67,8 @@ from decimal import Decimal
 from uncertainties import ufloat
 from uncertainties.core import AffineScalarFunc
 
-from encomp.units import Quantity, MagnitudeInput, Unit
+from encomp.units import Quantity, Unit
+from encomp.utypes import MagnitudeInput, Dimensionality
 from encomp.misc import isinstance_types
 
 # type alias for objects that can be serialized using json.dumps()
@@ -203,6 +204,7 @@ def custom_serializer(obj: Any) -> JSON:
 
         return {
             'type': 'Quantity',
+            'dimensionality': obj._dimensionality_type.__name__,
             'data': [serialize(obj.m), str(obj.u._units)]
         }
 
@@ -349,23 +351,34 @@ def decode(inp: JSON,
 
             if inp['type'] == 'Quantity':
 
+                # optional key with the name of the dimensionality class
+                dimensionality_name = inp.get('dimensionality')
                 val, unit = inp['data']  # type: ignore
 
-                # not necessary to pass on the custom kwarg
+                if unit is None:
+                    unit = ''
+
+                dimensionality: Optional[type[Dimensionality]] = None
+
+                for d in Dimensionality._registry:
+                    if d.__name__ == dimensionality_name:
+                        dimensionality = d
+                        break
+
                 val = decode(val)
 
                 # check if this list has types that matches a serialized Quantity
                 if (isinstance_types(val, MagnitudeInput) and
                         isinstance_types(unit, Union[Unit, str])):
 
-                    if unit == '':
-                        unit = 'dimensionless'
-
-                    try:
+                    if dimensionality is None:
                         return Quantity(val, unit)
 
-                    except Exception:
-                        pass
+                    else:
+
+                        return Quantity[dimensionality](  # type: ignore
+                            val, unit
+                        )
 
             if inp['type'] == 'Path':
                 return Path(inp['data'])  # type: ignore
@@ -409,7 +422,7 @@ def decode(inp: JSON,
                         'must contain a classmethod named "from_dict" '
                         'that takes a dict as input and returns a class instance')
 
-                d = inp['data']
+                d = inp['data']  # type: ignore
 
                 # in case the to_json() method returns a string,
                 # the string must be loaded into a dict

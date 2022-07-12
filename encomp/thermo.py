@@ -14,14 +14,13 @@ from encomp.utypes import (Mass,
                            Energy,
                            Power,
                            Length,
-                           HeatCapacity,
+                           SpecificHeatCapacity,
                            ThermalConductivity,
-                           HeatTransferCoefficient,
-                           HeatCapacity)
+                           HeatTransferCoefficient)
 
 
 SIGMA = CONSTANTS.SIGMA
-DEFAULT_CP = Quantity[HeatCapacity](4.18, 'kJ/kg/K')
+DEFAULT_CP = Quantity[SpecificHeatCapacity](4.18, 'kJ/kg/K')
 
 
 def heat_balance(
@@ -30,7 +29,7 @@ def heat_balance(
                  Quantity[Energy],
                  Quantity[Power],
                  Quantity[Temperature]],
-    cp: Quantity[HeatCapacity] = DEFAULT_CP
+    cp: Quantity[SpecificHeatCapacity] = DEFAULT_CP
 ) -> Union[Quantity[Mass],
            Quantity[MassFlow],
            Quantity[Energy],
@@ -49,7 +48,7 @@ def heat_balance(
     args : Quantity
         The two known variables in the heat balance equation:
         mass, mass flow, energy, power or temperature difference
-    cp : Quantity[HeatCapacity], optional
+    cp : Quantity[SpecificHeatCapacity], optional
         Heat capacity, by default 4.18 kg/kJ/K (water)
 
     Returns

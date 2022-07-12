@@ -95,7 +95,7 @@ The `Quantity` object has an associated `Dimensionality` type parameter that is 
 Each dimensionality (for example _pressure_, _length_, _time_, _dimensionless_) is represented by a subclass of `Quantity`.
 
 Common dimensionalities can be statically determined based on overload variants of the `Quantity.__new__` method (see `encomp.utypes.get_registered_units` for a list of units that support this).
-Additionally, some common operations using ``*``, ``**`` and ``/`` are also defined using overload variants.
+Additionally, operations using ``*``, ``**`` and ``/`` are also defined using overload variants for combinations of the default dimensionalities.
 
 
 In case the unit is not registered by default, the type checker will use the dimensionality `Unknown`.

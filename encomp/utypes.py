@@ -68,9 +68,9 @@ CurrencyPerVolumeUnits = L[
     'SEK/L', 'EUR/L',
     'SEK/l', 'EUR/l',
     'SEK/liter', 'EUR/liter',
-    'SEK/m3', 'EUR/m3'
-    'SEK/m^3', 'EUR/m^3'
-    'SEK/m**3', 'EUR/m**3'
+    'SEK/m3', 'EUR/m3',
+    'SEK/m^3', 'EUR/m^3',
+    'SEK/m**3', 'EUR/m**3',
     'SEK/m³', 'EUR/m³'
 ]
 
@@ -79,7 +79,7 @@ CurrencyPerTimeUnits = L[
     'SEK/hour', 'EUR/hour', 'SEK/d', 'EUR/d',
     'SEK/day', 'EUR/day', 'SEK/w', 'EUR/w',
     'SEK/week', 'EUR/week', 'SEK/y', 'EUR/y',
-    'SEK/yr', 'EUR/yr', 'SEK/year', 'EUR/year'
+    'SEK/yr', 'EUR/yr', 'SEK/year', 'EUR/year',
     'SEK/a', 'EUR/a'
 ]
 
@@ -162,7 +162,8 @@ NormalVolumeFlowUnits = L[
 
 DensityUnits = L[
     'kg/m3', 'kg/m**3',
-    'kg/m^3', 'kg/m³', 'g/l',
+    'kg/m^3', 'kg/m³',
+    'kg/liter', 'g/l',
     'g/L', 'gram/liter'
 ]
 
@@ -174,8 +175,8 @@ SpecificVolumeUnits = L[
 EnergyUnits = L[
     'J', 'kJ', 'MJ',
     'GJ', 'TJ', 'PJ',
-                'kWh', 'MWh', 'Wh',
-                'GWh', 'TWh'
+    'kWh', 'MWh', 'Wh',
+    'GWh', 'TWh'
 ]
 
 PowerUnits = L[
@@ -198,6 +199,12 @@ KinematicViscosityUnits = L[
     'm2/s', 'm**2/s', 'm^2/s',
     'm²/s', 'cSt', 'cm2/s',
     'cm**2/s', 'cm^2/s', 'cm²/s'
+]
+
+HeatingValueUnits = L[
+    'MJ/kg', 'MWh/kg', 'kJ/kg', 'kWh/kg',
+    'MJ/t', 'MWh/t', 'kJ/t', 'kWh/t',
+    'MJ/ton', 'MWh/ton', 'kJ/ton', 'kWh/ton'
 ]
 
 
@@ -235,6 +242,13 @@ class Dimensionality(ABC):
     ``pint.unit.UnitsContainer``.
     """
 
+    # set _distinct_override to False for dimensionalities that are not distinct
+    # purely based on the dimensions. For example, [energy] / [mass]
+    # might mean LowerHeatingValue, UpperHeatingValue, ...
+    # and the dimensions alone are not sufficient to determine what
+    # the dimensionality should be
+    _distinct_override: Optional[bool] = None
+
     dimensions: Optional[UnitsContainer] = None
 
     # keeps track of all the dimensionalities that have been
@@ -244,6 +258,7 @@ class Dimensionality(ABC):
     _registry: dict[type[Dimensionality], UnitsContainer] = {}
 
     # also store a reversed map, this might not contain all items in _registry
+    # dimensionalities where is_distinct() returns True will have precedence
     _registry_reversed: dict[UnitsContainer, type[Dimensionality]] = {}
 
     def __init_subclass__(cls) -> None:
@@ -290,9 +305,9 @@ class Dimensionality(ABC):
 
         cls._registry[cls] = cls.dimensions
 
-        # in case there are multiple class definitions with the same UnitRegistry,
-        # do not overwrite previously defined ones
-        if cls.dimensions not in cls._registry_reversed:
+        # unless specifically overridden with _distinct_override,
+        # this will be True only for the first subtype with specific dimensions
+        if cls.is_distinct():
             cls._registry_reversed[cls.dimensions] = cls
 
     @classmethod
@@ -314,6 +329,22 @@ class Dimensionality(ABC):
         )
 
         return _Dimensionality
+
+    @classmethod
+    def is_distinct(cls) -> bool:
+
+        if cls._distinct_override is None:
+
+            if cls.dimensions is None:
+                return True
+
+            ucs = list(cls._registry.values())
+
+            # NOTE: the output of this classmethod
+            # might change when the registry is updated
+            return ucs.count(cls.dimensions) == 1
+
+        return cls._distinct_override
 
 
 # type variables that represent a certain dimensionality
@@ -394,6 +425,18 @@ _KinematicViscosityUC = _LengthUC**2 / _TimeUC
 _FrequencyUC = 1 / _TimeUC
 _MolarMassUC = _MassUC / _SubstanceUC
 _MolarDensityUC = _SubstanceUC / _VolumeUC
+_CurrencyPerEnergyUC = _CurrencyUC / _EnergyUC
+_CurrencyPerMassUC = _CurrencyUC / _MassUC
+_CurrencyPerVolumeUC = _CurrencyUC / _VolumeUC
+_CurrencyPerTimeUC = _CurrencyUC / _TimeUC
+_PowerPerLengthUC = _PowerUC / _LengthUC
+_PowerPerAreaUC = _PowerUC / _AreaUC
+_PowerPerVolumeUC = _PowerUC / _VolumeUC
+_PowerPerTemperatureC = _PowerUC / _TemperatureUC
+_ThermalConductivityUC = _PowerUC / _LengthUC / _TemperatureUC
+_HeatTransferCoefficientUC = _PowerUC / _AreaUC / _TemperatureUC
+_MassPerNormalVolumeUC = _MassUC / _NormalVolumeUC
+_MassPerEnergyUC = _MassUC / _EnergyUC
 
 
 class Area(Dimensionality):
@@ -464,100 +507,6 @@ class MolarDensity(Dimensionality):
     dimensions = _MolarDensityUC
 
 
-# these dimensionalities might have different names depending on the context
-_HeatingValueUC = _EnergyUC / _MassUC
-_LowerHeatingValueUC = _EnergyUC / _MassUC
-_HigherHeatingValueUC = _EnergyUC / _MassUC
-_SpecificHeatCapacityUC = _EnergyUC / _MassUC / _TemperatureUC
-
-_SpecificEnthalpyUC = _EnergyUC / _MassUC
-_MolarSpecificEnthalpyUC = _EnergyUC / _SubstanceUC
-_SpecificEntropyUC = _SpecificEnthalpyUC / _TemperatureUC
-_MolarSpecificEntropyUC = _SpecificEnthalpyUC / _SubstanceUC
-_SpecificInternalEnergyUC = _EnergyUC / _MassUC
-_MolarSpecificInternalEnergyUC = _EnergyUC / _SubstanceUC
-
-_HeatCapacityUC = _EnergyUC / _MassUC / _TemperatureUC
-_ThermalConductivityUC = _PowerUC / _LengthUC / _TemperatureUC
-_HeatTransferCoefficientUC = _PowerUC / _AreaUC / _TemperatureUC
-_MassPerNormalVolumeUC = _MassUC / _NormalVolumeUC
-_MassPerEnergyUC = _MassUC / _EnergyUC
-_CurrencyPerEnergyUC = _CurrencyUC / _EnergyUC
-_CurrencyPerMassUC = _CurrencyUC / _MassUC
-_CurrencyPerVolumeUC = _CurrencyUC / _VolumeUC
-_CurrencyPerTimeUC = _CurrencyUC / _TimeUC
-
-# related to CoolProp humid air
-_SpecificHeatPerDryAirUC = _EnergyUC / _MassUC / _TemperatureUC
-_SpecificHeatPerHumidAirUC = _EnergyUC / _MassUC / _TemperatureUC
-_MixtureEnthalpyPerDryAirUC = _EnergyUC / _MassUC
-_MixtureEnthalpyPerHumidAirUC = _EnergyUC / _MassUC
-_MixtureEntropyPerDryAirUC = _EnergyUC / _MassUC / _TemperatureUC
-_MixtureEntropyPerHumidAirUC = _EnergyUC / _MassUC / _TemperatureUC
-_MixtureVolumePerDryAirUC = _VolumeUC / _MassUC
-_MixtureVolumePerHumidAirUC = _VolumeUC / _MassUC
-
-
-class HeatingValue(Dimensionality):
-    dimensions = _HeatingValueUC
-
-
-class LowerHeatingValue(Dimensionality):
-    dimensions = _LowerHeatingValueUC
-
-
-class HigherHeatingValue(Dimensionality):
-    dimensions = _HigherHeatingValueUC
-
-
-class SpecificHeatCapacity(Dimensionality):
-    dimensions = _SpecificHeatCapacityUC
-
-
-class SpecificEnthalpy(Dimensionality):
-    dimensions = _SpecificEnthalpyUC
-
-
-class MolarSpecificEnthalpy(Dimensionality):
-    dimensions = _MolarSpecificEnthalpyUC
-
-
-class SpecificEntropy(Dimensionality):
-    dimensions = _SpecificEntropyUC
-
-
-class MolarSpecificEntropy(Dimensionality):
-    dimensions = _MolarSpecificEntropyUC
-
-
-class SpecificInternalEnergy(Dimensionality):
-    dimensions = _SpecificInternalEnergyUC
-
-
-class MolarSpecificInternalEnergy(Dimensionality):
-    dimensions = _MolarSpecificInternalEnergyUC
-
-
-class HeatCapacity(Dimensionality):
-    dimensions = _HeatCapacityUC
-
-
-class ThermalConductivity(Dimensionality):
-    dimensions = _ThermalConductivityUC
-
-
-class HeatTransferCoefficient(Dimensionality):
-    dimensions = _HeatTransferCoefficientUC
-
-
-class MassPerNormalVolume(Dimensionality):
-    dimensions = _MassPerNormalVolumeUC
-
-
-class MassPerEnergy(Dimensionality):
-    dimensions = _MassPerEnergyUC
-
-
 class Currency(Dimensionality):
     dimensions = _CurrencyUC
 
@@ -578,33 +527,142 @@ class CurrencyPerTime(Dimensionality):
     dimensions = _CurrencyPerTimeUC
 
 
-class SpecificHeatPerDryAir(Dimensionality):
+class PowerPerLength(Dimensionality):
+    dimensions = _PowerPerLengthUC
+
+
+class PowerPerArea(Dimensionality):
+    dimensions = _PowerPerAreaUC
+
+
+class PowerPerVolume(Dimensionality):
+    dimensions = _PowerPerVolumeUC
+
+
+class PowerPerTemperature(Dimensionality):
+    dimensions = _PowerPerTemperatureC
+
+
+class ThermalConductivity(Dimensionality):
+    dimensions = _ThermalConductivityUC
+
+
+class HeatTransferCoefficient(Dimensionality):
+    dimensions = _HeatTransferCoefficientUC
+
+
+class MassPerNormalVolume(Dimensionality):
+    dimensions = _MassPerNormalVolumeUC
+
+
+class MassPerEnergy(Dimensionality):
+    dimensions = _MassPerEnergyUC
+
+
+# these dimensionalities might have different names depending on the context
+# they are not included as inputs for the autogenerated type hint
+_HeatingValueUC = _EnergyUC / _MassUC
+_LowerHeatingValueUC = _EnergyUC / _MassUC
+_HigherHeatingValueUC = _EnergyUC / _MassUC
+_SpecificEnthalpyUC = _EnergyUC / _MassUC
+_SpecificInternalEnergyUC = _EnergyUC / _MassUC
+
+_SpecificHeatCapacityUC = _HeatingValueUC / _TemperatureUC
+
+_MolarSpecificEnthalpyUC = _EnergyUC / _SubstanceUC
+_MolarSpecificInternalEnergyUC = _EnergyUC / _SubstanceUC
+
+_SpecificEntropyUC = _SpecificEnthalpyUC / _TemperatureUC
+_MolarSpecificEntropyUC = _SpecificEnthalpyUC / _SubstanceUC
+
+
+class HeatingValue(Dimensionality):
+    dimensions = _HeatingValueUC
+    _distinct_override = True
+
+
+class LowerHeatingValue(Dimensionality):
+    dimensions = _LowerHeatingValueUC
+
+
+class HigherHeatingValue(Dimensionality):
+    dimensions = _HigherHeatingValueUC
+
+
+class SpecificEnthalpy(Dimensionality):
+    dimensions = _SpecificEnthalpyUC
+
+
+class SpecificInternalEnergy(Dimensionality):
+    dimensions = _SpecificInternalEnergyUC
+
+
+class SpecificHeatCapacity(Dimensionality):
+    dimensions = _SpecificHeatCapacityUC
+    _distinct_override = True
+
+
+class MolarSpecificEnthalpy(Dimensionality):
+    dimensions = _MolarSpecificEnthalpyUC
+
+
+class MolarSpecificInternalEnergy(Dimensionality):
+    dimensions = _MolarSpecificInternalEnergyUC
+
+
+class SpecificEntropy(Dimensionality):
+    dimensions = _SpecificEntropyUC
+
+
+class MolarSpecificEntropy(Dimensionality):
+    dimensions = _MolarSpecificEntropyUC
+
+
+# related to CoolProp humid air
+_SpecificHeatPerDryAirUC = _EnergyUC / _MassUC / _TemperatureUC
+_SpecificHeatPerHumidAirUC = _EnergyUC / _MassUC / _TemperatureUC
+_MixtureEnthalpyPerDryAirUC = _EnergyUC / _MassUC
+_MixtureEnthalpyPerHumidAirUC = _EnergyUC / _MassUC
+_MixtureEntropyPerDryAirUC = _EnergyUC / _MassUC / _TemperatureUC
+_MixtureEntropyPerHumidAirUC = _EnergyUC / _MassUC / _TemperatureUC
+_MixtureVolumePerDryAirUC = _VolumeUC / _MassUC
+_MixtureVolumePerHumidAirUC = _VolumeUC / _MassUC
+
+
+# these dimensionalities are not distinct, the same
+# combination of dimensions can be mean multiple things
+
+class IndistinctDimensionality(Dimensionality):
+    _distinct_override = False
+
+
+class SpecificHeatPerDryAir(IndistinctDimensionality):
     dimensions = _SpecificHeatPerDryAirUC
 
 
-class SpecificHeatPerHumidAir(Dimensionality):
+class SpecificHeatPerHumidAir(IndistinctDimensionality):
     dimensions = _SpecificHeatPerHumidAirUC
 
 
-class MixtureEnthalpyPerDryAir(Dimensionality):
+class MixtureEnthalpyPerDryAir(IndistinctDimensionality):
     dimensions = _MixtureEnthalpyPerDryAirUC
 
 
-class MixtureEnthalpyPerHumidAir(Dimensionality):
+class MixtureEnthalpyPerHumidAir(IndistinctDimensionality):
     dimensions = _MixtureEnthalpyPerHumidAirUC
 
 
-class MixtureEntropyPerDryAir(Dimensionality):
+class MixtureEntropyPerDryAir(IndistinctDimensionality):
     dimensions = _MixtureEntropyPerDryAirUC
 
 
-class MixtureEntropyPerHumidAir(Dimensionality):
+class MixtureEntropyPerHumidAir(IndistinctDimensionality):
     dimensions = _MixtureEntropyPerHumidAirUC
 
 
-class MixtureVolumePerDryAir(Dimensionality):
+class MixtureVolumePerDryAir(IndistinctDimensionality):
     dimensions = _MixtureVolumePerDryAirUC
 
 
-class MixtureVolumePerHumidAir(Dimensionality):
+class MixtureVolumePerHumidAir(IndistinctDimensionality):
     dimensions = _MixtureVolumePerHumidAirUC

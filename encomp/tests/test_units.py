@@ -13,7 +13,7 @@ from encomp.units import (Quantity,
                           ExpectedDimensionalityError,
                           convert_volume_mass)
 from encomp.units import Quantity as Q
-
+from encomp.serialize import decode
 from encomp.fluids import Water
 from encomp.utypes import *
 
@@ -606,3 +606,38 @@ def test_compatibility():
     assert str(
         (Q(25, 'MSEK/GWh') * Q(25, 'kWh')).to_base_units()
     ) == '625.0 currency'
+
+
+def test_distinct_dimensionality():
+
+    unit = 'm**6/kg**2'
+    uc = UnitsContainer({'[length]': 6, '[mass]': -2})
+
+    class Indistinct(Dimensionality):
+        dimensions = uc
+        _distinct_override = False
+
+    class Distinct(Dimensionality):
+        dimensions = uc
+        _distinct_override = True
+
+    assert type(Q(1, unit)) is Q[Distinct]
+    assert type(Q[Distinct](1, unit)) is Q[Distinct]
+    assert type(Q[Indistinct](1, unit)) is Q[Indistinct]
+
+
+def test_literal_units():
+
+    for d, units in get_registered_units().items():
+
+        for u in units:
+
+            decoded = decode(
+                {
+                    'type': 'Quantity',
+                    'dimensionality': d,
+                    'data': [1, u]
+                }
+            )
+
+            assert decoded._dimensionality_type.__name__ == d
