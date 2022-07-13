@@ -9,8 +9,8 @@ import pandas as pd
 from encomp.misc import isinstance_types
 from encomp.conversion import convert_volume_mass
 from encomp.units import (Quantity,
-                          wraps,
-                          check,
+                          ureg,
+                          DimensionalityTypeError,
                           ExpectedDimensionalityError)
 from encomp.units import Quantity as Q
 from encomp.serialize import decode
@@ -202,11 +202,11 @@ def test_custom_units():
 
 def test_wraps():
 
-    # @wraps(ret, args, strict=True|False) is a convenience
+    # @ureg.wraps(ret, args, strict=True|False) is a convenience
     # decorator for making the input/output of a function into Quantity
     # however, it does not enforce the return value
 
-    @wraps('kg', ('m', 'kg'), strict=True)
+    @ureg.wraps('kg', ('m', 'kg'), strict=True)
     def func(a, b):
 
         # this is incorrect, cannot add 1 to a dimensional Quantity
@@ -222,7 +222,7 @@ def test_check():
     assert Q(1, 'kg').check(Mass)
     assert not Q(1, 'kg').check(Energy)
 
-    @check('[length]', '[mass]')
+    @ureg.check('[length]', '[mass]')
     def func(a, b):
 
         return a * b
@@ -564,16 +564,16 @@ def test_compatibility():
 
     q3 = Q[IncompatibleFraction](0.2)
 
-    with pytest.raises(TypeError):
+    with pytest.raises(DimensionalityTypeError):
         q3 + q1
 
-    with pytest.raises(TypeError):
+    with pytest.raises(DimensionalityTypeError):
         q3 + q2
 
-    with pytest.raises(TypeError):
+    with pytest.raises(DimensionalityTypeError):
         q1 + q3
 
-    with pytest.raises(TypeError):
+    with pytest.raises(DimensionalityTypeError):
         q2 + q3
 
     s = Q(25, 'm')
@@ -593,10 +593,10 @@ def test_compatibility():
     d + d2
     d2 - d
 
-    with pytest.raises(TypeError):
+    with pytest.raises(DimensionalityTypeError):
         s + d
 
-    with pytest.raises(TypeError):
+    with pytest.raises(DimensionalityTypeError):
         d - s
 
     assert str(
@@ -607,6 +607,28 @@ def test_compatibility():
         (Q(25, 'MSEK/GWh') * Q(25, 'kWh')).to_base_units()
     ) == '625.0 currency'
 
+    # if the _distinct class attribute is True, an unspecified
+    # dimensionality will default to this
+    # for example, HeatingValue has _distinct=True even though
+    # it shares dimensions with other dimensionalities like SpecificEnthalpy
+
+    # q4 will be become Quantity[HeatingValue] by default
+
+    q4 = Q(25, 'kJ/kg')
+
+    # override the Literal['kJ/kg'] overload
+    q5 = Q[SpecificEnthalpy](25, str('kJ/kg'))
+    q6 = Q[HeatingValue](25, str('kJ/kg'))
+
+    with pytest.raises(DimensionalityTypeError):
+        q4 - q5
+
+    with pytest.raises(DimensionalityTypeError):
+        q5 - q4
+
+    q4 + q6
+    q6 - q4
+
 
 def test_distinct_dimensionality():
 
@@ -615,11 +637,11 @@ def test_distinct_dimensionality():
 
     class Indistinct(Dimensionality):
         dimensions = uc
-        _distinct_override = False
+        _distinct = False
 
     class Distinct(Dimensionality):
         dimensions = uc
-        _distinct_override = True
+        _distinct = True
 
     assert type(Q(1, unit)) is Q[Distinct]
     assert type(Q[Distinct](1, unit)) is Q[Distinct]

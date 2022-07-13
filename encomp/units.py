@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 import warnings
 import numbers
-from typing import Union, Optional, Generic, Any
+from typing import Union, Optional, Generic
 import sympy as sp
 import numpy as np
 import pandas as pd
@@ -33,13 +33,7 @@ from encomp.utypes import (MagnitudeInput,
                            Magnitude,
                            DT,
                            Dimensionality,
-                           Unknown,
-                           Dimensionless,
-                           Density,
-                           Volume,
-                           Mass,
-                           MassFlow,
-                           VolumeFlow)
+                           Unknown)
 
 if SETTINGS.ignore_ndarray_unit_stripped_warning:
     warnings.filterwarnings(
@@ -132,7 +126,7 @@ class CustomRegistry:
         return self(*args, **kwargs)
 
 
-ureg = CustomRegistry()
+ureg: UnitRegistry = CustomRegistry()  # type: ignore
 
 
 # if False, degC must be explicitly converted to K when multiplying
@@ -151,11 +145,6 @@ try:
     ureg._registry.default_format = SETTINGS.default_unit_format
 except Exception:
     pass
-
-
-# shorthand for the @wraps(ret, args, strict=True|False) decorator
-wraps = ureg.wraps
-check = ureg.check
 
 
 def define_dimensionality(name: str, symbol: str = None) -> None:
@@ -227,8 +216,10 @@ USD = 10 * currency
 """
 
 for n in _currency_definition.split('\n'):
+
     if not n.strip():
         continue
+
     ureg.define(n)
 
 _CUSTOM_DIMENSIONS.append('currency')
@@ -238,18 +229,15 @@ def _load_additional_units() -> None:
 
     with open(SETTINGS.additional_units, 'r', encoding='utf-8') as f:
 
-        lines = f.read().split('\n')
-        for line in lines:
+        for line in f.read().split('\n'):
 
-            if line.startswith('#'):
+            if line.startswith('#') or not line.strip():
                 continue
 
-            if line.strip():
-
-                try:
-                    ureg.define(line)
-                except pint.errors.RedefinitionError:
-                    pass
+            try:
+                ureg.define(line)
+            except pint.errors.RedefinitionError:
+                pass
 
 
 if (
@@ -266,7 +254,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
 
     Encodes the output dimensionalities of some common operations,
     for example ``Length**2 -> Area``. This is implemented by overloading the
-    ``__mul__, __truediv__, __pow__`` methods.
+    ``__mul__, __truediv__, __rtruediv__, __pow__`` methods.
 
 
     .. note::
@@ -895,4 +883,3 @@ def set_quantity_format(fmt: str = 'compact') -> None:
         ureg._registry.default_format = fmt
     except Exception:
         pass
-

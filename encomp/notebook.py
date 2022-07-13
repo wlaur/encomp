@@ -38,7 +38,7 @@ from IPython.display import (display,
 from encomp.settings import SETTINGS
 from encomp.misc import grid_dimensions
 from encomp.sympy import sp
-from encomp.units import Quantity, wraps
+from encomp.units import Quantity
 from encomp.units import Quantity as Q
 from encomp.utypes import *
 from encomp.fluids import Fluid, Water, HumidAir

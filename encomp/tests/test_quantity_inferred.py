@@ -91,4 +91,10 @@ def test_quantity_unspecified_type() -> None:
     unit_not_literal = str('kg/s')
     reveal_type(Q(25, unit_not_literal))  # R: encomp.units.Quantity[<nothing>]
 
+
+    reveal_type(Q(25, 'J') / Q(25, 'kg') / Q(25, 'mol'))  # R: encomp.units.Quantity[encomp.utypes.MolarSpecificEntropy]
+    reveal_type(Q(25, 'J') / Q(25, 'mol'))  # R: encomp.units.Quantity[encomp.utypes.MolarSpecificEnthalpy]
+    reveal_type(Q(25, 'J') / Q(25, 'kmol'))  # R: encomp.units.Quantity[encomp.utypes.MolarSpecificEnthalpy]
+    reveal_type(Q(25, 'kg') / Q(25, 'kmol'))  # R: encomp.units.Quantity[encomp.utypes.MolarMass]
+
     # autopep8: on

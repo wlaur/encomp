@@ -304,6 +304,15 @@ This error can also be imported from the :py:mod:`encomp.units` module.
 
 
 
+Integration with Pydantic
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The :py:class:`encomp.units.Quantity` class can be used as a field type with Pydantic.
+
+
+
+
+
 The Fluid class
 ---------------
 
