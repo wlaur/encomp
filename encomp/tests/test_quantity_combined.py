@@ -1,7 +1,7 @@
 import pytest
 
-from encomp.units import convert_volume_mass
 from encomp.units import Quantity as Q
+from encomp.conversion import convert_volume_mass
 from encomp.utypes import (Dimensionless,
                            Time,
                            Length,

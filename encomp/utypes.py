@@ -36,7 +36,7 @@ MagnitudeInput = Union[MagnitudeScalar,
 # list, tuple, Series will be converted
 Magnitude = Union[MagnitudeScalar, np.ndarray]
 
-_BASE_SI_UNITS: tuple[str, ...] = ('m', 'kg', 's', 'K', 'mol', 'A', 'cd')
+_BASE_SI_UNITS = ('m', 'kg', 's', 'K', 'mol', 'A', 'cd')
 
 # these string literals are used to infer the dimensionality of commonly created quantities
 # they are only used by type checkers and ignored at runtime
@@ -99,8 +99,8 @@ TimeUnits = L[
 TemperatureUnits = L[
     'C', 'degC', '°C', 'K',
     'F', 'degF', '°F',
-    'delta_C', 'delta_degC', 'Δ°C',
-    'delta_F', 'delta_degF', 'Δ°F'
+    'delta_C', 'delta_degC', 'Δ°C', 'ΔC',
+    'delta_F', 'delta_degF', 'Δ°F', 'ΔF'
 ]
 
 SubstanceUnits = L['mol', 'kmol']
@@ -229,9 +229,9 @@ class Dimensionality(ABC):
 
     .. math::
 
-        \Pi \, d^n, d \in \{T, L, M ,I, \Theta, N, J, \ldots\}, n \in \mathbb{Q}
+        \Pi \, d^n_d, d \in \{T, L, M ,I, \Theta, N, J, \ldots\}, n_d \in \mathbb{Q}
 
-    where $\{T, L, M, ...\}$ are the base dimensions (time, length, mass, ...) and $n$ is a rational number.
+    where $\{T, L, M, ...\}$ are the base dimensions (time, length, mass, ...) and $n_d$ is a rational number.
 
     Subclasses of this abstract base class are used
     as type parameters when creating instances of
@@ -349,6 +349,13 @@ class Dimensionality(ABC):
 
 # type variables that represent a certain dimensionality
 # the DT_ type is used to signify a different dimensionality than DT
+# NOTE: the DT/DT_ type variables will represent an instance of DT when used
+# as type hints (e.g. def func(...) -> DT)
+# a function that returns a class definition/type should be annotated as
+# func(...) -> type[DT]
+# however, when used as type parameters, they do not represent instances
+# e.g. Quantity[DT] means a subclass of Quantity with dimensionality type DT,
+# the dimensionality is not an instance of DT
 DT = TypeVar('DT', bound=Dimensionality)
 DT_ = TypeVar('DT_', bound=Dimensionality)
 

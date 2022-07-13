@@ -269,9 +269,9 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
     ``__mul__, __truediv__, __pow__`` methods.
 
 
-    .. todo::
+    .. note::
 
-        Maybe the overload methods should be moved to a separate stub file?
+        The overload signatures are defined in a separate file (``units.pyi``)
 
     """
 
@@ -325,6 +325,9 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         'ft_H2O': 'feet_H2O',
         'ft_water': 'feet_H2O'
     }
+
+    NORMAL_M3_VARIANTS = ('nm³', 'Nm³', 'nm3', 'Nm3',
+                          'nm**3', 'Nm**3', 'nm^3', 'Nm^3')
 
     def __hash__(self) -> int:
         return super().__hash__()
@@ -418,6 +421,8 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
 
         # this is a hack to force the type checker to default to Unknown
         # in case the generic type is not specified at all
+        # do not pass the _dt parameter directly, always use square brackets to
+        # specify the dimensionality type
         _dt: type[DT] = Unknown  # type: ignore
     ) -> Quantity[DT]:
 
@@ -433,8 +438,6 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
                 u = u.strip()
                 val = Quantity(m, u)  # type: ignore
 
-            # this allows us to create new dimensionless quantities
-            # by omitting the unit
             unit = getattr(val, 'u', None) or ''
 
         if isinstance(val, Quantity):
@@ -466,10 +469,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
                 valid_unit.dimensionality
             )
 
-            # __new__ will return an instance of this subclass
-            # NOTE: the type checker will not be able to infer the class in this case,
-            # since it is created dynamically
-
+            # the __new__ method will be called again, as part of the subclass
             subcls = cls._get_dimensional_subclass(dim)
             return subcls(val, valid_unit)
 
@@ -508,7 +508,6 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         return qty
 
     def _to_unit(self, unit: Union[Unit, UnitsContainer, str, Quantity[DT], dict]) -> Unit:
-
         return self._validate_unit(unit)
 
     @property
@@ -539,7 +538,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         # better to use ":.0f" formatting or round() anyway
 
         # avoid numpy.core._exceptions.UFuncTypeError (not on all platforms?)
-        # convert integer arrays to float (creating a copy)
+        # convert integer arrays to float(64) (creating a copy)
         if (
             isinstance(self._magnitude, np.ndarray) and
             issubclass(self._magnitude.dtype.type, numbers.Integral)
@@ -594,8 +593,9 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
 
         * Fixes common misspellings and case-errors (kpa vs. kPa)
         * Adds ``**`` between the unit and the exponent if it's missing, for example ``kg/m3 → kg/m**3``.
-        * Parses "Nm³" (and variations of this) as "normal * m³"
+        * Parses "Nm³" (and variations of this) as "normal * m³" (use explicit "nanometer³" to get this unit)
         * Converts % and ‰ to percent and permille
+        * Changes the ``Δ`` character to ``delta_``, for example ``Δ°C`` to ``delta_degC``
 
         Parameters
         ----------
@@ -611,16 +611,21 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         unit = str(unit).strip()
 
         # normal cubic meter, not nano or Newton
-        # there's no consistent way of writing normal liter,
+        # there's no consistent way of abbreviating "normal liter",
         # so we'll not even try to parse that
-        for n in ['nm³', 'Nm³', 'nm3', 'Nm3', 'nm**3', 'Nm**3', 'nm^3', 'Nm^3']:
+        # use "nanometer**3" if necessary
+        for n in Quantity.NORMAL_M3_VARIANTS:
+
             if n in unit:
+
                 # include brackets, otherwise "kg/nm3" is
                 # incorrectly converted to "kg/normal*m3"
                 unit = unit.replace(n, '(normal * m³)')
 
         # replace unicode Δ°C or Δ°F with delta_degC or delta_degF
         unit = re.sub(r'\bΔ\s*°(C|F)\b', r'delta_deg\g<1>', unit)
+        # the ° character is optional
+        unit = re.sub(r'\bΔ\s*(C|F)\b', r'delta_deg\g<1>', unit)
 
         # percent & permille sign (pint cannot parse "%" and "‰" characters)
         unit = unit.replace('%', 'percent')
@@ -723,18 +728,6 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
 
         return cls(magnitude, unit).to_base_units()
 
-    @property
-    def dim(self) -> UnitsContainer:
-        return self.dimensionality
-
-    @property
-    def dimensionality_name(self) -> str:
-        return str(self.dimensionality)
-
-    @property
-    def dim_name(self) -> str:
-        return self.dimensionality_name
-
     @classmethod
     def __get_validators__(cls):
 
@@ -746,13 +739,16 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
 
         if not isinstance(qty, Quantity):
             raise TypeError(
-                'Expexted instance of Quantity, '
+                'Expected instance of Quantity, '
                 f'got {qty} ({type(qty)})'
             )
 
         return cls(qty.m, qty.u)  # type: ignore
 
     def check_compatibility(self, other: Union[Quantity, MagnitudeScalar]) -> None:
+        """
+        Checks compatibility for addition and subtraction.
+        """
 
         if not isinstance(other, Quantity):
 
@@ -850,8 +846,6 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
             raise DimensionalityComparisonError(str(e)) from e
 
 
-# NOTE: to use a shorter name for Quantity, import the class using this name,
-# for example: from encomp.units import Quantity as Q
 # override the implementation of the Quantity class for the current registry
 # this ensures that all Quantity objects created with this registry
 # uses the subclass encomp.units.Quantity instead of pint.Quantity
@@ -902,39 +896,3 @@ def set_quantity_format(fmt: str = 'compact') -> None:
     except Exception:
         pass
 
-
-def convert_volume_mass(inp, rho=None):
-    """
-    Converts mass to volume or vice versa.
-
-    Parameters
-    ----------
-    inp : Union[M, V]
-        Input mass or volume (or flow)
-    rho : Quantity[Density], optional
-        Density, by default 997 kg/m³
-
-    Returns
-    -------
-    Union[V, M]
-        Calculated volume or mass (or flow)
-    """
-
-    if rho is None:
-        rho = Quantity[Density](997, 'kg/m³')
-
-    if not isinstance(rho, Quantity[Density]):  # type: ignore
-        raise TypeError(
-            f'Incorrect type for rho: {rho}'
-        )
-
-    if isinstance(inp, (Quantity[Mass], Quantity[MassFlow])):  # type: ignore
-        return (inp / rho).to_reduced_units()
-
-    elif isinstance(inp, (Quantity[Volume], Quantity[VolumeFlow])):  # type: ignore
-        return (inp * rho).to_reduced_units()
-
-    else:
-        raise TypeError(
-            f'Incorrect input: {inp}'
-        )

@@ -69,7 +69,7 @@ The actual dimensionality (a combination of the seven base dimensions) is specif
 
 .. note::
 
-    The dimensionality type parameters must be a subclass or :py:class:`encomp.utypes.Dimensionality`, but not an instance of this subclass. ``Q[Power]`` creates a subclass of ``Quantity`` with dimensionality *power*, but ``Q[Power()]`` will raise a ``TypeError``.
+    The dimensionality type parameters must be a *subclass* of :py:class:`encomp.utypes.Dimensionality` (not an instance of this subclass). ``Q[Power]`` creates a subclass of ``Quantity`` with dimensionality *power*, but ``Q[Power()]`` will raise a ``TypeError``.
 
 
 The module :py:mod:`encomp.utypes` contains :py:class:`encomp.utypes.Dimensionality` subclasses for some common dimensionalities.
@@ -199,9 +199,10 @@ When assigning a quantity to a DataFrame column, make sure to assign the magnitu
 
 .. code-block:: python
 
-    res = Quantity(..., 'ton/h')
+    res = Q(..., 'ton/h')
 
     # convert result, and assign the magnitude ("m")
+    # the magnitude must be a scalar or a vector with length df.shape[0]
     df['Result (kg/s)'] = res.to('kg/s').m
 
 
@@ -257,7 +258,7 @@ Currency units
 ~~~~~~~~~~~~~~
 
 Engineering calculations will often involve economic aspects.
-To aid in this, the dimensionality ``Currency`` can be used to represent an arbitrary currency.
+To aid in this, the dimensionality :py:class:`encomp.utypes.Currency` can be used to represent an arbitrary currency.
 By default, the currencies ``SEK, EUR, USD`` are defined.
 
 
@@ -288,7 +289,7 @@ By default, the currencies ``SEK, EUR, USD`` are defined.
 
 .. warning::
 
-    Do not use this system for currency conversions.
+    Do not use this system for currency *conversions*.
     The scaling factors between the default currencies are approximations (``10 SEK = 1 EUR = 1 USD``).
 
     Refer to the `pint documentation <https://pint.readthedocs.io/en/stable/currencies.html?highlight=currency#using-pint-for-currency-conversions>`_ for instructions on how to implement a registry context that handles currency conversion correctly.

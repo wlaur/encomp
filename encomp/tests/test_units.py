@@ -7,11 +7,11 @@ import numpy as np
 import pandas as pd
 
 from encomp.misc import isinstance_types
+from encomp.conversion import convert_volume_mass
 from encomp.units import (Quantity,
                           wraps,
                           check,
-                          ExpectedDimensionalityError,
-                          convert_volume_mass)
+                          ExpectedDimensionalityError)
 from encomp.units import Quantity as Q
 from encomp.serialize import decode
 from encomp.fluids import Water

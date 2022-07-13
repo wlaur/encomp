@@ -8,7 +8,8 @@ Functions related to gases: normal volume to mass conversion, compressibility, e
 from typing import Union, Literal, cast
 
 from encomp.constants import CONSTANTS
-from encomp.units import Quantity, convert_volume_mass
+from encomp.units import Quantity
+from encomp.conversion import convert_volume_mass
 from encomp.utypes import (Mass,
                            MassFlow,
                            Volume,

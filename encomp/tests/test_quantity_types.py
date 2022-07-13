@@ -579,3 +579,4 @@ def test_quantity_currency_types() -> None:
 
     # autopep8: off
 
+

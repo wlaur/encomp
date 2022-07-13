@@ -70,7 +70,7 @@ It also registers the `%read` and `%%write` Jupyter magics for reading and writi
 
 The fundamental building block of `encomp` is the `encomp.units.Quantity` class (shorthand alias `Q`), which is an extension of `pint.Quantity`.
 This class is used to construct objects with a _magnitude_ and _unit_.
-Each unit also has a _dimensionality_, and each dimensionality will have multiple associated units.
+Each unit also has a _dimensionality_ (combination of the base dimensions), and each dimensionality will have multiple associated units.
 
 ```python
 from encomp.units import Quantity as Q

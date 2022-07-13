@@ -165,12 +165,6 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
     def get_dimension_symbol_map(cls) -> dict[sp.Basic, Unit]: ...
     @classmethod
     def from_expr(cls, expr: sp.Basic) -> Quantity: ...
-    @property
-    def dim(self) -> UnitsContainer: ...
-    @property
-    def dimensionality_name(self) -> str: ...
-    @property
-    def dim_name(self) -> str: ...
     @classmethod
     def __get_validators__(cls) -> Generator[Incomplete, None, None]: ...
     @classmethod
@@ -2421,38 +2415,3 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
     @overload
     def __le__(self, other: Quantity[DT]) -> bool:
         ...
-
-
-@overload
-def convert_volume_mass(inp: Quantity[Mass],
-                        rho: Optional[Quantity[Density]] = None) -> Quantity[Volume]:
-    ...
-
-
-@overload
-def convert_volume_mass(inp: Quantity[MassFlow],
-                        rho: Optional[Quantity[Density]] = None) -> Quantity[VolumeFlow]:
-    ...
-
-
-@overload
-def convert_volume_mass(inp: Quantity[Volume],
-                        rho: Optional[Quantity[Density]] = None) -> Quantity[Mass]:
-    ...
-
-
-@overload
-def convert_volume_mass(inp: Quantity[VolumeFlow],
-                        rho: Optional[Quantity[Density]] = None) -> Quantity[MassFlow]:
-    ...
-
-
-@overload
-def convert_volume_mass(inp: Quantity,
-                        rho: Optional[Quantity[Density]] = None
-                        ) -> Union[Quantity[Mass],
-                                   Quantity[MassFlow],
-                                   Quantity[Volume],
-                                   Quantity[VolumeFlow]
-                                   ]:
-    ...
