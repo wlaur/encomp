@@ -181,6 +181,9 @@ In case a tuple or list is given as magnitude when creating a quantity, it will 
     # [0.0 0.0204 0.0408 ... 0.9795 1.0] bar
 
 
+Usage with Pandas
+~~~~~~~~~~~~~~~~~
+
 
 Pandas ``Series`` objects are converted to ``ndarray`` when constructing the quantity, which means that all metadata (such as index and name) is removed.
 
@@ -194,17 +197,53 @@ Pandas ``Series`` objects are converted to ``ndarray`` when constructing the qua
     pressure_ = Q(s, 'bar') # pd.Series is converted to np.ndarray
     # "series_name" will no longer be associated with pressure_ or pressure_.m
 
-When assigning a quantity to a DataFrame column, make sure to assign the magnitude (in the desired unit) instead of the actual quantity object.
-
+In most cases, the *magnitude* should be assigned to a DataFrame column (not the quantity instance).
+Assigning a quantity object will create a column with ``dtype=object``.
 
 .. code-block:: python
 
-    res = Q(..., 'ton/h')
+    index = pd.date_range('2020-01-01', '2020-01-02', freq='h')
+    df = pd.DataFrame(index=index)
 
-    # convert result, and assign the magnitude ("m")
-    # the magnitude must be a scalar or a vector with length df.shape[0]
-    df['Result (kg/s)'] = res.to('kg/s').m
+    df['input'] = np.linspace(0, 1, len(df))
 
+    q_vector = Q(df['input'], 'm/s')  # Q[Velocity]
+
+    # assigns a float array, as expected
+    df['A'] = q_vector.to('kmh')
+
+    q_scalar = Q(25, 'ton/h')  # Q[MassFlow]
+
+    # assigns a repeated array of Quantity objects
+    df['B'] = q_scalar
+
+    # identical to the previous assignment
+    df['C'] = [q_scalar] * len(df)
+
+    # this will be correctly broadcasted to a repeated array
+    df['D'] = q_scalar.m
+
+    df.head()
+    #                         input     A        B        C   D
+    # 2020-01-01 00:00:00  0.000000  0.00  25 t/hr  25 t/hr  25
+    # 2020-01-01 01:00:00  0.041667  0.15  25 t/hr  25 t/hr  25
+    # 2020-01-01 02:00:00  0.083333  0.30  25 t/hr  25 t/hr  25
+    # 2020-01-01 03:00:00  0.125000  0.45  25 t/hr  25 t/hr  25
+    # 2020-01-01 04:00:00  0.166667  0.60  25 t/hr  25 t/hr  25
+
+    df.dtypes
+
+    # input    float64
+    # A        float64
+    # B         object
+    # C         object
+    # D          int64
+    # dtype: object
+
+
+.. warning::
+
+    To avoid issues with ``dtype`` when assigning both vector and scalar quantities to a DataFrame column, make sure to always explicitly assing the *magnitude* of the quantity.
 
 
 Combining quantities

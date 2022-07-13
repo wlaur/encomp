@@ -21,7 +21,7 @@ import pandas as pd
 
 import pint
 from pint.unit import UnitsContainer, Unit
-from pint.registry import UnitRegistry
+from pint.registry import UnitRegistry, LazyRegistry
 from pint.errors import DimensionalityError
 
 from encomp.settings import SETTINGS
@@ -84,50 +84,23 @@ class DimensionalityRedefinitionError(ValueError):
 _CUSTOM_DIMENSIONS: list[str] = []
 
 
-# there should only be one registry at a time, pint raises ValueError
-# in case quantities from different registries interact
-
-class CustomRegistry:
-    """
-    Custom registry implementation, based on
-    ``LazyRegistry``.
-    """
-
-    def __init__(self, args=None, kwargs=None):
-        self.__dict__['params'] = args or (), kwargs or {}
+class _LazyRegistry(LazyRegistry):
 
     def __init(self):
         args, kwargs = self.__dict__['params']
         kwargs['on_redefinition'] = 'raise'
+
+        # override the filename
         kwargs['filename'] = str(SETTINGS.units.resolve().absolute())
+
         self.__class__ = UnitRegistry
         self.__init__(*args, **kwargs)
         self._after_init()
 
-    def __getattr__(self, item):
-        if item == '_on_redefinition':
-            return 'raise'
-        self.__init()
-        return getattr(self, item)
 
-    def __setattr__(self, key, value):
-        if key == '__class__':
-            super().__setattr__(key, value)
-        else:
-            self.__init()
-            setattr(self, key, value)
+ureg: UnitRegistry = _LazyRegistry()  # type: ignore
 
-    def __getitem__(self, item):
-        self.__init()
-        return self[item]
-
-    def __call__(self, *args, **kwargs):
-        self.__init()
-        return self(*args, **kwargs)
-
-
-ureg: UnitRegistry = CustomRegistry()  # type: ignore
-
+pint.application_registry.set(ureg)
 
 # if False, degC must be explicitly converted to K when multiplying
 # this is False by default, there's no reason to set this to True
@@ -267,7 +240,8 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
     # only one generic type variable can be used in this class
     _magnitude: Magnitude
 
-    _REGISTRY: CustomRegistry = ureg  # type: ignore
+    # override ClassVar
+    _REGISTRY: UnitRegistry = ureg  # type: ignore
 
     _DIMENSIONAL_SUBCLASSES: dict[type[Dimensionality], type[Quantity]] = {}
 
@@ -391,6 +365,8 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
 
     def __len__(self) -> int:
 
+        # __len__() must return an integer
+        # the len() function ensures this at a lower level
         if isinstance(self._magnitude, (float, int)):
 
             raise TypeError(
@@ -832,6 +808,25 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
             return super().__le__(other)
         except ValueError as e:
             raise DimensionalityComparisonError(str(e)) from e
+
+    def __round__(self, ndigits: Optional[int] = None) -> Quantity[DT]:
+
+        if isinstance(self.m, np.ndarray):
+            return self.__class__(np.round(self.m, ndigits or 0), self.u)
+
+        return super().__round__(ndigits)  # type: ignore
+
+    @property
+    def ndim(self) -> int:
+
+        # compatibility with pandas
+        # if ndim == 0, pandas considers the object
+        # a scalar and will fill array when assigning columns
+
+        if isinstance(self.m, (float, int)):
+            return 0
+
+        return self.m.ndim
 
 
 # override the implementation of the Quantity class for the current registry

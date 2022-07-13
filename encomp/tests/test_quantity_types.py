@@ -41,6 +41,11 @@ def test_quantity_reveal_type() -> None:
     # correctly identifies it as Unknown
     reveal_type(unknown)  # R: encomp.units.Quantity[Any]
 
+    ms = Q([1, 2, 3], 'kg/s')
+
+    reveal_type(ms)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+    reveal_type(ms[0])  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+
 
 @pytest.mark.mypy_testing
 def test_quantity_construction() -> None:
@@ -183,6 +188,8 @@ def test_quantity_misc_types() -> None:
 @pytest.mark.mypy_testing
 def test_quantity_div_types() -> None:
 
+    # autopep8: off
+
     m = Q[MassFlow](1, 'kg/s')
     n = Q[NormalVolumeFlow](1, 'Nm^3/h')
 
@@ -237,7 +244,6 @@ def test_quantity_div_types() -> None:
     # in case the dimensionalities are Unknown, division will output Unknown
     unknown = 1 / m**2
 
-    # autopep8: off
 
     reveal_type(unknown / unknown)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
 
@@ -251,7 +257,6 @@ def test_quantity_div_types() -> None:
 
 
     # autopep8: on
-
 
 
 @pytest.mark.mypy_testing
@@ -580,3 +585,13 @@ def test_quantity_currency_types() -> None:
     # autopep8: off
 
 
+@pytest.mark.mypy_testing
+def test_quantity_misc_operators() -> None:
+
+    q = Q(25, 'kg/s')
+
+    # TODO: why are types not inferred in round() and abs()
+
+    # __pos__, __neg__ operators
+    reveal_type(-q)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+    reveal_type(+q)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]

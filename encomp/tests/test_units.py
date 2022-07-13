@@ -5,6 +5,8 @@ from pytest import approx
 from typeguard import typechecked
 import numpy as np
 import pandas as pd
+import numpy as np
+from pandas.api.types import is_list_like as pandas_is_list_like  # type: ignore
 
 from encomp.misc import isinstance_types
 from encomp.conversion import convert_volume_mass
@@ -663,3 +665,120 @@ def test_literal_units():
             )
 
             assert decoded._dimensionality_type.__name__ == d
+
+
+def test_indexing():
+
+    qs = Q([1, 2, 3], 'kg')
+
+    assert isinstance(qs, Q[Mass])
+
+    qi = qs[1]
+
+    assert isinstance(qi, Q[Mass])
+    assert qi == Q(2, 'kg')
+
+
+def test_plus_minus():
+
+    # TODO: add type hints for this
+    l = Q(2, 'm')
+
+    l_e = l.plus_minus(Q(1, 'cm'))
+
+    l2_e = (l_e**2).to('km**2')
+
+    assert l2_e.error == Q(4e-8, 'km**2')
+    assert isinstance(l2_e.error, Q[Area])
+
+
+def test_round():
+
+    q = Q(25.12312312312, 'kg/s')
+
+    q_r = round(q, 1)
+
+    assert q_r.m == 25.1
+
+    q = Q([25.12312312312, 25.12312312312], 'kg/s')
+
+    q_r = round(q, 1)
+
+    assert q_r.m[0] == 25.1
+    assert q_r.m[1] == 25.1
+
+
+def test_abs():
+
+    q = Q(-25, 'kg/s')
+
+    q_a = abs(q)
+
+    assert q_a.m == 25
+
+    q = Q([-25, -25], 'kg/s')
+
+    q_a = abs(q)
+
+    assert q_a.m[0] == 25
+    assert q_a.m[1] == 25
+
+
+def test_pandas_is_list_like():
+
+    # scalar magnitude is not list like
+
+    assert pandas_is_list_like(Q([25]))
+    assert pandas_is_list_like(Q([25, 25]))
+    assert pandas_is_list_like(Q(np.linspace(0, 1), 'kg'))
+
+    assert not pandas_is_list_like(Q(25))
+    assert not pandas_is_list_like(Q(0.2))
+    assert not pandas_is_list_like(Q(0.2, 'kg/s'))
+
+
+def test_pandas_integration():
+
+    index = pd.date_range('2020-01-01', '2020-01-02', freq='h')
+    df = pd.DataFrame(index=index)
+
+    df['input'] = np.linspace(0, 1, len(df))
+
+    q_vector = Q(df['input'], 'm/s')
+
+    # assigns a float array, as expected
+    df['A'] = q_vector.to('kmh')
+
+    q_scalar = Q(25, 'ton/h')
+
+    # assigns a repeated array of Quantity objects
+    df['B'] = q_scalar
+
+    # identical to the previous assignment
+    df['C'] = [q_scalar] * len(df)
+
+    # this will be correctly broadcasted to a repeated array
+    df['D'] = q_scalar.m
+
+    assert df.dtypes.A == np.float64
+    assert df.dtypes.B == object
+    assert df.dtypes.C == object
+    assert df.dtypes.D == np.int64
+
+    assert isinstance(df.A.values[0], np.float64)
+    assert isinstance(df.B.values[-1], Q[MassFlow])
+    assert isinstance(df.C.values[0], Q[MassFlow])
+    assert isinstance(df.D.values[0], np.int64)
+
+
+def test_unit_compatibility():
+
+    # the ureg registry object contains unit attributes
+    # that can be multiplied and divided by a magnitude
+    # to create Quantity instances
+
+    assert isinstance(ureg.m * 1, Q[Length])
+    assert isinstance(1 * ureg.m / ureg.s, Q[Velocity])
+    assert isinstance([1, 2, 3] * ureg.m / ureg.s, Q[Velocity])
+    assert isinstance((1, 2, 3) * ureg.m / ureg.s, Q[Velocity])
+    assert isinstance(np.array([1, 2, 3]) * ureg.m / ureg.s, Q[Velocity])

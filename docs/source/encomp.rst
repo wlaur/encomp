@@ -124,14 +124,6 @@ encomp.units module
    :undoc-members:
    :show-inheritance:
 
-encomp.units\_helper module
----------------------------
-
-.. automodule:: encomp.units_helper
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 encomp.utypes module
 --------------------
 
