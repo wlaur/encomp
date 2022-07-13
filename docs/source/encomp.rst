@@ -20,6 +20,14 @@ encomp.context module
    :undoc-members:
    :show-inheritance:
 
+encomp.conversion module
+------------------------
+
+.. automodule:: encomp.conversion
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 encomp.fluids module
 --------------------
 
