@@ -13,7 +13,8 @@ from __future__ import annotations
 import re
 import warnings
 import numbers
-from typing import Union, Optional, Generic
+from typing import Union, Optional, Generic, Union
+
 import sympy as sp
 import numpy as np
 import pandas as pd
@@ -25,10 +26,9 @@ from pint.registry import UnitRegistry, LazyRegistry
 from pint.errors import DimensionalityError
 
 from encomp.settings import SETTINGS
-
-from encomp.utypes import _BASE_SI_UNITS
-
-from encomp.utypes import (MagnitudeInput,
+from encomp.misc import isinstance_types
+from encomp.utypes import (_BASE_SI_UNITS,
+                           MagnitudeInput,
                            MagnitudeScalar,
                            Magnitude,
                            DT,
@@ -101,6 +101,11 @@ class _LazyRegistry(LazyRegistry):
 ureg: UnitRegistry = _LazyRegistry()  # type: ignore
 
 pint.application_registry.set(ureg)
+
+# if this is True, scalar magnitude inputs will
+# be converted to 1-element arrays
+ureg.force_ndarray = False
+ureg.force_ndarray_like = False
 
 # if False, degC must be explicitly converted to K when multiplying
 # this is False by default, there's no reason to set this to True
@@ -178,8 +183,6 @@ for dimensionality_name in (
 # the default currencies will have an approximate scaling factor
 # NOTE: actual currency operations should use decimal.Decimal or similar
 # to account for rounding etc.
-# Quantity supports Decimal magnitudes, but it's not included in the type hints
-# unit conversions do not work with Decimal magnitudes (scaling factors are floats)
 
 _currency_definition = """
 currency = [currency]
@@ -367,7 +370,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
 
         # __len__() must return an integer
         # the len() function ensures this at a lower level
-        if isinstance(self._magnitude, (float, int)):
+        if isinstance_types(self._magnitude, MagnitudeScalar):
 
             raise TypeError(
                 f'Quantity with scalar magnitude ({self._magnitude}) has no len(). '
@@ -376,7 +379,13 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
                 '(df["column"] = qty.m instead of df["column"] = qty)'
             )
 
-        return len(self._magnitude)
+        elif isinstance(self._magnitude, np.ndarray):
+            return len(self._magnitude)
+
+        raise TypeError(
+            f'Cannot determine len() of {self._magnitude} '
+            f'({type(self._magnitude)})'
+        )
 
     def __new__(  # type: ignore
         cls,
@@ -819,9 +828,11 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
     @property
     def ndim(self) -> int:
 
-        # compatibility with pandas
+        # compatibility with pandas broadcasting
         # if ndim == 0, pandas considers the object
         # a scalar and will fill array when assigning columns
+        # this is similar to setting ureg.force_ndarray_like
+        # except that it still allows for scalar magnitudes
 
         if isinstance(self.m, (float, int)):
             return 0

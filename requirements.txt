@@ -2,6 +2,7 @@ python-dateutil
 python-dotenv
 pydantic
 typeguard
+typing-extensions
 asttokens
 numpy
 pandas

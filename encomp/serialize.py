@@ -66,9 +66,10 @@ import sympy as sp
 from decimal import Decimal
 from uncertainties import ufloat
 from uncertainties.core import AffineScalarFunc
+from pint.unit import Unit
 
-from encomp.units import Quantity, Unit
-from encomp.utypes import MagnitudeInput, Dimensionality
+from encomp.units import Quantity
+from encomp.utypes import Magnitude, Dimensionality
 from encomp.misc import isinstance_types
 
 # type alias for objects that can be serialized using json.dumps()
@@ -368,7 +369,7 @@ def decode(inp: JSON,
                 val = decode(val)
 
                 # check if this list has types that matches a serialized Quantity
-                if (isinstance_types(val, MagnitudeInput) and
+                if (isinstance_types(val, Magnitude) and
                         isinstance_types(unit, Union[Unit, str])):
 
                     if dimensionality is None:

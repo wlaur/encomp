@@ -6,25 +6,70 @@ import ast
 import asttokens
 import numpy as np
 
-from typing import Any, _GenericAlias, Union, Type, _TypedDictMeta  # type: ignore
+from typing import Any, Type, Union, TypeVar, overload
+from typing import _TypedDictMeta, _GenericAlias  # type: ignore
+
 from typeguard import check_type
+from typing_extensions import TypeGuard
 
 
-def isinstance_types(obj: Any,
-                     expected: Union[_GenericAlias, Type]) -> bool:
+T = TypeVar('T')
+
+
+# NOTE: these overloads are a hack to avoid issues with type[T] -> T
+# signatures with mypy
+
+@overload
+def isinstance_types(obj: Any, expected: type[T]) -> TypeGuard[T]: ...
+
+
+@overload
+def isinstance_types(obj: Any, expected: T) -> bool: ...
+
+
+def isinstance_types(obj: Any, expected: Union[_GenericAlias, Type]) -> bool:
     """
     Checks if the input object matches the expected type.
     This function also supports complex type annotations that cannot
     be checked with the builtin ``isinstance()``.
+    Uses ``typeguard.check_type`` for runtime checks of complex types.
 
-    Uses ``typeguard.check_type``.
+    .. todo::
+
+        Return type hint should be a ``TypeGuard`` that helps static type checkers
+        to narrow down the type of the input object.
+
+        This does not work with complex types using ``mypy`` (https://github.com/python/mypy/issues/9003).
+        However, it does work with Pylance.
+        The current implementation is a hack to avoid ``mypy`` errors when calling
+        this function. The type guard does not work with ``mypy`` (the type will not be narrowed at all).
+
+        ``mypy`` and Pylance do not support type negation using ``TypeGuard``.
+        This means that the following does not work as expected (compare with behavior for
+        the builtin ``isinstance()``):
+
+        .. code-block:: python
+
+            a: Union[str, int] = ...
+
+            if isinstance_types(a, int):
+                reveal_type(a)  # int
+            else:
+                reveal_type(a)  # str | int, should be str
+
+            # this works with builtin isinstance()
+            if isinstance(a, int):
+                reveal_type(a)  # int
+            else:
+                reveal_type(a)  # str
+
 
     Parameters
     ----------
-    obj : Any
+    obj : Union[_GenericAlias, Type]
         Object to check
-    expected : Union[_GenericAlias, type]
-        Expected type or generic type alias
+    expected : type
+        Expected type or type alias
 
     Returns
     -------
@@ -33,6 +78,7 @@ def isinstance_types(obj: Any,
     """
 
     # normal types are checked with isinstance()
+    # note: this check must use typing.Type, not the builtin type (lower case)
     if isinstance(expected, Type):  # type: ignore
 
         # typing.TypedDict is a special case

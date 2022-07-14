@@ -12,6 +12,17 @@ def test_name_assignments():
 
     assert len(assignments) == 2
 
+    src = dedent("""
+
+        a = 12
+        b = a * 2
+
+        c = b or none
+
+    """)
+
+    assert {n[0] for n in name_assignments(src)} == {'a', 'b', 'c'}
+
 
 def test_isinstance_types():
 
@@ -30,17 +41,3 @@ def test_isinstance_types():
     assert isinstance_types(d, dict[str, list[Optional[float]]])
     assert not isinstance_types(d, dict[str, list[Optional[int]]])
     assert not isinstance_types(d, dict[str, list[float]])
-
-
-def test_name_assignments():
-
-    src = dedent("""
-
-        a = 12
-        b = a * 2
-
-        c = b or none
-
-    """)
-
-    assert {n[0] for n in name_assignments(src)} == {'a', 'b', 'c'}

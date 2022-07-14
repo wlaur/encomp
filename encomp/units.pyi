@@ -4,12 +4,15 @@ from typing import (Generic,
                     Literal,
                     Generator,
                     Any,
+                    Union,
                     overload,
                     SupportsAbs,
                     SupportsRound)
 
 import sympy as sp
 from _typeshed import Incomplete
+
+import numpy as np
 
 import pint
 from pint.unit import UnitsContainer, Unit
@@ -47,8 +50,7 @@ from encomp.utypes import (DimensionlessUnits,
                            HeatingValueUnits,
                            KinematicViscosityUnits)
 
-from encomp.utypes import (Magnitude,
-                           MagnitudeInput,
+from encomp.utypes import (MagnitudeInput,
                            MagnitudeScalar,
                            DT,
                            DT_,
@@ -143,7 +145,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
     def get_unit(cls, unit_name: str) -> Unit: ...
     def __len__(self) -> int: ...
     @property
-    def m(self) -> Magnitude: ...
+    def m(self) -> Union[MagnitudeScalar, np.ndarray]: ...
     @property
     def ndim(self) -> int: ...
     def to_reduced_units(self) -> Quantity[DT]: ...

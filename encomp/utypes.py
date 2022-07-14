@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import TypeVar, Union, Optional
 from typing import Literal as L
 from typing import _LiteralGenericAlias  # type: ignore
-from typing import Union
+
 from abc import ABC
 
 
@@ -26,14 +26,14 @@ from pint.unit import UnitsContainer
 
 MagnitudeScalar = Union[float, int]
 
-MagnitudeInput = Union[MagnitudeScalar,
-                       list[MagnitudeScalar],
-                       tuple[MagnitudeScalar, ...],
-                       np.ndarray,
-                       pd.Series]
+MagnitudeInput = Union[
+    MagnitudeScalar,
+    list[MagnitudeScalar],
+    tuple[MagnitudeScalar, ...],
+    np.ndarray,
+    pd.Series
+]
 
-# the actual Quantity._magnitude attribute is scalar or np.ndarray
-# list, tuple, Series will be converted
 Magnitude = Union[MagnitudeScalar, np.ndarray]
 
 _BASE_SI_UNITS = ('m', 'kg', 's', 'K', 'mol', 'A', 'cd')

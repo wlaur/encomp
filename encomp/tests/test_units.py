@@ -1,11 +1,12 @@
 from typing import TypedDict
+from decimal import Decimal
 
 import pytest
 from pytest import approx
 from typeguard import typechecked
+
 import numpy as np
 import pandas as pd
-import numpy as np
 from pandas.api.types import is_list_like as pandas_is_list_like  # type: ignore
 
 from encomp.misc import isinstance_types
@@ -782,3 +783,19 @@ def test_unit_compatibility():
     assert isinstance([1, 2, 3] * ureg.m / ureg.s, Q[Velocity])
     assert isinstance((1, 2, 3) * ureg.m / ureg.s, Q[Velocity])
     assert isinstance(np.array([1, 2, 3]) * ureg.m / ureg.s, Q[Velocity])
+
+
+
+def test_decimal():
+
+    # decimal.Decimal works, but it's not included in the type hints
+
+    assert Q(Decimal('1.5'), 'MSEK').to('SEK').m == Decimal('1500000.00')
+
+    q = Q([Decimal('1.5'), Decimal('1.5')], 'kg')
+
+    with pytest.raises(TypeError):
+
+        # this does not work with pint's internal API
+        # unsupported operand type(s) for *: 'decimal.Decimal' and 'float'
+        q.to('g')

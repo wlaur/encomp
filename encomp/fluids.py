@@ -31,9 +31,13 @@ except ImportError:
     def HAPropsSI(*args, **kwargs):
         raise NotImplementedError()
 
+from pint.unit import Unit
+
 from encomp.structures import flatten
-from encomp.units import Quantity, Unit
+from encomp.misc import isinstance_types
+from encomp.units import Quantity
 from encomp.utypes import (Magnitude,
+                           MagnitudeScalar,
                            Unknown,
                            Pressure,
                            Temperature,
@@ -463,7 +467,7 @@ class CoolPropFluid:
     ) -> Magnitude:
 
         # case 1: all inputs are scalar, output is scalar
-        if all(isinstance(pt[1], (float, int)) for pt in points):
+        if all(isinstance_types(pt[1], MagnitudeScalar) for pt in points):
             return self.evaluate_single(output, *points)  # type: ignore
 
         # at this point, the output will be a vector of at least length 1
@@ -512,8 +516,8 @@ class CoolPropFluid:
 
         def expand_scalars(x: Magnitude) -> np.ndarray:
 
-            if isinstance(x, (float, int)):
-                return np.repeat(x, N).astype(float).reshape(shape)
+            if isinstance_types(x, MagnitudeScalar):
+                return np.repeat(float(x), N).astype(float).reshape(shape)
 
             return x.astype(float)
 
