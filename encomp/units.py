@@ -43,6 +43,7 @@ if SETTINGS.ignore_ndarray_unit_stripped_warning:
 
 
 # custom errors inherit from pint.errors.DimensionalityError
+# (which inherits from TypeError)
 # this makes it possible to use
 # try:
 #     ...
@@ -708,15 +709,15 @@ class Quantity(pint.quantity.Quantity, Generic[DT]):
         yield cls.validate
 
     @classmethod
-    def validate(cls, qty: Quantity[DT]) -> Quantity[DT]:
+    def validate(cls, qty: Union[str, MagnitudeInput, Quantity[DT]]) -> Quantity[DT]:
 
-        if not isinstance(qty, Quantity):
+        if not isinstance_types(qty, Union[str, MagnitudeInput, Quantity]):
             raise TypeError(
-                'Expected instance of Quantity, '
+                'Expected instance of str, MagnitudeInput or Quantity, '
                 f'got {qty} ({type(qty)})'
             )
 
-        return cls(qty.m, qty.u)  # type: ignore
+        return cls(qty)
 
     def check_compatibility(self, other: Union[Quantity, MagnitudeScalar]) -> None:
         """
