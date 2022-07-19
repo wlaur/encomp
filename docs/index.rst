@@ -19,8 +19,9 @@ Main functionality of the ``encomp`` library:
    * Modules :py:mod:`encomp.units`, :py:mod:`encomp.utypes`
    * Extends the `pint <https://pypi.org/project/Pint/>`_ library
    * Uses Python's type system to validate dimensionalities
+   * Compatible with ``mypy`` and other type checkers
    * Integrates with ``np.ndarray`` and ``pd.Series``
-   * Automatic JSON serialization and decoding
+   * JSON serialization and decoding
 * Implements a flexible interface to `CoolProp <http://www.coolprop.org>`_
    * Module :py:mod:`encomp.fluids`
    * Uses quantities for all inputs and outputs (including dimensionless quantities)
