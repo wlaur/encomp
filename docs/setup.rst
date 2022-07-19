@@ -1,12 +1,8 @@
 Setup
 =====
 
-This sections contains various installation instructions.
-``encomp`` requires Python 3.9 and ``conda``.
+``encomp`` requires Python 3.9 or higher.
 The library is tested on Windows and Linux.
-
-Follow `these <https://conda.io/projects/conda/en/latest/user-guide/install/index.html#regular-installation>`_ instructions to install ``conda``.
-A Miniconda installation is sufficient.
 
 
 Installing with ``pip``
@@ -20,9 +16,10 @@ To install ``encomp`` with ``pip``:
 
 This will install ``encomp`` along with its dependencies into the active Python environment.
 
-.. todo::
+.. warning::
 
-    Since the Python bindings for CoolProp do not officially support Python 3.9, CoolProp must be installed from ``conda-forge`` for now:
+    The *CoolProp* package might cause issues when installing with ``pip``.
+    In this case, use ``conda`` to install a prebuilt version from ``conda-forge``:
 
     .. code-block:: bash
 

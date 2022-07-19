@@ -682,9 +682,9 @@ def test_indexing():
 
 def test_plus_minus():
 
-    # TODO: add type hints for this
     l = Q(2, 'm')
 
+    # TODO: add type hints for this
     l_e = l.plus_minus(Q(1, 'cm'))
 
     l2_e = (l_e**2).to('km**2')

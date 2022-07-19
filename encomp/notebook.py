@@ -1,9 +1,7 @@
 """
 Module that imports commonly used functions and
 sets up the ``encomp`` Jupyter Notebook environment.
-
-.. note::
-    This module requires ``IPython``
+This module also works in a non-Jupyter REPL or script.
 """
 
 import sys
@@ -22,18 +20,27 @@ import numpy as np
 import pandas as pd
 import matplotlib
 from matplotlib import pyplot as plt
-import seaborn as sns
-from uncertainties import ufloat
 
-from IPython.core.pylabtools import print_figure
-from IPython.display import (display,
-                             Markdown,
-                             HTML,
-                             SVG,
-                             Javascript,
-                             Math,
-                             IFrame)
+try:
+    import seaborn as sns
+    SNS_PALETTE = sns.color_palette()
+    SNS_BLUE = SNS_PALETTE[0]
 
+except ImportError:
+    pass
+
+
+try:
+    from IPython.core.pylabtools import print_figure
+    from IPython.display import (display,
+                                Markdown,
+                                HTML,
+                                SVG,
+                                Javascript,
+                                Math,
+                                IFrame)
+except ImportError:
+    pass
 
 from encomp.settings import SETTINGS
 from encomp.misc import grid_dimensions
@@ -43,9 +50,6 @@ from encomp.units import Quantity as Q
 from encomp.utypes import *
 from encomp.fluids import Fluid, Water, HumidAir
 
-
-SNS_PALETTE = sns.color_palette()
-SNS_BLUE = SNS_PALETTE[0]
 
 GraphicInput = Union[Path, str, plt.Figure]
 

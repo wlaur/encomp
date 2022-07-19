@@ -7,7 +7,6 @@ dependencies:
   - pip
   - scipy
   - jupyter
-  - CoolProp
   - fire
   - pip:
     - -r requirements.txt

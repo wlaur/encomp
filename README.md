@@ -4,6 +4,8 @@
 
 Documentation at https://encomp.readthedocs.io/en/latest/
 
+`encomp` is tested on Windows and Linux, with Python versions 3.9 and 3.10.
+
 ## Features
 
 Main functionality of the `encomp` library:
@@ -38,6 +40,7 @@ Main functionality of the `encomp` library:
 The other modules implement calculations related to process engineering and thermodynamics.
 The module `encomp.serialize` implements custom JSON serialization and decoding for classes used elsewhere in the library.
 
+
 ## Installation
 
 Install with `pip`:
@@ -48,11 +51,6 @@ pip install encomp
 
 This will install `encomp` along with its dependencies into the currently active Python environment.
 
-> `CoolProp` is not installable with `pip` for Python 3.9. Install manually with `conda` for now:
-
-```
-conda install conda-forge::coolprop
-```
 
 ## Getting started
 
@@ -152,8 +150,7 @@ y = Q[MassFlow](15, 'meter cubed')
 
 
 The `Quantity` subtypes can be used to restrict function and class attribute types at runtime.
-If the `ENCOMP_TYPE_CHECKING` environment variable is set to `True`, the `typeguard.typechecked` decorator is automatically applied to all functions and methods inside the main `encomp` library.
-To use it on your own functions, apply the decorator explicitly:
+Use the ``typeguard.typechecked`` decorator to apply runtime typechecking to function inputs and outputs:
 
 ```python
 from typeguard import typechecked
@@ -288,6 +285,8 @@ See the file `.env.example` in the base of this repository for examples.
   - This could use `TypeVarTuple` (import from `typing_extensions` until Python 3.11)
   - Not supported by `mypy` yet, need to wait with this
 - Document the `Quantity[Dimensionality]` type system
+- The `mypy` tests don't seem to work on Windows, or if the test is run on the `site-packages` version of the package
+  - Error: `ValueError: Not a valid mypy message` is raised at some point
 - What is the license of this package?
   - For example, ``pint`` uses *3-Clause BSD License*, this should be compatible with ``MIT``
   - Should this package include the ``pint`` license text somewhere?

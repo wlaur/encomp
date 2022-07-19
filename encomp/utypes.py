@@ -1,7 +1,5 @@
 """
 Contains type definitions for :py:class:`encomp.units.Quantity` objects.
-If ``encomp.settings.SETTINGS.type_checking`` is ``True``,
-these types will be enforced everywhere.
 
 The dimensionalities defined in this module can be combined with ``*`` and ``/``.
 Some commonly used derived dimensionalities (like density) are defined for convenience.

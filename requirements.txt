@@ -8,8 +8,7 @@ numpy
 pandas
 scipy
 matplotlib
-seaborn
+coolprop
 sympy
 pint>=0.19.2
-uncertainties
 symbolic-equation

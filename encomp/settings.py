@@ -35,9 +35,6 @@ class Settings(BaseSettings):
     * ``DATA_DIRECTORY``: path to a directory with auxiliary data
     * ``UNITS``: path to a file with unit definitions for ``pint``
     * ``ADDITIONAL_UNITS``: path to a file with additional unit definitions for ``pint``
-    * ``TYPE_CHECKING``: whether to check parameter and return value types of the core
-      library function. This does not impact user-defined functions, the
-      ``typeguard.typechecked`` decorator must be used explicitly
     * ``TYPESET_SYMBOL_SCRIPTS``: whether to typeset Sympy symbol sub- and superscripts
     * ``IGNORE_NDARRAY_UNIT_STRIPPED_WARNING``: whether to suppress the ``pint`` warning
       when converting Quantity to Numpy array.
@@ -55,7 +52,6 @@ class Settings(BaseSettings):
     units: FilePath = data_directory / 'units.txt'
     additional_units: FilePath = data_directory / 'additional-units.txt'
 
-    type_checking: bool = False
     typeset_symbol_scripts: bool = True
     ignore_ndarray_unit_stripped_warning: bool = True
 

@@ -10,11 +10,6 @@ RUN conda env create -f environment.yml
 RUN echo "source activate encomp-env" > ~/.bashrc
 ENV PATH /opt/conda/envs/encomp-env/bin:$PATH
 
-# install coolprop
-# TODO: remove this once coolprop supports Python 3.9
-RUN conda install conda-forge::coolprop
-
-
 # copy local whl-file and install
 # use wildcard since filename contains version number
 # make sure that the latest version is the only file in the /dist folder

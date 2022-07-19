@@ -3,4 +3,4 @@ from encomp.settings import SETTINGS
 
 def test_SETTINGS():
 
-    assert isinstance(SETTINGS.type_checking, bool)
+    assert isinstance(SETTINGS.autoconvert_offset_to_baseunit, bool)
