@@ -2,7 +2,7 @@ autopep8
 pytest
 mypy>=0.961
 pytest-mypy-testing
-data-science-types
+pandas-stubs
 hypothesis
 twine
 Sphinx
