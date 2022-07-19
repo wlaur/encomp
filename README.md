@@ -13,8 +13,9 @@ Main functionality of the `encomp` library:
   - Modules `encomp.units`, `encomp.utypes`
   - Extends the [pint](https://pypi.org/project/Pint) library
   - Uses Python's type system to validate dimensionalities
+  - Compatible with ``mypy`` and other type checkers
   - Integrates with `np.ndarray` and `pd.Series`
-  - Automatic JSON serialization and decoding
+  - JSON serialization and decoding
 
 - Implements a flexible interface to [CoolProp](http://www.coolprop.org)
 
@@ -55,10 +56,9 @@ conda install conda-forge::coolprop
 
 ## Getting started
 
-To use `encomp` from a Jupyter Notebook (or REPL), import the `encomp.notebook` module:
+To use `encomp` in a Jupyter Notebook (or REPL), import the `encomp.notebook` module:
 
 ```python
-# imports commonly used functions and registers Notebook magics
 from encomp.notebook import *
 ```
 
@@ -98,21 +98,22 @@ Common dimensionalities can be statically determined based on overload variants 
 Additionally, operations using ``*``, ``**`` and ``/`` are also defined using overload variants for combinations of the default dimensionalities.
 
 
-In case the unit is not registered by default, the type checker will use the dimensionality `Unknown`.
-During runtime, the dimensionality will be evaluated based on the unit that was specified.
-
+In case the dimensionality cannot be inferred, the type checker will use the dimensionality `Unknown`.
+At runtime, the dimensionality will be evaluated based on the unit that was specified.
 The `Unknown` dimensionality is also used for operations using ``*``, ``**`` and ``/`` that are not explicitly defined as overload variants.
+
+
 If necessary, the dimensionality of a quantity can be explicitly specified by providing a subclass of `encomp.utypes.Dimensionality` as type parameter.
 
-Most dimensionalities are defined in the `encomp.utypes` module.
-In case a new dimensionality is created, the classname will be `Dimensionality[...]`, for example `Quantity[Dimensionality[[mass] ** 2 / [length] ** 3]]`.
+Commonly used dimensionalities are defined in the `encomp.utypes` module.
+When a new dimensionality is created, the classname will be `Dimensionality[...]` (for example `Quantity[Dimensionality[[mass] ** 2 / [length] ** 3]]`).
 
 
 ```python
 from encomp.units import Quantity as Q
 from encomp.utypes import Volume, MassFlow
 
-# the types are determined by a static type checker like mypy
+# the types are inferred by a static type checker like mypy
 
 # the unit "m" is registered as a Mass unit
 m = Q(12, 'kg')  # Quantity[Mass]
@@ -187,30 +188,36 @@ another_func(Q(25, 'm'))
 # encomp.units.Quantity[Temperature]; got encomp.units.Quantity[Length] instead
 ```
 
-To create a new dimensionality (for example temperature difference per length), combine the `pint.UnitsContainer` objects stored in the `dimensions` class attribute.
+To create a new dimensionality (for example temperature difference per mass flow rate), combine the `pint.UnitsContainer` objects stored in the `dimensions` class attribute.
 
 
 ```python
 from encomp.units import Quantity as Q
-from encomp.utypes import Temperature, Length, Volume, Dimensionality
+from encomp.units import DimensionalityError
+from encomp.utypes import Temperature, MassFlow, Volume, Dimensionality
 
-class TemperaturePerLength(Dimensionality):
-    dimensions = Temperature.dimensions / Length.dimensions
+class TemperaturePerMassFlow(Dimensionality):
+    dimensions = Temperature.dimensions / MassFlow.dimensions
 
-qty = Q[TemperaturePerLength](1, 'delta_degC / km')
+# note the extra parentheses around (kg/s)
+qty = Q[TemperaturePerMassFlow](1, 'delta_degC/(kg/s)')
 
-# raises an exception since liter is Length**3 and the Quantity expects Length**1
-another_qty = Q[TemperaturePerLength](1, 'delta_degC / liter')
+# raises an exception since liter is Length**3 and the Quantity expects Mass
+try:
+    another_qty = Q[TemperaturePerMassFlow](1, 'delta_degC/(liter/hour)')
+except DimensionalityError:
+    pass
 
 # create a new subclass of Quantity with restricted input units
 
-class CustomDimensionality(Dimensionality):
-    dimensions = Temperature.dimensions / Volume.dimensions
+CustomCoolingCapacity = Q[TemperaturePerMassFlow]
 
-CustomCoolingCapacity = Q[CustomDimensionality]
+# the pint library handles a wide range of input formats and unit names
+q1 = CustomCoolingCapacity(6, '°F per (lbs per week)')
+q2 = Q('3 degree_Fahrenheit per (pound per fortnight)')
 
-# the underlying pint library handles a wide range of input formats and unit names
-assert CustomCoolingCapacity(3, '°F per yard³') == Q('3 degree_Fahrenheit per yard cubed')
+assert q1 == q2
+assert type(q1) is type(q2)
 ```
 
 ### The `Fluid` class
@@ -282,7 +289,7 @@ See the file `.env.example` in the base of this repository for examples.
   - Not supported by `mypy` yet, need to wait with this
 - Document the `Quantity[Dimensionality]` type system
 - What is the license of this package?
-  - For example, ``pint`` uses *3-Clause BSD License* this should be compatible with ``MIT``
+  - For example, ``pint`` uses *3-Clause BSD License*, this should be compatible with ``MIT``
   - Should this package include the ``pint`` license text somewhere?
-  - Extending the ``pint`` package counts as modification
+    - Extending the ``pint`` package counts as modification
 
