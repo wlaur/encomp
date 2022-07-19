@@ -4,7 +4,6 @@ from typing import (Generic,
                     Literal,
                     Generator,
                     Any,
-                    Union,
                     overload,
                     SupportsAbs,
                     SupportsRound)
