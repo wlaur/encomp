@@ -1,4 +1,5 @@
 import os
+import platform
 
 try:
     import fire
@@ -9,13 +10,25 @@ except ImportError:
 
 def build_docs():
 
-    cmds = [
+    if platform.system() == 'Windows':
 
-        # exclude the encomp.tests subpackage
-        'sphinx-apidoc -f -o docs/source encomp encomp/tests',
-        'call docs/make clean',
-        'call docs/make html'
-    ]
+        cmds = [
+
+            # exclude the encomp.tests subpackage
+            'sphinx-apidoc -f -o docs/source encomp encomp/tests',
+            'call docs/make clean',
+            'call docs/make html'
+        ]
+
+    else:
+
+        cmds = [
+
+            # exclude the encomp.tests subpackage
+            'sphinx-apidoc -f -o docs/source encomp encomp/tests',
+            'make --directory docs clean',
+            'make --directory docs html'
+        ]
 
     for n in cmds:
         os.system(n)

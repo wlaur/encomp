@@ -243,7 +243,7 @@ Assigning a quantity object will create a column with ``dtype=object``.
 
 .. warning::
 
-    To avoid issues with ``dtype`` when assigning both vector and scalar quantities to a DataFrame column, make sure to always explicitly assing the *magnitude* of the quantity.
+    To avoid issues with ``dtype`` when assigning both vector and scalar quantities to a DataFrame column, make sure to always explicitly assing the *magnitude* (attribute ``m``) of the quantity.
 
 
 Combining quantities
@@ -342,14 +342,135 @@ Use ``pint.errors.DimensionalityError`` to catch all unit-related errors.
 This error can also be imported from the :py:mod:`encomp.units` module.
 
 
+.. code-block:: python
+
+    from encomp.units import DimensionalityError
+    # alternatively, use pint.errors.DimensionalityError
+    # from pint.errors import DimensionalityError
+
+    try:
+        Q(25, 'bar') + Q(25, 'm')
+    except DimensionalityError as e:
+        print(f'Error: {e}')
+
+    try:
+        Q[Pressure](25, 'm')
+    except DimensionalityError as e:
+        print(f'Error: {e}')
+
+    try:
+        Q(15, 'm').to('kg')
+    except DimensionalityError as e:
+        print(f'Error: {e}')
+
 
 Integration with Pydantic
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The :py:class:`encomp.units.Quantity` class can be used as a field type with Pydantic.
+Pydantic can be used for runtime type validation of class attributes.
+The :py:class:`encomp.units.Quantity` class (along with an optional dimensionality type parameter) can be used as a field type with Pydantic.
+The field types are defined as type hints.
+Pydantic models inherit from the ``pydantic.BaseModel`` class.
 
 
+.. tip::
 
+    Enable the ``Config.validate_all`` flag to validate default values.
+
+
+.. code-block:: python
+
+    from pydantic import BaseModel
+
+    class Model(BaseModel):
+
+        # a can be any dimensionality
+        a: Q
+
+        m: Q[Mass]
+        s: Q[Length]
+
+        # float can be converted to Quantity[Dimensionless]
+        r: Q[Dimensionless] = 0.5
+
+        # float cannot be converted to Quantity[Length]
+        # this raises pydantic.ValidationError (if Config.validate_all is set)
+        # d: Q[Length] = 0.5
+
+        class Config:
+            validate_all = True
+
+
+    # in case the input dimensionalities do not match the type hint,
+    # a runtime error (pydantic.ValidationError) will be raised
+    m = Model(
+        a=Q(25, 'cSt')
+        m=Q(25, 'kg'),
+        s=Q(25, 'cm')
+    )
+
+    print(m)
+    # a=<Quantity(25, 'centistokes')> m=<Quantity(25, 'kilogram')>
+    # s=<Quantity(25, 'centimeter')> r=<Quantity(0.5, 'dimensionless')>
+
+
+The ``pydantic.BaseSettings`` class is used to read, convert and validate key-value pairs from an ``.env``-file.
+
+
+.. tip::
+
+    Enable the ``Config.validate_assignment`` flag to validate attribute assignment.
+    The ``Config.validate_all`` flag does not need to be set explicitly to ``True`` when inheriting from ``BaseSettings``.
+
+    To disable all modifications of the settings instance, set ``Config.allow_mutation`` to ``False``.
+
+``.env``-file:
+
+.. code-block::
+
+    any_quantity=1.215 kJ/kg/K
+    mass=24 kg
+    length=25 m
+    ratio=0.25
+
+
+``.py``-file:
+
+.. code-block:: python
+
+    from pydantic import BaseSettings
+
+    class Settings(BaseSettings):
+
+        any_quantity: Q
+        mass: Q[Mass]
+        length: Q[Length]
+
+        ratio: Q[Dimensionless] = 0
+
+        pressure: Q[Pressure] = Q(1, 'atm')
+
+        class Config:
+            validate_assignment = True
+
+
+    # parameters that are not explicitly passed here are read from the .env-file
+    # if the .env-file does not specify the value, the default value
+    # is used (if it is specified, otherwise pydantic.ValidationError is raised)
+    s = Settings(ratio=0.75)
+
+    print(s)
+    # any_quantity=<Quantity(1.215, 'kilojoule / kelvin / kilogram')>
+    # mass=<Quantity(24.0, 'kilogram')> length=<Quantity(25.0, 'meter')>
+    # ratio=<Quantity(0.75, 'dimensionless')> pressure=<Quantity(1, 'standard_atmosphere')>
+
+    # raises pydantic.ValidationError (since Config.validate_assignment is True)
+    s.mass = Q(25, 'bar')
+
+
+.. note::
+
+    Vector quantities, for example ``Q([25, 26], 'kg')``, cannot be specified with an ``.env``-file.
 
 
 The Fluid class
