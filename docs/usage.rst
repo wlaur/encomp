@@ -752,6 +752,11 @@ This only works for functions that are defined on the top-level in the ``fluids`
 Similar compatibility layers also exist in the `ht <https://pypi.org/project/ht/>`_ and `thermo <https://pypi.org/project/thermo/>`_ packages by the same author.
 
 
+.. note::
+
+    The ``fluids.units`` module must be imported *after* the ``encomp.units`` module.
+
+
 .. code-block:: python
 
     from encomp.units import Quantity as Q
@@ -765,6 +770,7 @@ Similar compatibility layers also exist in the `ht <https://pypi.org/project/ht/
 
     # wrapper that converts the inputs to magnitudes with the correct
     # units and creates a quantity from the output magnitude
+    # imports from fluids.units must happen after encomp.units has been imported
     from fluids.units import integrate_drag_sphere
 
     integrate_drag_sphere(D, rhop, rho, mu, t, V=V)  # 1.037... meter/second
