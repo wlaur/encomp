@@ -21,6 +21,51 @@ from encomp.fluids import Water
 from encomp.utypes import *
 
 
+def test_registry():
+
+
+    from encomp.units import ureg
+    from pint import _DEFAULT_REGISTRY, application_registry
+
+    us = [ureg, _DEFAULT_REGISTRY, application_registry.get()]
+
+    # check that all these objects are the same
+    assert len(set(map(id, us))) == 1
+
+    # check that units from all objects can be combined
+    q = 1 * ureg.kg / _DEFAULT_REGISTRY.s**2 / application_registry.get().m
+    assert isinstance(q, Q[Pressure])
+
+
+def test_type_eq():
+
+    q = Q(25, 'm')
+
+    # this is the recommended way of checking type
+    assert isinstance(q, Q)
+
+    # this is overloaded to work for the Quantity base class
+    # for compatibility with other libraries
+
+    assert type(q) == Q
+    assert Q == type(q)
+
+
+    assert type(Q(2)) == Q
+    assert Q == type(Q(25, 'bar'))
+
+    # __eq__ is overloaded, but these are still different types
+    assert not type(q) is Q
+
+    # subclasses behave as expected
+
+    assert type(q) == Q[Length]
+    assert Q[Length] == type(q)
+
+    assert not type(q) == Q[Dimensionless]
+    assert not Q[Dimensionless] == type(q)
+
+
 def test_Q():
 
     # test that Quantity objects can be constructed

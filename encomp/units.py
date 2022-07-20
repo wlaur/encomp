@@ -85,6 +85,33 @@ class DimensionalityRedefinitionError(ValueError):
 _CUSTOM_DIMENSIONS: list[str] = []
 
 
+_REGISTRY_STATIC_OPTIONS = {
+
+    # if False, degC must be explicitly converted to K when multiplying
+    # this is False by default, there's no reason to set this to True
+    'autoconvert_offset_to_baseunit': SETTINGS.autoconvert_offset_to_baseunit,
+
+    # if this is True, scalar magnitude inputs will
+    # be converted to 1-element arrays
+    # tests are written with the assumption that this is False
+    'force_ndarray_like': False,
+    'force_ndarray': False,
+
+}
+
+
+class _UnitRegistry(UnitRegistry):
+
+    def __setattr__(self, key, value):
+
+        # ensure that static options cannot be overridden
+        if key in _REGISTRY_STATIC_OPTIONS:
+            if value != _REGISTRY_STATIC_OPTIONS[key]:
+                return
+
+        return super().__setattr__(key, value)
+
+
 class _LazyRegistry(LazyRegistry):
 
     def __init(self):
@@ -94,23 +121,20 @@ class _LazyRegistry(LazyRegistry):
         # override the filename
         kwargs['filename'] = str(SETTINGS.units.resolve().absolute())
 
-        self.__class__ = UnitRegistry
+        self.__class__ = _UnitRegistry
         self.__init__(*args, **kwargs)
         self._after_init()
 
 
 ureg: UnitRegistry = _LazyRegistry()  # type: ignore
 
+for k, v in _REGISTRY_STATIC_OPTIONS.items():
+    setattr(ureg, k, v)
+
+# make sure that ureg is the only registry that can be used
+pint._DEFAULT_REGISTRY = ureg
 pint.application_registry.set(ureg)
 
-# if this is True, scalar magnitude inputs will
-# be converted to 1-element arrays
-ureg.force_ndarray = False
-ureg.force_ndarray_like = False
-
-# if False, degC must be explicitly converted to K when multiplying
-# this is False by default, there's no reason to set this to True
-ureg.autoconvert_offset_to_baseunit = SETTINGS.autoconvert_offset_to_baseunit
 
 # enable support for matplotlib axis ticklabels etc...
 try:
@@ -118,6 +142,7 @@ try:
 except ImportError:
     pass
 
+# this option should be changeable
 ureg.default_format = SETTINGS.default_unit_format
 
 try:
@@ -224,7 +249,22 @@ if (
     _load_additional_units()
 
 
-class Quantity(pint.quantity.Quantity, Generic[DT]):
+class QuantityMeta(type):
+
+    def __eq__(mcls, obj: object) -> bool:
+
+        # override the == operator so that
+        # type(val) == Quantity returns True for subclasses
+        if obj is Quantity:
+            return True
+
+        return super().__eq__(obj)
+
+    def __hash__(mcls):
+        return id(mcls)
+
+
+class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
     """
     Subclass of ``pint.quantity.Quantity`` with additional functionality
     and integration with other libraries.

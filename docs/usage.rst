@@ -42,6 +42,19 @@ Convert the pressure to another unit:
 Refer to the unit definition file (``encomp/data/units.txt``) for a list of accepted unit names.
 This definition file is based on the ``defaults_en.txt`` file from ``pint``, with some slight modifications.
 
+Quantities can also be constructed by combining unit objects.
+The unit registry contains a number of common units as attributes.
+
+.. code-block:: python
+
+    from encomp.units import ureg as u
+
+    d = 50 * u.m
+    v = d / u.s
+
+    mf = Q(25, u.kg / u.h)
+
+
 
 Quantity types
 ~~~~~~~~~~~~~~
@@ -722,4 +735,56 @@ The expression must instead be converted to a function with :py:func:`encomp.sym
         z: Q(0.4, 'm³/kg')
     })
     # [26860.5 95726.25] kg
+
+
+
+
+Intergration with other libraries
+---------------------------------
+
+
+``fluids``
+~~~~~~~~~~
+
+The package `fluids <https://pypi.org/project/fluids/>`_ contains a large collection of process engineering functions.
+The compatibility layer ``fluids.units`` automatically handles input and output quantities based on the units specified in the docstrings.
+This only works for functions that are defined on the top-level in the ``fluids`` module.
+Similar compatibility layers also exist in the `ht <https://pypi.org/project/ht/>`_ and `thermo <https://pypi.org/project/thermo/>`_ packages by the same author.
+
+
+.. code-block:: python
+
+    from encomp.units import Quantity as Q
+
+    D = Q(25, 'cm')
+    rhop = Q(800, 'kg/m3')
+    rho = Q(700, 'kg/m3')
+    mu = Q(10, 'cP')
+    t = Q(25, 's')
+    V = Q(25, 'm/s')
+
+    # wrapper that converts the inputs to magnitudes with the correct
+    # units and creates a quantity from the output magnitude
+    from fluids.units import integrate_drag_sphere
+
+    integrate_drag_sphere(D, rhop, rho, mu, t, V=V)  # 1.037... meter/second
+
+    # in case the function is imported with
+    # from fluids import integrate_drag_sphere (i.e. not via the .units layer)
+    # the following error is raised:
+    # DimensionalityComparisonError: Cannot compare Quantity and <class 'float'>
+
+
+In case any of the inputs have incorrect units, an error is raised before the function is evaluated:
+
+
+.. code-block:: python
+
+    from fluids.units import Reynolds
+
+    # the "nu" parameter is kinematic viscosity, but cP is a unit of dynamic viscosity
+    Reynolds(V=Q(1, 'm/s'), D=Q(15, 'cm'), nu=Q(12, 'cP'))
+    # ValueError: Converting 12 cP to units of m^2/s raised
+    # DimensionalityError: Cannot convert from 'centipoise' ([mass] / [length] / [time])
+    # to 'meter ** 2 / second' ([length] ** 2 / [time])
 
