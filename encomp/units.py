@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import re
 import warnings
+import copy
 import numbers
-from typing import Union, Optional, Generic, Union
+from typing import Union, Optional, Generic, Union, Any, TypeVar
 
 import sympy as sp
 import numpy as np
@@ -133,7 +134,7 @@ for k, v in _REGISTRY_STATIC_OPTIONS.items():
     setattr(ureg, k, v)
 
 # make sure that ureg is the only registry that can be used
-pint._DEFAULT_REGISTRY = ureg
+pint._DEFAULT_REGISTRY = ureg  # type: ignore
 pint.application_registry.set(ureg)
 
 
@@ -339,14 +340,18 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
     NORMAL_M3_VARIANTS = ('nm³', 'Nm³', 'nm3', 'Nm3',
                           'nm**3', 'Nm**3', 'nm^3', 'Nm^3')
 
+    # attributes used internally by pint
+    __used: bool
+
     def __hash__(self) -> int:
         return super().__hash__()
 
     @classmethod
-    def _get_dimensional_subclass(cls, dim: type[Dimensionality]) -> type[Quantity[DT]]:
+    def _get_dimensional_subclass(cls, dim: Optional[type[Dimensionality]]) -> type[Quantity[DT]]:
 
-        # NOTE: this classmethod is called when defining type hints
-        # on Python <3.10 (unless from __future__ import annotations is active)
+        # this never happens at runtime
+        if dim is None:
+            dim = Dimensionless
 
         if dim.__name__ in cls._subclasses:
             return cls._subclasses[dim.__name__]
@@ -368,6 +373,13 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
         return DimensionalQuantity
 
     def __class_getitem__(cls, dim: type[DT]) -> type[Quantity[DT]]:
+
+        # NOTE: this method is called when defining type hints
+        # on Python <3.10 (unless from __future__ import annotations is active)
+
+        # use Unknown as a proxy for type variables
+        if isinstance(dim, TypeVar):
+            dim = Unknown
 
         if not isinstance(dim, type):
             raise TypeError(
@@ -419,6 +431,10 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
     def get_unit(cls, unit_name: str) -> Unit:
         return cls._REGISTRY.parse_units(unit_name)
 
+    @property
+    def subclass(self) -> type[Quantity[DT]]:
+        return self._get_dimensional_subclass(self.dimensionality_type)
+
     def __len__(self) -> int:
 
         # __len__() must return an integer
@@ -440,6 +456,31 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
             f'({type(self._magnitude)})'
         )
 
+    def __copy__(self) -> Quantity[DT]:
+
+        ret = self.subclass(
+            copy.copy(self._magnitude),
+            self._units
+        )
+
+        ret.__used = self.__used
+
+        return ret
+
+    def __deepcopy__(self, memo: Optional[dict[int, Any]] = None) -> Quantity[DT]:
+
+        if memo is None:
+            memo = {}
+
+        ret = self.subclass(
+            copy.deepcopy(self._magnitude, memo),
+            copy.deepcopy(self._units, memo)
+        )
+
+        ret.__used = self.__used
+
+        return ret
+
     def __new__(  # type: ignore
         cls,
         val: Union[MagnitudeInput, Quantity[DT], str],
@@ -453,6 +494,13 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
     ) -> Quantity[DT]:
 
         if unit is None:
+
+            # nested calls, for example Q(Q(1, 'kg')) are handled
+            # separately to preserve the dimensionality type
+            # TODO: this creates unnecessary copies of the magnitude
+            # this is an issue for large array magnitudes
+            if isinstance(val, Quantity) and cls.dimensionality_type is None:
+                return val.__deepcopy__()
 
             # support passing only string input, this is not recommended
             delimiter = ' '
@@ -484,8 +532,8 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
 
         if cls.dimensionality_type is Unknown:
             raise TypeError(
-                'Cannot initialize Quantity with Unknown dimensionality, '
-                'the Unknown dimensionality type can only be used in type hints'
+                'Cannot initialize Quantity with Unknown (or variable) dimensionality, '
+                'this dimensionality type can only be used in type hints'
             )
 
         if cls.dimensionality_type is None:
@@ -554,10 +602,12 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
         return self._magnitude
 
     def to_reduced_units(self) -> Quantity[DT]:
-        return super().to_reduced_units()  # type: ignore
+        ret = super().to_reduced_units()
+        return self.subclass(ret)
 
     def to_base_units(self) -> Quantity[DT]:
-        return super().to_base_units()  # type: ignore
+        ret = super().to_base_units()
+        return self.subclass(ret)
 
     def to(self,  # type: ignore[override]
            unit: Union[Unit, UnitsContainer, str, Quantity[DT], dict]) -> Quantity[DT]:
@@ -565,7 +615,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
         unit = self._to_unit(unit)
         m = self._convert_magnitude_not_inplace(unit)
 
-        return self.__class__(m, unit)
+        return self.subclass(m, unit)
 
     def ito(self,  # type: ignore[override]
             unit: Union[Unit, UnitsContainer, str, Quantity[DT]]) -> None:
@@ -846,11 +896,12 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
                 f'{type(self)} and {type(other)}. '
             )
 
-    def is_compatible_with(self, other):
+    def is_compatible_with(self, other, *contexts, **ctx_kwargs):
 
         # add an additional check of the dimensionality types
-
-        is_compatible = super().is_compatible_with(other)
+        is_compatible = super().is_compatible_with(
+            other, *contexts, **ctx_kwargs
+        )
 
         if not is_compatible:
             return False
@@ -882,13 +933,13 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
         if isinstance(other, (Quantity, Unit)):
             return ret
 
-        return self.__class__[self.dimensionality_type](ret)
+        return self.subclass(ret)
 
     def __rmul__(self, other):
 
         ret = super().__rmul__(other)
 
-        return self.__class__[self.dimensionality_type](ret)
+        return self.subclass(ret)
 
     def __truediv__(self, other):
 
@@ -897,21 +948,21 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
         if isinstance(other, (Quantity, Unit)):
             return ret
 
-        return self.__class__[self.dimensionality_type](ret)
+        return self.subclass(ret)
 
     def __add__(self, other):
 
         self.check_compatibility(other)
         ret = super().__add__(other)
 
-        return self.__class__[self.dimensionality_type](ret)
+        return self.subclass(ret)
 
     def __sub__(self, other):
 
         self.check_compatibility(other)
         ret = super().__sub__(other)
 
-        return self.__class__[self.dimensionality_type](ret)
+        return self.subclass(ret)
 
     def __gt__(self, other):
 

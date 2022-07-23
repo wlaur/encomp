@@ -1,6 +1,7 @@
 from typing import TypedDict
 from decimal import Decimal
 from contextlib import contextmanager
+import copy
 
 import pytest
 from pytest import approx
@@ -84,10 +85,19 @@ def test_custom_dimensionality():
         class Custom(Dimensionality):
             dimensions = Temperature.dimensions**2 / Length.dimensions
 
+        _custom = Custom
+
         q1 = Q[Custom](1, 'degC**2/m')
 
         class Custom(Dimensionality):
             dimensions = Temperature.dimensions**2 / Length.dimensions
+
+        # the classes are not identical
+        assert Custom is not _custom
+
+        # the Q[DT] type only considers the class name,
+        # which is identical
+        assert Q[Custom] is Q[_custom]
 
         q2 = Q[Custom](1, 'degC**2/m')
 
@@ -95,11 +105,15 @@ def test_custom_dimensionality():
         # but the dimensionality types don't match
         assert q1 == q2
 
-        assert type(q1) == type(q2)
+        assert type(q1) == type(q2) == Q[Custom]
         assert isinstance(q1, type(q2))
         assert isinstance(q2, type(q1))
         assert isinstance(q1 + q2, type(q1))
         assert isinstance(q2 - q1, type(q1))
+
+        assert isinstance(q1.to('degC**2/km'), type(q1))
+        assert isinstance(q1.to_base_units(), type(q1))
+        assert isinstance(q1.to_reduced_units(), type(q1))
 
         with pytest.raises(TypeError):
 
@@ -1014,3 +1028,17 @@ def test_decimal():
         # this does not work with pint's internal API
         # unsupported operand type(s) for *: 'decimal.Decimal' and 'float'
         q.to('g')
+
+
+def test_copy():
+
+    q = Q(25, 'm')
+
+    assert isinstance(q, Q[Length])
+    assert isinstance(q.__copy__(), Q[Length])
+
+    assert isinstance(q.__deepcopy__(), Q[Length])
+    assert isinstance(q.__deepcopy__({}), Q[Length])
+
+    assert isinstance(copy.copy(q), Q[Length])
+    assert isinstance(copy.deepcopy(q), Q[Length])

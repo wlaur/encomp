@@ -1,4 +1,5 @@
 from typing import TYPE_CHECKING
+import copy
 
 import pytest
 
@@ -8,6 +9,7 @@ from encomp.utypes import (Dimensionless,
                            NormalVolumeFlow,
                            MassFlow,
                            Time,
+                           Length,
                            Mass,
                            Temperature)
 
@@ -20,6 +22,10 @@ if not TYPE_CHECKING:
 # autopep8: off
 # ... some code above the line length limit
 # autopep8: on
+
+
+class Distance(Length):
+    pass
 
 
 @pytest.mark.mypy_testing
@@ -46,6 +52,53 @@ def test_quantity_reveal_type() -> None:
     reveal_type(ms)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
     reveal_type(ms[0])  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
 
+    ms_ = Q(ms)
+    reveal_type(ms_)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+
+
+@pytest.mark.mypy_testing
+def test_quantity_reveal_type_copy() -> None:
+
+    # autopep8: off
+
+    q = Q(25, 'm')
+
+    reveal_type(q)  # R: encomp.units.Quantity[encomp.utypes.Length]
+    reveal_type(q.__copy__())  # R: encomp.units.Quantity[encomp.utypes.Length]
+    reveal_type(q.__deepcopy__())  # R: encomp.units.Quantity[encomp.utypes.Length]
+
+    reveal_type(copy.copy(q))  # R: encomp.units.Quantity[encomp.utypes.Length]
+    reveal_type(copy.deepcopy(q))  # R: encomp.units.Quantity[encomp.utypes.Length]
+
+    # autopep8: on
+
+
+@pytest.mark.mypy_testing
+def test_quantity_reveal_custom_type() -> None:
+
+    # Distance is a custom dimensionality that is defined in this module
+    # in case the subclass is defined inside this function,
+    # mypy will identify the type as
+    # encomp.units.Quantity[encomp.tests.test_quantity_types.Distance@XX]
+    # where XX is the line number of the class definition inside the function
+    d = Q[Distance](1, str('m'))
+
+    # autopep8: off
+
+    reveal_type(d)  # R: encomp.units.Quantity[encomp.tests.test_quantity_types.Distance]
+    reveal_type(d.to('km'))  # R: encomp.units.Quantity[encomp.tests.test_quantity_types.Distance]
+    reveal_type(d.to_reduced_units())  # R: encomp.units.Quantity[encomp.tests.test_quantity_types.Distance]
+    reveal_type(d.to_base_units())  # R: encomp.units.Quantity[encomp.tests.test_quantity_types.Distance]
+
+    reveal_type(d * 2)  # R: encomp.units.Quantity[encomp.tests.test_quantity_types.Distance]
+    reveal_type(2 * d)  # R: encomp.units.Quantity[encomp.tests.test_quantity_types.Distance]
+    reveal_type(d + d)  # R: encomp.units.Quantity[encomp.tests.test_quantity_types.Distance]
+    reveal_type(d - d)  # R: encomp.units.Quantity[encomp.tests.test_quantity_types.Distance]
+    reveal_type((d - d / 2) * 2.5)  # R: encomp.units.Quantity[encomp.tests.test_quantity_types.Distance]
+
+
+    # autopep8: off
+
 
 @pytest.mark.mypy_testing
 def test_quantity_construction() -> None:
@@ -71,9 +124,6 @@ def test_quantity_construction() -> None:
     mf_ = Q(25, 'kg/s')
     mf = Q[MassFlow](25, 'kg/week')
     e = Q(25, 'kJ')
-
-
-    # autopep8: off
 
     reveal_type(mf_)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
     reveal_type(mf)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]

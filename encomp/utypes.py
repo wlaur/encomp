@@ -365,13 +365,19 @@ class Dimensionality(ABC):
 
 # type variables that represent a certain dimensionality
 # the DT_ type is used to signify a different dimensionality than DT
-# NOTE: the DT/DT_ type variables will represent an instance of DT when used
+# the DT/DT_ type variables will represent an instance of DT when used
 # as type hints (e.g. def func(...) -> DT)
 # a function that returns a class definition/type should be annotated as
 # func(...) -> type[DT]
 # however, when used as type parameters, they do not represent instances
-# e.g. Quantity[DT] means a subclass of Quantity with dimensionality type DT,
-# the dimensionality is not an instance of DT but instead the type DT
+# e.g. Q[DT] means a subclass of Q with dimensionality type DT,
+# the dimensionality is not an instance of DT but instead the *type* DT
+
+# these type variables are invariant, since
+# Q[DimA] is not a subclass of Q[DimB] if DimA is a subclass of DimB
+# all Q[DT] subclasses are direct subclasses of Q
+# it might make sense to consider DT as covariant, but it won't have any practical advantages,
+# and it does not match the actual implementation
 DT = TypeVar('DT', bound=Dimensionality)
 DT_ = TypeVar('DT_', bound=Dimensionality)
 
