@@ -78,7 +78,7 @@ Each new dimensionality is represented by a unique subclass of :py:class:`encomp
 
 To create a subclass of :py:class:`encomp.units.Quantity` with a certain dimensionality, provide a dimensionality *type parameter* using square brackets.
 All dimensionality type parameters must inherit from :py:class:`encomp.utypes.Dimensionality`.
-The actual dimensionality (a combination of the seven base dimensions) is specified as a ``pint.unit.UnitsContainer`` instance (class attribute ``dimensions``).
+The dimensions of a dimensionality (a combination of the seven base dimensions) is specified as a ``pint.unit.UnitsContainer`` instance (class attribute ``dimensions``).
 
 .. note::
 
@@ -95,6 +95,7 @@ The module :py:mod:`encomp.utypes` contains :py:class:`encomp.utypes.Dimensional
 
     Pressure.dimensions # <UnitsContainer({'[length]': -1, '[mass]': 1, '[time]': -2})>
 
+    # the class name PowerPerLength must be globally unique
     class PowerPerLength(Dimensionality):
         dimensions = Power.dimensions / Length.dimensions
 

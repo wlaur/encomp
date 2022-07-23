@@ -132,10 +132,10 @@ def test_quantity_mul_types() -> None:
     reveal_type(k5)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
     reveal_type(k6)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
 
-    class CustomDimensionless(Dimensionless):
+    class _CustomDimensionless(Dimensionless):
         pass
 
-    d_custom = Q[CustomDimensionless](0.5)
+    d_custom = Q[_CustomDimensionless](0.5)
 
     k7 = m * d_custom
     k8 = d_custom * m
@@ -145,7 +145,7 @@ def test_quantity_mul_types() -> None:
 
     # alternative way of specifying the dimensionality
     # NOTE: the _dt parameter is ignored at runtime, the subclass will not be validated
-    d_custom_ = Q(0.6, _dt=CustomDimensionless)
+    d_custom_ = Q(0.6, _dt=_CustomDimensionless)
     k9 = m * d_custom_
     k10 = d_custom * m
 

@@ -193,6 +193,7 @@ from encomp.units import Quantity as Q
 from encomp.units import DimensionalityError
 from encomp.utypes import Temperature, MassFlow, Volume, Dimensionality
 
+# the class name TemperaturePerMassFlow must be globally unique
 class TemperaturePerMassFlow(Dimensionality):
     dimensions = Temperature.dimensions / MassFlow.dimensions
 

@@ -21,7 +21,6 @@ import numpy as np
 import pandas as pd
 from pint.unit import UnitsContainer
 
-
 MagnitudeScalar = Union[float, int]
 
 MagnitudeInput = Union[
@@ -264,11 +263,30 @@ class Dimensionality(ABC):
         if not hasattr(cls, 'dimensions'):
             raise AttributeError(
                 'Subtypes of Dimensionality must define the '
-                'attribute "dimensions" (an instance of pint.unit.UnitsContainer)'
+                'attribute "dimensions" (instance of pint.unit.UnitsContainer)'
             )
+
+        # ensure that the subclass names are unique
+        if cls.__name__ in (subcls.__name__ for subcls in cls._registry):
+
+            existing = next(filter(lambda x: x.__name__ == cls.__name__,
+                                   cls._registry))
+
+            if cls.dimensions != existing.dimensions:
+                raise TypeError(
+                    'Cannot create dimensionality subclass with '
+                    f'name "{cls.__name__}", another subclass with '
+                    'this name already exists and the dimensions do '
+                    f'not match: {cls.dimensions} != {existing.dimensions}'
+                )
+
+            # don't create a new subclass with the same name
+            return
 
         # the Unknown dimensionality subclass has dimensions=None
         # it will never be used at runtime, only during type checking
+        # a subclass that will be used to create more subclasses
+        # might also have dimensions=None
         if cls.dimensions is None:
             return
 
@@ -353,7 +371,7 @@ class Dimensionality(ABC):
 # func(...) -> type[DT]
 # however, when used as type parameters, they do not represent instances
 # e.g. Quantity[DT] means a subclass of Quantity with dimensionality type DT,
-# the dimensionality is not an instance of DT
+# the dimensionality is not an instance of DT but instead the type DT
 DT = TypeVar('DT', bound=Dimensionality)
 DT_ = TypeVar('DT_', bound=Dimensionality)
 

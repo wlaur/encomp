@@ -33,6 +33,7 @@ from encomp.utypes import (_BASE_SI_UNITS,
                            Magnitude,
                            DT,
                            Dimensionality,
+                           Dimensionless,
                            Unknown)
 
 if SETTINGS.ignore_ndarray_unit_stripped_warning:
@@ -287,13 +288,16 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
     # override ClassVar
     _REGISTRY: UnitRegistry = ureg  # type: ignore
 
-    _DIMENSIONAL_SUBCLASSES: dict[type[Dimensionality], type[Quantity]] = {}
+    # mapping from dimensionality subclass name to quantity subclass
+    # this dict will be populated at runtime
+    # use a custom class attribute (not cls.__subclasses__()) for more control
+    _subclasses: dict[str, type[Quantity]] = {}
 
     # used to validate dimensionality using type checking,
     # if None the dimensionality is not checked
     # subclasses of Quantity have this class attribute set, which
     # will restrict the dimensionality when creating the object
-    _dimensionality_type: Optional[type[Dimensionality]] = None
+    dimensionality_type: Optional[type[Dimensionality]] = None
 
     _dimension_symbol_map: Optional[dict[sp.Basic, Unit]] = None
 
@@ -341,8 +345,11 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
     @classmethod
     def _get_dimensional_subclass(cls, dim: type[Dimensionality]) -> type[Quantity[DT]]:
 
-        if dim in cls._DIMENSIONAL_SUBCLASSES:
-            return cls._DIMENSIONAL_SUBCLASSES[dim]
+        # NOTE: this classmethod is called when defining type hints
+        # on Python <3.10 (unless from __future__ import annotations is active)
+
+        if dim.__name__ in cls._subclasses:
+            return cls._subclasses[dim.__name__]
 
         quantity_name = f'Quantity[{dim.__name__}]'
 
@@ -350,13 +357,13 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
             quantity_name,
             (Quantity,),
             {
-                '_dimensionality_type': dim,
+                'dimensionality_type': dim,
                 '__class__': Quantity,
 
             }
         )
 
-        cls._DIMENSIONAL_SUBCLASSES[dim] = DimensionalQuantity
+        cls._subclasses[dim.__name__] = DimensionalQuantity
 
         return DimensionalQuantity
 
@@ -364,16 +371,21 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
 
         if not isinstance(dim, type):
             raise TypeError(
-                'Generic type parameter to Quantity must be an '
-                'encomp.utypes.Dimensionality subtype, '
+                'Generic type parameter to Quantity must be a type object, '
                 f'passed an instance of {type(dim)}: {dim}'
             )
 
-        if not issubclass(dim, Dimensionality):
+        # check if the attribute dimensions exists instead of using issubclass()
+        if not hasattr(dim, 'dimensions'):
             raise TypeError(
-                'Generic type parameter to Quantity must be an '
-                'encomp.utypes.Dimensionality subtype, '
+                'Generic type parameter to Quantity has no attribute "dimensions", '
                 f'passed: {dim}'
+            )
+
+        if not isinstance(dim.dimensions, (UnitsContainer, type(None))):
+            raise TypeError(
+                'Generic type parameter to Quantity has incorrect type for attribute "dimensions", '
+                f'passed: {dim} with dimensions: {dim.dimensions} ({type(dim.dimensions)})'
             )
 
         return cls._get_dimensional_subclass(dim)
@@ -470,7 +482,13 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
 
         valid_unit = cls._validate_unit(unit)
 
-        if cls._dimensionality_type is None:
+        if cls.dimensionality_type is Unknown:
+            raise TypeError(
+                'Cannot initialize Quantity with Unknown dimensionality, '
+                'the Unknown dimensionality type can only be used in type hints'
+            )
+
+        if cls.dimensionality_type is None:
 
             # in case this Quantity was initialized without specifying
             # the dimensionality, check the dimensionality and return the
@@ -485,13 +503,20 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
 
             # the __new__ method will be called again, as part of the subclass
             subcls = cls._get_dimensional_subclass(dim)
+
             return subcls(val, valid_unit)
 
-        expected_dimensionality = cls._dimensionality_type
+        expected_dimensionality = cls.dimensionality_type
+
+        if expected_dimensionality.dimensions is None:
+            raise DimensionalityTypeError(
+                'Cannot initialize Quantity with dimensionality '
+                f'{expected_dimensionality.__name__}, the "dimensions" attribute is None'
+            )
 
         if valid_unit.dimensionality != expected_dimensionality.dimensions:
             raise ExpectedDimensionalityError(
-                f'Quantity with unit "{valid_unit}" has incorrect '
+                f'Quantity with unit "{str(valid_unit) or "dimensionless"}" has incorrect '
                 f'dimensionality {valid_unit.dimensionality}, '
                 f'expected {expected_dimensionality.dimensions}'
             )
@@ -774,8 +799,8 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
 
             return
 
-        dim = self._dimensionality_type
-        other_dim = other._dimensionality_type
+        dim = self.dimensionality_type
+        other_dim = other.dimensionality_type
 
         # this never happens at runtime
         if dim is None or other_dim is None:
@@ -787,7 +812,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
         # dimensionality of other or vice versa
         if issubclass(dim, other_dim) or issubclass(other_dim, dim):
 
-            # verify that the actual dimensions also match
+            # verify that the dimensions also match
             # this is also verified in the Dimensionality.__init_subclass__ method
             if dim.dimensions != other_dim.dimensions:
                 raise DimensionalityTypeError(
@@ -802,17 +827,17 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
         # normal case, check that the types of Quantity is the same
         if not type(self) is type(other):
 
-            # different error message if the actual dimensions match, but not the type
-            if self._dimensionality_type is None or other._dimensionality_type is None:
+            # different error message if the dimensions match, but not the type
+            if self.dimensionality_type is None or other.dimensionality_type is None:
                 raise DimensionalityTypeError(
                     f'One or both quantities are missing dimensionalities: '
                     f'{type(self)} and {type(other)}. '
                 )
 
-            if self._dimensionality_type.dimensions == other._dimensionality_type.dimensions:
+            if self.dimensionality_type.dimensions == other.dimensionality_type.dimensions:
                 raise DimensionalityTypeError(
                     f'Quantities with different dimensionalities are not compatible: '
-                    f'{type(self)} and {type(other)}. The actual dimensions match, '
+                    f'{type(self)} and {type(other)}. The dimensions match, '
                     'but the dimensionalities have different types.'
                 )
 
@@ -821,15 +846,72 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
                 f'{type(self)} and {type(other)}. '
             )
 
+    def is_compatible_with(self, other):
+
+        # add an additional check of the dimensionality types
+
+        is_compatible = super().is_compatible_with(other)
+
+        if not is_compatible:
+            return False
+
+        try:
+            self.check_compatibility(other)
+            return True
+        except DimensionalityTypeError:
+            return False
+
+    def __eq__(self, other):
+
+        # this returns an array of one or both inputs have array magnitudes
+        is_equal = super().__eq__(other)
+
+        if isinstance(is_equal, np.ndarray):
+
+            if self.is_compatible_with(other):
+                return is_equal
+
+            return np.zeros_like(is_equal).astype(bool)
+
+        return is_equal and self.is_compatible_with(other)
+
+    def __mul__(self, other):
+
+        ret = super().__mul__(other)
+
+        if isinstance(other, (Quantity, Unit)):
+            return ret
+
+        return self.__class__[self.dimensionality_type](ret)
+
+    def __rmul__(self, other):
+
+        ret = super().__rmul__(other)
+
+        return self.__class__[self.dimensionality_type](ret)
+
+    def __truediv__(self, other):
+
+        ret = super().__truediv__(other)
+
+        if isinstance(other, (Quantity, Unit)):
+            return ret
+
+        return self.__class__[self.dimensionality_type](ret)
+
     def __add__(self, other):
 
         self.check_compatibility(other)
-        return super().__add__(other)
+        ret = super().__add__(other)
+
+        return self.__class__[self.dimensionality_type](ret)
 
     def __sub__(self, other):
 
         self.check_compatibility(other)
-        return super().__sub__(other)
+        ret = super().__sub__(other)
+
+        return self.__class__[self.dimensionality_type](ret)
 
     def __gt__(self, other):
 

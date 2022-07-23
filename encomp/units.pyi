@@ -172,6 +172,9 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
     @classmethod
     def validate(cls, qty: Quantity[DT]) -> Quantity[DT]: ...
 
+    def is_compatible_with(self, other: Union[Quantity, MagnitudeScalar]
+                           ) -> bool: ...
+
     def check_compatibility(self, other: Union[Quantity, MagnitudeScalar]
                             ) -> None: ...
 
