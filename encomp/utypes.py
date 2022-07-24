@@ -308,7 +308,7 @@ class Dimensionality(ABC):
                 raise TypeError(
                     f'Cannot create subclass of {parent} where '
                     'the dimensions do not match. Tried to '
-                    f'create subclass with {cls.dimensions} but '
+                    f'create subclass with dimensions {cls.dimensions}, but '
                     f'the parent has dimensions {parent.dimensions}'
                 )
 
@@ -364,15 +364,7 @@ class Dimensionality(ABC):
 
 
 # type variables that represent a certain dimensionality
-# the DT_ type is used to signify a different dimensionality than DT
-# the DT/DT_ type variables will represent an instance of DT when used
-# as type hints (e.g. def func(...) -> DT)
-# a function that returns a class definition/type should be annotated as
-# func(...) -> type[DT]
-# however, when used as type parameters, they do not represent instances
-# e.g. Q[DT] means a subclass of Q with dimensionality type DT,
-# the dimensionality is not an instance of DT but instead the *type* DT
-
+# the DT_ type variable is used to signify a different dimensionality than DT
 # these type variables are invariant, since
 # Q[DimA] is not a subclass of Q[DimB] if DimA is a subclass of DimB
 # all Q[DT] subclasses are direct subclasses of Q

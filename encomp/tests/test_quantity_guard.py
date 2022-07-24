@@ -32,7 +32,7 @@ def test_quantity_typeguard() -> None:
     reveal_type(q)  # R: Union[encomp.units.Quantity[encomp.utypes.Length], encomp.units.Quantity[encomp.utypes.Velocity]]
 
 
-    # TODO: this does not work with mypy, does work with pylance
+    # TODO: this does not work with mypy, does work with pyright
     if isinstance_types(q, Q[Length]):
 
         # mypy infers Q[Unknown] from the type: ignore assignment

@@ -43,7 +43,7 @@ def test_quantity_reveal_type() -> None:
     # the type will be correct at runtime
     unknown = Q(25, 'bar/week')  # E: Need type annotation for "unknown"
 
-    # TODO: mypy infers the dimensionality type as Any, but pylance
+    # TODO: mypy infers the dimensionality type as Any, but pyright
     # correctly identifies it as Unknown
     reveal_type(unknown)  # R: encomp.units.Quantity[Any]
 

@@ -31,7 +31,7 @@ def test_simple_signatures() -> None:
         f1(Q(25, 'm'))  # E: Argument 1 to "f1" has incompatible type "Quantity[Length]"; expected "Quantity[Temperature]"
 
     # missing return type hint
-    # mypy cannot infer that return type is Q[Pressure] | None (pylance handles this)
+    # mypy cannot infer that return type is Q[Pressure] | None (pyright handles this)
     def f2(a: Q[Temperature]):
 
 

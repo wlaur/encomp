@@ -442,17 +442,14 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
         if isinstance_types(self._magnitude, MagnitudeScalar):
 
             raise TypeError(
-                f'Quantity with scalar magnitude ({self._magnitude}) has no len(). '
-                'In case this error occurs when assigning to a pd.DataFrame, '
-                'try assigning the magnitude instead of the quantity '
-                '(df["column"] = qty.m instead of df["column"] = qty)'
+                f'Quantity with scalar magnitude ({self._magnitude}) has no length'
             )
 
         elif isinstance(self._magnitude, np.ndarray):
             return len(self._magnitude)
 
         raise TypeError(
-            f'Cannot determine len() of {self._magnitude} '
+            f'Cannot determine length of {self._magnitude} '
             f'({type(self._magnitude)})'
         )
 

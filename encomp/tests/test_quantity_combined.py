@@ -125,7 +125,7 @@ def test_quantity_custom_pow_types() -> None:
     reveal_type(s**2)  # R: encomp.units.Quantity[encomp.utypes.Area]
     reveal_type(s**3)  # R: encomp.units.Quantity[encomp.utypes.Volume]
 
-    # this works with pylance but not mypy for some reason...
+    # this works with pyright but not mypy for some reason...
     exp = 2
     reveal_type(s**exp)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
 
@@ -153,7 +153,7 @@ def test_convert_mass_flow_types() -> None:
 
     unknown_output = convert_volume_mass(p1)
 
-    # mypy does not identify this as Union[...], but pylance does
+    # mypy does not identify this as Union[...], but pyright does
     reveal_type(unknown_output)  # R: encomp.units.Quantity[Any]
 
 

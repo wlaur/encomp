@@ -83,7 +83,7 @@ def test_quantity_unspecified_type() -> None:
     reveal_type(Q(25, 'kW/m^2'))  # R: encomp.units.Quantity[<nothing>]
 
     # string literals can be used as variables, however mypy does not handle this
-    # this is correctly inferred by pylance
+    # this is correctly inferred by pyright
 
     unit = 'kg/s'
     reveal_type(Q(25, unit))  # R: encomp.units.Quantity[<nothing>]
