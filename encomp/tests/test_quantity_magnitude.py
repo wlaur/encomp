@@ -1,15 +1,13 @@
+from typing import TYPE_CHECKING
+
 import pytest
 import numpy as np
 
 
 from encomp.units import Quantity as Q
 
-
-# it's important that the expected mypy output is a comment on the
-# same line as the expression, disable autopep8 if necessary with
-# autopep8: off
-# ... some code above the line length limit
-# autopep8: on
+if not TYPE_CHECKING:
+    def reveal_type(x): return x
 
 
 @pytest.mark.mypy_testing
@@ -30,7 +28,6 @@ def test_quantity_magnitude_types() -> None:
         reveal_type(p1.m) # R: builtins.float
 
         # autopep8: on
-
 
     p2 = Q([25, 35], 'km')
 

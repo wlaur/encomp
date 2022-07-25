@@ -1,5 +1,6 @@
 autopep8
 pytest
+coverage
 mypy>=0.961
 pytest-mypy-testing
 pandas-stubs

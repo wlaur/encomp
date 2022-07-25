@@ -6,8 +6,6 @@ typing-extensions
 asttokens
 numpy
 pandas
-scipy
-matplotlib
 coolprop
 sympy
 pint>=0.19.2

@@ -3,7 +3,11 @@ Functions relating to thermodynamics.
 """
 
 from typing import Union
-from scipy.optimize import fsolve
+
+try:
+    from scipy.optimize import fsolve
+except ImportError:
+    fsolve = None
 
 from encomp.misc import isinstance_types
 from encomp.units import Quantity
@@ -175,6 +179,12 @@ def intermediate_temperatures(
         The intermediate temperatures :math:`T_1` and :math:`T_2`:
         the surface temperatures of the inside and outside of the barrier
     """
+
+    if fsolve is None:
+        raise ModuleNotFoundError(
+            f'Module scipy.optimize was not found, '
+            'install with "pip install scipy"'
+        )
 
     # convert input to numerical values with correct unit
     T_s_val = T_s.to('K').m

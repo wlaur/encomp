@@ -1,7 +1,6 @@
 """
 Miscellaneous functions that do not fit anywhere else.
 """
-
 import ast
 import asttokens
 import numpy as np

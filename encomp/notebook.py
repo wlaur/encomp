@@ -18,8 +18,17 @@ from typing import Union
 
 import numpy as np
 import pandas as pd
-import matplotlib
-from matplotlib import pyplot as plt
+
+try:
+    import matplotlib
+    from matplotlib import pyplot as plt
+    from matplotlib_inline.backend_inline import set_matplotlib_formats
+
+    GraphicInput = Union[Path, str, plt.Figure]
+
+except ImportError:
+    matplotlib = None
+    GraphicInput = Union[Path, str]  # type: ignore
 
 try:
     import seaborn as sns
@@ -33,17 +42,17 @@ except ImportError:
 try:
     from IPython.core.pylabtools import print_figure
     from IPython.display import (display,
-                                Markdown,
-                                HTML,
-                                SVG,
-                                Javascript,
-                                Math,
-                                IFrame)
+                                 Markdown,
+                                 HTML,
+                                 SVG,
+                                 Javascript,
+                                 Math,
+                                 IFrame)
 except ImportError:
     pass
 
 from encomp.settings import SETTINGS
-from encomp.misc import grid_dimensions
+from encomp.misc import grid_dimensions as _grid_dimensions
 from encomp.sympy import sp
 from encomp.units import Quantity, ureg
 from encomp.units import ureg as u
@@ -52,23 +61,22 @@ from encomp.utypes import *
 from encomp.fluids import Fluid, Water, HumidAir
 
 
-GraphicInput = Union[Path, str, plt.Figure]
-
 if __INTERACTIVE__:
 
     # loads Jupyter Notebook magics: %%markdown, %%output, %%write and %read
     import encomp.magics
 
-    plt.style.use('seaborn-notebook')  # type: ignore
-    matplotlib.rcParams['font.sans-serif'] = 'Arial'  # type: ignore
-    matplotlib.rcParams['font.family'] = 'sans-serif'  # type: ignore
-
-    from matplotlib_inline.backend_inline import set_matplotlib_formats
-    set_matplotlib_formats(SETTINGS.matplotlib_notebook_format)
-
     # this is required to get table output in PDF
     # set to False as default
     pd.options.display.latex.repr = False
+
+    if matplotlib is not None:
+
+        plt.style.use('seaborn-notebook')  # type: ignore
+        matplotlib.rcParams['font.sans-serif'] = 'Arial'  # type: ignore
+        matplotlib.rcParams['font.family'] = 'sans-serif'  # type: ignore
+
+        set_matplotlib_formats(SETTINGS.matplotlib_notebook_format)
 
 
 def mprint(x):
@@ -170,7 +178,7 @@ class Graphic:
 
         self.N = len(self.data)
 
-        self.nrows, self.ncols = grid_dimensions(self.N, nrows, ncols)
+        self.nrows, self.ncols = _grid_dimensions(self.N, nrows, ncols)
 
     def _repr_html_(self):
         """

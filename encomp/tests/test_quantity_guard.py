@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 import pytest
 
 from typing import Union
@@ -6,11 +8,9 @@ from encomp.units import Quantity as Q
 from encomp.utypes import *
 from encomp.misc import isinstance_types
 
-# it's important that the expected mypy output is a comment on the
-# same line as the expression, disable autopep8 if necessary with
-# autopep8: off
-# ... some code above the line length limit
-# autopep8: on
+
+if not TYPE_CHECKING:
+    def reveal_type(x): return x
 
 
 @pytest.mark.mypy_testing

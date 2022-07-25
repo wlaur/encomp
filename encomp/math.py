@@ -1,7 +1,12 @@
-import numpy as np
 from typing import Union, Callable, Optional, Mapping, Any
-from scipy.interpolate import interp1d
+
+import numpy as np
 from sympy import geometry
+
+try:
+    from scipy.interpolate import interp1d
+except ImportError:
+    interp1d = None
 
 
 def interpolate(
@@ -41,6 +46,12 @@ def interpolate(
     Callable[[Union[float, np.ndarray]], Union[float, np.ndarray]]
         An interpolation function based on the input dataset
     """
+
+    if interp1d is None:
+        raise ModuleNotFoundError(
+            f'Module scipy.interpolate was not found, '
+            'install with "pip install scipy"'
+        )
 
     kwargs: dict[str, Any] = {'bounds_error': False}
 
@@ -247,4 +258,3 @@ def circle_line_intersection(A: Union[tuple[float, float], geometry.Point2D],
         return None
 
     return [(float(p[0]), float(p[1])) for p in points]
-
