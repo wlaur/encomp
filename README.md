@@ -295,3 +295,4 @@ See the file `.env.example` in the base of this repository for examples.
     -   For example, `pint` uses _3-Clause BSD License_, this should be compatible with `MIT`
     -   Should this package include the `pint` license text somewhere?
         -   Extending the `pint` package counts as modification
+- Remove version constraint for Sphinx once the bug with 5.1.0 is fixed
