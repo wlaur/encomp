@@ -286,7 +286,6 @@ See the file `.env.example` in the base of this repository for examples.
   - This could use `TypeVarTuple` (import from `typing_extensions` until Python 3.11)
   - Not supported by `mypy` yet, need to wait with this
 - Document the `Quantity[Dimensionality]` type system
-- The `requirements.txt` file seems to include some unnecessary packages (for example `pillow`)
 - What is the license of this package?
   - For example, ``pint`` uses *3-Clause BSD License*, this should be compatible with ``MIT``
   - Should this package include the ``pint`` license text somewhere?

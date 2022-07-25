@@ -32,7 +32,7 @@ setup(
     package_data={'encomp': ['py.typed', '*.pyi']},
     python_requires='~=3.9',
     install_requires=install_requires,
-    extra_requires={
+    extras_require={
         'optional': requirements_optional,
         'dev': requirements_dev,
         'full': requirements_optional + requirements_dev
