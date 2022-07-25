@@ -6,7 +6,7 @@ pytest-mypy-testing
 pandas-stubs
 hypothesis
 twine
-Sphinx
+Sphinx<=5.0.2
 jinja2<3.0.3
 nbsphinx
 furo
