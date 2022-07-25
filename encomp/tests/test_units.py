@@ -6,6 +6,8 @@ import copy
 import pytest
 from pytest import approx
 from typeguard import typechecked
+from pydantic import BaseModel
+from pydantic.error_wrappers import ValidationError
 
 import numpy as np
 import pandas as pd
@@ -15,6 +17,9 @@ from encomp.misc import isinstance_types
 from encomp.conversion import convert_volume_mass
 from encomp.units import (Quantity,
                           ureg,
+                          CUSTOM_DIMENSIONS,
+                          define_dimensionality,
+                          DimensionalityRedefinitionError,
                           DimensionalityTypeError,
                           ExpectedDimensionalityError)
 from encomp.units import Quantity as Q
@@ -36,6 +41,18 @@ def test_registry():
     # check that units from all objects can be combined
     q = 1 * ureg.kg / _DEFAULT_REGISTRY.s**2 / application_registry.get().m
     assert isinstance(q, Q[Pressure])
+
+    # options cannot be overridden once set
+    ureg.force_ndarray_like = True
+    assert not ureg.force_ndarray_like
+
+
+def test_define_dimensionality():
+
+    assert 'normal' in CUSTOM_DIMENSIONS
+
+    with pytest.raises(DimensionalityRedefinitionError):
+        define_dimensionality(CUSTOM_DIMENSIONS[0])
 
 
 @contextmanager
@@ -76,6 +93,18 @@ def _reset_dimensionality_registry():
         # clear existing mapping from dimensionality subclass name to Quantity subclass
         # this will be dynamically rebuilt
         Q._subclasses.clear()
+
+
+def test_dimensionality_subtype_protocol():
+
+    with _reset_dimensionality_registry():
+
+        # the subclass is not checked, only the "dimensions" attribute
+        class Test:
+            dimensions = Dimensionless.dimensions
+
+        Q[Test]
+        Q[Test](1)
 
 
 def test_custom_dimensionality():
@@ -375,6 +404,8 @@ def test_Q():
 
     # compare scalar and vector will return a vector
     assert (Q(2, 'bar') == Q(vals, 'bar').to('kPa')).any()
+
+    assert not (Q(5, 'bar') == Q(vals, 'bar').to('kPa')).any()
 
     # support a single string as input if the
     # magnitude and units are separated by one or more spaces
@@ -1042,3 +1073,38 @@ def test_copy():
 
     assert isinstance(copy.copy(q), Q[Length])
     assert isinstance(copy.deepcopy(q), Q[Length])
+
+
+def test_pydantic_integration():
+
+    class Model(BaseModel):
+
+        # a can be any dimensionality
+        a: Q
+
+        m: Q[Mass]
+        s: Q[Length]
+
+        # float can be converted to Quantity[Dimensionless]
+        r: Q[Dimensionless] = 0.5
+
+        # float cannot be converted to Quantity[Length]
+        # this raises pydantic.ValidationError (if Config.validate_all is set)
+        # d: Q[Length] = 0.5
+
+        class Config:
+            validate_all = True
+
+    Model(
+        a=Q(25, 'cSt'),
+        m=Q(25, 'kg'),
+        s=Q(25, 'cm')
+    )
+
+    with pytest.raises(ValidationError):
+
+        Model(
+            a=Q(25, 'cSt'),
+            m=Q(25, 'kg/day'),
+            s=Q(25, 'cm')
+        )

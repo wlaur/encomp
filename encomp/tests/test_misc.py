@@ -1,7 +1,26 @@
 from typing import Optional
 from textwrap import dedent
 
-from encomp.misc import name_assignments, isinstance_types, name_assignments
+
+from encomp.misc import (name_assignments,
+                         isinstance_types,
+                         name_assignments,
+                         grid_dimensions)
+
+
+def test_grid_dimensions():
+
+    assert [
+        grid_dimensions(1, 2, 3),
+        grid_dimensions(-1, -1, 3),
+        grid_dimensions(-1, 2, 3),
+        grid_dimensions(2, -1, 3)
+    ] == [
+        (2, 3),
+        (0, 3),
+        (2, 3),
+        (1, 3)
+    ]
 
 
 def test_name_assignments():

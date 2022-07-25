@@ -1,15 +1,26 @@
 import json
+from pathlib import Path
+from dataclasses import dataclass
+
 import numpy as np
 import pandas as pd
 from decimal import Decimal
-from uncertainties import ufloat
-from dataclasses import dataclass
+
+try:
+    from uncertainties import ufloat
+except ImportError:
+    ufloat = None
 
 from encomp.units import Quantity as Q
 from encomp.serialize import serialize, decode, is_serializable
 
 
 def test_serialize():
+
+    p = Path().absolute()
+    d = serialize(p)
+    assert decode(d) == p
+    assert decode(d) is not p
 
     P1 = Q(1, 'bar')
 
@@ -60,12 +71,14 @@ def test_serialize():
     json_str = json.dumps(s)
     d_ = decode(json.loads(json_str))
 
-    x = ufloat(1, 0.1)
+    if ufloat is not None:
 
-    qty = Q([x * 2] * 5, 'kg')
-    s = serialize(qty)
-    json_str = json.dumps(s)
-    d_ = decode(json.loads(json_str))
+        x = ufloat(1, 0.1)
+
+        qty = Q([x * 2] * 5, 'kg')
+        s = serialize(qty)
+        json_str = json.dumps(s)
+        d_ = decode(json.loads(json_str))
 
     qty = Q({1, 2}, 'kg')
     s = serialize(qty)

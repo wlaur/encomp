@@ -312,10 +312,7 @@ class Dimensionality(ABC):
                     f'the parent has dimensions {parent.dimensions}'
                 )
 
-        # NOTE: dict keys are class definitions, not class names
-        # for example, re-running a notebook cell will
-        # create a new class each time, which will have its own entry in
-        # the dimensionality registry
+        # this will never happen, since the class name was already checked for duplicates
         if cls in cls._registry:
             return
 

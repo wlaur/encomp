@@ -418,7 +418,7 @@ Pydantic models inherit from the ``pydantic.BaseModel`` class.
     # in case the input dimensionalities do not match the type hint,
     # a runtime error (pydantic.ValidationError) will be raised
     m = Model(
-        a=Q(25, 'cSt')
+        a=Q(25, 'cSt'),
         m=Q(25, 'kg'),
         s=Q(25, 'cm')
     )

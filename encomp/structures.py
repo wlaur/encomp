@@ -2,10 +2,34 @@
 Data structures and related functions.
 """
 
-from typing import Sequence, Iterator, Optional, Any, Union
+from typing import Sequence, Iterator, Optional, Any, Union, TypeVar, overload
+
+import numpy as np
+
+T = TypeVar('T')
 
 
-def divide_chunks(container: Sequence[Any], N: int) -> Iterator[Any]:
+@overload
+def divide_chunks(container: list[T], N: int) -> Iterator[list[T]]:
+    ...
+
+
+@overload
+def divide_chunks(container: tuple[T], N: int) -> Iterator[tuple[T]]:
+    ...
+
+
+@overload
+def divide_chunks(container: Sequence[T], N: int) -> Iterator[Sequence[T]]:
+    ...
+
+
+@overload
+def divide_chunks(container: np.ndarray, N: int) -> Iterator[np.ndarray]:
+    ...
+
+
+def divide_chunks(container, N):
     """
     Generator that divides a container into chunks with length ``N``.
     The last chunk might not have ``N`` elements.
@@ -17,7 +41,7 @@ def divide_chunks(container: Sequence[Any], N: int) -> Iterator[Any]:
 
     Parameters
     ----------
-    container : Sequence[Any]
+    container : Sequence[T]
         The container that will be split into chunks. Since sets are unordered,
         it does not make sense to accept set inputs here.
     N : int
@@ -25,7 +49,7 @@ def divide_chunks(container: Sequence[Any], N: int) -> Iterator[Any]:
 
     Yields
     -------
-    Iterator[Any]
+    Iterator[Sequence[T]]
         Generator of chunks
     """
 
@@ -33,15 +57,16 @@ def divide_chunks(container: Sequence[Any], N: int) -> Iterator[Any]:
         raise ValueError('Cannot chunk empty container')
 
     if N < 1:
-        raise ValueError(f'Cannot split container into {N} chunks')
+        raise ValueError(
+            f'Cannot split container with into {N} chunks')
 
     for i in range(0, len(container), N):
         yield container[i:i + N]
 
 
-def flatten(container: Sequence[Union[Any, Sequence[Any]]],
-            max_depth: Optional[int] = None, *,
-            depth: int = 0) -> Iterator[Any]:
+def flatten(container: Sequence[Any],
+            max_depth: Optional[int] = None,
+            _depth: int = 0) -> Iterator[Any]:
     """
     Generator that flattens a nested container.
 
@@ -49,25 +74,19 @@ def flatten(container: Sequence[Union[Any, Sequence[Any]]],
 
     .. code-block:: python
 
-        flat_list = list(flatten(nested_list), max_depth=3)
+        flat_list = list(flatten(nested_list))
 
     This function will flatten arbitrarily deeply nested lists or tuples recursively.
     If ``max_depth`` is ``None``, recurse until no more nested structures remain,
     otherwise flatten until the specified max depth.
 
-    .. note::
-        Uses ``isinstance(obj, typing.Iterable)`` to determine if a sub-object is iterable.
-        Strings are not considered iterables.
 
     Parameters
     ----------
-    container : Sequence[Union[Any, Sequence[Any]]]
-        The container to be flattened. Note that it is not possible
-        to construct nested sets, so the ``Sequence`` type is appropriate here.
+    container : Sequence[Any]
+        The container to be flattened
     max_depth : int, optional
         The maximum level to flatten to, by default None (flatten all)
-    depth : int
-        The current depth used by the recursive algorithm, do not pass this explicitly
 
     Yields
     -------
@@ -75,11 +94,9 @@ def flatten(container: Sequence[Union[Any, Sequence[Any]]],
         Generator of non-nested objects
     """
 
-    # in case the max depth was reached
-    if max_depth is not None and depth >= max_depth:
+    if max_depth is not None and _depth >= max_depth:
         yield container
-
-    depth += 1
+        return
 
     for obj in container:
 
@@ -90,7 +107,7 @@ def flatten(container: Sequence[Union[Any, Sequence[Any]]],
         # check if this object can be flattened further
         if isinstance(obj, Sequence):
 
-            for sub_obj in flatten(obj, max_depth=max_depth, depth=depth):
+            for sub_obj in flatten(obj, max_depth=max_depth, _depth=_depth + 1):
                 yield sub_obj
 
             continue

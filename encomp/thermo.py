@@ -81,8 +81,10 @@ def heat_balance(
             if isinstance_types(a, tp[0]):
 
                 if param_name == 'dT' and not a._ok_for_muldiv():
-                    raise ValueError(f'Cannot pass temperature difference using '
-                                     f'degree unit {a.u}, convert to delta_deg')
+                    raise ValueError(
+                        f'Cannot pass temperature difference using '
+                        f'degree unit {a.u}, convert to delta_deg'
+                    )
 
                 vals[param_name] = (a)
 

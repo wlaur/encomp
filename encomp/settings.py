@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     * ``TYPESET_SYMBOL_SCRIPTS``: whether to typeset Sympy symbol sub- and superscripts
     * ``IGNORE_NDARRAY_UNIT_STRIPPED_WARNING``: whether to suppress the ``pint`` warning
       when converting Quantity to Numpy array.
+    * ``IGNORE_COOLPROP_WARNINGS``: whether to suppress warnings from the CoolProp backend
     * ``MATPLOTLIB_NOTEBOOK_FORMAT``: figure format for Matplotlib figures in Jupyter Notebooks
     * ``AUTOCONVERT_OFFSET_TO_BASEUNIT``: whether to automatically convert offset units in calculations. If this is False, °C must be converted to K before multiplication (for example)
     * ``DEFAULT_UNIT_FORMAT``: default unit format for ``Quantity`` objects: one of ``~P`` (compact), ``~L`` (Latex), ``~H`` (HTML), ``~Lx`` (Latex with SIUNITX package)
@@ -54,6 +55,7 @@ class Settings(BaseSettings):
 
     typeset_symbol_scripts: bool = True
     ignore_ndarray_unit_stripped_warning: bool = True
+    ignore_coolprop_warnings: bool = True
 
     matplotlib_notebook_format: Literal['retina', 'png', 'svg'] = 'retina'
     autoconvert_offset_to_baseunit: bool = False

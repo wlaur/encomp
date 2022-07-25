@@ -55,7 +55,10 @@ def ideal_gas_density(T: Quantity[Temperature],
 
     # directly from ideal gas law
     # override the inferred type here since it's sure to be Density
-    rho = cast(Quantity[Density], (P * M) / (R * T.to('K')))
+    rho = cast(
+        Quantity[Density],
+        (P * M) / (R * T.to('K'))
+    )
 
     return rho.to('kg/m³')
 

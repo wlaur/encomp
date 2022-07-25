@@ -84,7 +84,7 @@ class DimensionalityRedefinitionError(ValueError):
 
 
 # keep track of user-created dimensions
-_CUSTOM_DIMENSIONS: list[str] = []
+CUSTOM_DIMENSIONS: list[str] = []
 
 
 _REGISTRY_STATIC_OPTIONS = {
@@ -166,7 +166,7 @@ def define_dimensionality(name: str, symbol: str = None) -> None:
 
     .. note::
         Make sure to only define new custom dimensions using this function,
-        since the unit needs to be appended to the ``_CUSTOM_DIMENSIONS`` list as well.
+        since the unit needs to be appended to the ``CUSTOM_DIMENSIONS`` list as well.
 
     Parameters
     ----------
@@ -176,7 +176,7 @@ def define_dimensionality(name: str, symbol: str = None) -> None:
         Optional (short) symbol, by default None
     """
 
-    if name in _CUSTOM_DIMENSIONS:
+    if name in CUSTOM_DIMENSIONS:
         raise DimensionalityRedefinitionError(
             'Cannot define new dimensionality with '
             f'name: {name}, a dimensionality with this name was already defined')
@@ -188,7 +188,7 @@ def define_dimensionality(name: str, symbol: str = None) -> None:
 
     ureg.define(definition_str)
 
-    _CUSTOM_DIMENSIONS.append(name)
+    CUSTOM_DIMENSIONS.append(name)
 
 
 # define commonly used media as dimensionalities
@@ -226,7 +226,7 @@ for n in _currency_definition.split('\n'):
 
     ureg.define(n)
 
-_CUSTOM_DIMENSIONS.append('currency')
+CUSTOM_DIMENSIONS.append('currency')
 
 
 def _load_additional_units() -> None:
@@ -772,7 +772,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
         # also consider custom dimensions defined with encomp.units.define_dimensionality
         cls._dimension_symbol_map = {
             cls.get_unit_symbol(n): cls.get_unit(n)
-            for n in list(_BASE_SI_UNITS) + _CUSTOM_DIMENSIONS
+            for n in list(_BASE_SI_UNITS) + CUSTOM_DIMENSIONS
         }
 
         return cls._dimension_symbol_map

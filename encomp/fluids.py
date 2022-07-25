@@ -11,6 +11,7 @@ Uses CoolProp as backend.
 
 import warnings
 from typing import Annotated, Callable, cast
+from abc import ABC, abstractmethod
 
 import numpy as np
 
@@ -34,8 +35,9 @@ except ImportError:
 from pint.unit import Unit
 
 from encomp.structures import flatten
+from encomp.settings import SETTINGS
 from encomp.misc import isinstance_types
-from encomp.units import Quantity
+from encomp.units import Quantity, DimensionalityError, ExpectedDimensionalityError
 from encomp.utypes import (Magnitude,
                            MagnitudeScalar,
                            Unknown,
@@ -64,16 +66,33 @@ from encomp.utypes import (Magnitude,
                            MolarMass,
                            DynamicViscosity)
 
+
+if SETTINGS.ignore_coolprop_warnings:
+
+    warnings.filterwarnings(
+        'ignore',
+        message='CoolProp could not calculate'
+    )
+
+
 CProperty = Annotated[str, 'CoolProp property name']
 CName = Annotated[str, 'CoolProp fluid name']
 UnitString = Annotated[str, 'Unit string']
 
 
-class CoolPropFluid:
+class CoolPropFluid(ABC):
+
+    name: CName
+    points: list[tuple[CProperty, Quantity]]
 
     BACKEND: Callable = PropsSI
-    APPEND_NAME_TO_CP_INPUTS: bool = True
-    EVALUATE_INVALID_SEPARATELY: bool = False
+
+    # PropsSI expects the fluid name as the first input, but not HAPropsSI
+    _append_name_to_cp_inputs: bool = True
+
+    # HAPropsSI fails if one or more inputs are incorrect,
+    # PropsSI returns NaN for invalid inputs in case valid inputs are also present
+    _evaluate_invalid_separately: bool = False
 
     # substrings from the CoolProp error messages for when inputs are
     # not valid or not implemented (CoolProp will always raise ValueError, no matter the error)
@@ -197,13 +216,16 @@ class CoolPropFluid:
     # skip checking for zero for these properties
     _SKIP_ZERO_CHECK: tuple[CProperty, ...] = ('PHASE', )
 
-    def __init__(self, name: CName):
+    @abstractmethod
+    def __init__(self, name: CName, **kwargs: Quantity):
         """
         Base class that represents a fluid (pure or mixture, gas or liquid).
         Uses *CoolProp* as backend to determine fluid properties.
 
         This class should not be used directly, since it does not contain a fixed
         point to determine fluid properties (temperature, pressure, enthalpy, entropy, ...).
+        Define a subclass of :py:class:`encomp.fluids.CoolPropFluid` that implements
+        the ``__init__`` method (this method must set instance attributes ``name`` and ``points``).
 
         Fluid names for pure fluids are not case-sensitive, but the mixture names are.
         The following fluid names are recognized by CoolProp:
@@ -320,11 +342,7 @@ class CoolPropFluid:
                 - ``INCOMP::MPG[0.5]``: 50 % ethylene glycol
                 - ``INCOMP::T66``: Therminol 66 (https://www.therminol.com/product/71093438)
 
-
         """
-
-        self.name = name
-        self.points: list[tuple[CProperty, Quantity]] = []
 
     @classmethod
     def get_prop_key(cls, prop: CProperty) -> tuple[CProperty, ...]:
@@ -502,12 +520,16 @@ class CoolPropFluid:
 
             # 1-length vectors were converted to float, so this error will be relevant
             if len(set(sizes)) != 1:
-                raise ValueError('All inputs must have the same size, '
-                                 f'passed {points} with sizes {sizes}')
+                raise ValueError(
+                    'All inputs must have the same size, '
+                    f'passed {points} with sizes {sizes}'
+                )
 
             if len(set(shapes)) != 1:
-                raise ValueError('All inputs must have the same shape, '
-                                 f'passed {points} with shapes {shapes}')
+                raise ValueError(
+                    'All inputs must have the same shape, '
+                    f'passed {points} with shapes {shapes}'
+                )
 
         else:
 
@@ -519,7 +541,8 @@ class CoolPropFluid:
             if isinstance_types(x, MagnitudeScalar):
                 return np.repeat(float(x), N).astype(float).reshape(shape)
 
-            return x.astype(float)
+            # TODO: typing.TypeGuard if-else constructs are not handled by the type checker
+            return x.astype(float)  # type: ignore
 
         points_arr = tuple(
             (p, expand_scalars(v)) for p, v in points
@@ -534,7 +557,7 @@ class CoolPropFluid:
 
         inputs = list(flatten(points))
 
-        if self.APPEND_NAME_TO_CP_INPUTS:
+        if self._append_name_to_cp_inputs:
             inputs.append(self.name)
 
         try:
@@ -565,7 +588,7 @@ class CoolPropFluid:
             inputs_i = list(flatten(list(zip(props,
                                              arrs_flat_masked_i))))
 
-            if self.APPEND_NAME_TO_CP_INPUTS:
+            if self._append_name_to_cp_inputs:
                 inputs_i.append(self.name)
 
             try:
@@ -609,7 +632,7 @@ class CoolPropFluid:
 
             inputs = list(flatten(list(zip(props, arrs_flat_masked))))
 
-            if self.APPEND_NAME_TO_CP_INPUTS:
+            if self._append_name_to_cp_inputs:
                 inputs.append(self.name)
 
             # this can fail if the numeric values
@@ -621,10 +644,7 @@ class CoolPropFluid:
 
                 self.check_exception(output, e)
 
-                # the HAPropsSI backend fails if one or more inputs
-                # are incorrect, PropsSI returns NaN for invalid inputs
-                # in case valid inputs are also present
-                if self.EVALUATE_INVALID_SEPARATELY:
+                if self._evaluate_invalid_separately:
                     val_masked = self.evaluate_multiple_separately(
                         output, props, arrs_flat_masked, N
                     )
@@ -683,7 +703,14 @@ class CoolPropFluid:
 
         unit = self.get_coolprop_unit(prop)
 
-        return qty.to(unit).m
+        try:
+            return qty.to(unit).m
+        except DimensionalityError:
+            raise ExpectedDimensionalityError(
+                f'CoolProp input for property "{prop}" is incorrect. '
+                f'expected {unit} ({unit.dimensionality}), but passed '
+                f'{qty.u} ({qty.dimensionality})'
+            )
 
     def get(self,
             output: CProperty,
@@ -993,8 +1020,8 @@ class Water(Fluid):
 class HumidAir(CoolPropFluid):
 
     BACKEND = HAPropsSI
-    APPEND_NAME_TO_CP_INPUTS = False
-    EVALUATE_INVALID_SEPARATELY = True
+    _append_name_to_cp_inputs = False
+    _evaluate_invalid_separately = True
 
     # unit and description for properties in function HAPropsSI
     PROPERTY_MAP: dict[tuple[CProperty, ...], tuple[str, str]] = {

@@ -2,12 +2,17 @@ from setuptools import setup
 
 from encomp import __version__
 
-# load requirements.txt (base install) dependencies
-with open('requirements.txt') as f:
-    install_requires = [n for n in f.read().splitlines() if n.strip()]
+
+def get_requirements(fname: str) -> list[str]:
+    with open(fname, encoding='utf-8') as f:
+        return [n for n in f.read().splitlines() if n.strip()]
 
 
-# include readme
+install_requires = get_requirements('requirements.txt')
+requirements_optional = get_requirements('requirements-optional.txt')
+requirements_dev = get_requirements('requirements-dev.txt')
+
+
 with open('README.md', encoding='utf-8') as f:
     long_description = f.read()
 
@@ -27,7 +32,12 @@ setup(
     package_data={'encomp': ['py.typed', '*.pyi']},
     python_requires='~=3.9',
     install_requires=install_requires,
+    extra_requires={
+        'optional': requirements_optional,
+        'dev': requirements_dev,
+        'full': requirements_optional + requirements_dev
+    },
     long_description=long_description,
     long_description_content_type='text/markdown',
-    include_package_data=True  # package data is specified in MANIFEST.in
+    include_package_data=True  # additional package data is specified in MANIFEST.in
 )

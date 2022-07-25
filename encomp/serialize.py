@@ -336,6 +336,8 @@ def decode(inp: JSON,
     if isinstance(inp, dict):
 
         # serialized pint.Quantity with array as magnitude
+        # NOTE: this is for compatibility with units that are
+        # serialized directly from pint (i.e. without the encomp.units extension)
         if {'_units', '_magnitude'} <= set(inp):
 
             # decode custom np.array objects
@@ -434,7 +436,7 @@ def decode(inp: JSON,
 
                 # in case the dict representation contains objects
                 # that must be decoded
-                d = decode(d, custom=custom)
+                d = decode(d, custom=custom)  # type: ignore
 
                 return custom_class.from_dict(d)
 

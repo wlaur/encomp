@@ -12,6 +12,9 @@ def test_Fluid():
 
     repr(fld)
 
+    fld.describe('P')
+    fld.search('pressure')
+
     assert fld.__getattr__('S') == Q(1087.7758824621442, 'J/(K kg)')
     assert fld.S == Q(1087.7758824621442, 'J/(K kg)')
 
@@ -26,6 +29,15 @@ def test_Fluid():
     Water(P=Q(1, 'bar'), Q=Q(0.9, ''))
     Water(P=Q(1, 'bar'), T=Q(0.9, 'degC'))
     Water(T=Q(1, 'bar'), Q=Q(0.9, ''))
+
+    repr(Water(T=Q(np.nan, 'degC'), Q=Q(0.9)))
+    repr(Water(T=Q(np.inf, 'degC'), Q=Q(0.9)))
+    repr(Water(T=Q(-np.inf, 'degC'), Q=Q(0.9)))
+
+    repr(Water(T=Q([np.nan, np.nan], 'degC'), Q=Q(0.9)))
+    repr(Water(T=Q([np.inf, np.inf], 'degC'), Q=Q(0.9)))
+    repr(Water(T=Q([-np.inf, -np.inf], 'degC'), Q=Q(0.9)))
+    repr(Water(T=Q([-np.inf, np.inf], 'degC'), Q=Q(0.9)))
 
     with pytest.raises(ValueError):
 
@@ -146,6 +158,43 @@ def test_Fluid():
     with pytest.raises(ValueError):
 
         Fluid('water', T=Q([np.nan, np.nan], 'C'), P=Q([], 'bar')).H
+
+
+def test_incorrect_inputs():
+
+    # NOTE: the name cannot be checked until CoolProp is actually
+    # called, so the name is not validated in __init__
+    invalid = Fluid('this fluid name does not exist',
+                    P=Q(2, 'bar'), T=Q(25, '°C'))
+
+    with pytest.raises(ValueError):
+        invalid.P
+
+    p = np.zeros((5, 5))
+    t = np.zeros(5)
+
+    with pytest.raises(ValueError):
+        Fluid('water', P=Q(p, 'bar'), T=Q(t, 'degC')).D
+
+    p = np.zeros((5, 5))
+    t = np.zeros(5 * 5)
+
+    with pytest.raises(ValueError):
+        Fluid('water', P=Q(p, 'bar'), T=Q(t, 'degC')).D
+
+    with pytest.raises(ValueError):
+        Fluid('water', P=Q(p, 'bar'), T=Q(t, 'degC'), H=Q(25, 'kJ/kg'))
+
+    with pytest.raises(ValueError):
+        Water(P=Q(p, 'bar'), T=Q(t, 'degC'), H=Q(25, 'kJ/kg'))
+
+    with pytest.raises(ValueError):
+        Water(P=Q(p, 'bar'))
+
+    with pytest.raises(AttributeError):
+        Fluid(
+            'water', P=Q(2, 'bar'), T=Q(25, '°C')
+        ).THIS_ATTRIBUTE_DOES_NOT_EXIST
 
 
 def test_Water():

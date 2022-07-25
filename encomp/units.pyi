@@ -131,6 +131,8 @@ class DimensionalityRedefinitionError(ValueError):
 # (note that this is not the same method as "__init__")
 ureg: UnitRegistry
 
+CUSTOM_DIMENSIONS: list[str]
+
 
 def define_dimensionality(name: str, symbol: str = ...) -> None: ...
 def set_quantity_format(fmt: str = ...) -> None: ...

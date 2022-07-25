@@ -39,22 +39,52 @@ def test_decorate():
 
     n = sp.Symbol('n')
 
-    n.decorate(prefix=r'\sum', prefix_sub='2', suffix_sup='i', suffix=r'\ldots')
+    n.decorate(prefix=r'\sum', prefix_sub='2',
+               suffix_sup='i', suffix=r'\ldots')
     n._('H_2O').__('out')
 
 
-def test_Quantity_integration():
+def test_sympy_to_Quantity_integration():
+
     x, y, z = sp.symbols('x, y, z')
 
     expr = x * y / z
 
-    result = expr.subs({
+    _subs = {
         x: Q(235, 'yard'),
         y: Q(98, 'K/m²'),
         z: Q(0.4, 'minutes')
+    }
+
+    result = expr.subs(_subs)
+
+    _result = _subs[x] * _subs[y] / _subs[z]
+
+    assert isinstance(Q.from_expr(result), type(_result))
+
+    a, b = sp.symbols('a, b', nonzero=True)
+
+    expr = a / b
+
+    result = expr.subs({
+        a: Q(235, 'm'),
+        b: Q(98, 'mile')
     })
 
-    Q.from_expr(result).dimensionality
+    assert Q.from_expr(result).check(Q(0))
+
+
+def test_Quantity_to_sympy_integration():
+
+    x = sp.Symbol('x')
+
+    x * Q(25, 'kg')
+    x * Q(25, 'kg')
+
+    Q(25, 'kg') * x
+
+    x + Q(2)
+    x + Q(2, 'm')
 
 
 def test_get_function():
