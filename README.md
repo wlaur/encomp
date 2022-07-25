@@ -10,36 +10,35 @@ Documentation at https://encomp.readthedocs.io/en/latest/
 
 Main functionality of the `encomp` library:
 
-- Handles physical quantities with magnitude(s), dimensionality and units
+-   Handles physical quantities with magnitude(s), dimensionality and units
 
-  - Modules `encomp.units`, `encomp.utypes`
-  - Extends the [pint](https://pypi.org/project/Pint) library
-  - Uses Python's type system to validate dimensionalities
-  - Compatible with ``mypy`` and other type checkers
-  - Integrates with `np.ndarray` and `pd.Series`
-  - JSON serialization and decoding
+    -   Modules `encomp.units`, `encomp.utypes`
+    -   Extends the [pint](https://pypi.org/project/Pint) library
+    -   Uses Python's type system to validate dimensionalities
+    -   Compatible with `mypy` and other type checkers
+    -   Integrates with `np.ndarray` and `pd.Series`
+    -   JSON serialization and decoding
 
-- Implements a flexible interface to [CoolProp](http://www.coolprop.org)
+-   Implements a flexible interface to [CoolProp](http://www.coolprop.org)
 
-  - Module `encomp.fluids`
-  - Uses quantities for all inputs and outputs
-  - Fluids are represented as class instances, the properties are class attributes
+    -   Module `encomp.fluids`
+    -   Uses quantities for all inputs and outputs
+    -   Fluids are represented as class instances, the properties are class attributes
 
-- Extends [Sympy](https://pypi.org/project/sympy/)
+-   Extends [Sympy](https://pypi.org/project/sympy/)
 
-  - Module `encomp.sympy`
-  - Adds convenience methods for creating symbols with sub- and superscripts
-  - Additional functions to convert (algebraic) expressions and systems to Python code that supports Numpy arrays
+    -   Module `encomp.sympy`
+    -   Adds convenience methods for creating symbols with sub- and superscripts
+    -   Additional functions to convert (algebraic) expressions and systems to Python code that supports Numpy arrays
 
-- Jupyter Notebook integration
+-   Jupyter Notebook integration
 
-  - Module `encomp.notebook`
-  - Imports commonly used functions and classes
-  - Defines custom Jupyter magics
+    -   Module `encomp.notebook`
+    -   Imports commonly used functions and classes
+    -   Defines custom Jupyter magics
 
 The other modules implement calculations related to process engineering and thermodynamics.
 The module `encomp.serialize` implements custom JSON serialization and decoding for classes used elsewhere in the library.
-
 
 ## Installation
 
@@ -50,7 +49,11 @@ pip install encomp
 ```
 
 This will install `encomp` along with its dependencies into the currently active Python environment.
+To also install optional or development dependencies, use the extras ``optional``, ``dev`` or ``full``.
 
+```
+pip install encomp[optional,dev,full]
+```
 
 ## Getting started
 
@@ -62,7 +65,6 @@ from encomp.notebook import *
 
 This will import commonly used functions and classes.
 It also registers the `%read` and `%%write` Jupyter magics for reading and writing custom objects from and to JSON.
-
 
 ### The `Quantity` class
 
@@ -86,26 +88,22 @@ Q([1, 2, 3], 'bar') * 2 # [2, 4, 6] bar
 Q(0.1) == Q(10, '%')
 ```
 
-
 #### `Quantity` type system
 
 The `Quantity` object has an associated `Dimensionality` type parameter that is dynamically determined based on the unit.
 Each dimensionality (for example _pressure_, _length_, _time_, _dimensionless_) is represented by a subclass of `Quantity`.
 
 Common dimensionalities can be statically determined based on overload variants of the `Quantity.__new__` method (see `encomp.utypes.get_registered_units` for a list of units that support this).
-Additionally, operations using ``*``, ``**`` and ``/`` are also defined using overload variants for combinations of the default dimensionalities.
-
+Additionally, operations using `*`, `**` and `/` are also defined using overload variants for combinations of the default dimensionalities.
 
 In case the dimensionality cannot be inferred, the type checker will use the dimensionality `Unknown`.
 At runtime, the dimensionality will be evaluated based on the unit that was specified.
-The `Unknown` dimensionality is also used for operations using ``*``, ``**`` and ``/`` that are not explicitly defined as overload variants.
-
+The `Unknown` dimensionality is also used for operations using `*`, `**` and `/` that are not explicitly defined as overload variants.
 
 If necessary, the dimensionality of a quantity can be explicitly specified by providing a subclass of `encomp.utypes.Dimensionality` as type parameter.
 
 Commonly used dimensionalities are defined in the `encomp.utypes` module.
 When a new dimensionality is created, the classname will be `Dimensionality[...]` (for example `Quantity[Dimensionality[[mass] ** 2 / [length] ** 3]]`).
-
 
 ```python
 from encomp.units import Quantity as Q
@@ -148,9 +146,8 @@ y = Q[MassFlow](15, 'meter cubed')
 
 #### Runtime type checking
 
-
 The `Quantity` subtypes can be used to restrict function and class attribute types at runtime.
-Use the ``typeguard.typechecked`` decorator to apply runtime typechecking to function inputs and outputs:
+Use the `typeguard.typechecked` decorator to apply runtime typechecking to function inputs and outputs:
 
 ```python
 from typeguard import typechecked
@@ -186,7 +183,6 @@ another_func(Q(25, 'm'))
 ```
 
 To create a new dimensionality (for example temperature difference per mass flow rate), combine the `pint.UnitsContainer` objects stored in the `dimensions` class attribute.
-
 
 ```python
 from encomp.units import Quantity as Q
@@ -263,7 +259,7 @@ Water(H=Q(2800, 'kJ/kg'), S=Q(7300, 'J/kg/K'))
 # <Water (Gas), P=225 kPa, T=165.8 °C, D=1.1 kg/m³, V=0.0 cP>
 ```
 
-The `HumidAir` class requires three input points (``R`` means relative humidity):
+The `HumidAir` class requires three input points (`R` means relative humidity):
 
 ```python
 from encomp.units import Quantity as Q
@@ -271,6 +267,15 @@ from encomp.fluids import HumidAir
 
 HumidAir(P=Q(1, 'bar'), T=Q(100, 'degC'), R=Q(0.5))
 # <HumidAir, P=100 kPa, T=100.0 °C, R=0.50, Vda=2.2 m³/kg, Vha=1.3 m³/kg, M=0.017 cP>
+```
+
+## Tests
+
+First, make sure the development dependencies are installed with `pip install encomp[dev]` or `pip install encomp[full]`.
+Run the tests with
+
+```
+pytest -W ignore --pyargs encomp -p no:mypy-testing
 ```
 
 ## Settings
@@ -282,12 +287,11 @@ See the file `.env.example` in the base of this repository for examples.
 
 ## TODO
 
-- Possible to use a secondary type variable / generic to figure out the magnitude type?
-  - This could use `TypeVarTuple` (import from `typing_extensions` until Python 3.11)
-  - Not supported by `mypy` yet, need to wait with this
-- Document the `Quantity[Dimensionality]` type system
-- What is the license of this package?
-  - For example, ``pint`` uses *3-Clause BSD License*, this should be compatible with ``MIT``
-  - Should this package include the ``pint`` license text somewhere?
-    - Extending the ``pint`` package counts as modification
-
+-   Possible to use a secondary type variable / generic to figure out the magnitude type?
+    -   This could use `TypeVarTuple` (import from `typing_extensions` until Python 3.11)
+    -   Not supported by `mypy` yet, need to wait with this
+-   Document the `Quantity[Dimensionality]` type system
+-   What is the license of this package?
+    -   For example, `pint` uses _3-Clause BSD License_, this should be compatible with `MIT`
+    -   Should this package include the `pint` license text somewhere?
+        -   Extending the `pint` package counts as modification
