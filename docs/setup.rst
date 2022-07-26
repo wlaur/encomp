@@ -2,7 +2,6 @@ Setup
 =====
 
 ``encomp`` requires Python 3.9 or higher.
-The library is tested on Windows and Linux.
 
 
 Installing with ``pip``

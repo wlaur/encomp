@@ -23,7 +23,7 @@ from encomp import __version__  # noqa: E402
 # -- Project information -----------------------------------------------------
 
 project = 'encomp'
-copyright = '2021, William Laurén'
+copyright = '2022, William Laurén'
 author = 'William Laurén'
 
 

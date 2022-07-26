@@ -78,7 +78,7 @@ Each new dimensionality is represented by a unique subclass of :py:class:`encomp
 
 To create a subclass of :py:class:`encomp.units.Quantity` with a certain dimensionality, provide a dimensionality *type parameter* using square brackets.
 All dimensionality type parameters must inherit from :py:class:`encomp.utypes.Dimensionality`.
-The dimensions of a dimensionality (a combination of the seven base dimensions) is specified as a ``pint.unit.UnitsContainer`` instance (class attribute ``dimensions``).
+The dimensions of a dimensionality (a combination of the base dimensions) is specified as a ``pint.unit.UnitsContainer`` instance (class attribute ``dimensions``).
 
 .. note::
 
@@ -131,7 +131,7 @@ For more complex types, like ``list[Quantity[Pressure]]``, the :py:func:`encomp.
     isinstance_types(pressure, Q)  # True
 
 
-To check types for functions and methods, use the ``@typeguard.typechecked`` decorator instead of writing explicit checks inside the function body:
+To check types for functions and methods, use the ``typeguard.typechecked`` decorator instead of writing explicit checks inside the function body:
 
 
 .. code-block:: python
@@ -142,7 +142,7 @@ To check types for functions and methods, use the ``@typeguard.typechecked`` dec
     def func(p1: Q[Pressure]) -> tuple[Q[Length], Q[Power]]:
         return Q(1, 'm'), Q(1, 'kW')
 
-A ``TypeError`` will be raised in case the function ``func`` is called with incorrect units or if the return value(s) have incorrect units.
+A ``TypeError`` will be raised if the function ``func`` is called with incorrect dimensionalities or if the return value has incorrect dimensionalities.
 
 
 Custom base dimensionalities
@@ -211,8 +211,8 @@ Pandas ``Series`` objects are converted to ``ndarray`` when constructing the qua
     pressure_ = Q(s, 'bar') # pd.Series is converted to np.ndarray
     # "series_name" will no longer be associated with pressure_ or pressure_.m
 
-In most cases, the *magnitude* should be assigned to a DataFrame column (not the quantity instance).
-Assigning a quantity object will create a column with ``dtype=object``.
+In most cases, the *magnitude* (not the quantity instance) should be assigned to a DataFrame column.
+Assigning the quantity instance will create a column with ``dtype=object``.
 
 .. code-block:: python
 
@@ -221,12 +221,12 @@ Assigning a quantity object will create a column with ``dtype=object``.
 
     df['input'] = np.linspace(0, 1, len(df))
 
-    q_vector = Q(df['input'], 'm/s')  # Q[Velocity]
+    q_vector = Q(df['input'], 'm/s')
 
     # assigns a float array, as expected
     df['A'] = q_vector.to('kmh')
 
-    q_scalar = Q(25, 'ton/h')  # Q[MassFlow]
+    q_scalar = Q(25, 'ton/h')
 
     # assigns a repeated array of Quantity objects
     df['B'] = q_scalar
@@ -234,7 +234,7 @@ Assigning a quantity object will create a column with ``dtype=object``.
     # identical to the previous assignment
     df['C'] = [q_scalar] * len(df)
 
-    # this will be correctly broadcasted to a repeated array
+    # this will be correctly broadcasted to a repeated int array
     df['D'] = q_scalar.m
 
     df.head()
@@ -255,7 +255,7 @@ Assigning a quantity object will create a column with ``dtype=object``.
     # dtype: object
 
 
-.. warning::
+.. tip::
 
     To avoid issues with ``dtype`` when assigning both vector and scalar quantities to a DataFrame column, make sure to always explicitly assing the *magnitude* (attribute ``m``) of the quantity.
 
@@ -276,7 +276,7 @@ The :py:meth:`encomp.units.Quantity.to_reduced_units` method can be used to canc
     (Q(5, '%') * Q(1, 'meter')).to('mm') # 50.0 mm
 
 Operations with temperature units can lead to unexpected results.
-When using degree units, a temperature *difference* can be defined with the prefix ``delta_``.
+When using temperature degree scales, a temperature *difference* can be defined with the prefix ``delta_``.
 This is only required when defining the temperature difference directly.
 
 
@@ -293,7 +293,6 @@ This is only required when defining the temperature difference directly.
     # this is not the result we're after, °C is offset by 273.15 K
     Q(4.19, 'kJ/kg/K') * Q(5, '°C').to('K') # 1165.4485 kJ/kg
 
-    # the degree step for °C is equal to 1 K
     Q(4.19, 'kJ/kg/K') * Q(5, 'delta_degC') # 20.95 kJ Δ°C/(K kg)
     Q(4.19, 'kJ/kg/K') * Q(5, 'K') # 20.95 kJ/kg
 
@@ -381,7 +380,7 @@ This error can also be imported from the :py:mod:`encomp.units` module.
 Integration with Pydantic
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Pydantic can be used for runtime type validation of class attributes.
+Pydantic is used for runtime type validation of data models.
 The :py:class:`encomp.units.Quantity` class (along with an optional dimensionality type parameter) can be used as a field type with Pydantic.
 The field types are defined as type hints.
 Pydantic models inherit from the ``pydantic.BaseModel`` class.
@@ -491,7 +490,7 @@ The Fluid class
 ---------------
 
 The :py:class:`encomp.fluids.Fluid` class represents a fluid at a fixed point.
-The parent class :py:class:`encomp.fluids.CoolPropFluid` implements an interface to CoolProp.
+The abstract base class :py:class:`encomp.fluids.CoolPropFluid` implements an interface to CoolProp.
 All inputs and outputs are :py:class:`encomp.units.Quantity` instances.
 
 
@@ -500,7 +499,7 @@ All inputs and outputs are :py:class:`encomp.units.Quantity` instances.
     All input and output parameter names follow the conventions used in CoolProp.
 
 To create a new instance, pass the CoolProp fluid name and the fixed points (for example *P, T*) to the class constructor.
-The documentation for the parent class :py:class:`encomp.fluids.CoolPropFluid` contains a list of fluid and property names.
+The documentation for the base class :py:class:`encomp.fluids.CoolPropFluid` contains a list of fluid and property names.
 All combinations of input parameters are not valid -- in case of incorrect inputs, a ``ValueError`` is raised when evaluating an attribute (i.e. not when the instance is created).
 The ``__repr__`` of the instance will show ``N/A`` instead of raising an error.
 
@@ -521,8 +520,8 @@ The ``__repr__`` of the instance will show ``N/A`` instead of raising an error.
     # ValueError: Input pair variable is invalid and output(s) are non-trivial; cannot do state update : PropsSI("T","D",500,"PCRIT",100000,"water")
 
 
-If the convenience class :py:class:`encomp.fluids.Water` is used, the fluid name can be omitted.
-:py:class:`encomp.fluids.Water` uses ``IAPWS-95``.
+When the class :py:class:`encomp.fluids.Water` is used, the fluid name can be omitted.
+:py:class:`encomp.fluids.Water` uses the ``IAPWS-95`` formulations.
 To use ``IAPWS-97`` instead, create an instance of :py:class:`encomp.fluids.Fluid` with name ``IF97::Water``.
 
 
@@ -542,7 +541,7 @@ The :py:class:`encomp.fluids.HumidAir` class has a different set of input and ou
 
 
 The exact names used by CoolProp must be used.
-Note that these are different for humid air.
+Note that these are different for :py:class:`encomp.fluids.HumidAir`.
 
 .. code-block:: python
 
@@ -590,9 +589,9 @@ All property synonyms are valid instance attributes:
 Using vector inputs
 ~~~~~~~~~~~~~~~~~~~
 
-The CoolProp library supports vector inputs, which means that multiple inputs can be evaluated at the same time.
+The CoolProp library supports vector inputs, which means that multiple inputs can be evaluated at the same time (in a single call to the CoolProp backend).
 The inputs must be instances of :py:class:`encomp.units.Quantity` with one-dimensional Numpy arrays as magnitude.
-All inputs must be the same length (or a single scalar value).
+All inputs must have the same length (or a single scalar value).
 
 
 .. code-block:: python
@@ -738,7 +737,37 @@ The expression must instead be converted to a function with :py:func:`encomp.sym
     # [26860.5 95726.25] kg
 
 
+Quantity objects can be directly combined with Sympy symbols.
+The units are automatically converted to their symbolic representations (in the method :py:meth:`encomp.units.Quantity._sympy_`).
 
+
+
+.. code-block::python
+
+    x, y, z = sp.symbols('x, y, z')
+
+    # the type of the left object determines the output
+
+    # output is Quantity[Dimensionless]
+    Q(1) * x  # x dimensionless
+    Q(10, '%') * x  # 10*x percent
+
+    # output is a sympy object
+    x * Q(1)  # x
+    x * Q(10, '%')  # 0.1x
+
+    # symbols can also be used as magnitude
+    Q(x * y, 'm') / Q(z, 's')  # x*y/z meter/second
+
+    # when the output is a sympy object,
+    # all derived units are expanded to the base SI units
+    x + y  / Q(25, 'kW')
+    # x + 4.0e-5*\\text{s}**3*y/(\\text{kg}*\\text{m}**2)
+
+
+.. todo::
+
+    This behavior is not encoded in the type hints.
 
 Intergration with other libraries
 ---------------------------------
