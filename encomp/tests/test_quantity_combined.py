@@ -166,7 +166,7 @@ def test_various_mul_div_types() -> None:
 
     reveal_type(Q[ThermalConductivity](25, 'W/m/K') * Q(25, 'm'))  # R: encomp.units.Quantity[encomp.utypes.PowerPerTemperature]
 
-    reveal_type(Q(25, 'MWh') / Q(25, 'kg'))  # R: encomp.units.Quantity[encomp.utypes.HeatingValue]
-    reveal_type((Q(2, 'd') * Q(25, 'kW')) / (Q(25, 'kg/s') * Q(2, 'w')))  # R: encomp.units.Quantity[encomp.utypes.HeatingValue]
+    reveal_type(Q(25, 'MWh') / Q(25, 'kg'))  # R: encomp.units.Quantity[encomp.utypes.EnergyPerMass]
+    reveal_type((Q(2, 'd') * Q(25, 'kW')) / (Q(25, 'kg/s') * Q(2, 'w')))  # R: encomp.units.Quantity[encomp.utypes.EnergyPerMass]
 
     # autopep8: on

@@ -111,21 +111,20 @@ def test_asdim():
 
     with _reset_dimensionality_registry():
 
-        # default dimensionality for kJ/kg is HeatingValue
+        # default dimensionality for kJ/kg is EnergyPerMass
         q1 = Q(15, 'kJ/kg')
         q2 = Q[LowerHeatingValue](15, 'kJ/kg')
 
         assert type(q1) is not type(q2)
         assert q1 != q2
 
-        print(type(q1), type(q2.asdim(HeatingValue)))
-        assert type(q1) is type(q2.asdim(HeatingValue))
+        assert type(q1) is type(q2.asdim(EnergyPerMass))
         assert type(q2) is type(q1.asdim(LowerHeatingValue))
 
         assert type(q1) is type(q2.asdim(q1))
         assert type(q2) is type(q1.asdim(q2))
 
-        assert q1 == q2.asdim(HeatingValue)
+        assert q1 == q2.asdim(EnergyPerMass)
         assert q2 == q1.asdim(LowerHeatingValue)
 
         assert q1 == q2.asdim(q1)
@@ -904,16 +903,22 @@ def test_compatibility():
 
     # if the _distinct class attribute is True, an unspecified
     # dimensionality will default to this
-    # for example, HeatingValue has _distinct=True even though
-    # it shares dimensions with other dimensionalities like SpecificEnthalpy
+    # for example, EnergyPerMass has _distinct=True even though
+    # it shares dimensions with other dimensionalities like SpecificEnthalpy and HeatingValue
 
-    # q4 will be become Quantity[HeatingValue] by default
+    # q4 will be become Quantity[EnergyPerMass] by default
 
     q4 = Q(25, 'kJ/kg')
 
     # override the Literal['kJ/kg'] overload
     q5 = Q[SpecificEnthalpy](25, str('kJ/kg'))
-    q6 = Q[HeatingValue](25, str('kJ/kg'))
+
+    # prefer to use the asdim method
+    q5_ = Q(25, 'kJ/kg').asdim(SpecificEnthalpy)
+
+    assert q5 == q5_
+
+    q6 = Q[EnergyPerMass](25, str('kJ/kg'))
 
     with pytest.raises(DimensionalityTypeError):
         q4 - q5

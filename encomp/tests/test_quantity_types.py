@@ -57,9 +57,14 @@ def test_quantity_asdim() -> None:
     # autopep8: off
 
     q = Q(15, 'kJ/kg')
-    p = Q[LowerHeatingValue](15, str('kJ/kg'))
 
-    reveal_type(q)  # R: encomp.units.Quantity[encomp.utypes.HeatingValue]
+    # the string literal overload must be overridden when using Q[Dim]
+    p = Q[LowerHeatingValue](15, str('kJ/kg'))
+    s = Q(15, 'kJ/kg').asdim(LowerHeatingValue)
+
+    reveal_type(q)  # R: encomp.units.Quantity[encomp.utypes.EnergyPerMass]
+    reveal_type(p)  # R: encomp.units.Quantity[encomp.utypes.LowerHeatingValue]
+    reveal_type(s)  # R: encomp.units.Quantity[encomp.utypes.LowerHeatingValue]
 
     reveal_type(q.asdim(LowerHeatingValue))  # R: encomp.units.Quantity[encomp.utypes.LowerHeatingValue]
     reveal_type(q.asdim(p))  # R: encomp.units.Quantity[encomp.utypes.LowerHeatingValue]
@@ -312,10 +317,13 @@ def test_quantity_div_types() -> None:
     reveal_type(1.2 / Q(25, 's'))  # R: encomp.units.Quantity[encomp.utypes.Frequency]
     reveal_type(2 / Q(25, 'kg/liter'))  # R: encomp.units.Quantity[encomp.utypes.SpecificVolume]
     reveal_type(0.2 / Q(25, 'MWh/kg'))  # R: encomp.units.Quantity[encomp.utypes.MassPerEnergy]
-    reveal_type(1 / (0.2 / Q(25, 'MWh/kg')))  # R: encomp.units.Quantity[encomp.utypes.HeatingValue]
+    reveal_type(1 / (0.2 / Q(25, 'MWh/kg')))  # R: encomp.units.Quantity[encomp.utypes.EnergyPerMass]
+
+    reveal_type(Q(1, 'MJ/kg'))  # R: encomp.units.Quantity[encomp.utypes.EnergyPerMass]
+    reveal_type(1 / Q(1, 'MJ/kg'))  # R: encomp.units.Quantity[encomp.utypes.MassPerEnergy]
+    reveal_type(1 / (1 / Q(1, 'MJ/kg')))  # R: encomp.units.Quantity[encomp.utypes.EnergyPerMass]
 
     reveal_type(1 / Q(25, 'kW'))  # R: encomp.units.Quantity[encomp.utypes.Unknown]
-
 
     # autopep8: on
 

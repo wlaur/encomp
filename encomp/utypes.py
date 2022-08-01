@@ -198,7 +198,7 @@ KinematicViscosityUnits = L[
     'cm**2/s', 'cm^2/s', 'cm²/s'
 ]
 
-HeatingValueUnits = L[
+EnergyPerMassUnits = L[
     'MJ/kg', 'MWh/kg', 'kJ/kg', 'kWh/kg',
     'MJ/t', 'MWh/t', 'kJ/t', 'kWh/t',
     'MJ/ton', 'MWh/ton', 'kJ/ton', 'kWh/ton'
@@ -584,8 +584,12 @@ class MolarSpecificEntropy(Dimensionality):
 # (unless the _distinct class attribute is set to True)
 
 
-class HeatingValue(Dimensionality):
+class EnergyPerMass(Dimensionality):
     _distinct = True
+    dimensions = _EnergyUC / _MassUC
+
+
+class HeatingValue(Dimensionality):
     dimensions = _EnergyUC / _MassUC
 
 

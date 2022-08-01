@@ -9,6 +9,7 @@ from encomp.utypes import (Dimensionality,
                            Energy,
                            Mass,
                            Temperature,
+                           EnergyPerMass,
                            HeatingValue,
                            SpecificHeatCapacity,
                            LowerHeatingValue,
@@ -63,7 +64,7 @@ def generate_overloaded_signatures(
         tuple[type[Dimensionality], type[Dimensionality]],
         type[Dimensionality]
     ] = {
-
+        (EnergyPerMass, Mass): Energy,
         (HeatingValue, Mass): Energy,
         (LowerHeatingValue, Mass): Energy,
         (HigherHeatingValue, Mass): Energy
@@ -74,8 +75,8 @@ def generate_overloaded_signatures(
         type[Dimensionality]
     ] = {
 
-        (Energy, Mass): HeatingValue,
-        (HeatingValue, Temperature): SpecificHeatCapacity,
+        (Energy, Mass): EnergyPerMass,
+        (EnergyPerMass, Temperature): SpecificHeatCapacity,
     }
 
     registry = get_registry()
