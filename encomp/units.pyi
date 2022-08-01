@@ -152,6 +152,9 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
     def to_reduced_units(self) -> Quantity[DT]: ...
     def to_base_units(self) -> Quantity[DT]: ...
 
+    def astype(self, other: Union[type[DT_],
+               Quantity[DT_]]) -> Quantity[DT_]: ...
+
     def to(self, unit: Union[Unit, UnitsContainer,  # type: ignore
            str, Quantity[DT], dict]) -> Quantity[DT]: ...
 
@@ -546,11 +549,6 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
         ...
 
     @overload
-    def __mul__(self: Quantity[Mass], other: Quantity[MolarSpecificEntropy]  # type: ignore
-                ) -> Quantity[MolarSpecificEnthalpy]:
-        ...
-
-    @overload
     def __mul__(self: Quantity[Mass], other: Quantity[HeatingValue]  # type: ignore
                 ) -> Quantity[Energy]:
         ...
@@ -626,6 +624,11 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
         ...
 
     @overload
+    def __mul__(self: Quantity[Temperature], other: Quantity[MolarSpecificEntropy]  # type: ignore
+                ) -> Quantity[MolarSpecificEnthalpy]:
+        ...
+
+    @overload
     def __mul__(self: Quantity[Temperature], other: Quantity[SpecificHeatCapacity]  # type: ignore
                 ) -> Quantity[HeatingValue]:
         ...
@@ -633,11 +636,6 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
     @overload
     def __mul__(self: Quantity[Substance], other: Quantity[MolarMass]  # type: ignore
                 ) -> Quantity[Mass]:
-        ...
-
-    @overload
-    def __mul__(self: Quantity[Substance], other: Quantity[MolarSpecificEntropy]  # type: ignore
-                ) -> Quantity[HeatingValue]:
         ...
 
     @overload
@@ -1086,6 +1084,11 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
         ...
 
     @overload
+    def __mul__(self: Quantity[MolarMass], other: Quantity[SpecificHeatCapacity]  # type: ignore
+                ) -> Quantity[MolarSpecificEntropy]:
+        ...
+
+    @overload
     def __mul__(self: Quantity[MolarDensity], other: Quantity[Volume]  # type: ignore
                 ) -> Quantity[Substance]:
         ...
@@ -1291,13 +1294,8 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
         ...
 
     @overload
-    def __mul__(self: Quantity[MolarSpecificEntropy], other: Quantity[Mass]  # type: ignore
+    def __mul__(self: Quantity[MolarSpecificEntropy], other: Quantity[Temperature]  # type: ignore
                 ) -> Quantity[MolarSpecificEnthalpy]:
-        ...
-
-    @overload
-    def __mul__(self: Quantity[MolarSpecificEntropy], other: Quantity[Substance]  # type: ignore
-                ) -> Quantity[HeatingValue]:
         ...
 
     @overload
@@ -1368,6 +1366,11 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
     @overload
     def __mul__(self: Quantity[SpecificHeatCapacity], other: Quantity[DynamicViscosity]  # type: ignore
                 ) -> Quantity[ThermalConductivity]:
+        ...
+
+    @overload
+    def __mul__(self: Quantity[SpecificHeatCapacity], other: Quantity[MolarMass]  # type: ignore
+                ) -> Quantity[MolarSpecificEntropy]:
         ...
 
     # endregion
@@ -2268,13 +2271,18 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
         ...
 
     @overload
-    def __truediv__(self: Quantity[HeatingValue], other: Quantity[Temperature]  # type: ignore
+    def __truediv__(self: Quantity[MolarSpecificEntropy], other: Quantity[MolarMass]  # type: ignore
                     ) -> Quantity[SpecificHeatCapacity]:
         ...
 
     @overload
-    def __truediv__(self: Quantity[HeatingValue], other: Quantity[Substance]  # type: ignore
-                    ) -> Quantity[MolarSpecificEntropy]:
+    def __truediv__(self: Quantity[MolarSpecificEntropy], other: Quantity[SpecificHeatCapacity]  # type: ignore
+                    ) -> Quantity[MolarMass]:
+        ...
+
+    @overload
+    def __truediv__(self: Quantity[HeatingValue], other: Quantity[Temperature]  # type: ignore
+                    ) -> Quantity[SpecificHeatCapacity]:
         ...
 
     @overload
@@ -2303,17 +2311,12 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
         ...
 
     @overload
-    def __truediv__(self: Quantity[HeatingValue], other: Quantity[MolarSpecificEntropy]  # type: ignore
-                    ) -> Quantity[Substance]:
-        ...
-
-    @overload
     def __truediv__(self: Quantity[HeatingValue], other: Quantity[SpecificHeatCapacity]  # type: ignore
                     ) -> Quantity[Temperature]:
         ...
 
     @overload
-    def __truediv__(self: Quantity[MolarSpecificEnthalpy], other: Quantity[Mass]  # type: ignore
+    def __truediv__(self: Quantity[MolarSpecificEnthalpy], other: Quantity[Temperature]  # type: ignore
                     ) -> Quantity[MolarSpecificEntropy]:
         ...
 
@@ -2324,7 +2327,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
 
     @overload
     def __truediv__(self: Quantity[MolarSpecificEnthalpy], other: Quantity[MolarSpecificEntropy]  # type: ignore
-                    ) -> Quantity[Mass]:
+                    ) -> Quantity[Temperature]:
         ...
 
     @overload

@@ -1,13 +1,13 @@
 autopep8
 pytest
 coverage
-mypy>=0.961
+mypy
 pytest-mypy-testing
 pandas-stubs
 hypothesis
 twine
-Sphinx<=5.0.2
-jinja2<3.0.3
+Sphinx
+jinja2
 nbsphinx
 furo
 sphinx-inline-tabs

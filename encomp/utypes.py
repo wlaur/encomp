@@ -240,10 +240,7 @@ class Dimensionality(ABC):
     """
 
     # set _distinct to False for dimensionalities that are not distinct
-    # purely based on the dimensions. For example, [energy] / [mass]
-    # might mean LowerHeatingValue, UpperHeatingValue, ...
-    # and the dimensions alone are not sufficient to determine what
-    # the dimensionality should be
+    # purely based on the dimensions
     _distinct: Optional[bool] = None
 
     dimensions: Optional[UnitsContainer] = None
@@ -455,7 +452,7 @@ _ThermalConductivityUC = _PowerUC / _LengthUC / _TemperatureUC
 _HeatTransferCoefficientUC = _PowerUC / _AreaUC / _TemperatureUC
 _MassPerNormalVolumeUC = _MassUC / _NormalVolumeUC
 _MassPerEnergyUC = _MassUC / _EnergyUC
-_MolarSpecificEntropyUC = _EnergyUC / _MassUC / _SubstanceUC
+_MolarSpecificEntropyUC = _EnergyUC / _TemperatureUC / _SubstanceUC
 
 
 class Area(Dimensionality):

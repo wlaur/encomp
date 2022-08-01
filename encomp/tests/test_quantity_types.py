@@ -11,6 +11,7 @@ from encomp.utypes import (Dimensionless,
                            Time,
                            Length,
                            Mass,
+                           LowerHeatingValue,
                            Temperature)
 
 
@@ -48,6 +49,24 @@ def test_quantity_reveal_type() -> None:
 
     ms_ = Q(ms)
     reveal_type(ms_)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+
+
+
+@pytest.mark.mypy_testing
+def test_quantity_astype() -> None:
+
+    # autopep8: off
+
+    q = Q(15, 'kJ/kg')
+    p = Q[LowerHeatingValue](15, str('kJ/kg'))
+
+    reveal_type(q)  # R: encomp.units.Quantity[encomp.utypes.HeatingValue]
+
+    reveal_type(q.astype(LowerHeatingValue))  # R: encomp.units.Quantity[encomp.utypes.LowerHeatingValue]
+    reveal_type(q.astype(p))  # R: encomp.units.Quantity[encomp.utypes.LowerHeatingValue]
+
+    # autopep8: on
+
 
 
 @pytest.mark.mypy_testing

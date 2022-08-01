@@ -3,7 +3,7 @@ import numpy as np
 
 from encomp.units import Quantity as Q
 from encomp.fluids import Fluid, HumidAir, Water
-from encomp.utypes import Density
+from encomp.utypes import Density, SpecificEntropy
 
 
 def test_Fluid():
@@ -15,8 +15,11 @@ def test_Fluid():
     fld.describe('P')
     fld.search('pressure')
 
+    # using __getattr__ will not call astype()
     assert fld.__getattr__('S') == Q(1087.7758824621442, 'J/(K kg)')
-    assert fld.S == Q(1087.7758824621442, 'J/(K kg)')
+
+    # property access will call astype()
+    assert fld.S == Q[SpecificEntropy](1087.7758824621442, 'J/(K kg)')
 
     assert fld.D == fld.__getattr__('D')
 

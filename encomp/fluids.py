@@ -10,7 +10,7 @@ Uses CoolProp as backend.
 """
 
 import warnings
-from typing import Annotated, Callable, cast
+from typing import Annotated, Callable
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -803,139 +803,139 @@ class Fluid(CoolPropFluid):
 
     @property
     def PHASE(self) -> Quantity[Dimensionless]:
-        return cast(Quantity[Dimensionless], self.__getattr__('PHASE'))
+        return self.__getattr__('PHASE').astype(Dimensionless)
 
     @property
     def PRANDTL(self) -> Quantity[Dimensionless]:
-        return cast(Quantity[Dimensionless], self.__getattr__('PRANDTL'))
+        return self.__getattr__('PRANDTL').astype(Dimensionless)
 
     @property
     def P(self) -> Quantity[Pressure]:
-        return cast(Quantity[Pressure], self.__getattr__('P'))
+        return self.__getattr__('P').astype(Pressure)
 
     @property
     def PCRIT(self) -> Quantity[Pressure]:
-        return cast(Quantity[Pressure], self.__getattr__('PCRIT'))
+        return self.__getattr__('PCRIT').astype(Pressure)
 
     @property
     def PMAX(self) -> Quantity[Pressure]:
-        return cast(Quantity[Pressure], self.__getattr__('PMAX'))
+        return self.__getattr__('PMAX').astype(Pressure)
 
     @property
     def PMIN(self) -> Quantity[Pressure]:
-        return cast(Quantity[Pressure], self.__getattr__('PMIN'))
+        return self.__getattr__('PMIN').astype(Pressure)
 
     @property
     def PTRIPLE(self) -> Quantity[Pressure]:
-        return cast(Quantity[Pressure], self.__getattr__('PTRIPLE'))
+        return self.__getattr__('PTRIPLE').astype(Pressure)
 
     @property
     def P_REDUCING(self) -> Quantity[Pressure]:
-        return cast(Quantity[Pressure], self.__getattr__('P_REDUCING'))
+        return self.__getattr__('P_REDUCING').astype(Pressure)
 
     @property
     def T(self) -> Quantity[Temperature]:
-        return cast(Quantity[Temperature], self.__getattr__('T'))
+        return self.__getattr__('T').astype(Temperature)
 
     @property
     def TCRIT(self) -> Quantity[Temperature]:
-        return cast(Quantity[Temperature], self.__getattr__('TCRIT'))
+        return self.__getattr__('TCRIT').astype(Temperature)
 
     @property
     def TMAX(self) -> Quantity[Temperature]:
-        return cast(Quantity[Temperature], self.__getattr__('TMAX'))
+        return self.__getattr__('TMAX').astype(Temperature)
 
     @property
     def TMIN(self) -> Quantity[Temperature]:
-        return cast(Quantity[Temperature], self.__getattr__('TMIN'))
+        return self.__getattr__('TMIN').astype(Temperature)
 
     @property
     def TTRIPLE(self) -> Quantity[Temperature]:
-        return cast(Quantity[Temperature], self.__getattr__('TTRIPLE'))
+        return self.__getattr__('TTRIPLE').astype(Temperature)
 
     @property
     def T_FREEZING(self) -> Quantity[Temperature]:
-        return cast(Quantity[Temperature], self.__getattr__('T_FREEZING'))
+        return self.__getattr__('T_FREEZING').astype(Temperature)
 
     @property
     def T_REDUCING(self) -> Quantity[Temperature]:
-        return cast(Quantity[Temperature], self.__getattr__('T_REDUCING'))
+        return self.__getattr__('T_REDUCING').astype(Temperature)
 
     @property
     def Q(self) -> Quantity[Dimensionless]:
-        return cast(Quantity[Dimensionless], self.__getattr__('Q'))
+        return self.__getattr__('Q').astype(Dimensionless)
 
     @property
     def H(self) -> Quantity[SpecificEnthalpy]:
-        return cast(Quantity[SpecificEnthalpy], self.__getattr__('H'))
+        return self.__getattr__('H').astype(SpecificEnthalpy)
 
     @property
     def HMOLAR(self) -> Quantity[MolarSpecificEnthalpy]:
-        return cast(Quantity[MolarSpecificEnthalpy], self.__getattr__('HMOLAR'))
+        return self.__getattr__('HMOLAR').astype(MolarSpecificEnthalpy)
 
     @property
     def S(self) -> Quantity[SpecificEntropy]:
-        return cast(Quantity[SpecificEntropy], self.__getattr__('S'))
+        return self.__getattr__('S').astype(SpecificEntropy)
 
     @property
     def SMOLAR(self) -> Quantity[MolarSpecificEntropy]:
-        return cast(Quantity[MolarSpecificEntropy], self.__getattr__('SMOLAR'))
+        return self.__getattr__('SMOLAR').astype(MolarSpecificEntropy)
 
     @property
     def U(self) -> Quantity[SpecificInternalEnergy]:
-        return cast(Quantity[SpecificInternalEnergy], self.__getattr__('U'))
+        return self.__getattr__('U').astype(SpecificInternalEnergy)
 
     @property
     def UMOLAR(self) -> Quantity[MolarSpecificInternalEnergy]:
-        return cast(Quantity[MolarSpecificInternalEnergy], self.__getattr__('UMOLAR'))
+        return self.__getattr__('UMOLAR').astype(MolarSpecificInternalEnergy)
 
     @property
     def V(self) -> Quantity[DynamicViscosity]:
-        return cast(Quantity[DynamicViscosity], self.__getattr__('V'))
+        return self.__getattr__('V').astype(DynamicViscosity)
 
     @property
     def Z(self) -> Quantity[Dimensionless]:
-        return cast(Quantity[Dimensionless], self.__getattr__('Z'))
+        return self.__getattr__('Z').astype(Dimensionless)
 
     @property
     def DELTA(self) -> Quantity[Dimensionless]:
-        return cast(Quantity[Dimensionless], self.__getattr__('DELTA'))
+        return self.__getattr__('DELTA').astype(Dimensionless)
 
     @property
     def D(self) -> Quantity[Density]:
-        return cast(Quantity[Density], self.__getattr__('D'))
+        return self.__getattr__('D').astype(Density)
 
     @property
     def RHOMASS_REDUCING(self) -> Quantity[Density]:
-        return cast(Quantity[Density], self.__getattr__('RHOMASS_REDUCING'))
+        return self.__getattr__('RHOMASS_REDUCING').astype(Density)
 
     @property
     def RHOMOLAR_CRITICAL(self) -> Quantity[MolarDensity]:
-        return cast(Quantity[MolarDensity], self.__getattr__('RHOMOLAR_CRITICAL'))
+        return self.__getattr__('RHOMOLAR_CRITICAL').astype(MolarDensity)
 
     @property
     def RHOMOLAR_REDUCING(self) -> Quantity[MolarDensity]:
-        return cast(Quantity[MolarDensity], self.__getattr__('RHOMOLAR_REDUCING'))
+        return self.__getattr__('RHOMOLAR_REDUCING').astype(MolarDensity)
 
     @property
     def DMOLAR(self) -> Quantity[MolarDensity]:
-        return cast(Quantity[MolarDensity], self.__getattr__('DMOLAR'))
+        return self.__getattr__('DMOLAR').astype(MolarDensity)
 
     @property
     def A(self) -> Quantity[Velocity]:
-        return cast(Quantity[Velocity], self.__getattr__('D'))
+        return self.__getattr__('A').astype(Velocity)
 
     @property
     def L(self) -> Quantity[ThermalConductivity]:
-        return cast(Quantity[ThermalConductivity], self.__getattr__('L'))
+        return self.__getattr__('L').astype(ThermalConductivity)
 
     @property
     def C(self) -> Quantity[SpecificHeatCapacity]:
-        return cast(Quantity[SpecificHeatCapacity], self.__getattr__('C'))
+        return self.__getattr__('C').astype(SpecificHeatCapacity)
 
     @property
     def M(self) -> Quantity[MolarMass]:
-        return cast(Quantity[MolarMass], self.__getattr__('M'))
+        return self.__getattr__('M').astype(MolarMass)
 
     def __getattr__(self, attr: CProperty) -> Quantity[Unknown]:
 
@@ -1106,79 +1106,79 @@ class HumidAir(CoolPropFluid):
 
     @property
     def psi_w(self) -> Quantity[Dimensionless]:
-        return cast(Quantity[Dimensionless], self.__getattr__('psi_w'))
+        return self.__getattr__('psi_w').astype(Dimensionless)
 
     @property
     def W(self) -> Quantity[Dimensionless]:
-        return cast(Quantity[Dimensionless], self.__getattr__('W'))
+        return self.__getattr__('W').astype(Dimensionless)
 
     @property
     def Z(self) -> Quantity[Dimensionless]:
-        return cast(Quantity[Dimensionless], self.__getattr__('Z'))
+        return self.__getattr__('Z').astype(Dimensionless)
 
     @property
     def R(self) -> Quantity[Dimensionless]:
-        return cast(Quantity[Dimensionless], self.__getattr__('R'))
+        return self.__getattr__('R').astype(Dimensionless)
 
     @property
     def P(self) -> Quantity[Pressure]:
-        return cast(Quantity[Pressure], self.__getattr__('P'))
+        return self.__getattr__('P').astype(Pressure)
 
     @property
     def P_w(self) -> Quantity[Pressure]:
-        return cast(Quantity[Pressure], self.__getattr__('P_w'))
+        return self.__getattr__('P_w').astype(Pressure)
 
     @property
     def B(self) -> Quantity[Temperature]:
-        return cast(Quantity[Temperature], self.__getattr__('B'))
+        return self.__getattr__('B').astype(Temperature)
 
     @property
     def T(self) -> Quantity[Temperature]:
-        return cast(Quantity[Temperature], self.__getattr__('T'))
+        return self.__getattr__('T').astype(Temperature)
 
     @property
     def D(self) -> Quantity[Temperature]:
-        return cast(Quantity[Temperature], self.__getattr__('D'))
+        return self.__getattr__('D').astype(Temperature)
 
     @property
     def K(self) -> Quantity[ThermalConductivity]:
-        return cast(Quantity[ThermalConductivity], self.__getattr__('K'))
+        return self.__getattr__('K').astype(ThermalConductivity)
 
     @property
     def M(self) -> Quantity[DynamicViscosity]:
-        return cast(Quantity[DynamicViscosity], self.__getattr__('M'))
+        return self.__getattr__('M').astype(DynamicViscosity)
 
     @property
     def C(self) -> Quantity[SpecificHeatPerDryAir]:
-        return cast(Quantity[SpecificHeatPerDryAir], self.__getattr__('C'))
+        return self.__getattr__('C').astype(SpecificHeatPerDryAir)
 
     @property
     def Cha(self) -> Quantity[SpecificHeatPerHumidAir]:
-        return cast(Quantity[SpecificHeatPerHumidAir], self.__getattr__('Cha'))
+        return self.__getattr__('Cha').astype(SpecificHeatPerHumidAir)
 
     @property
     def H(self) -> Quantity[MixtureEnthalpyPerDryAir]:
-        return cast(Quantity[MixtureEnthalpyPerDryAir], self.__getattr__('H'))
+        return self.__getattr__('H').astype(MixtureEnthalpyPerDryAir)
 
     @property
     def Hha(self) -> Quantity[MixtureEnthalpyPerHumidAir]:
-        return cast(Quantity[MixtureEnthalpyPerHumidAir], self.__getattr__('Hha'))
+        return self.__getattr__('Hha').astype(MixtureEnthalpyPerHumidAir)
 
     @property
     def S(self) -> Quantity[MixtureEntropyPerDryAir]:
-        return cast(Quantity[MixtureEntropyPerDryAir], self.__getattr__('S'))
+        return self.__getattr__('S').astype(MixtureEntropyPerDryAir)
 
     @property
     def Sha(self) -> Quantity[MixtureEntropyPerHumidAir]:
-        return cast(Quantity[MixtureEntropyPerHumidAir], self.__getattr__('Sha'))
+        return self.__getattr__('Sha').astype(MixtureEntropyPerHumidAir)
 
     @property
     def V(self) -> Quantity[MixtureVolumePerDryAir]:
-        return cast(Quantity[MixtureVolumePerDryAir], self.__getattr__('V'))
+        return self.__getattr__('V').astype(MixtureVolumePerDryAir)
 
     @property
     def Vha(self) -> Quantity[MixtureVolumePerHumidAir]:
-        return cast(Quantity[MixtureVolumePerHumidAir], self.__getattr__('Vha'))
+        return self.__getattr__('Vha').astype(MixtureVolumePerHumidAir)
 
     def __getattr__(self, attr: CProperty) -> Quantity[Unknown]:
 

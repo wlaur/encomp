@@ -14,7 +14,7 @@ import re
 import warnings
 import copy
 import numbers
-from typing import Union, Optional, Generic, Union, Any, TypeVar
+from typing import Union, Optional, Generic, Union, Any, TypeVar, Type
 
 import sympy as sp
 import numpy as np
@@ -520,7 +520,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
         if isinstance(val, pd.Series):
 
             # support passing pd.Series directly
-            val = val.values
+            val = val.values  # type: ignore
 
         if isinstance(val, str):
             val = float(val)
@@ -600,11 +600,11 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
 
     def to_reduced_units(self) -> Quantity[DT]:
         ret = super().to_reduced_units()
-        return self.subclass(ret)
+        return self.subclass(ret)  # type: ignore
 
     def to_base_units(self) -> Quantity[DT]:
         ret = super().to_base_units()
-        return self.subclass(ret)
+        return self.subclass(ret)  # type: ignore
 
     def to(self,  # type: ignore[override]
            unit: Union[Unit, UnitsContainer, str, Quantity[DT], dict]) -> Quantity[DT]:
@@ -1009,6 +1009,15 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
             return 0
 
         return self.m.ndim
+
+    def astype(self, other):
+
+        if isinstance(other, Quantity):
+            dim = other.dimensionality_type
+        else:
+            dim = other
+
+        return Quantity[dim](self)
 
 
 # override the implementation of the Quantity class for the current registry

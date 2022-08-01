@@ -107,6 +107,37 @@ def test_dimensionality_subtype_protocol():
         Q[Test](1)
 
 
+def test_astype():
+
+    with _reset_dimensionality_registry():
+
+        # default dimensionality for kJ/kg is HeatingValue
+        q1 = Q(15, 'kJ/kg')
+        q2 = Q[LowerHeatingValue](15, 'kJ/kg')
+
+        assert type(q1) is not type(q2)
+        assert q1 != q2
+
+        print(type(q1), type(q2.astype(HeatingValue)))
+        assert type(q1) is type(q2.astype(HeatingValue))
+        assert type(q2) is type(q1.astype(LowerHeatingValue))
+
+        assert type(q1) is type(q2.astype(q1))
+        assert type(q2) is type(q1.astype(q2))
+
+        assert q1 == q2.astype(HeatingValue)
+        assert q2 == q1.astype(LowerHeatingValue)
+
+        assert q1 == q2.astype(q1)
+        assert q2 == q1.astype(q2)
+
+        with pytest.raises(ExpectedDimensionalityError):
+            q1.astype(Temperature)
+
+        with pytest.raises(ExpectedDimensionalityError):
+            q1.astype(Q(25, 'kg'))
+
+
 def test_custom_dimensionality():
 
     with _reset_dimensionality_registry():
