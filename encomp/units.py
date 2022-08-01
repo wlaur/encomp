@@ -14,7 +14,7 @@ import re
 import warnings
 import copy
 import numbers
-from typing import Union, Optional, Generic, Union, Any, TypeVar, Type
+from typing import Union, Optional, Generic, Union, Any, TypeVar, Literal
 
 import sympy as sp
 import numpy as np
@@ -35,6 +35,9 @@ from encomp.utypes import (_BASE_SI_UNITS,
                            DT,
                            Dimensionality,
                            Dimensionless,
+                           Temperature,
+                           TemperatureDifference,
+                           TemperatureDifferenceUnits,
                            Unknown)
 
 if SETTINGS.ignore_ndarray_unit_stripped_warning:
@@ -340,6 +343,9 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
     NORMAL_M3_VARIANTS = ('nm³', 'Nm³', 'nm3', 'Nm3',
                           'nm**3', 'Nm**3', 'nm^3', 'Nm^3')
 
+    TEMPERATURE_DIFFERENCE_UCS = (Unit('delta_degC')._units,
+                                  Unit('delta_degF')._units)
+
     # attributes used internally by pint
     __used: bool
 
@@ -535,6 +541,12 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
 
         if cls.dimensionality_type is None:
 
+            # special case for temperature difference
+
+            if valid_unit._units in cls.TEMPERATURE_DIFFERENCE_UCS:
+                subcls = cls._get_dimensional_subclass(TemperatureDifference)
+                return subcls(val, valid_unit)
+
             # in case this Quantity was initialized without specifying
             # the dimensionality, check the dimensionality and return the
             # subclass with correct dimensionality
@@ -598,11 +610,32 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
     def m(self) -> Magnitude:
         return self._magnitude
 
+    @property
+    def _is_temperature_difference(self):
+        return self.dimensionality_type is TemperatureDifference
+
+    def _check_temperature_compatibility(self, unit: Unit) -> None:
+
+        if self._is_temperature_difference:
+
+            if unit._units not in self.TEMPERATURE_DIFFERENCE_UCS:
+
+                raise DimensionalityTypeError(
+                    f'Cannot convert {self.units} (dimensionality '
+                    f'{self.dimensionality_type.__name__}) '  # type: ignore
+                    f'to {unit} (dimensionality '
+                    f'{Quantity(1, unit).dimensionality_type.__name__})'
+                )
+
     def to_reduced_units(self) -> Quantity[DT]:
+
         ret = super().to_reduced_units()
         return self.subclass(ret)  # type: ignore
 
     def to_base_units(self) -> Quantity[DT]:
+
+        self._check_temperature_compatibility(Unit('kelvin'))
+
         ret = super().to_base_units()
         return self.subclass(ret)  # type: ignore
 
@@ -610,14 +643,24 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
            unit: Union[Unit, UnitsContainer, str, Quantity[DT], dict]) -> Quantity[DT]:
 
         unit = self._to_unit(unit)
+
+        self._check_temperature_compatibility(unit)
+
         m = self._convert_magnitude_not_inplace(unit)
+
+        if unit._units in self.TEMPERATURE_DIFFERENCE_UCS:
+            return Quantity[TemperatureDifference](m, unit)  # type: ignore
 
         return self.subclass(m, unit)
 
     def ito(self,  # type: ignore[override]
             unit: Union[Unit, UnitsContainer, str, Quantity[DT]]) -> None:
 
+        # NOTE: this method cannot convert the dimensionality type
+
         unit = self._to_unit(unit)
+
+        self._check_temperature_compatibility(unit)
 
         # it's not safe to convert units as int, the
         # user will have to convert back to int if necessary
@@ -947,17 +990,66 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
 
         return self.subclass(ret)
 
+    def _temperature_difference_add_sub(self, other, operator: Literal['add', 'sub']):
+
+        v1 = self.to('degC').m
+        v2 = other.to('delta_degC').m
+
+        if operator == 'add':
+            val = v1 + v2
+        else:
+            val = v1 - v2
+
+        return Quantity[Temperature](val, 'degC')
+
     def __add__(self, other):
 
-        self.check_compatibility(other)
+        try:
+            self.check_compatibility(other)
+
+        except DimensionalityTypeError as e:
+
+            if not isinstance_types(
+                    [self, other],
+                    list[Union[Quantity[Temperature],
+                               Quantity[TemperatureDifference]]]
+            ):
+                raise e
+
+            if self.dimensionality_type is TemperatureDifference:
+                raise e
+
+            return self._temperature_difference_add_sub(other, 'add')
+
         ret = super().__add__(other)
 
         return self.subclass(ret)
 
     def __sub__(self, other):
 
-        self.check_compatibility(other)
+        try:
+            self.check_compatibility(other)
+        except DimensionalityTypeError as e:
+
+            if not isinstance_types(
+                    [self, other],
+                    list[Union[Quantity[Temperature],
+                               Quantity[TemperatureDifference]]]
+            ):
+                raise e
+
+            if self.dimensionality_type is TemperatureDifference:
+                raise e
+
+            return self._temperature_difference_add_sub(other, 'sub')
+
         ret = super().__sub__(other)
+
+        if (
+            self.dimensionality_type is Temperature and
+            other.dimensionality_type is Temperature
+        ):
+            return Quantity[TemperatureDifference](ret)
 
         return self.subclass(ret)
 

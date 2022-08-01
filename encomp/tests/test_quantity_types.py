@@ -3,7 +3,7 @@ import copy
 
 import pytest
 
-from encomp.units import DimensionalityError, ExpectedDimensionalityError
+from encomp.units import DimensionalityError, ExpectedDimensionalityError, DimensionalityTypeError
 from encomp.units import Quantity as Q
 from encomp.utypes import (Dimensionless,
                            NormalVolumeFlow,
@@ -664,3 +664,33 @@ def test_quantity_misc_operators() -> None:
     # __pos__, __neg__ operators
     reveal_type(-q)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
     reveal_type(+q)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
+
+
+@pytest.mark.mypy_testing
+def test_quantity_temperature_types() -> None:
+
+
+    T1 = Q(15, 'C')
+    T2 = Q(25, 'C')
+
+    dT = Q(1, 'delta_C')
+
+    # autopep8: off
+
+    reveal_type(T1 - T2)  # R: encomp.units.Quantity[encomp.utypes.TemperatureDifference]
+    reveal_type(T2 - T1)  # R: encomp.units.Quantity[encomp.utypes.TemperatureDifference]
+    reveal_type((T2 - T1) / 2)  # R: encomp.units.Quantity[encomp.utypes.TemperatureDifference]
+
+    reveal_type((T2 - T1) / (T2 - T1))  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+
+    reveal_type(T1 + dT)  # R: encomp.units.Quantity[encomp.utypes.Temperature]
+    reveal_type(T1 + (T2 - T1))  # R: encomp.units.Quantity[encomp.utypes.Temperature]
+
+    with pytest.raises(DimensionalityTypeError):
+        dT + T1   # E: Unsupported operand types for + ("Quantity[TemperatureDifference]" and "Quantity[Temperature]")
+
+    with pytest.raises(DimensionalityTypeError):
+        (T1 - T2) - T2   # E: Unsupported operand types for - ("Quantity[TemperatureDifference]" and "Quantity[Temperature]")
+
+
+     # autopep8: on

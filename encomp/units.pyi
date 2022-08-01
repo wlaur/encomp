@@ -30,6 +30,7 @@ from encomp.utypes import (DimensionlessUnits,
                            MassUnits,
                            TimeUnits,
                            TemperatureUnits,
+                           TemperatureDifferenceUnits,
                            SubstanceUnits,
                            CurrentUnits,
                            LuminosityUnits,
@@ -67,6 +68,7 @@ from encomp.utypes import (MagnitudeInput,
                            Power,
                            Time,
                            Temperature,
+                           TemperatureDifference,
                            Length,
                            Area,
                            Volume,
@@ -284,6 +286,11 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
     @overload
     def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: TemperatureUnits) -> Quantity[Temperature]:
+        ...
+
+    @overload
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
+                unit: TemperatureDifferenceUnits) -> Quantity[TemperatureDifference]:
         ...
 
     @overload
@@ -620,27 +627,27 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
         ...
 
     @overload
-    def __mul__(self: Quantity[Temperature], other: Quantity[PowerPerTemperature]  # type: ignore
+    def __mul__(self: Quantity[TemperatureDifference], other: Quantity[PowerPerTemperature]  # type: ignore
                 ) -> Quantity[Power]:
         ...
 
     @overload
-    def __mul__(self: Quantity[Temperature], other: Quantity[ThermalConductivity]  # type: ignore
+    def __mul__(self: Quantity[TemperatureDifference], other: Quantity[ThermalConductivity]  # type: ignore
                 ) -> Quantity[PowerPerLength]:
         ...
 
     @overload
-    def __mul__(self: Quantity[Temperature], other: Quantity[HeatTransferCoefficient]  # type: ignore
+    def __mul__(self: Quantity[TemperatureDifference], other: Quantity[HeatTransferCoefficient]  # type: ignore
                 ) -> Quantity[PowerPerArea]:
         ...
 
     @overload
-    def __mul__(self: Quantity[Temperature], other: Quantity[MolarSpecificEntropy]  # type: ignore
+    def __mul__(self: Quantity[TemperatureDifference], other: Quantity[MolarSpecificEntropy]  # type: ignore
                 ) -> Quantity[MolarSpecificEnthalpy]:
         ...
 
     @overload
-    def __mul__(self: Quantity[Temperature], other: Quantity[SpecificHeatCapacity]  # type: ignore
+    def __mul__(self: Quantity[TemperatureDifference], other: Quantity[SpecificHeatCapacity]  # type: ignore
                 ) -> Quantity[EnergyPerMass]:
         ...
 
@@ -1220,7 +1227,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
         ...
 
     @overload
-    def __mul__(self: Quantity[PowerPerTemperature], other: Quantity[Temperature]  # type: ignore
+    def __mul__(self: Quantity[PowerPerTemperature], other: Quantity[TemperatureDifference]  # type: ignore
                 ) -> Quantity[Power]:
         ...
 
@@ -1230,7 +1237,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
         ...
 
     @overload
-    def __mul__(self: Quantity[ThermalConductivity], other: Quantity[Temperature]  # type: ignore
+    def __mul__(self: Quantity[ThermalConductivity], other: Quantity[TemperatureDifference]  # type: ignore
                 ) -> Quantity[PowerPerLength]:
         ...
 
@@ -1240,7 +1247,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
         ...
 
     @overload
-    def __mul__(self: Quantity[HeatTransferCoefficient], other: Quantity[Temperature]  # type: ignore
+    def __mul__(self: Quantity[HeatTransferCoefficient], other: Quantity[TemperatureDifference]  # type: ignore
                 ) -> Quantity[PowerPerArea]:
         ...
 
@@ -1305,7 +1312,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
         ...
 
     @overload
-    def __mul__(self: Quantity[MolarSpecificEntropy], other: Quantity[Temperature]  # type: ignore
+    def __mul__(self: Quantity[MolarSpecificEntropy], other: Quantity[TemperatureDifference]  # type: ignore
                 ) -> Quantity[MolarSpecificEnthalpy]:
         ...
 
@@ -1365,7 +1372,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
         ...
 
     @overload
-    def __mul__(self: Quantity[SpecificHeatCapacity], other: Quantity[Temperature]  # type: ignore
+    def __mul__(self: Quantity[SpecificHeatCapacity], other: Quantity[TemperatureDifference]  # type: ignore
                 ) -> Quantity[EnergyPerMass]:
         ...
 
@@ -1432,7 +1439,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
         ...
 
     @overload
-    def __truediv__(self: Quantity[EnergyPerMass], other: Quantity[Temperature]  # type: ignore
+    def __truediv__(self: Quantity[EnergyPerMass], other: Quantity[TemperatureDifference]  # type: ignore
                     ) -> Quantity[SpecificHeatCapacity]:
         ...
 
@@ -1857,7 +1864,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
         ...
 
     @overload
-    def __truediv__(self: Quantity[Power], other: Quantity[Temperature]  # type: ignore
+    def __truediv__(self: Quantity[Power], other: Quantity[TemperatureDifference]  # type: ignore
                     ) -> Quantity[PowerPerTemperature]:
         ...
 
@@ -1913,7 +1920,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
 
     @overload
     def __truediv__(self: Quantity[Power], other: Quantity[PowerPerTemperature]  # type: ignore
-                    ) -> Quantity[Temperature]:
+                    ) -> Quantity[TemperatureDifference]:
         ...
 
     @overload
@@ -2147,7 +2154,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
         ...
 
     @overload
-    def __truediv__(self: Quantity[PowerPerLength], other: Quantity[Temperature]  # type: ignore
+    def __truediv__(self: Quantity[PowerPerLength], other: Quantity[TemperatureDifference]  # type: ignore
                     ) -> Quantity[ThermalConductivity]:
         ...
 
@@ -2183,7 +2190,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
 
     @overload
     def __truediv__(self: Quantity[PowerPerLength], other: Quantity[ThermalConductivity]  # type: ignore
-                    ) -> Quantity[Temperature]:
+                    ) -> Quantity[TemperatureDifference]:
         ...
 
     @overload
@@ -2197,7 +2204,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
         ...
 
     @overload
-    def __truediv__(self: Quantity[PowerPerArea], other: Quantity[Temperature]  # type: ignore
+    def __truediv__(self: Quantity[PowerPerArea], other: Quantity[TemperatureDifference]  # type: ignore
                     ) -> Quantity[HeatTransferCoefficient]:
         ...
 
@@ -2218,7 +2225,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
 
     @overload
     def __truediv__(self: Quantity[PowerPerArea], other: Quantity[HeatTransferCoefficient]  # type: ignore
-                    ) -> Quantity[Temperature]:
+                    ) -> Quantity[TemperatureDifference]:
         ...
 
     @overload
@@ -2292,7 +2299,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
         ...
 
     @overload
-    def __truediv__(self: Quantity[EnergyPerMass], other: Quantity[Temperature]  # type: ignore
+    def __truediv__(self: Quantity[EnergyPerMass], other: Quantity[TemperatureDifference]  # type: ignore
                     ) -> Quantity[SpecificHeatCapacity]:
         ...
 
@@ -2323,11 +2330,11 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
 
     @overload
     def __truediv__(self: Quantity[EnergyPerMass], other: Quantity[SpecificHeatCapacity]  # type: ignore
-                    ) -> Quantity[Temperature]:
+                    ) -> Quantity[TemperatureDifference]:
         ...
 
     @overload
-    def __truediv__(self: Quantity[MolarSpecificEnthalpy], other: Quantity[Temperature]  # type: ignore
+    def __truediv__(self: Quantity[MolarSpecificEnthalpy], other: Quantity[TemperatureDifference]  # type: ignore
                     ) -> Quantity[MolarSpecificEntropy]:
         ...
 
@@ -2338,7 +2345,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
 
     @overload
     def __truediv__(self: Quantity[MolarSpecificEnthalpy], other: Quantity[MolarSpecificEntropy]  # type: ignore
-                    ) -> Quantity[Temperature]:
+                    ) -> Quantity[TemperatureDifference]:
         ...
 
     @overload
@@ -2418,6 +2425,11 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
         ...
 
     @overload
+    def __add__(self: Quantity[Temperature], other: Quantity[TemperatureDifference]  # type: ignore
+                ) -> Quantity[Temperature]:
+        ...
+
+    @overload
     def __add__(self, other: Quantity[DT]) -> Quantity[DT]:
         ...
 
@@ -2427,6 +2439,16 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
 
     @overload
     def __sub__(self: Quantity[Dimensionless], other: MagnitudeScalar) -> Quantity[Dimensionless]:
+        ...
+
+    @overload
+    def __sub__(self: Quantity[Temperature], other: Quantity[TemperatureDifference]  # type: ignore
+                ) -> Quantity[Temperature]:
+        ...
+
+    @overload
+    def __sub__(self: Quantity[Temperature], other: Quantity[Temperature]  # type: ignore
+                ) -> Quantity[TemperatureDifference]:
         ...
 
     @overload

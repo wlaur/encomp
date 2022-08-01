@@ -15,6 +15,7 @@ from encomp.constants import CONSTANTS
 from encomp.utypes import (Mass,
                            MassFlow,
                            Temperature,
+                           TemperatureDifference,
                            Energy,
                            Power,
                            Length,
@@ -24,7 +25,7 @@ from encomp.utypes import (Mass,
 
 
 SIGMA = CONSTANTS.SIGMA
-DEFAULT_CP = Quantity[SpecificHeatCapacity](4.18, 'kJ/kg/K')
+DEFAULT_CP = Quantity(4.18, 'kJ/kg/K').asdim(SpecificHeatCapacity)
 
 
 def heat_balance(
@@ -32,13 +33,14 @@ def heat_balance(
                  Quantity[MassFlow],
                  Quantity[Energy],
                  Quantity[Power],
+                 Quantity[TemperatureDifference],
                  Quantity[Temperature]],
     cp: Quantity[SpecificHeatCapacity] = DEFAULT_CP
 ) -> Union[Quantity[Mass],
            Quantity[MassFlow],
            Quantity[Energy],
            Quantity[Power],
-           Quantity[Temperature]]:
+           Quantity[TemperatureDifference]]:
     """
     Solves the heat balance equation
 
@@ -69,7 +71,7 @@ def heat_balance(
 
     params = {
         'm':  (Union[Quantity[Mass], Quantity[MassFlow]], ('kg', 'kg/s')),
-        'dT': (Quantity[Temperature], ('delta_degC', )),
+        'dT': (Union[Quantity[TemperatureDifference], Quantity[Temperature]], ('delta_degC', )),
         'Q_h': (Union[Quantity[Energy], Quantity[Power]], ('kJ', 'kW'))
     }
 
@@ -115,7 +117,7 @@ def heat_balance(
         ret = vals['Q_h'] / (cp * vals['m'])
         unit = units['dT'][0]
 
-        if not ret.check(Temperature):
+        if not ret.check(TemperatureDifference):
             raise ValueError(
                 f'Both units must be per unit time in case one '
                 f'of them is: {vals}'

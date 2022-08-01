@@ -187,11 +187,11 @@ To create a new dimensionality (for example temperature difference per mass flow
 ```python
 from encomp.units import Quantity as Q
 from encomp.units import DimensionalityError
-from encomp.utypes import Temperature, MassFlow, Volume, Dimensionality
+from encomp.utypes import TemperatureDifference, MassFlow, Volume, Dimensionality
 
 # the class name TemperaturePerMassFlow must be globally unique
 class TemperaturePerMassFlow(Dimensionality):
-    dimensions = Temperature.dimensions / MassFlow.dimensions
+    dimensions = TemperatureDifference.dimensions / MassFlow.dimensions
 
 # note the extra parentheses around (kg/s)
 qty = Q[TemperaturePerMassFlow](1, 'delta_degC/(kg/s)')
@@ -207,8 +207,9 @@ except DimensionalityError:
 CustomCoolingCapacity = Q[TemperaturePerMassFlow]
 
 # the pint library handles a wide range of input formats and unit names
+# the prefix "delta_" can be omitted in this case
 q1 = CustomCoolingCapacity(6, '°F per (lbs per week)')
-q2 = Q('3 degree_Fahrenheit per (pound per fortnight)')
+q2 = Q('3 deltdegree_Fahrenheit per (pound per fortnight)')
 
 assert q1 == q2
 assert type(q1) is type(q2)

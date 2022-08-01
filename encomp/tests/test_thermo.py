@@ -1,13 +1,13 @@
 
 from encomp.units import Quantity as Q
-from encomp.utypes import Temperature, MassFlow, Energy, Power
+from encomp.utypes import Temperature, TemperatureDifference, MassFlow, Energy, Power
 from encomp.thermo import heat_balance, intermediate_temperatures
 
 
 def test_heat_balance():
 
     assert isinstance(heat_balance(
-        Q(2, 'kg/s'), Q(2, 'kJ/s')), Q[Temperature])
+        Q(2, 'kg/s'), Q(2, 'kJ/s')), Q[TemperatureDifference])
 
     assert isinstance(heat_balance(
         Q(2, 'K'), Q(2, 'kJ/s')), Q[MassFlow])

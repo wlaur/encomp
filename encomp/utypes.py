@@ -95,7 +95,10 @@ TimeUnits = L[
 
 TemperatureUnits = L[
     'C', 'degC', '°C', 'K',
-    'F', 'degF', '°F',
+    'F', 'degF', '°F'
+]
+
+TemperatureDifferenceUnits = L[
     'delta_C', 'delta_degC', 'Δ°C', 'ΔC',
     'delta_F', 'delta_degF', 'Δ°F', 'ΔF'
 ]
@@ -407,6 +410,11 @@ class Time(Dimensionality):
 
 
 class Temperature(Dimensionality):
+    _distinct = True
+    dimensions = _TemperatureUC
+
+
+class TemperatureDifference(Dimensionality):
     dimensions = _TemperatureUC
 
 

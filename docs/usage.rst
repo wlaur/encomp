@@ -278,15 +278,19 @@ The :py:meth:`encomp.units.Quantity.to_reduced_units` method can be used to canc
 Operations with temperature units can lead to unexpected results.
 When using temperature degree scales, a temperature *difference* can be defined with the prefix ``delta_``.
 This is only required when defining the temperature difference directly.
+Temperatures  (absolute or degree units) and temperatures differences have different dimensionalities (:py:class:`encomp.utypes.Temperature` and :py:class:`encomp.utypes.TemperatureDifference`).
 
 
 .. code-block:: python
 
     dT = Q(5, 'delta_degC') # 5 Δ°C
-    dT.to('degC') # -268.15 °C, same as converting 5 K to °C
+
+    # this is not allowed
+    dT.to('degC')
+    # DimensionalityTypeError: Cannot convert Δ°C (dimensionality TemperatureDifference)
+    # to °C (dimensionality Temperature)
 
     Q(25, 'degC') - Q(36, 'degC') # -11 Δ°C
-
 
     Q(4.19, 'kJ/kg/K') * Q(5, '°C') # raises OffsetUnitCalculusError
 

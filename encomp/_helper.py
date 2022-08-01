@@ -9,6 +9,7 @@ from encomp.utypes import (Dimensionality,
                            Energy,
                            Mass,
                            Temperature,
+                           TemperatureDifference,
                            EnergyPerMass,
                            HeatingValue,
                            SpecificHeatCapacity,
@@ -24,6 +25,14 @@ def get_registry():
     }
 
 
+def get_dim(dim: type[Dimensionality]) -> type[Dimensionality]:
+
+    if dim is Temperature:
+        return TemperatureDifference
+
+    return dim
+
+
 def get_signature(self: Union[type[Dimensionality], str],
                   other: Union[type[Dimensionality], str],
                   output: Union[type[Dimensionality], str],
@@ -32,17 +41,17 @@ def get_signature(self: Union[type[Dimensionality], str],
     if isinstance(self, str):
         t_self = self
     else:
-        t_self = f'Quantity[{self.__name__}]'
+        t_self = f'Quantity[{get_dim(self).__name__}]'
 
     if isinstance(other, str):
         t_other = other
     else:
-        t_other = f'Quantity[{other.__name__}]'
+        t_other = f'Quantity[{get_dim(other).__name__}]'
 
     if isinstance(output, str):
         t_output = output
     else:
-        t_output = f'Quantity[{output.__name__}]'
+        t_output = f'Quantity[{get_dim(output).__name__}]'
 
     return dedent(
         f"""
@@ -199,3 +208,17 @@ def generate_overloaded_signatures(
 def get_overload_signatures() -> tuple[str, str, str]:
     dimensionalities = list(get_registry().values())
     return generate_overloaded_signatures(dimensionalities)
+
+
+def write_overload_signatures() -> None:
+
+    mul, div, rdiv = get_overload_signatures()
+
+    with open('mul.py', 'w') as f:
+        f.write(mul)
+
+    with open('div.py', 'w') as f:
+        f.write(div)
+
+    with open('rdiv.py', 'w') as f:
+        f.write(rdiv)

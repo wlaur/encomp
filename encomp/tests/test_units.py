@@ -1144,3 +1144,45 @@ def test_pydantic_integration():
             m=Q(25, 'kg/day'),
             s=Q(25, 'cm')
         )
+
+
+def test_temperature_difference():
+
+    T1 = Q(25, 'C')
+    T2 = Q(35, 'C')
+
+    dT = T1 - T2
+    dT_ = T2 - T1
+
+    assert isinstance(dT, Q[TemperatureDifference])
+    assert isinstance(dT.to('delta_F'), Q[TemperatureDifference])
+
+    assert isinstance(dT_, Q[TemperatureDifference])
+    assert isinstance(dT_ + dT, Q[TemperatureDifference])
+
+    assert isinstance(T1 + dT, Q[Temperature])
+
+    with pytest.raises(DimensionalityTypeError):
+        assert isinstance(dT + T1, Q[Temperature])
+
+    with pytest.raises(DimensionalityTypeError):
+        (T1 - T2).to('degC')
+
+    with pytest.raises(DimensionalityTypeError):
+        (T1.to('K') - T2.to('K')).to('K')
+
+    with pytest.raises(DimensionalityTypeError):
+        (T1 - T2).to('K')
+
+    with pytest.raises(DimensionalityTypeError):
+        (T1 - T2).to('degC')
+
+    T1 = Q(800, 'degC')
+    T2 = T1.to('K') - Q(100, 'degC').to('K')
+
+    with pytest.raises(DimensionalityTypeError):
+        T2.to('K')
+
+    T2_ = T1.to('K') - Q(100, 'delta_degC')
+
+    assert isinstance(T2_, Q[Temperature])

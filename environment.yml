@@ -8,6 +8,7 @@ dependencies:
   - scipy
   - jupyter
   - fire
+  - pandoc
   - pip:
     - -r requirements.txt
     - -r requirements-optional.txt
