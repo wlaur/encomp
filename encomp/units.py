@@ -1010,7 +1010,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
 
         return self.m.ndim
 
-    def astype(self, other):
+    def asdim(self, other):
 
         if isinstance(other, Quantity):
             dim = other.dimensionality_type

@@ -51,9 +51,8 @@ def test_quantity_reveal_type() -> None:
     reveal_type(ms_)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
 
 
-
 @pytest.mark.mypy_testing
-def test_quantity_astype() -> None:
+def test_quantity_asdim() -> None:
 
     # autopep8: off
 
@@ -62,11 +61,10 @@ def test_quantity_astype() -> None:
 
     reveal_type(q)  # R: encomp.units.Quantity[encomp.utypes.HeatingValue]
 
-    reveal_type(q.astype(LowerHeatingValue))  # R: encomp.units.Quantity[encomp.utypes.LowerHeatingValue]
-    reveal_type(q.astype(p))  # R: encomp.units.Quantity[encomp.utypes.LowerHeatingValue]
+    reveal_type(q.asdim(LowerHeatingValue))  # R: encomp.units.Quantity[encomp.utypes.LowerHeatingValue]
+    reveal_type(q.asdim(p))  # R: encomp.units.Quantity[encomp.utypes.LowerHeatingValue]
 
     # autopep8: on
-
 
 
 @pytest.mark.mypy_testing

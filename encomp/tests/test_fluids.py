@@ -15,10 +15,10 @@ def test_Fluid():
     fld.describe('P')
     fld.search('pressure')
 
-    # using __getattr__ will not call astype()
+    # using __getattr__ will not call asdim()
     assert fld.__getattr__('S') == Q(1087.7758824621442, 'J/(K kg)')
 
-    # property access will call astype()
+    # property access will call asdim()
     assert fld.S == Q[SpecificEntropy](1087.7758824621442, 'J/(K kg)')
 
     assert fld.D == fld.__getattr__('D')

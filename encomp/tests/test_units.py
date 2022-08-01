@@ -107,7 +107,7 @@ def test_dimensionality_subtype_protocol():
         Q[Test](1)
 
 
-def test_astype():
+def test_asdim():
 
     with _reset_dimensionality_registry():
 
@@ -118,24 +118,24 @@ def test_astype():
         assert type(q1) is not type(q2)
         assert q1 != q2
 
-        print(type(q1), type(q2.astype(HeatingValue)))
-        assert type(q1) is type(q2.astype(HeatingValue))
-        assert type(q2) is type(q1.astype(LowerHeatingValue))
+        print(type(q1), type(q2.asdim(HeatingValue)))
+        assert type(q1) is type(q2.asdim(HeatingValue))
+        assert type(q2) is type(q1.asdim(LowerHeatingValue))
 
-        assert type(q1) is type(q2.astype(q1))
-        assert type(q2) is type(q1.astype(q2))
+        assert type(q1) is type(q2.asdim(q1))
+        assert type(q2) is type(q1.asdim(q2))
 
-        assert q1 == q2.astype(HeatingValue)
-        assert q2 == q1.astype(LowerHeatingValue)
+        assert q1 == q2.asdim(HeatingValue)
+        assert q2 == q1.asdim(LowerHeatingValue)
 
-        assert q1 == q2.astype(q1)
-        assert q2 == q1.astype(q2)
-
-        with pytest.raises(ExpectedDimensionalityError):
-            q1.astype(Temperature)
+        assert q1 == q2.asdim(q1)
+        assert q2 == q1.asdim(q2)
 
         with pytest.raises(ExpectedDimensionalityError):
-            q1.astype(Q(25, 'kg'))
+            q1.asdim(Temperature)
+
+        with pytest.raises(ExpectedDimensionalityError):
+            q1.asdim(Q(25, 'kg'))
 
 
 def test_custom_dimensionality():
