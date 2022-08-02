@@ -272,7 +272,10 @@ class Dimensionality(ABC):
             existing = next(filter(lambda x: x.__name__ == cls.__name__,
                                    cls._registry))
 
-            if cls.dimensions != existing.dimensions:
+            # compare string representations of the UnitsContainer instances
+            # might run into issues with float accuracy otherwise
+            # the UnitsContainer.__eq__ method checks hash(frozenset(self._d.items()))
+            if str(cls.dimensions) != str(existing.dimensions):
                 raise TypeError(
                     'Cannot create dimensionality subclass with '
                     f'name "{cls.__name__}", another subclass with '

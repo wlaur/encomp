@@ -571,7 +571,8 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
                 f'{expected_dimensionality.__name__}, the "dimensions" attribute is None'
             )
 
-        if valid_unit.dimensionality != expected_dimensionality.dimensions:
+        # compare string representation to avoid issues with float accuracy and hashing
+        if str(valid_unit.dimensionality) != str(expected_dimensionality.dimensions):
             raise ExpectedDimensionalityError(
                 f'Quantity with unit "{str(valid_unit) or "dimensionless"}" has incorrect '
                 f'dimensionality {valid_unit.dimensionality}, '
