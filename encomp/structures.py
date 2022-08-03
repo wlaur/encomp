@@ -2,11 +2,17 @@
 Data structures and related functions.
 """
 
-from typing import Sequence, Iterator, Optional, Any, Union, TypeVar, overload
+from typing import Sequence, Iterator, Optional, Any, Iterable, TypeVar, overload
 
 import numpy as np
+import pandas as pd
+
+from encomp.units import Quantity
 
 T = TypeVar('T')
+
+
+_BASE_TYPES = (str, Quantity, pd.Series, pd.DataFrame, np.ndarray)
 
 
 @overload
@@ -64,7 +70,7 @@ def divide_chunks(container, N):
         yield container[i:i + N]
 
 
-def flatten(container: Sequence[Any],
+def flatten(container: Iterable[Any],
             max_depth: Optional[int] = None,
             _depth: int = 0) -> Iterator[Any]:
     """
@@ -79,11 +85,13 @@ def flatten(container: Sequence[Any],
     This function will flatten arbitrarily deeply nested lists or tuples recursively.
     If ``max_depth`` is ``None``, recurse until no more nested structures remain,
     otherwise flatten until the specified max depth.
+    The base types ``str``, :py:class:`encomp.units.Quantity`, ``pd.Series``, ``pd.DataFrame``,
+    ``np.ndarray`` will not be flattened.
 
 
     Parameters
     ----------
-    container : Sequence[Any]
+    container : Iterable[Any]
         The container to be flattened
     max_depth : int, optional
         The maximum level to flatten to, by default None (flatten all)
@@ -100,12 +108,12 @@ def flatten(container: Sequence[Any],
 
     for obj in container:
 
-        if isinstance(obj, str):
+        if isinstance(obj, _BASE_TYPES):
             yield obj
             continue
 
         # check if this object can be flattened further
-        if isinstance(obj, Sequence):
+        if isinstance(obj, Iterable):
 
             for sub_obj in flatten(obj, max_depth=max_depth, _depth=_depth + 1):
                 yield sub_obj
