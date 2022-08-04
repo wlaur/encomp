@@ -127,7 +127,7 @@ NormalVolumeUnits = L[
     'nm³', 'Nm**3', 'nm**3'
 ]
 
-PressureUnits = L['bar', 'kPa', 'Pa', 'MPa', 'mbar', 'mmHg']
+PressureUnits = L['bar', 'kPa', 'Pa', 'MPa', 'mbar', 'mmHg', 'atm']
 
 MassFlowUnits = L[
     'kg/s', 'kg/h', 'kg/hr',
