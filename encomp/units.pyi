@@ -48,7 +48,8 @@ from encomp.utypes import (DimensionlessUnits,
                            VelocityUnits,
                            DynamicViscosityUnits,
                            EnergyPerMassUnits,
-                           KinematicViscosityUnits)
+                           KinematicViscosityUnits,
+                           SpecificHeatCapacityUnits)
 
 from encomp.utypes import (MagnitudeInput,
                            MagnitudeScalar,
@@ -381,6 +382,11 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
     @overload
     def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: EnergyPerMassUnits) -> Quantity[EnergyPerMass]:
+        ...
+
+    @overload
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
+                unit: SpecificHeatCapacityUnits) -> Quantity[SpecificHeatCapacity]:
         ...
 
     @overload

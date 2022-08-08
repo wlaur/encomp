@@ -207,6 +207,12 @@ EnergyPerMassUnits = L[
     'MJ/ton', 'MWh/ton', 'kJ/ton', 'kWh/ton'
 ]
 
+SpecificHeatCapacityUnits = L[
+    'kJ/kg/K', 'kJ/kg/delta_degC', 'kJ/kg/Δ°C', 'kJ/kg/°C', 'kJ/kg/degC',
+    'J/kg/K', 'J/kg/delta_degC', 'J/kg/Δ°C', 'J/kg/°C', 'J/kg/degC',
+    'J/g/K', 'J/g/delta_degC', 'J/g/Δ°C', 'J/g/°C', 'J/g/degC'
+]
+
 
 def get_registered_units() -> dict[str, tuple[str, ...]]:
 
