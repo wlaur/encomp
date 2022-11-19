@@ -19,7 +19,7 @@ from abc import ABC
 
 import numpy as np
 import pandas as pd
-from pint.unit import UnitsContainer
+from pint.util import UnitsContainer
 
 MagnitudeScalar = Union[float, int]
 
@@ -94,16 +94,21 @@ TimeUnits = L[
 ]
 
 TemperatureUnits = L[
-    'C', 'degC', '°C', 'K',
-    'F', 'degF', '°F'
+    'degC', '°C', 'K',
+    'degF', '°F',
+    '℃', '℉'
 ]
 
 TemperatureDifferenceUnits = L[
-    'delta_C', 'delta_degC', 'Δ°C', 'ΔC',
-    'delta_F', 'delta_degF', 'Δ°F', 'ΔF'
+    'delta_°C', 'delta_degC', 'Δ°C', 'Δ℃',
+    'delta_°F', 'delta_degF', 'Δ°F', 'Δ℉'
 ]
 
 SubstanceUnits = L['mol', 'kmol']
+
+MolarMassUnits = L['g/mol', 'kg/kmol']
+
+SubstancePerMassUnits = L['mol/g', 'kmol/kg']
 
 CurrentUnits = L['A', 'mA']
 
@@ -167,10 +172,18 @@ DensityUnits = L[
     'g/L', 'gram/liter'
 ]
 
+
 SpecificVolumeUnits = L[
     'm3/kg', 'm^3/kg', 'm³/kg',
     'l/g', 'L/g'
 ]
+
+
+NormalVolumePerMassUnits = L[
+    'Nm3/kg', 'Nm^3/kg', 'Nm³/kg',
+    'nm3/kg', 'nm^3/kg', 'nm³/kg',
+]
+
 
 EnergyUnits = L[
     'J', 'kJ', 'MJ',
@@ -208,9 +221,9 @@ EnergyPerMassUnits = L[
 ]
 
 SpecificHeatCapacityUnits = L[
-    'kJ/kg/K', 'kJ/kg/delta_degC', 'kJ/kg/Δ°C', 'kJ/kg/°C', 'kJ/kg/degC',
-    'J/kg/K', 'J/kg/delta_degC', 'J/kg/Δ°C', 'J/kg/°C', 'J/kg/degC',
-    'J/g/K', 'J/g/delta_degC', 'J/g/Δ°C', 'J/g/°C', 'J/g/degC'
+    'kJ/kg/K', 'kJ/kg/delta_degC', 'kJ/kg/Δ°C', 'kJ/kg/Δ℃', 'kJ/kg/°C', 'kJ/kg/℃', 'kJ/kg/degC',
+    'J/kg/K', 'J/kg/delta_degC', 'J/kg/Δ°C', 'J/kg/Δ℃', 'J/kg/°C', 'J/kg/℃', 'J/kg/degC',
+    'J/g/K', 'J/g/delta_degC', 'J/g/Δ°C', 'J/g/Δ℃', 'J/g/°C', 'J/g/℃', 'J/g/degC'
 ]
 
 
@@ -536,6 +549,10 @@ class MolarMass(Dimensionality):
     dimensions = _MolarMassUC
 
 
+class SubstancePerMass(Dimensionality):
+    dimensions = 1 / _MolarMassUC
+
+
 class MolarDensity(Dimensionality):
     dimensions = _MolarDensityUC
 
@@ -594,6 +611,16 @@ class MassPerEnergy(Dimensionality):
 
 class MolarSpecificEntropy(Dimensionality):
     dimensions = _MolarSpecificEntropyUC
+
+
+# not called "SpecificNormalVolume" since that term is not commonly used
+# this name is more explicit
+class NormalVolumePerMass(Dimensionality):
+    dimensions = 1 / _MassPerNormalVolumeUC
+
+
+class NormalTemperature(Dimensionality):
+    dimensions = _TemperatureUC * _NormalUC
 
 
 # these dimensionalities might have different names depending on the context

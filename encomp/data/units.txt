@@ -61,6 +61,7 @@
 @end
 
 
+
 #### PREFIXES ####
 
 # decimal prefixes
@@ -113,6 +114,9 @@ radian = [] = rad
 bit = []
 count = []
 
+# custom dimensions, make sure these are listed in units.py (list CUSTOM_DIMENSIONS)
+currency = [currency]
+normal = [normal]
 
 #### CONSTANTS ####
 
@@ -139,6 +143,13 @@ mil = π / 32000 * radian
 # Solid angle
 steradian = radian ** 2 = sr
 square_degree = (π / 180) ** 2 * sr = sq_deg = sqdeg
+
+
+# Currencies
+# NOTE: these are only approximate, don't use for currency conversion
+SEK = 1 * currency
+EUR = 10 * currency
+USD = 10 * currency
 
 # Information
 baud = bit / second = Bd = bps
@@ -207,6 +218,7 @@ degree_Reaumur = 4 / 5 * kelvin; offset: 273.15 = °Re = reaumur = degRe = degre
 atomic_unit_of_temperature = E_h / k = a_u_temp
 planck_temperature = (hbar * c ** 5 / gravitational_constant / k ** 2) ** 0.5
 
+
 # Area
 [area] = [length] ** 2
 are = 100 * meter ** 2
@@ -236,7 +248,7 @@ reciprocal_centimeter = 1 / cm = cm_1 = kayser
 [velocity] = [length] / [time] = [speed]
 knot = nautical_mile / hour = kt = knot_international = international_knot
 mile_per_hour = mile / hour = mph = MPH
-kilometer_per_hour = kilometer / hour = kph = KPH
+kilometer_per_hour = kilometer / hour = kph = KPH = kmh = KMH
 kilometer_per_second = kilometer / second = kps
 meter_per_second = meter / second = mps
 foot_per_second = foot / second = fps
@@ -313,9 +325,15 @@ inch_Hg = inch * Hg * g_0 = inHg = in_Hg = inch_Hg_32F
 inch_Hg_60F = inch * Hg_60F * g_0
 inch_H2O_39F = inch * water_39F * g_0
 inch_H2O_60F = inch * water_60F * g_0
-foot_H2O = foot * conventional_water * g_0 = ftH2O = feet_H2O
+foot_H2O = foot * conventional_water * g_0 = ftH2O = feet_H2O = feet_water = foot_water = ft_H2O = ft_water
 centimeter_H2O = centimeter * conventional_water * g_0 = cmH2O = cm_H2O
+meter_H2O = cmH2O * 100 = m_H2O = mH2O = mh2o = mH20 = meter_water = m_water
 sound_pressure_level = 20e-6 * pascal = SPL
+
+
+# Valve constants
+Kv = m**3 / hour / bar**0.5 = K_v
+Cv = gallon / minute / psi**0.5 = C_v
 
 # Torque
 [torque] = [force] * [length]

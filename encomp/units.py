@@ -22,7 +22,8 @@ import pandas as pd
 
 
 import pint
-from pint.unit import UnitsContainer, Unit
+from pint import Unit
+from pint.util import UnitsContainer
 from pint.registry import UnitRegistry, LazyRegistry
 from pint.errors import DimensionalityError
 
@@ -37,7 +38,6 @@ from encomp.utypes import (_BASE_SI_UNITS,
                            Dimensionless,
                            Temperature,
                            TemperatureDifference,
-                           TemperatureDifferenceUnits,
                            Unknown)
 
 if SETTINGS.ignore_ndarray_unit_stripped_warning:
@@ -64,7 +64,7 @@ class _DimensionalityError(DimensionalityError):
     def __init__(self, msg: str = ''):
 
         self.msg = msg
-        super().__init__(None, None, dim1=None, dim2=None, extra_msg=msg)
+        super().__init__(None, None, dim1='', dim2='', extra_msg=msg)
 
     def __str__(self) -> str:
         return self.msg
@@ -87,7 +87,8 @@ class DimensionalityRedefinitionError(ValueError):
 
 
 # keep track of user-created dimensions
-CUSTOM_DIMENSIONS: list[str] = []
+# NOTE: make sure to list all that are defined in data/units.txt ("# custom dimensions")
+CUSTOM_DIMENSIONS: list[str] = ['currency', 'normal']
 
 
 _REGISTRY_STATIC_OPTIONS = {
@@ -128,11 +129,10 @@ class _LazyRegistry(LazyRegistry):
 
         self.__class__ = _UnitRegistry
         self.__init__(*args, **kwargs)
-        self._after_init()
+        self._after_init()  # type: ignore
 
 
 ureg: UnitRegistry = _LazyRegistry()  # type: ignore
-
 for k, v in _REGISTRY_STATIC_OPTIONS.items():
     setattr(ureg, k, v)
 
@@ -195,63 +195,12 @@ def define_dimensionality(name: str, symbol: str = None) -> None:
 
 
 # define commonly used media as dimensionalities
-# "normal" is used to signify normal volume, e.g. "Nm³/s"
-for dimensionality_name in (
-    'normal',
-    'air',
-    'water',
-    'fuel'
-):
+for dimensionality_name in ['air', 'water', 'fuel']:
 
     try:
         define_dimensionality(dimensionality_name)
     except pint.errors.DefinitionSyntaxError as e:
         pass
-
-
-# "currency" is used to represent some unspecified currency
-# note that it's not possible to convert different currencies using this system
-# the default currencies will have an approximate scaling factor
-# NOTE: actual currency operations should use decimal.Decimal or similar
-# to account for rounding etc.
-
-_currency_definition = """
-currency = [currency]
-SEK = 1 * currency
-EUR = 10 * currency
-USD = 10 * currency
-"""
-
-for n in _currency_definition.split('\n'):
-
-    if not n.strip():
-        continue
-
-    ureg.define(n)
-
-CUSTOM_DIMENSIONS.append('currency')
-
-
-def _load_additional_units() -> None:
-
-    with open(SETTINGS.additional_units, 'r', encoding='utf-8') as f:
-
-        for line in f.read().split('\n'):
-
-            if line.startswith('#') or not line.strip():
-                continue
-
-            try:
-                ureg.define(line)
-            except pint.errors.RedefinitionError:
-                pass
-
-
-if (
-    SETTINGS.additional_units is not None and
-    SETTINGS.additional_units.is_file()
-):
-    _load_additional_units()
 
 
 class QuantityMeta(type):
@@ -307,38 +256,6 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
 
     # compact, Latex, HTML, Latex/siunitx formatting
     FORMATTING_SPECS = ('~P', '~L', '~H', '~Lx')
-
-    # common unit names not supported by pint, also some misspellings
-    # TODO: this does not work with compound units, need to use ureg.define
-    # to override units at the pint parsing stage
-    UNIT_CORRECTIONS = {
-        '-': 'dimensionless',
-        'kpa': 'kPa',
-        'mpa': 'MPa',
-        'pa': 'Pa',
-        'F': 'degF',
-        'C': 'degC',
-        '°C': 'degC',
-        '°F': 'degF',
-        'delta_C': 'delta_degC',
-        'delta_°C': 'delta_degC',
-        'delta_F': 'delta_degF',
-        'delta_°F': 'delta_degF',
-        'kmh': 'km/hour',
-        'mh2o': 'meter_H2O',
-        'mH20': 'meter_H2O',
-        'mH2O': 'meter_H2O',
-        'm H2O': 'meter_H2O',
-        'm h2o': 'meter_H2O',
-        'meter water': 'meter_H2O',
-        'm water': 'meter_H2O',
-        'm_water': 'meter_H2O',
-        'meter_water': 'meter_H2O',
-        'feet_water': 'feet_H2O',
-        'foot_water': 'feet_H2O',
-        'ft_H2O': 'feet_H2O',
-        'ft_water': 'feet_H2O'
-    }
 
     NORMAL_M3_VARIANTS = ('nm³', 'Nm³', 'nm3', 'Nm3',
                           'nm**3', 'Nm**3', 'nm^3', 'Nm^3')
@@ -468,7 +385,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
 
         ret.__used = self.__used
 
-        return ret
+        return ret  # type: ignore
 
     def __deepcopy__(self, memo: Optional[dict[int, Any]] = None) -> Quantity[DT]:
 
@@ -482,7 +399,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
 
         ret.__used = self.__used
 
-        return ret
+        return ret  # type: ignore
 
     def __new__(  # type: ignore
         cls,
@@ -721,16 +638,18 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
         """
         Corrects the unit name to make it compatible with pint.
 
-        * Fixes common misspellings and case-errors (kpa vs. kPa)
         * Adds ``**`` between the unit and the exponent if it's missing, for example ``kg/m3 → kg/m**3``.
         * Parses "Nm³" (and variations of this) as "normal * m³" (use explicit "nanometer³" to get this unit)
         * Converts % and ‰ to percent and permille
-        * Changes the ``Δ`` character to ``delta_``, for example ``Δ°C`` to ``delta_degC``
+        * Changes the ``Δ`` character to ``delta_``, for example ``Δ°C`` to ``delta_°C``
+        * Interprets ``-`` as ``dimensionless``
+        * Converts the single-character symbols ``℃`` and ``℉`` to ``degC`` and ``degF``
+        * Converts the compound units ``Δ°C`` and ``Δ°F`` to ``delta_degC`` and ``delta_degF``
 
         Parameters
         ----------
         unit : str
-            A (potentially incorrect) unit name
+            A (potentially inconsistently specified) unit name
 
         Returns
         -------
@@ -739,6 +658,9 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
         """
 
         unit = str(unit).strip()
+
+        if unit == '-':
+            return 'dimensionless'
 
         # normal cubic meter, not nano or Newton
         # there's no consistent way of abbreviating "normal liter",
@@ -752,21 +674,27 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
                 # incorrectly converted to "kg/normal*m3"
                 unit = unit.replace(n, '(normal * m³)')
 
-        # replace unicode Δ°C or Δ°F with delta_degC or delta_degF
-        unit = re.sub(r'\bΔ\s*°(C|F)\b', r'delta_deg\g<1>', unit)
-        # the ° character is optional
-        unit = re.sub(r'\bΔ\s*(C|F)\b', r'delta_deg\g<1>', unit)
+        # NOTE: the order of replacements matters here
+        replacements = {
 
-        # percent & permille sign (pint cannot parse "%" and "‰" characters)
-        unit = unit.replace('%', 'percent')
-        unit = unit.replace('‰', 'permille')
+            '°C': 'degC',
+            '°F': 'degF',
+
+            '℃': 'degC',
+            '℉': 'degF',
+            '%': 'percent',
+            '‰': 'permille',
+
+            'Δ': 'delta_'
+        }
+
+        for old, new in replacements.items():
+            if old in unit:
+                unit = unit.replace(old, new)
 
         # add ** between letters and numbers if they
         # are right next to each other and if the number is at a word boundary
         unit = re.sub(r'([A-Za-z])(\d+)\b', r'\1**\2', unit)
-
-        if unit in Quantity.UNIT_CORRECTIONS:
-            unit = Quantity.UNIT_CORRECTIONS[unit]
 
         return unit
 
@@ -1107,6 +1035,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
 
         if isinstance(other, Quantity):
             dim = other.dimensionality_type
+            assert dim is not None
         else:
             dim = other
 

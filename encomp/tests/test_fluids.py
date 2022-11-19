@@ -52,26 +52,26 @@ def test_Fluid():
         # incorrect argument name
         Water(T=Q(1, 'bar'), p=Q(9, 'degC'))
 
-    Fluid('water', T=Q([25, 95], 'C'), P=Q([1, 2], 'bar')).H
-    Fluid('water', T=Q([25, np.nan], 'C'), P=Q([1, 2], 'bar')).H
-    Fluid('water', T=Q([np.nan, np.nan], 'C'), P=Q([1, 2], 'bar')).H
-    Fluid('water', T=Q([np.nan, np.nan], 'C'), P=Q([np.nan, np.nan], 'bar')).H
-    Fluid('water', T=Q(23, 'C'), P=Q([1, 2], 'bar')).H
-    Fluid('water', T=Q(23, 'C'), P=Q([1], 'bar')).H
-    Fluid('water', T=Q([23, 25], 'C'), P=Q([1], 'bar')).H
-    Fluid('water', T=Q([23, 25], 'C'), P=Q(np.nan, 'bar')).H
-    Fluid('water', T=Q([23, 25], 'C'), P=Q([1, np.nan], 'bar')).H
+    Fluid('water', T=Q([25, 95], '°C'), P=Q([1, 2], 'bar')).H
+    Fluid('water', T=Q([25, np.nan], '°C'), P=Q([1, 2], 'bar')).H
+    Fluid('water', T=Q([np.nan, np.nan], '°C'), P=Q([1, 2], 'bar')).H
+    Fluid('water', T=Q([np.nan, np.nan], '°C'), P=Q([np.nan, np.nan], 'bar')).H
+    Fluid('water', T=Q(23, '°C'), P=Q([1, 2], 'bar')).H
+    Fluid('water', T=Q(23, '°C'), P=Q([1], 'bar')).H
+    Fluid('water', T=Q([23, 25], '°C'), P=Q([1], 'bar')).H
+    Fluid('water', T=Q([23, 25], '°C'), P=Q(np.nan, 'bar')).H
+    Fluid('water', T=Q([23, 25], '°C'), P=Q([1, np.nan], 'bar')).H
 
-    Water(T=Q([25, 25, 63], 'C'), Q=Q([np.nan, np.nan, 0.4], '')).H
-    Water(T=Q([25, np.nan, 63], 'C'), Q=Q([np.nan, 0.2, 0.5], '')).H
-    Water(T=Q([25, np.nan, np.nan], 'C'), Q=Q([np.nan, 0.2, np.nan], '')).H
+    Water(T=Q([25, 25, 63], '°C'), Q=Q([np.nan, np.nan, 0.4], '')).H
+    Water(T=Q([25, np.nan, 63], '°C'), Q=Q([np.nan, 0.2, 0.5], '')).H
+    Water(T=Q([25, np.nan, np.nan], '°C'), Q=Q([np.nan, 0.2, np.nan], '')).H
 
     # returns empty array (not nan)
-    ret = Fluid('water', T=Q([], 'C'), P=Q([], 'bar')).H.m
+    ret = Fluid('water', T=Q([], '°C'), P=Q([], 'bar')).H.m
     assert isinstance(ret, np.ndarray) and ret.size == 0
-    ret = Fluid('water', T=Q([], 'C'), P=Q((), 'bar')).H.m
+    ret = Fluid('water', T=Q([], '°C'), P=Q((), 'bar')).H.m
     assert isinstance(ret, np.ndarray) and ret.size == 0
-    ret = Fluid('water', T=Q([], 'C'), P=Q(np.array([]), 'bar')).H.m
+    ret = Fluid('water', T=Q([], '°C'), P=Q(np.array([]), 'bar')).H.m
     assert isinstance(ret, np.ndarray) and ret.size == 0
 
     # 1-element list or array works in the same way as scalar,
@@ -140,27 +140,27 @@ def test_Fluid():
     assert isinstance(ret, np.ndarray) and ret.size == 0
 
     # returns 1-element list
-    assert isinstance(Fluid('water', T=Q([23], 'C'), P=Q([1], 'bar')).H.m,
+    assert isinstance(Fluid('water', T=Q([23], '°C'), P=Q([1], 'bar')).H.m,
                       np.ndarray)
 
-    assert isinstance(Fluid('water', T=Q(23, 'C'), P=Q([1], 'bar')).H.m,
+    assert isinstance(Fluid('water', T=Q(23, '°C'), P=Q([1], 'bar')).H.m,
                       np.ndarray)
 
-    assert isinstance(Fluid('water', T=Q([23], 'C'), P=Q(1, 'bar')).H.m,
+    assert isinstance(Fluid('water', T=Q([23], '°C'), P=Q(1, 'bar')).H.m,
                       np.ndarray)
 
     # returns float
-    assert isinstance(Fluid('water', T=Q(23, 'C'), P=Q(1, 'bar')).H.m,
+    assert isinstance(Fluid('water', T=Q(23, '°C'), P=Q(1, 'bar')).H.m,
                       float)
 
     with pytest.raises(ValueError):
 
-        Fluid('water', T=Q([np.nan, np.nan], 'C'),
+        Fluid('water', T=Q([np.nan, np.nan], '°C'),
               P=Q([np.nan, np.nan, np.nan], 'bar')).H
 
     with pytest.raises(ValueError):
 
-        Fluid('water', T=Q([np.nan, np.nan], 'C'), P=Q([], 'bar')).H
+        Fluid('water', T=Q([np.nan, np.nan], '°C'), P=Q([], 'bar')).H
 
 
 def test_incorrect_inputs():
@@ -234,42 +234,42 @@ def test_Water():
 
 
 def test_HumidAir():
-    T = Q(20, 'C')
+    T = Q(20, '°C')
     P = Q(20, 'bar')
     R = Q(20, '%')
 
     ha = HumidAir(T=T, P=P, R=R)
     ha.V
 
-    T = Q([25, 34], 'C')
+    T = Q([25, 34], '°C')
     P = Q(20, 'bar')
     R = Q(20, '%')
 
     ha = HumidAir(T=T, P=P, R=R)
     ha.V
 
-    T = Q([25, 34], 'C')
+    T = Q([25, 34], '°C')
     P = Q([20, 30], 'bar')
     R = Q([20, 40], '%')
 
     ha = HumidAir(T=T, P=P, R=R)
     ha.V
 
-    T = Q([25, 34], 'C')
+    T = Q([25, 34], '°C')
     P = Q([20, 30], 'bar')
     R = Q([20, np.nan], '%')
 
     ha = HumidAir(T=T, P=P, R=R)
     ha.V
 
-    T = Q([np.nan, 34], 'C')
+    T = Q([np.nan, 34], '°C')
     P = Q([np.nan, 30], 'bar')
     R = Q([20, np.nan], '%')
 
     ha = HumidAir(T=T, P=P, R=R)
     ha.V
 
-    T = Q([20, 40], 'C')
+    T = Q([20, 40], '°C')
     P = Q([20, 1], 'bar')
     R = Q([20, 101], '%')
 
@@ -283,7 +283,7 @@ def test_shapes():
 
     N = 16
 
-    T = Q(np.linspace(50, 60, N).reshape(4, 4), 'C')
+    T = Q(np.linspace(50, 60, N).reshape(4, 4), '°C')
     P = Q(np.linspace(2, 4, N).reshape(4, 4), 'bar')
 
     water = Fluid('water', T=T, P=P)
@@ -293,7 +293,7 @@ def test_shapes():
 
     N = 27
 
-    T = Q(np.linspace(50, 60, N).reshape(3, 3, 3), 'C')
+    T = Q(np.linspace(50, 60, N).reshape(3, 3, 3), '°C')
     P = Q(np.linspace(2, 4, N).reshape(3, 3, 3), 'bar')
 
     water = Fluid('water', T=T, P=P)
@@ -359,7 +359,7 @@ def test_properties_Fluid():
     for fluid_name in fluid_names:
         for T, P in zip(Ts, Ps):
 
-            fluid = Fluid(fluid_name, T=Q(T, 'C'), P=Q(P, 'bar'))
+            fluid = Fluid(fluid_name, T=Q(T, '°C'), P=Q(P, 'bar'))
             repr(fluid)
 
             for p in props:
@@ -390,7 +390,7 @@ def test_properties_HumidAir():
 
     for T, P, R in zip(Ts, Ps, Rs):
 
-        ha = HumidAir(T=Q(T, 'C'), P=Q(P, 'bar'), R=Q(R))
+        ha = HumidAir(T=Q(T, '°C'), P=Q(P, 'bar'), R=Q(R))
         repr(ha)
 
         for p in props:

@@ -50,11 +50,11 @@ def test_quantity_unspecified_type() -> None:
     reveal_type(Q(25, 'g/L'))  # R: encomp.units.Quantity[encomp.utypes.Density]
     reveal_type(Q(25, 'gram/liter'))  # R: encomp.units.Quantity[encomp.utypes.Density]
 
-    reveal_type(Q(25, 'C'))  # R: encomp.units.Quantity[encomp.utypes.Temperature]
+    reveal_type(Q(25, '°C'))  # R: encomp.units.Quantity[encomp.utypes.Temperature]
     reveal_type(Q(25, 'degC'))  # R: encomp.units.Quantity[encomp.utypes.Temperature]
     reveal_type(Q(25, 'K'))  # R: encomp.units.Quantity[encomp.utypes.Temperature]
 
-    reveal_type(Q(25, 'delta_C'))  # R: encomp.units.Quantity[encomp.utypes.TemperatureDifference]
+    reveal_type(Q(25, 'delta_°C'))  # R: encomp.units.Quantity[encomp.utypes.TemperatureDifference]
     reveal_type(Q(25, 'delta_degC'))  # R: encomp.units.Quantity[encomp.utypes.TemperatureDifference]
 
     # refer to the encomp.utypes module for a list of string literals
@@ -91,7 +91,7 @@ def test_quantity_unspecified_type() -> None:
     unit_not_literal = str('kg/s')
     reveal_type(Q(25, unit_not_literal))  # R: encomp.units.Quantity[<nothing>]
 
-    reveal_type(Q(25, 'J') / Q(25, 'mol') / Q(25, 'delta_C'))  # R: encomp.units.Quantity[encomp.utypes.MolarSpecificEntropy]
+    reveal_type(Q(25, 'J') / Q(25, 'mol') / Q(25, 'delta_°C'))  # R: encomp.units.Quantity[encomp.utypes.MolarSpecificEntropy]
     reveal_type(Q(25, 'J') / Q(25, 'mol'))  # R: encomp.units.Quantity[encomp.utypes.MolarSpecificEnthalpy]
     reveal_type(Q(25, 'J') / Q(25, 'kmol'))  # R: encomp.units.Quantity[encomp.utypes.MolarSpecificEnthalpy]
     reveal_type(Q(25, 'kg') / Q(25, 'kmol'))  # R: encomp.units.Quantity[encomp.utypes.MolarMass]

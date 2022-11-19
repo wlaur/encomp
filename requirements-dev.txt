@@ -2,7 +2,6 @@ autopep8
 pytest
 coverage
 mypy
-pytest-mypy-testing
 pandas-stubs
 hypothesis
 twine

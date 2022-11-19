@@ -34,7 +34,6 @@ class Settings(BaseSettings):
 
     * ``DATA_DIRECTORY``: path to a directory with auxiliary data
     * ``UNITS``: path to a file with unit definitions for ``pint``
-    * ``ADDITIONAL_UNITS``: path to a file with additional unit definitions for ``pint``
     * ``TYPESET_SYMBOL_SCRIPTS``: whether to typeset Sympy symbol sub- and superscripts
     * ``IGNORE_NDARRAY_UNIT_STRIPPED_WARNING``: whether to suppress the ``pint`` warning
       when converting Quantity to Numpy array.
@@ -51,7 +50,6 @@ class Settings(BaseSettings):
     data_directory: DirectoryPath = ENCOMP_BASE / 'data'
 
     units: FilePath = data_directory / 'units.txt'
-    additional_units: FilePath = data_directory / 'additional-units.txt'
 
     typeset_symbol_scripts: bool = True
     ignore_ndarray_unit_stripped_warning: bool = True

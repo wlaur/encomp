@@ -32,6 +32,8 @@ from encomp.utypes import (DimensionlessUnits,
                            TemperatureUnits,
                            TemperatureDifferenceUnits,
                            SubstanceUnits,
+                           MolarMassUnits,
+                           SubstancePerMassUnits,
                            CurrentUnits,
                            LuminosityUnits,
                            AreaUnits,
@@ -64,6 +66,8 @@ from encomp.utypes import (MagnitudeInput,
                            CurrencyPerVolume,
                            CurrencyPerTime,
                            Substance,
+                           MolarMass,
+                           SubstancePerMass,
                            Density,
                            Energy,
                            Power,
@@ -91,7 +95,6 @@ from encomp.utypes import (MagnitudeInput,
                            HeatingValue,
                            HigherHeatingValue,
                            LowerHeatingValue,
-                           MolarMass,
                            Frequency,
                            MassPerEnergy,
                            MassPerNormalVolume,
@@ -297,6 +300,16 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
     @overload
     def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
                 unit: SubstanceUnits) -> Quantity[Substance]:
+        ...
+
+    @overload
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
+                unit: MolarMassUnits) -> Quantity[MolarMass]:
+        ...
+
+    @overload
+    def __new__(cls, val: Union[MagnitudeInput, Quantity[DT], str],  # type: ignore
+                unit: SubstancePerMassUnits) -> Quantity[SubstancePerMass]:
         ...
 
     @overload

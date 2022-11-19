@@ -30,7 +30,7 @@ setup(
         'encomp.tests',
     ],
     package_data={'encomp': ['py.typed', '*.pyi']},
-    python_requires='~=3.9',
+    python_requires='~=3.10',
     install_requires=install_requires,
     extras_require={
         'optional': requirements_optional,

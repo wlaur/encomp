@@ -248,7 +248,7 @@ The fluid name `'water'` (or the subclass `Water`) uses _IAPWS_ to evaluate stea
 from encomp.units import Quantity as Q
 from encomp.fluids import Fluid, Water
 
-Fluid('water', P=Q(25, 'bar'), T=Q(550, 'C'))
+Fluid('water', P=Q(25, 'bar'), T=Q(550, '°C'))
 # <Fluid "water", P=2500 kPa, T=550.0 °C, D=6.7 kg/m³, V=0.031 cP>
 
 # note that the CoolProp property "Q" (vapor quality) has the same name as the class

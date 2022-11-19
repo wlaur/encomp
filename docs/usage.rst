@@ -539,7 +539,7 @@ The :py:class:`encomp.fluids.HumidAir` class has a different set of input and ou
     Water(D=Q(12, 'lbs / ft³'), T=Q(250, '°F'))
     # <Water (Two-phase), P=206 kPa, T=121.1 °C, D=192.2 kg/m³, V=0.0 cP, Q=0.00>
 
-    HumidAir(T=Q(25, 'C'), P=Q(2, 'bar'), R=Q(25, '%'))
+    HumidAir(T=Q(25, '°C'), P=Q(2, 'bar'), R=Q(25, '%'))
     # <HumidAir, P=200 kPa, T=25.0 °C, R=0.25, Vda=0.4 m³/kg, Vha=0.4 m³/kg, M=0.018 cP>
 
 
@@ -549,7 +549,7 @@ Note that these are different for :py:class:`encomp.fluids.HumidAir`.
 
 .. code-block:: python
 
-    HumidAir(T=Q(25, 'C'), Ps=Q(2, 'bar'), R=Q(25, '%'))
+    HumidAir(T=Q(25, '°C'), Ps=Q(2, 'bar'), R=Q(25, '%'))
     # ValueError: Invalid CoolProp property name: Ps
     # Valid names:
     # B, C, CV, CVha, Cha, Conductivity, D, DewPoint, Enthalpy, Entropy, H, Hda, Hha,
@@ -827,4 +827,3 @@ In case any of the inputs have incorrect units, an error is raised before the fu
     # ValueError: Converting 12 cP to units of m^2/s raised
     # DimensionalityError: Cannot convert from 'centipoise' ([mass] / [length] / [time])
     # to 'meter ** 2 / second' ([length] ** 2 / [time])
-

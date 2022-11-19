@@ -670,10 +670,10 @@ def test_quantity_misc_operators() -> None:
 def test_quantity_temperature_types() -> None:
 
 
-    T1 = Q(15, 'C')
-    T2 = Q(25, 'C')
+    T1 = Q(15, '°C')
+    T2 = Q(25, '°C')
 
-    dT = Q(1, 'delta_C')
+    dT = Q(1, 'delta_°C')
 
     # autopep8: off
 

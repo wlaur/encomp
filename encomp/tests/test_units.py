@@ -688,21 +688,21 @@ def test_instance_checks():
 
     assert isinstance(Q(25, 'bar'), Q[Pressure])
 
-    assert not isinstance(Q(25, 'C'), Q[Pressure])
+    assert not isinstance(Q(25, '°C'), Q[Pressure])
 
-    assert isinstance(Q(25, 'C'), Q[Temperature])
+    assert isinstance(Q(25, '°C'), Q[Temperature])
 
     assert isinstance(Q(25, 'kg'), Q[Mass])
 
     assert isinstance(Q(25, 'kg'), Q)
 
-    assert isinstance_types(Q(25, 'C'), Q)
-    assert isinstance_types(Q(25, 'C'), Q[Temperature])
+    assert isinstance_types(Q(25, '°C'), Q)
+    assert isinstance_types(Q(25, '°C'), Q[Temperature])
 
-    assert isinstance_types([Q(25, 'C')], list[Q[Temperature]])
+    assert isinstance_types([Q(25, '°C')], list[Q[Temperature]])
     assert isinstance_types(
-        [Q[Temperature](25, 'C'), Q(25, 'F')], list[Q[Temperature]])
-    assert isinstance_types([Q(25, 'C'), Q(25, 'bar')], list[Q])
+        [Q[Temperature](25, '°C'), Q(25, '°F')], list[Q[Temperature]])
+    assert isinstance_types([Q(25, '°C'), Q(25, 'bar')], list[Q])
 
     # NOTE: the name CustomDimensionality must be globally unique
 
@@ -724,15 +724,15 @@ def test_instance_checks():
     assert not isinstance_types((Q(25, 'm*g/K^2'), ),
                                 tuple[Q[CustomDimensionality], ...])
 
-    assert not isinstance_types([Q(25, 'C')], list[Q[Pressure]])
+    assert not isinstance_types([Q(25, '°C')], list[Q[Pressure]])
 
-    assert isinstance_types([Q[Temperature](25, 'C'), Q(25, 'F')],
+    assert isinstance_types([Q[Temperature](25, '°C'), Q(25, '°F')],
                             list[Q[Temperature]])
 
-    assert not isinstance_types([Q[Temperature](25, 'C'), Q(25, 'F/day')],
+    assert not isinstance_types([Q[Temperature](25, '°C'), Q(25, 'F/day')],
                                 list[Q[Temperature]])
 
-    assert not isinstance_types([Q(25, 'C'), Q(25, 'bar')],
+    assert not isinstance_types([Q(25, '°C'), Q(25, 'bar')],
                                 list[Q[CustomDimensionality]])
 
 
@@ -1148,14 +1148,14 @@ def test_pydantic_integration():
 
 def test_temperature_difference():
 
-    T1 = Q(25, 'C')
-    T2 = Q(35, 'C')
+    T1 = Q(25, '°C')
+    T2 = Q(35, '°C')
 
     dT = T1 - T2
     dT_ = T2 - T1
 
     assert isinstance(dT, Q[TemperatureDifference])
-    assert isinstance(dT.to('delta_F'), Q[TemperatureDifference])
+    assert isinstance(dT.to('delta_degF'), Q[TemperatureDifference])
 
     assert isinstance(dT_, Q[TemperatureDifference])
     assert isinstance(dT_ + dT, Q[TemperatureDifference])
@@ -1186,3 +1186,36 @@ def test_temperature_difference():
     T2_ = T1.to('K') - Q(100, 'delta_degC')
 
     assert isinstance(T2_, Q[Temperature])
+
+
+def test_temperature_unit_inputs():
+
+    for unit in [
+        'degC',
+        'delta_degC',
+        'ΔdegC',
+        'degF',
+        'delta_degF',
+        'ΔdegF',
+        'delta_°C',
+        'delta_℃',
+        'Δ℃',
+        'Δ°C',
+        'delta_℉',
+        'Δ℉',
+        'Δ°F'
+    ]:
+
+        qty = Q(1, unit)
+
+        # NOTE: qty.check(Temperature) and qty.check(TemperatureDifference)
+        # are equivalent since both dimensionalitites have the same unitscontainer
+        assert isinstance(qty, (Q[Temperature], Q[TemperatureDifference]))
+
+        # this will automatically be converted to delta_temperature per length,
+        # even if the input is temperature (not delta_temperature)
+        dT_per_length = Q(1, f'{unit} / m')
+        assert dT_per_length.dimensionality == Temperature.dimensions / Length.dimensions
+
+        vol_per_dT = Q(1, f'm3/{unit}')
+        assert vol_per_dT.dimensionality == Volume.dimensions / Temperature.dimensions
