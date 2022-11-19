@@ -10,25 +10,36 @@ be imported in this case.
 
 from __future__ import annotations
 
-from typing import TypeVar, Union, Optional
-from typing import Literal as L
+from typing import (TypeVar,
+                    Union,
+                    Optional,
+                    Protocol,
+                    Literal as L,
+                    runtime_checkable)
 from typing import _LiteralGenericAlias  # type: ignore
 
 from abc import ABC
 
 
 import numpy as np
-import pandas as pd
 from pint.util import UnitsContainer
 
 MagnitudeScalar = Union[float, int]
+
+
+@runtime_checkable
+class SupportsNumpyConversion(Protocol):
+
+    def to_numpy(self) -> np.ndarray:
+        ...
+
 
 MagnitudeInput = Union[
     MagnitudeScalar,
     list[MagnitudeScalar],
     tuple[MagnitudeScalar, ...],
     np.ndarray,
-    pd.Series
+    SupportsNumpyConversion
 ]
 
 Magnitude = Union[MagnitudeScalar, np.ndarray]

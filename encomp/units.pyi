@@ -13,8 +13,12 @@ from _typeshed import Incomplete
 
 import numpy as np
 
+from pint.util import UnitsContainer
 from pint.facets.plain.quantity import PlainQuantity
+from pint.facets.measurement.objects import MeasurementQuantity
+from pint.facets.numpy.quantity import NumpyQuantity
 from pint.facets.plain.unit import PlainUnit
+from pint.facets.numpy.unit import NumpyUnit
 from pint.facets.formatting.objects import FormattingQuantity, FormattingUnit
 
 from pint.util import UnitsContainer
@@ -148,11 +152,19 @@ def define_dimensionality(name: str, symbol: str = ...) -> None: ...
 def set_quantity_format(fmt: str = ...) -> None: ...
 
 
-class Unit(PlainUnit, FormattingUnit):
+class Unit(PlainUnit,
+           NumpyUnit,
+           FormattingUnit):
     ...
 
 
-class Quantity(PlainQuantity, FormattingQuantity, Generic[DT], SupportsAbs, SupportsRound):
+class Quantity(PlainQuantity,
+               NumpyQuantity,
+               MeasurementQuantity,
+               FormattingQuantity,
+               Generic[DT],
+               SupportsAbs,
+               SupportsRound):
 
     def __hash__(self) -> int: ...
     def __class_getitem__(cls, dim: type[DT]) -> type[Quantity[DT]]: ...

@@ -24,13 +24,15 @@ from typing import (Union,
 
 import sympy as sp
 import numpy as np
-import pandas as pd
 
 
 import pint
 from pint.util import UnitsContainer
 from pint.facets.plain.quantity import PlainQuantity
+from pint.facets.measurement.objects import MeasurementQuantity
+from pint.facets.numpy.quantity import NumpyQuantity
 from pint.facets.plain.unit import PlainUnit
+from pint.facets.numpy.unit import NumpyUnit
 from pint.facets.formatting.objects import FormattingQuantity, FormattingUnit
 from pint.registry import UnitRegistry, LazyRegistry
 from pint.errors import DimensionalityError
@@ -148,8 +150,6 @@ for k, v in _REGISTRY_STATIC_OPTIONS.items():
 pint._DEFAULT_REGISTRY = ureg  # type: ignore
 pint.application_registry.set(ureg)
 
-ureg.default_format = SETTINGS.default_unit_format
-
 
 def define_dimensionality(name: str, symbol: str | None = None) -> None:
     """
@@ -204,13 +204,20 @@ class QuantityMeta(type):
         return id(mcls)
 
 
-class Unit(PlainUnit, FormattingUnit):
+class Unit(PlainUnit,
+           NumpyUnit,
+           FormattingUnit):
 
     # TODO: this also has Generic[DT]
     pass
 
 
-class Quantity(PlainQuantity, FormattingQuantity, Generic[DT], metaclass=QuantityMeta):
+class Quantity(PlainQuantity,
+               NumpyQuantity,
+               MeasurementQuantity,
+               FormattingQuantity,
+               Generic[DT],
+               metaclass=QuantityMeta):
     """
     Subclass of ``PlainQuantity`` with additional functionality
     and integration with other libraries.
@@ -253,9 +260,6 @@ class Quantity(PlainQuantity, FormattingQuantity, Generic[DT], metaclass=Quantit
 
     TEMPERATURE_DIFFERENCE_UCS = (Unit('delta_degC')._units,
                                   Unit('delta_degF')._units)
-
-    # attributes used internally by pint
-    __used: bool
 
     def __hash__(self) -> int:
         return super().__hash__()
@@ -321,16 +325,13 @@ class Quantity(PlainQuantity, FormattingQuantity, Generic[DT], metaclass=Quantit
 
     @staticmethod
     def _validate_unit(
-        unit: Union[Unit, PlainUnit, UnitsContainer, str, Quantity, dict, None]
+        unit: Union[Unit, Quantity, UnitsContainer, str, dict, None]
     ) -> Unit:
 
         if unit is None:
             return Unit('dimensionless')
 
         if isinstance(unit, Unit):
-            return unit
-
-        if isinstance(unit, PlainUnit):
             return Unit(unit)
 
         if isinstance(unit, Quantity):
@@ -355,7 +356,7 @@ class Quantity(PlainQuantity, FormattingQuantity, Generic[DT], metaclass=Quantit
 
         raise ValueError(
             f'Incorrect input for unit: {unit} ({type(unit)}), '
-            'expected Unit, PlainUnit, UnitsContainer, str or Quantity'
+            'expected Unit, UnitsContainer, str or Quantity'
         )
 
     @classmethod
@@ -391,8 +392,6 @@ class Quantity(PlainQuantity, FormattingQuantity, Generic[DT], metaclass=Quantit
             self._units
         )
 
-        ret.__used = self.__used
-
         return ret  # type: ignore
 
     def __deepcopy__(self, memo: Optional[dict[int, Any]] = None) -> Quantity[DT]:
@@ -405,15 +404,12 @@ class Quantity(PlainQuantity, FormattingQuantity, Generic[DT], metaclass=Quantit
             copy.deepcopy(self._units, memo)
         )
 
-        ret.__used = self.__used
-
         return ret  # type: ignore
 
     def __new__(  # type: ignore
         cls,
         val: Union[MagnitudeInput, Quantity[DT], str],
-        unit: Union[Unit, PlainUnit, UnitsContainer,
-                    str, Quantity[DT], None] = None,
+        unit: Union[Unit, UnitsContainer, str, Quantity[DT], None] = None,
 
         # this is a hack to force the type checker to default to Unknown
         # in case the generic type is not specified at all
@@ -449,10 +445,14 @@ class Quantity(PlainQuantity, FormattingQuantity, Generic[DT], metaclass=Quantit
             # the correct dimensional subclass as well
             val = val._convert_magnitude_not_inplace(unit)  # type: ignore
 
-        if isinstance(val, pd.Series):
+        if hasattr(val, 'to_numpy'):
 
-            # support passing pd.Series directly
-            val = val.values  # type: ignore
+            # NOTE: for Polars Series, this might return SeriesView instead
+            # of np.ndarray. This does not seem to cause any issues
+            # NOTE: depending on how to_numpy is implemented, this
+            # might create unnecessary copies (np.ndarray.copy() is called later on
+            # in this method)
+            val = val.to_numpy()  # type: ignore
 
         if isinstance(val, str):
             val = float(val)
@@ -626,7 +626,6 @@ class Quantity(PlainQuantity, FormattingQuantity, Generic[DT], metaclass=Quantit
             unit = unit.dimensions  # type: ignore
 
         return super().check(unit)  # type: ignore
-
 
     def __format__(self, format_type: str) -> str:
         """
@@ -1060,9 +1059,13 @@ class Quantity(PlainQuantity, FormattingQuantity, Generic[DT], metaclass=Quantit
         return Quantity[dim](self)
 
 
-# override the implementation of the Quantity class for the current registry
+# override the implementations for the Quantity and Unit classes for the current registry
 # this ensures that all Quantity objects created with this registry are the correct type
 ureg.Quantity = Quantity
+ureg.Unit = Unit
+
+# the default format must be set after Quantity and Unit are registered
+ureg.default_format = SETTINGS.default_unit_format
 
 
 def set_quantity_format(fmt: str = 'compact') -> None:

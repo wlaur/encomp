@@ -21,6 +21,7 @@ from ..units import (Quantity,
                      define_dimensionality,
                      DimensionalityRedefinitionError,
                      DimensionalityTypeError,
+                     DimensionalityError,
                      ExpectedDimensionalityError)
 from ..units import Quantity as Q
 from ..serialize import decode
@@ -30,7 +31,6 @@ from ..utypes import *
 
 def test_registry():
 
-    from ..units import ureg
     from pint import _DEFAULT_REGISTRY, application_registry
 
     us = [ureg, _DEFAULT_REGISTRY, application_registry.get()]
@@ -324,6 +324,10 @@ def test_Q():
     Q(Q(Q(Q(mass), 'lbs')))
     Q(Q(Q(Q(mass), 'lbs')), 'stone')
 
+    # nesting incompatible units is not allowed
+    with pytest.raises(DimensionalityError):
+        Q(Q(1, 'm'), 'kg')
+
     # no unit input defaults to dimensionless
     assert Q(12).check('')
     assert Q(1) == Q(100, '%')
@@ -469,6 +473,8 @@ def test_custom_units():
     # floating point accuracy
     assert round(v1, 10) == round(v2, 10) == round(v3, 10) == round(v4, 10)
 
+    define_dimensionality('air')
+
     factor = Q(12, 'Nm3 water/ (normal liter air)')
     (Q(1, 'kg water') / factor).to('pound air')
 
@@ -502,6 +508,49 @@ def test_wraps():
 
     assert isinstance(func(Q(1, 'yd'), Q(20, 'lbs')), Q[Mass])
     assert Q(1, 'bar').check(Pressure)
+
+
+def test_numpy_integration():
+
+    assert isinstance(Q(np.linspace(0, 1), 'kg'), Q[Mass])
+    assert isinstance(np.linspace(Q(0, 'kg'),  Q(1, 'kg')), Q[Mass])
+
+    assert isinstance(np.linspace(Q(2), Q(25, '%')), Q[Dimensionless])
+    assert isinstance(np.linspace(Q(2, 'cm'), Q(25, 'km')), Q[Length])
+
+    with pytest.raises(DimensionalityError):
+        np.linspace(Q(2, 'kg'), Q(25, 'm'))
+
+    assert (Q(np.linspace(0, 1), 'kg') ==
+            np.linspace(Q(0, 'kg'), Q(1, 'kg'))).all()
+
+    assert isinstance_types(
+        list(Q(np.linspace(0, 1), 'degC')),
+        list[Q[Temperature]]
+    )
+
+
+def test_series_integration():
+
+    # indirectly support Polars via "to_numpy method"
+
+    s_pd = pd.Series([1, 2, 3], name='name')
+
+    # the "name" attribute it lost when creating a Quantity
+    qty = Q(s_pd, 'kg')
+    assert qty.to('g')[0] == Q(1000, 'g')
+
+    # ignore these tests if Polars is not installed
+    try:
+        import polars as pl
+    except ImportError:
+        return
+
+    s_pl = pl.Series('name', [1, 2, 3])
+
+    qty = Q(s_pl, 'kg')
+
+    assert qty.to('g')[0] == Q(1000, 'g')
 
 
 def test_check():
@@ -985,6 +1034,7 @@ def test_indexing():
 
 def test_plus_minus():
 
+    # might be better to use the uncertainties package for this
     l = Q(2, 'm')
 
     # TODO: add type hints for this
@@ -1086,6 +1136,14 @@ def test_unit_compatibility():
     assert isinstance([1, 2, 3] * ureg.m / ureg.s, Q[Velocity])
     assert isinstance((1, 2, 3) * ureg.m / ureg.s, Q[Velocity])
     assert isinstance(np.array([1, 2, 3]) * ureg.m / ureg.s, Q[Velocity])
+
+
+def test_mul_rmul_initialization():
+
+    assert isinstance(ureg.m * np.array([1, 2]), Q[Length])
+    assert isinstance(np.array([1, 2]) * ureg.m, Q[Length])
+    assert isinstance([1, 2] * Q(1, 'm'), Q[Length])
+    assert isinstance(np.array([1, 2]) * Q(1, 'm'), Q[Length])
 
 
 def test_decimal():
