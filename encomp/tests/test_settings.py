@@ -1,4 +1,4 @@
-from encomp.settings import SETTINGS
+from ..settings import SETTINGS
 
 
 def test_SETTINGS():

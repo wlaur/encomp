@@ -7,7 +7,7 @@ from typing import Sequence, Iterator, Optional, Any, Iterable, TypeVar, overloa
 import numpy as np
 import pandas as pd
 
-from encomp.units import Quantity
+from .units import Quantity
 
 T = TypeVar('T')
 

@@ -1,7 +1,7 @@
 
-from encomp.units import Quantity as Q
-from encomp.utypes import Temperature, TemperatureDifference, MassFlow, Energy, Power
-from encomp.thermo import heat_balance, intermediate_temperatures
+from ..units import Quantity as Q
+from ..utypes import Temperature, TemperatureDifference, MassFlow, Energy, Power
+from ..thermo import heat_balance, intermediate_temperatures
 
 
 def test_heat_balance():

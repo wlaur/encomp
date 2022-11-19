@@ -7,18 +7,18 @@ Functions related to gases: normal volume to mass conversion, compressibility, e
 
 from typing import Union, Literal, cast
 
-from encomp.constants import CONSTANTS
-from encomp.units import Quantity
-from encomp.conversion import convert_volume_mass
-from encomp.utypes import (Mass,
-                           MassFlow,
-                           Volume,
-                           VolumeFlow,
-                           Temperature,
-                           MolarMass,
-                           Pressure,
-                           Density)
-from encomp.fluids import Fluid
+from .constants import CONSTANTS
+from .units import Quantity
+from .conversion import convert_volume_mass
+from .utypes import (Mass,
+                     MassFlow,
+                     Volume,
+                     VolumeFlow,
+                     Temperature,
+                     MolarMass,
+                     Pressure,
+                     Density)
+from .fluids import Fluid
 
 
 R = CONSTANTS.R

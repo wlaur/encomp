@@ -4,8 +4,8 @@ Functions related to converting quantities.
 
 from typing import Optional, Union, overload
 
-from encomp.units import Quantity
-from encomp.utypes import Mass, MassFlow, Density, Volume, VolumeFlow
+from .units import Quantity
+from .utypes import Mass, MassFlow, Density, Volume, VolumeFlow
 
 
 @overload

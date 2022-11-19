@@ -10,7 +10,7 @@ import tempfile
 from typing import Union
 
 
-from encomp.units import set_quantity_format, ureg
+from .units import set_quantity_format, ureg
 
 
 @contextmanager

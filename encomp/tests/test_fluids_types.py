@@ -3,8 +3,8 @@ from typing import TYPE_CHECKING
 import pytest
 
 
-from encomp.fluids import Water, HumidAir
-from encomp.units import Quantity as Q
+from ..fluids import Water, HumidAir
+from ..units import Quantity as Q
 
 if not TYPE_CHECKING:
     def reveal_type(x): return x

@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 import pytest
 
-from encomp.units import Quantity as Q
+from ..units import Quantity as Q
 
 
 if not TYPE_CHECKING:

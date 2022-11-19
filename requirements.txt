@@ -8,5 +8,5 @@ numpy
 pandas
 coolprop
 sympy
-pint==0.19.2
+pint>=0.20.1
 symbolic-equation

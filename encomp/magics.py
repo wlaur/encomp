@@ -21,8 +21,8 @@ from IPython.core.magic import (Magics,
 from IPython.core.magic_arguments import argument, magic_arguments, parse_argstring
 
 
-from encomp.misc import name_assignments
-from encomp.serialize import save, load
+from .misc import name_assignments
+from .serialize import save, load
 
 # check if this is imported into a Notebook
 __INTERACTIVE__ = 'ipykernel_launcher.py' in sys.argv[0]

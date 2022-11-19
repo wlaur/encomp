@@ -2,9 +2,9 @@ from typing import TypeVar, TYPE_CHECKING
 
 import pytest
 
-from encomp.units import DimensionalityError
-from encomp.units import Quantity as Q
-from encomp.utypes import *
+from ..units import DimensionalityError
+from ..units import Quantity as Q
+from ..utypes import *
 
 if not TYPE_CHECKING:
     def reveal_type(x): return x

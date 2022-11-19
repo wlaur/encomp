@@ -1,12 +1,12 @@
-from encomp.units import Quantity as Q
-from encomp.utypes import Density, VolumeFlow, Mass, Volume
+from ..units import Quantity as Q
+from ..utypes import Density, VolumeFlow, Mass, Volume
 
-from encomp.gases import (convert_gas_volume,
-                          ideal_gas_density,
-                          mass_from_actual_volume,
-                          mass_to_actual_volume,
-                          actual_volume_to_normal_volume,
-                          normal_volume_to_actual_volume)
+from ..gases import (convert_gas_volume,
+                     ideal_gas_density,
+                     mass_from_actual_volume,
+                     mass_to_actual_volume,
+                     actual_volume_to_normal_volume,
+                     normal_volume_to_actual_volume)
 
 
 def test_convert_gas_volume():

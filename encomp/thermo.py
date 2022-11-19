@@ -9,19 +9,19 @@ try:
 except ImportError:
     fsolve = None
 
-from encomp.misc import isinstance_types
-from encomp.units import Quantity
-from encomp.constants import CONSTANTS
-from encomp.utypes import (Mass,
-                           MassFlow,
-                           Temperature,
-                           TemperatureDifference,
-                           Energy,
-                           Power,
-                           Length,
-                           SpecificHeatCapacity,
-                           ThermalConductivity,
-                           HeatTransferCoefficient)
+from .misc import isinstance_types
+from .units import Quantity
+from .constants import CONSTANTS
+from .utypes import (Mass,
+                     MassFlow,
+                     Temperature,
+                     TemperatureDifference,
+                     Energy,
+                     Power,
+                     Length,
+                     SpecificHeatCapacity,
+                     ThermalConductivity,
+                     HeatTransferCoefficient)
 
 
 SIGMA = CONSTANTS.SIGMA

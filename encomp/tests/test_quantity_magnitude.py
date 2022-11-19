@@ -4,7 +4,7 @@ import pytest
 import numpy as np
 
 
-from encomp.units import Quantity as Q
+from ..units import Quantity as Q
 
 if not TYPE_CHECKING:
     def reveal_type(x): return x

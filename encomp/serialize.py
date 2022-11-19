@@ -66,11 +66,10 @@ import sympy as sp
 from decimal import Decimal
 from uncertainties import ufloat
 from uncertainties.core import AffineScalarFunc
-from pint.unit import Unit
 
-from encomp.units import Quantity
-from encomp.utypes import Magnitude, Dimensionality
-from encomp.misc import isinstance_types
+from .units import Quantity, Unit
+from .utypes import Magnitude, Dimensionality
+from .misc import isinstance_types
 
 # type alias for objects that can be serialized using json.dumps()
 JSONBase = Union[dict,

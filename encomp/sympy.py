@@ -22,8 +22,8 @@ except ImportError:
 
 from symbolic_equation import Eq as Eq_symbolic
 
-from encomp.settings import SETTINGS
-from encomp.units import Quantity
+from .settings import SETTINGS
+from .units import Quantity
 
 
 # TODO: what is this map used for?

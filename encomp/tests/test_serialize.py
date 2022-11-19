@@ -11,8 +11,8 @@ try:
 except ImportError:
     ufloat = None
 
-from encomp.units import Quantity as Q
-from encomp.serialize import serialize, decode, is_serializable
+from ..units import Quantity as Q
+from ..serialize import serialize, decode, is_serializable
 
 
 def test_serialize():

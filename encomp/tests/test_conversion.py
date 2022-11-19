@@ -1,8 +1,8 @@
 import pytest
 
-from encomp.units import Quantity as Q
-from encomp.utypes import VolumeFlow, Volume
-from encomp.conversion import convert_volume_mass
+from ..units import Quantity as Q
+from ..utypes import VolumeFlow, Volume
+from ..conversion import convert_volume_mass
 
 
 def test_convert_volume_mass():

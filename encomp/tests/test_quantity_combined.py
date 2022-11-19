@@ -2,20 +2,20 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from encomp.units import Quantity as Q
-from encomp.conversion import convert_volume_mass
-from encomp.utypes import (Dimensionless,
-                           Time,
-                           Length,
-                           MassFlow,
-                           Mass,
-                           VolumeFlow,
-                           Volume,
-                           Energy,
-                           NormalVolumeFlow,
-                           ThermalConductivity,
-                           Power,
-                           Temperature)
+from ..units import Quantity as Q
+from ..conversion import convert_volume_mass
+from ..utypes import (Dimensionless,
+                      Time,
+                      Length,
+                      MassFlow,
+                      Mass,
+                      VolumeFlow,
+                      Volume,
+                      Energy,
+                      NormalVolumeFlow,
+                      ThermalConductivity,
+                      Power,
+                      Temperature)
 
 if not TYPE_CHECKING:
     def reveal_type(x): return x

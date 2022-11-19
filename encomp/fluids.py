@@ -32,39 +32,38 @@ except ImportError:
     def HAPropsSI(*args, **kwargs):
         raise NotImplementedError()
 
-from pint.unit import Unit
 
-from encomp.structures import flatten
-from encomp.settings import SETTINGS
-from encomp.misc import isinstance_types
-from encomp.units import Quantity, DimensionalityError, ExpectedDimensionalityError
-from encomp.utypes import (Magnitude,
-                           MagnitudeScalar,
-                           Unknown,
-                           Pressure,
-                           Temperature,
-                           Dimensionless,
-                           MolarDensity,
-                           Density,
-                           SpecificHeatCapacity,
-                           SpecificEnthalpy,
-                           MolarSpecificEnthalpy,
-                           SpecificEntropy,
-                           MolarSpecificEntropy,
-                           SpecificInternalEnergy,
-                           MolarSpecificInternalEnergy,
-                           SpecificHeatPerDryAir,
-                           SpecificHeatPerHumidAir,
-                           MixtureEnthalpyPerDryAir,
-                           MixtureEnthalpyPerHumidAir,
-                           MixtureEntropyPerDryAir,
-                           MixtureEntropyPerHumidAir,
-                           MixtureVolumePerDryAir,
-                           MixtureVolumePerHumidAir,
-                           Velocity,
-                           ThermalConductivity,
-                           MolarMass,
-                           DynamicViscosity)
+from .structures import flatten
+from .settings import SETTINGS
+from .misc import isinstance_types
+from .units import Quantity, Unit, DimensionalityError, ExpectedDimensionalityError
+from .utypes import (Magnitude,
+                     MagnitudeScalar,
+                     Unknown,
+                     Pressure,
+                     Temperature,
+                     Dimensionless,
+                     MolarDensity,
+                     Density,
+                     SpecificHeatCapacity,
+                     SpecificEnthalpy,
+                     MolarSpecificEnthalpy,
+                     SpecificEntropy,
+                     MolarSpecificEntropy,
+                     SpecificInternalEnergy,
+                     MolarSpecificInternalEnergy,
+                     SpecificHeatPerDryAir,
+                     SpecificHeatPerHumidAir,
+                     MixtureEnthalpyPerDryAir,
+                     MixtureEnthalpyPerHumidAir,
+                     MixtureEntropyPerDryAir,
+                     MixtureEntropyPerHumidAir,
+                     MixtureVolumePerDryAir,
+                     MixtureVolumePerHumidAir,
+                     Velocity,
+                     ThermalConductivity,
+                     MolarMass,
+                     DynamicViscosity)
 
 
 if SETTINGS.ignore_coolprop_warnings:

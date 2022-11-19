@@ -4,7 +4,7 @@ from hypothesis import given
 from hypothesis.strategies import lists, integers
 
 
-from encomp.structures import flatten, divide_chunks
+from ..structures import flatten, divide_chunks
 
 
 def test_flatten():

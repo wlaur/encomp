@@ -1,9 +1,9 @@
 import pytest
 import numpy as np
 
-from encomp.units import Quantity as Q
-from encomp.fluids import Fluid, HumidAir, Water
-from encomp.utypes import Density, SpecificEntropy
+from ..units import Quantity as Q
+from ..fluids import Fluid, HumidAir, Water
+from ..utypes import Density, SpecificEntropy
 
 
 def test_Fluid():

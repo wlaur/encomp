@@ -4,9 +4,9 @@ import pytest
 
 from typing import Union
 
-from encomp.units import Quantity as Q
-from encomp.utypes import *
-from encomp.misc import isinstance_types
+from ..units import Quantity as Q
+from ..utypes import *
+from ..misc import isinstance_types
 
 
 if not TYPE_CHECKING:

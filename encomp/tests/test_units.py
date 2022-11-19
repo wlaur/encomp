@@ -13,24 +13,24 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import is_list_like as pandas_is_list_like  # type: ignore
 
-from encomp.misc import isinstance_types
-from encomp.conversion import convert_volume_mass
-from encomp.units import (Quantity,
-                          ureg,
-                          CUSTOM_DIMENSIONS,
-                          define_dimensionality,
-                          DimensionalityRedefinitionError,
-                          DimensionalityTypeError,
-                          ExpectedDimensionalityError)
-from encomp.units import Quantity as Q
-from encomp.serialize import decode
-from encomp.fluids import Water
-from encomp.utypes import *
+from ..misc import isinstance_types
+from ..conversion import convert_volume_mass
+from ..units import (Quantity,
+                     ureg,
+                     CUSTOM_DIMENSIONS,
+                     define_dimensionality,
+                     DimensionalityRedefinitionError,
+                     DimensionalityTypeError,
+                     ExpectedDimensionalityError)
+from ..units import Quantity as Q
+from ..serialize import decode
+from ..fluids import Water
+from ..utypes import *
 
 
 def test_registry():
 
-    from encomp.units import ureg
+    from ..units import ureg
     from pint import _DEFAULT_REGISTRY, application_registry
 
     us = [ureg, _DEFAULT_REGISTRY, application_registry.get()]
@@ -53,6 +53,12 @@ def test_define_dimensionality():
 
     with pytest.raises(DimensionalityRedefinitionError):
         define_dimensionality(CUSTOM_DIMENSIONS[0])
+
+
+def test_format():
+
+    assert '{:.2f~P}'.format(Q(25, 'delta_degC') /
+                             Q(255, 'm3')) == '0.10 Δ°C/m³'
 
 
 @contextmanager

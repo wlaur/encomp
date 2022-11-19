@@ -14,7 +14,13 @@ import re
 import warnings
 import copy
 import numbers
-from typing import Union, Optional, Generic, Union, Any, TypeVar, Literal
+from typing import (Union,
+                    Optional,
+                    Generic,
+                    Union,
+                    Any,
+                    TypeVar,
+                    Literal)
 
 import sympy as sp
 import numpy as np
@@ -22,23 +28,25 @@ import pandas as pd
 
 
 import pint
-from pint import Unit
 from pint.util import UnitsContainer
+from pint.facets.plain.quantity import PlainQuantity
+from pint.facets.plain.unit import PlainUnit
+from pint.facets.formatting.objects import FormattingQuantity, FormattingUnit
 from pint.registry import UnitRegistry, LazyRegistry
 from pint.errors import DimensionalityError
 
-from encomp.settings import SETTINGS
-from encomp.misc import isinstance_types
-from encomp.utypes import (_BASE_SI_UNITS,
-                           MagnitudeInput,
-                           MagnitudeScalar,
-                           Magnitude,
-                           DT,
-                           Dimensionality,
-                           Dimensionless,
-                           Temperature,
-                           TemperatureDifference,
-                           Unknown)
+from .settings import SETTINGS
+from .misc import isinstance_types
+from .utypes import (_BASE_SI_UNITS,
+                     MagnitudeInput,
+                     MagnitudeScalar,
+                     Magnitude,
+                     DT,
+                     Dimensionality,
+                     Dimensionless,
+                     Temperature,
+                     TemperatureDifference,
+                     Unknown)
 
 if SETTINGS.ignore_ndarray_unit_stripped_warning:
     warnings.filterwarnings(
@@ -140,13 +148,6 @@ for k, v in _REGISTRY_STATIC_OPTIONS.items():
 pint._DEFAULT_REGISTRY = ureg  # type: ignore
 pint.application_registry.set(ureg)
 
-
-# enable support for matplotlib axis ticklabels etc...
-try:
-    ureg.setup_matplotlib()
-except ImportError:
-    pass
-
 # this option should be changeable
 ureg.default_format = SETTINGS.default_unit_format
 
@@ -194,15 +195,6 @@ def define_dimensionality(name: str, symbol: str = None) -> None:
     CUSTOM_DIMENSIONS.append(name)
 
 
-# define commonly used media as dimensionalities
-for dimensionality_name in ['air', 'water', 'fuel']:
-
-    try:
-        define_dimensionality(dimensionality_name)
-    except pint.errors.DefinitionSyntaxError as e:
-        pass
-
-
 class QuantityMeta(type):
 
     def __eq__(mcls, obj: object) -> bool:
@@ -218,15 +210,20 @@ class QuantityMeta(type):
         return id(mcls)
 
 
-class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
+class Unit(PlainUnit, FormattingUnit):
+
+    # TODO: this also has Generic[DT]
+    pass
+
+
+class Quantity(PlainQuantity, FormattingQuantity, Generic[DT], metaclass=QuantityMeta):
     """
-    Subclass of ``pint.quantity.Quantity`` with additional functionality
+    Subclass of ``PlainQuantity`` with additional functionality
     and integration with other libraries.
 
     Encodes the output dimensionalities of some common operations,
     for example ``Length**2 -> Area``. This is implemented by overloading the
     ``__mul__, __truediv__, __rtruediv__, __pow__`` methods.
-
 
     .. note::
 
@@ -300,9 +297,9 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
         # NOTE: this method is called when defining type hints
         # on Python <3.10 (unless from __future__ import annotations is active)
 
-        # use Unknown as a proxy for type variables
+        # use Unknown as a placeholder for type variables
         if isinstance(dim, TypeVar):
-            dim = Unknown
+            dim = Unknown  # type: ignore
 
         if not isinstance(dim, type):
             raise TypeError(
@@ -326,33 +323,47 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
         return cls._get_dimensional_subclass(dim)
 
     @staticmethod
-    def _validate_unit(unit: Union[Unit, UnitsContainer, str, Quantity, dict]) -> Unit:
+    def _validate_unit(
+        unit: Union[Unit, PlainUnit, UnitsContainer, str, Quantity, dict, None]
+    ) -> Unit:
+
+        if unit is None:
+            return Unit('dimensionless')
 
         if isinstance(unit, Unit):
             return unit
 
+        if isinstance(unit, PlainUnit):
+            return Unit(unit)
+
         if isinstance(unit, Quantity):
-            return unit.u
+            return Unit(unit.u)
 
         # compatibility with internal pint API
         if isinstance(unit, dict):
-            return Quantity._validate_unit(str(UnitsContainer(unit)))
+            return Unit(
+                Quantity._validate_unit(str(UnitsContainer(unit)))
+            )
 
         # compatibility with internal pint API
         if isinstance(unit, UnitsContainer):
-            return Quantity._validate_unit(str(unit))
+            return Unit(
+                Quantity._validate_unit(str(unit))
+            )
 
         if isinstance(unit, str):
-            return Quantity._REGISTRY.parse_units(Quantity.correct_unit(unit))
+            return Unit(
+                Quantity._REGISTRY.parse_units(Quantity.correct_unit(unit))
+            )
 
         raise ValueError(
             f'Incorrect input for unit: {unit} ({type(unit)}), '
-            'expected Unit, UnitsContainer, str or Quantity'
+            'expected Unit, PlainUnit, UnitsContainer, str or Quantity'
         )
 
     @classmethod
     def get_unit(cls, unit_name: str) -> Unit:
-        return cls._REGISTRY.parse_units(unit_name)
+        return Unit(cls._REGISTRY.parse_units(unit_name))
 
     @property
     def subclass(self) -> type[Quantity[DT]]:
@@ -404,7 +415,8 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
     def __new__(  # type: ignore
         cls,
         val: Union[MagnitudeInput, Quantity[DT], str],
-        unit: Union[Unit, UnitsContainer, str, Quantity[DT], None] = None,
+        unit: Union[Unit, PlainUnit, UnitsContainer,
+                    str, Quantity[DT], None] = None,
 
         # this is a hack to force the type checker to default to Unknown
         # in case the generic type is not specified at all
@@ -529,6 +541,14 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
         return self._magnitude
 
     @property
+    def u(self) -> Unit:
+        return Unit(super().u)
+
+    @property
+    def units(self) -> Unit:
+        return Unit(super().units)
+
+    @property
     def _is_temperature_difference(self):
         return self.dimensionality_type is TemperatureDifference
 
@@ -564,12 +584,12 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
 
         self._check_temperature_compatibility(unit)
 
-        m = self._convert_magnitude_not_inplace(unit)
+        m: Magnitude = self._convert_magnitude_not_inplace(unit)
 
         if unit._units in self.TEMPERATURE_DIFFERENCE_UCS:
             return Quantity[TemperatureDifference](m, unit)  # type: ignore
 
-        return self.subclass(m, unit)
+        return self.subclass(m, unit)  # type: ignore
 
     def ito(self,  # type: ignore[override]
             unit: Union[Unit, UnitsContainer, str, Quantity[DT]]) -> None:
@@ -636,7 +656,7 @@ class Quantity(pint.quantity.Quantity, Generic[DT], metaclass=QuantityMeta):
     @staticmethod
     def correct_unit(unit: str) -> str:
         """
-        Corrects the unit name to make it compatible with pint.
+        Corrects the unit name to make it compatible with ``pint``.
 
         * Adds ``**`` between the unit and the exponent if it's missing, for example ``kg/m3 → kg/m**3``.
         * Parses "Nm³" (and variations of this) as "normal * m³" (use explicit "nanometer³" to get this unit)

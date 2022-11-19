@@ -1,8 +1,8 @@
 import os
 from pathlib import Path
 
-from encomp.units import Quantity
-from encomp.context import silence_stdout, quantity_format, temp_dir, working_dir
+from ..units import Quantity
+from ..context import silence_stdout, quantity_format, temp_dir, working_dir
 
 
 def test_context():

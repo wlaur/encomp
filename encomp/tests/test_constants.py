@@ -1,6 +1,6 @@
-from encomp.constants import CONSTANTS
-from encomp.units import Quantity
-from encomp.utypes import Pressure
+from ..constants import CONSTANTS
+from ..units import Quantity
+from ..utypes import Pressure
 
 
 def test_CONSTANTS():

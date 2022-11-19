@@ -1,6 +1,6 @@
 import numpy as np
 
-from encomp.math import exponential
+from ..math import exponential
 
 
 def test_exponential():

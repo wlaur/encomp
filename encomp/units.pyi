@@ -13,100 +13,103 @@ from _typeshed import Incomplete
 
 import numpy as np
 
-import pint
-from pint.unit import UnitsContainer, Unit
+from pint.facets.plain.quantity import PlainQuantity
+from pint.facets.plain.unit import PlainUnit
+from pint.facets.formatting.objects import FormattingQuantity, FormattingUnit
+
+from pint.util import UnitsContainer
 from pint.registry import UnitRegistry
 
 # this is not consistent with units.py
 from pint.errors import DimensionalityError as _DimensionalityError
 
-from encomp.utypes import (DimensionlessUnits,
-                           CurrencyUnits,
-                           CurrencyPerEnergyUnits,
-                           CurrencyPerMassUnits,
-                           CurrencyPerVolumeUnits,
-                           CurrencyPerTimeUnits,
-                           LengthUnits,
-                           MassUnits,
-                           TimeUnits,
-                           TemperatureUnits,
-                           TemperatureDifferenceUnits,
-                           SubstanceUnits,
-                           MolarMassUnits,
-                           SubstancePerMassUnits,
-                           CurrentUnits,
-                           LuminosityUnits,
-                           AreaUnits,
-                           VolumeUnits,
-                           NormalVolumeUnits,
-                           PressureUnits,
-                           MassFlowUnits,
-                           VolumeFlowUnits,
-                           NormalVolumeFlowUnits,
-                           DensityUnits,
-                           SpecificVolumeUnits,
-                           EnergyUnits,
-                           PowerUnits,
-                           VelocityUnits,
-                           DynamicViscosityUnits,
-                           EnergyPerMassUnits,
-                           KinematicViscosityUnits,
-                           SpecificHeatCapacityUnits)
+from .utypes import (DimensionlessUnits,
+                     CurrencyUnits,
+                     CurrencyPerEnergyUnits,
+                     CurrencyPerMassUnits,
+                     CurrencyPerVolumeUnits,
+                     CurrencyPerTimeUnits,
+                     LengthUnits,
+                     MassUnits,
+                     TimeUnits,
+                     TemperatureUnits,
+                     TemperatureDifferenceUnits,
+                     SubstanceUnits,
+                     MolarMassUnits,
+                     SubstancePerMassUnits,
+                     CurrentUnits,
+                     LuminosityUnits,
+                     AreaUnits,
+                     VolumeUnits,
+                     NormalVolumeUnits,
+                     PressureUnits,
+                     MassFlowUnits,
+                     VolumeFlowUnits,
+                     NormalVolumeFlowUnits,
+                     DensityUnits,
+                     SpecificVolumeUnits,
+                     EnergyUnits,
+                     PowerUnits,
+                     VelocityUnits,
+                     DynamicViscosityUnits,
+                     EnergyPerMassUnits,
+                     KinematicViscosityUnits,
+                     SpecificHeatCapacityUnits)
 
-from encomp.utypes import (MagnitudeInput,
-                           MagnitudeScalar,
-                           DT,
-                           DT_,
-                           Dimensionality,
-                           Unknown,
-                           Dimensionless,
-                           Currency,
-                           CurrencyPerEnergy,
-                           CurrencyPerMass,
-                           CurrencyPerVolume,
-                           CurrencyPerTime,
-                           Substance,
-                           MolarMass,
-                           SubstancePerMass,
-                           Density,
-                           Energy,
-                           Power,
-                           Time,
-                           Temperature,
-                           TemperatureDifference,
-                           Length,
-                           Area,
-                           Volume,
-                           Mass,
-                           MassFlow,
-                           VolumeFlow,
-                           NormalVolume,
-                           NormalVolumeFlow,
-                           SpecificVolume,
-                           Current,
-                           Luminosity,
-                           Pressure,
-                           Velocity,
-                           DynamicViscosity,
-                           KinematicViscosity,
-                           ThermalConductivity,
-                           MolarSpecificEnthalpy,
-                           EnergyPerMass,
-                           HeatingValue,
-                           HigherHeatingValue,
-                           LowerHeatingValue,
-                           Frequency,
-                           MassPerEnergy,
-                           MassPerNormalVolume,
-                           MolarDensity,
-                           Normal,
-                           SpecificHeatCapacity,
-                           HeatTransferCoefficient,
-                           PowerPerLength,
-                           PowerPerArea,
-                           PowerPerTemperature,
-                           PowerPerVolume,
-                           MolarSpecificEntropy)
+from .utypes import (MagnitudeInput,
+                     MagnitudeScalar,
+                     DT,
+                     DT_,
+                     Dimensionality,
+                     Unknown,
+                     Dimensionless,
+                     Currency,
+                     CurrencyPerEnergy,
+                     CurrencyPerMass,
+                     CurrencyPerVolume,
+                     CurrencyPerTime,
+                     Substance,
+                     MolarMass,
+                     SubstancePerMass,
+                     Density,
+                     Energy,
+                     Power,
+                     Time,
+                     Temperature,
+                     TemperatureDifference,
+                     Length,
+                     Area,
+                     Volume,
+                     Mass,
+                     MassFlow,
+                     VolumeFlow,
+                     NormalVolume,
+                     NormalVolumeFlow,
+                     SpecificVolume,
+                     Current,
+                     Luminosity,
+                     Pressure,
+                     Velocity,
+                     DynamicViscosity,
+                     KinematicViscosity,
+                     ThermalConductivity,
+                     MolarSpecificEnthalpy,
+                     EnergyPerMass,
+                     HeatingValue,
+                     HigherHeatingValue,
+                     LowerHeatingValue,
+                     Frequency,
+                     MassPerEnergy,
+                     MassPerNormalVolume,
+                     MolarDensity,
+                     Normal,
+                     SpecificHeatCapacity,
+                     HeatTransferCoefficient,
+                     PowerPerLength,
+                     PowerPerArea,
+                     PowerPerTemperature,
+                     PowerPerVolume,
+                     MolarSpecificEntropy)
 
 
 # this is not consistent with units.py, tries to
@@ -145,7 +148,11 @@ def define_dimensionality(name: str, symbol: str = ...) -> None: ...
 def set_quantity_format(fmt: str = ...) -> None: ...
 
 
-class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
+class Unit(PlainUnit, FormattingUnit):
+    ...
+
+
+class Quantity(PlainQuantity, FormattingQuantity, Generic[DT], SupportsAbs, SupportsRound):
 
     def __hash__(self) -> int: ...
     def __class_getitem__(cls, dim: type[DT]) -> type[Quantity[DT]]: ...
@@ -154,6 +161,8 @@ class Quantity(pint.quantity.Quantity, Generic[DT], SupportsAbs, SupportsRound):
     def __len__(self) -> int: ...
     @property
     def m(self) -> Union[MagnitudeScalar, np.ndarray]: ...
+    @property
+    def u(self) -> Unit: ...
     @property
     def ndim(self) -> int: ...
     def to_reduced_units(self) -> Quantity[DT]: ...

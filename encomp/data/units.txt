@@ -3,8 +3,6 @@
 # Language: english
 # :copyright: 2013,2019 by Pint Authors, see AUTHORS for more details.
 
-# modified version of defaults_en.txt from the base pint library
-
 # Syntax
 # ======
 # Units
@@ -61,7 +59,6 @@
 @end
 
 
-
 #### PREFIXES ####
 
 # decimal prefixes
@@ -71,7 +68,9 @@ atto- =  1e-18 = a-
 femto- = 1e-15 = f-
 pico- =  1e-12 = p-
 nano- =  1e-9  = n-
-micro- = 1e-6  = µ- = u-
+# The micro (U+00B5) and Greek mu (U+03BC) are both valid prefixes,
+# and they often use the same glyph.
+micro- = 1e-6  = µ- = μ- = u-
 milli- = 1e-3  = m-
 centi- = 1e-2  = c-
 deci- =  1e-1  = d-
@@ -131,6 +130,12 @@ normal = [normal]
 percent = 1 / 100 = _ = pct = procent
 permille = 1 / 1000 = permil = promille
 
+# NOTE: these are only approximate, don't use for currency conversion
+SEK = 1 * currency
+EUR = 10 * currency
+USD = 10 * currency
+
+
 # Angle
 turn = 2 * π * radian = _ = revolution = cycle = circle
 degree = π / 180 * radian = deg = arcdeg = arcdegree = angular_degree
@@ -144,13 +149,6 @@ mil = π / 32000 * radian
 steradian = radian ** 2 = sr
 square_degree = (π / 180) ** 2 * sr = sq_deg = sqdeg
 
-
-# Currencies
-# NOTE: these are only approximate, don't use for currency conversion
-SEK = 1 * currency
-EUR = 10 * currency
-USD = 10 * currency
-
 # Information
 baud = bit / second = Bd = bps
 
@@ -160,7 +158,7 @@ byte = 8 * bit = B = octet
 
 # Length
 angstrom = 1e-10 * meter = Å = ångström = Å
-micron = micrometer = µ
+micron = micrometer = µ = μ
 fermi = femtometer = fm
 light_year = speed_of_light * julian_year = ly = lightyear
 astronomical_unit = 149597870700 * meter = au  # since Aug 2012
@@ -183,9 +181,9 @@ planck_mass = (hbar * c / gravitational_constant) ** 0.5
 
 # Time
 minute = 60 * second = min
-hour = 60 * minute = hr = h
-day = 24 * hour = d = dygn = dag
-week = 7 * day = w = wk
+hour = 60 * minute = h = hr
+day = 24 * hour = d
+week = 7 * day
 fortnight = 2 * week
 year = 365.25 * day = a = yr = julian_year = y
 month = year / 12
@@ -218,7 +216,6 @@ degree_Reaumur = 4 / 5 * kelvin; offset: 273.15 = °Re = reaumur = degRe = degre
 atomic_unit_of_temperature = E_h / k = a_u_temp
 planck_temperature = (hbar * c ** 5 / gravitational_constant / k ** 2) ** 0.5
 
-
 # Area
 [area] = [length] ** 2
 are = 100 * meter ** 2
@@ -245,13 +242,18 @@ counts_per_second = count / second = cps
 reciprocal_centimeter = 1 / cm = cm_1 = kayser
 
 # Velocity
-[velocity] = [length] / [time] = [speed]
+[velocity] = [length] / [time]
+[speed] = [velocity]
 knot = nautical_mile / hour = kt = knot_international = international_knot
 mile_per_hour = mile / hour = mph = MPH
 kilometer_per_hour = kilometer / hour = kph = KPH = kmh = KMH
 kilometer_per_second = kilometer / second = kps
 meter_per_second = meter / second = mps
 foot_per_second = foot / second = fps
+
+# Volumetric Flow Rate
+[volumetric_flow_rate] = [volume] / [time]
+sverdrup = 1e6 * meter ** 3 / second = sv
 
 # Acceleration
 [acceleration] = [velocity] / [time]
@@ -272,7 +274,7 @@ joule = newton * meter = J
 erg = dyne * centimeter
 watt_hour = watt * hour = Wh = watthour
 electron_volt = e * volt = eV
-rydberg = planck_constant * c * R_inf = Ry
+rydberg = ℎ * c * R_inf = Ry
 hartree = 2 * rydberg = E_h = Eh = hartree_energy = atomic_unit_of_energy = a_u_energy
 calorie = 4.184 * joule = cal = thermochemical_calorie = cal_th
 international_calorie = 4.1868 * joule = cal_it = international_steam_table_calorie
@@ -296,6 +298,7 @@ boiler_horsepower = 33475 * Btu / hour                            # unclear whic
 metric_horsepower = 75 * force_kilogram * meter / second
 electrical_horsepower = 746 * watt
 refrigeration_ton = 12e3 * Btu / hour = _ = ton_of_refrigeration  # approximate, no exact definition
+cooling_tower_ton = 1.25 * refrigeration_ton # approximate, no exact definition
 standard_liter_per_minute = atmosphere * liter / minute = slpm = slm
 conventional_watt_90 = K_J90 ** 2 * R_K90 / (K_J ** 2 * R_K) * watt = W_90
 
@@ -305,7 +308,7 @@ conventional_watt_90 = K_J90 ** 2 * R_K90 / (K_J ** 2 * R_K) * watt = W_90
 # Density (as auxiliary for pressure)
 [density] = [mass] / [volume]
 mercury = 13.5951 * kilogram / liter = Hg = Hg_0C = Hg_32F = conventional_mercury
-conventional_water = 1.0 * kilogram / liter
+water = 1.0 * kilogram / liter = H2O = conventional_water
 mercury_60F = 13.5568 * kilogram / liter = Hg_60F   # approximate
 water_39F = 0.999972 * kilogram / liter = water_4C  # approximate
 water_60F = 0.999001 * kilogram / liter             # approximate
@@ -325,11 +328,10 @@ inch_Hg = inch * Hg * g_0 = inHg = in_Hg = inch_Hg_32F
 inch_Hg_60F = inch * Hg_60F * g_0
 inch_H2O_39F = inch * water_39F * g_0
 inch_H2O_60F = inch * water_60F * g_0
-foot_H2O = foot * conventional_water * g_0 = ftH2O = feet_H2O = feet_water = foot_water = ft_H2O = ft_water
-centimeter_H2O = centimeter * conventional_water * g_0 = cmH2O = cm_H2O
+foot_H2O = foot * water * g_0 = ftH2O = feet_H2O = feet_water = foot_water = ft_H2O = ft_water
+centimeter_H2O = centimeter * water * g_0 = cmH2O = cm_H2O
 meter_H2O = cmH2O * 100 = m_H2O = mH2O = mh2o = mH20 = meter_water = m_water
 sound_pressure_level = 20e-6 * pascal = SPL
-
 
 # Valve constants
 Kv = m**3 / hour / bar**0.5 = K_v
@@ -459,16 +461,16 @@ farad = coulomb / volt = F
 abfarad = 1e9 * farad = abF
 conventional_farad_90 = R_K90 / R_K * farad = F_90
 
+# Magnetic flux
+[magnetic_flux] = [electric_potential] * [time]
+weber = volt * second = Wb
+unit_pole = µ_0 * biot * centimeter
+
 # Inductance
 [inductance] = [magnetic_flux] / [current]
 henry = weber / ampere = H
 abhenry = 1e-9 * henry = abH
 conventional_henry_90 = R_K / R_K90 * henry = H_90
-
-# Magnetic flux
-[magnetic_flux] = [electric_potential] * [time]
-weber = volt * second = Wb
-unit_pole = µ_0 * biot * centimeter
 
 # Magnetic field
 [magnetic_field] = [magnetic_flux] / [area]
@@ -680,6 +682,7 @@ neper = 1 ; logbase: 2.71828182845904523536028747135266249775724709369995; logfa
     RKM  = gf / tex
 
     number_english = 840 * yard / pound = Ne = NeC = ECC
+    number_meter = kilometer / kilogram = Nm
 @end
 
 

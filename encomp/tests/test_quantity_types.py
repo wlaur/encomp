@@ -3,16 +3,18 @@ import copy
 
 import pytest
 
-from encomp.units import DimensionalityError, ExpectedDimensionalityError, DimensionalityTypeError
-from encomp.units import Quantity as Q
-from encomp.utypes import (Dimensionless,
-                           NormalVolumeFlow,
-                           MassFlow,
-                           Time,
-                           Length,
-                           Mass,
-                           LowerHeatingValue,
-                           Temperature)
+from ..units import (DimensionalityError,
+                     ExpectedDimensionalityError,
+                     DimensionalityTypeError,
+                     Quantity as Q)
+from ..utypes import (Dimensionless,
+                      NormalVolumeFlow,
+                      MassFlow,
+                      Time,
+                      Length,
+                      Mass,
+                      LowerHeatingValue,
+                      Temperature)
 
 
 if not TYPE_CHECKING:

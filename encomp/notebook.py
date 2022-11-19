@@ -51,20 +51,20 @@ try:
 except ImportError:
     pass
 
-from encomp.settings import SETTINGS
-from encomp.misc import grid_dimensions as _grid_dimensions
-from encomp.sympy import sp
-from encomp.units import Quantity, ureg
-from encomp.units import ureg as u
-from encomp.units import Quantity as Q
-from encomp.utypes import *
-from encomp.fluids import Fluid, Water, HumidAir
+from .settings import SETTINGS
+from .misc import grid_dimensions as _grid_dimensions
+from .sympy import sp
+from .units import Quantity, ureg
+from .units import ureg as u
+from .units import Quantity as Q
+from .utypes import *
+from .fluids import Fluid, Water, HumidAir
 
 
 if __INTERACTIVE__:
 
     # loads Jupyter Notebook magics: %%markdown, %%output, %%write and %read
-    import encomp.magics
+    from . import magics
 
     # this is required to get table output in PDF
     # set to False as default

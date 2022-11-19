@@ -4,8 +4,8 @@ Contains constants used elsewhere in the library.
 
 from dataclasses import dataclass
 
-from encomp.units import Quantity as Q
-from encomp.utypes import Unknown, Temperature, Pressure
+from .units import Quantity as Q
+from .utypes import Unknown, Temperature, Pressure
 
 
 @dataclass

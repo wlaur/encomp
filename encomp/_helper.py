@@ -4,17 +4,17 @@ from textwrap import dedent, indent
 
 import autopep8
 
-from encomp.utypes import (Dimensionality,
-                           Dimensionless,
-                           Energy,
-                           Mass,
-                           Temperature,
-                           TemperatureDifference,
-                           EnergyPerMass,
-                           HeatingValue,
-                           SpecificHeatCapacity,
-                           LowerHeatingValue,
-                           HigherHeatingValue)
+from .utypes import (Dimensionality,
+                     Dimensionless,
+                     Energy,
+                     Mass,
+                     Temperature,
+                     TemperatureDifference,
+                     EnergyPerMass,
+                     HeatingValue,
+                     SpecificHeatCapacity,
+                     LowerHeatingValue,
+                     HigherHeatingValue)
 
 
 def get_registry():
