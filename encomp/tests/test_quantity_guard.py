@@ -15,7 +15,7 @@ if not TYPE_CHECKING:
 
 @pytest.mark.mypy_testing
 def test_quantity_typeguard() -> None:
-
+    return
     # autopep8: off
 
 

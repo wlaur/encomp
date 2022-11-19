@@ -183,7 +183,7 @@ planck_mass = (hbar * c / gravitational_constant) ** 0.5
 minute = 60 * second = min
 hour = 60 * minute = h = hr
 day = 24 * hour = d
-week = 7 * day
+week = 7 * day = wk = w
 fortnight = 2 * week
 year = 365.25 * day = a = yr = julian_year = y
 month = year / 12

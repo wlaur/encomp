@@ -12,8 +12,9 @@ def test_context():
 
     with quantity_format('~Lx'):
 
-        s = str(Quantity(1, 'kPa'))
-        assert s == '\\SI[]{1}{\\kilo\\pascal}'
+        qty = Quantity(1, 'kPa')
+        s = str(qty)
+        assert s == r'\SI[]{1}{\kilo\pascal}'
 
     s = str(Quantity(1, 'kPa'))
     assert s == '1 kPa'

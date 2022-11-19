@@ -148,16 +148,10 @@ for k, v in _REGISTRY_STATIC_OPTIONS.items():
 pint._DEFAULT_REGISTRY = ureg  # type: ignore
 pint.application_registry.set(ureg)
 
-# this option should be changeable
 ureg.default_format = SETTINGS.default_unit_format
 
-try:
-    ureg._registry.default_format = SETTINGS.default_unit_format
-except Exception:
-    pass
 
-
-def define_dimensionality(name: str, symbol: str = None) -> None:
+def define_dimensionality(name: str, symbol: str | None = None) -> None:
     """
     Defines a new dimensionality that can be combined with existing
     dimensionalities. In case the dimensionality is already defined,
@@ -176,7 +170,7 @@ def define_dimensionality(name: str, symbol: str = None) -> None:
     ----------
     name : str
         Name of the dimensionality
-    symbol : str, optional
+    symbol : str | None, optional
         Optional (short) symbol, by default None
     """
 
@@ -265,6 +259,9 @@ class Quantity(PlainQuantity, FormattingQuantity, Generic[DT], metaclass=Quantit
 
     def __hash__(self) -> int:
         return super().__hash__()
+
+    def __str__(self) -> str:
+        return self.__format__(self._REGISTRY.default_format)
 
     @classmethod
     def _get_dimensional_subclass(cls, dim: Optional[type[Dimensionality]]) -> type[Quantity[DT]]:
@@ -630,6 +627,7 @@ class Quantity(PlainQuantity, FormattingQuantity, Generic[DT], metaclass=Quantit
 
         return super().check(unit)  # type: ignore
 
+
     def __format__(self, format_type: str) -> str:
         """
         Overrides the ``__format__`` method for Quantity:
@@ -649,7 +647,7 @@ class Quantity(PlainQuantity, FormattingQuantity, Generic[DT], metaclass=Quantit
         """
 
         if not format_type.endswith(Quantity.FORMATTING_SPECS):
-            format_type = f'{format_type}{Quantity.default_format}'
+            format_type = f'{format_type}{self._REGISTRY.default_format}'
 
         return super().__format__(format_type)
 
@@ -1063,16 +1061,8 @@ class Quantity(PlainQuantity, FormattingQuantity, Generic[DT], metaclass=Quantit
 
 
 # override the implementation of the Quantity class for the current registry
-# this ensures that all Quantity objects created with this registry
-# uses the subclass encomp.units.Quantity instead of pint.Quantity
-# pint uses an "ApplicationRegistry" wrapper class since v. 0.18,
-# account for this by setting the attribute on the "_registry" member
+# this ensures that all Quantity objects created with this registry are the correct type
 ureg.Quantity = Quantity
-
-try:
-    ureg._registry.Quantity = Quantity
-except Exception:
-    pass
 
 
 def set_quantity_format(fmt: str = 'compact') -> None:
@@ -1101,13 +1091,10 @@ def set_quantity_format(fmt: str = 'compact') -> None:
         fmt = fmt_aliases[fmt]
 
     if fmt not in Quantity.FORMATTING_SPECS:
-        raise ValueError(f'Cannot set default format to "{fmt}", '
-                         f'fmt is one of {Quantity.FORMATTING_SPECS} '
-                         'or alias siunitx: ~L, compact: ~P')
+        raise ValueError(
+            f'Cannot set default format to "{fmt}", '
+            f'fmt is one of {Quantity.FORMATTING_SPECS} '
+            'or alias siunitx: ~L, compact: ~P'
+        )
 
     ureg.default_format = fmt
-
-    try:
-        ureg._registry.default_format = fmt
-    except Exception:
-        pass

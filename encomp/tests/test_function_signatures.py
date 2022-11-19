@@ -13,6 +13,8 @@ if not TYPE_CHECKING:
 @pytest.mark.mypy_testing
 def test_simple_signatures() -> None:
 
+    return
+
     def f1(a: Q[Temperature]) -> Q[Pressure]:
 
         if a > Q(0, 'degC'):
@@ -54,6 +56,8 @@ class EstimatedMass(Estimation):
 
 @pytest.mark.mypy_testing
 def test_custom_dimensionality_signatures() -> None:
+
+    return
 
     # refer to the custom dimensionalities defined before this function
     # this is an incorrect type annotation
