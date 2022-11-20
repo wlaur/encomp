@@ -24,6 +24,7 @@ from typing import (Union,
 
 import sympy as sp
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 
 import pint
@@ -31,6 +32,7 @@ from pint.util import UnitsContainer
 from pint.facets.plain.quantity import PlainQuantity
 from pint.facets.measurement.objects import MeasurementQuantity
 from pint.facets.numpy.quantity import NumpyQuantity
+from pint.facets.nonmultiplicative.objects import NonMultiplicativeQuantity
 from pint.facets.plain.unit import PlainUnit
 from pint.facets.numpy.unit import NumpyUnit
 from pint.facets.formatting.objects import FormattingQuantity, FormattingUnit
@@ -215,12 +217,15 @@ class Unit(PlainUnit,
     pass
 
 
-class Quantity(PlainQuantity,
-               NumpyQuantity,
-               MeasurementQuantity,
-               FormattingQuantity,
-               Generic[DT],
-               metaclass=QuantityMeta):
+class Quantity(
+    NonMultiplicativeQuantity,
+    PlainQuantity,
+    MeasurementQuantity,
+    NumpyQuantity,
+    FormattingQuantity,
+    Generic[DT],
+    metaclass=QuantityMeta
+):
     """
     Subclass of ``PlainQuantity`` with additional functionality
     and integration with other libraries.
@@ -408,6 +413,16 @@ class Quantity(PlainQuantity,
 
         return ret  # type: ignore
 
+    @staticmethod
+    def _cast_float(inp: np.ndarray) -> npt.NDArray[np.float64] | np.ndarray:
+
+        # don't fail in case the array contains unsupported objects,
+        # for example uncertainties.ufloat
+        try:
+            return inp.astype(np.float64, casting='unsafe', copy=True)
+        except TypeError:
+            return inp
+
     def __new__(  # type: ignore
         cls,
         val: Union[MagnitudeInput, Quantity[DT], str],
@@ -487,18 +502,6 @@ class Quantity(PlainQuantity,
         if isinstance(val, (int, str)):
             val = float(val)
 
-        # numpy array magnitudes are copied and cast to float64
-        # list inputs to pint.Quantity.__new__ will be converted to
-        # np.ndarray, so there's no danger of modifying lists that are input to Quantity
-        if isinstance(val, np.ndarray):
-
-            # don't fail in case the array contains unsupported objects,
-            # for example uncertainties.ufloat
-            try:
-                val = val.astype(np.float64, casting='unsafe', copy=True)
-            except TypeError:
-                pass
-
         if cls.dimensionality_type is Unset:
 
             # special case for temperature difference
@@ -550,9 +553,15 @@ class Quantity(PlainQuantity,
             units=valid_unit
         )
 
-        # ensure that list/tuple inputs are converted to Float64 and not Float32
-        if isinstance(qty._magnitude, np.ndarray) and qty._magnitude.dtype == np.int32:
-            qty._magnitude = qty._magnitude.astype(np.float64)
+        # numpy array magnitudes are copied and cast to np.float64
+        # list/tuple inputs to pint.Quantity.__new__ will be converted to
+        # np.ndarray internally in super().__new__()
+        # NOTE: this will cast int/bool to float, this is intended behavior
+        # it does not make sense for Quantity magnitudes to be boolean,
+        # 0.0 and 1.0 can be used as proxy values if it's necessary to represent
+        # "boolean" magnitudes
+        if isinstance(qty._magnitude, np.ndarray):
+            qty._magnitude = cls._cast_float(qty._magnitude)
 
         return qty
 
@@ -562,6 +571,10 @@ class Quantity(PlainQuantity,
 
     @property
     def m(self) -> Magnitude:
+        """
+        The magnitude of the Quantity. This is either
+        a scalar float or a Numpy array with float values.
+        """
         return self._magnitude
 
     @property
@@ -857,7 +870,7 @@ class Quantity(PlainQuantity,
 
             if not self.dimensionless:
                 raise DimensionalityTypeError(
-                    f'Cannot add {other} ({type(other)}) to dimensional '
+                    f'Cannot add or subtract {other} ({type(other)}) to '
                     f'quantity {self} ({type(self)})'
                 )
 
@@ -865,12 +878,6 @@ class Quantity(PlainQuantity,
 
         dim = self.dimensionality_type
         other_dim = other.dimensionality_type
-
-        # this never happens at runtime
-        if dim is None or other_dim is None:
-            raise DimensionalityTypeError(
-                f'One or both dimensionalities are None: {type(self)} and {type(other)}'
-            )
 
         # if the dimensionality of self is a subclass of the
         # dimensionality of other or vice versa
@@ -927,7 +934,7 @@ class Quantity(PlainQuantity,
         if isinstance(is_equal, np.ndarray):
 
             if self.is_compatible_with(other):
-                return is_equal
+                return is_equal.astype(bool)
 
             return np.zeros_like(is_equal).astype(bool)
 
@@ -957,7 +964,10 @@ class Quantity(PlainQuantity,
 
         return self.subclass(ret)
 
-    def _temperature_difference_add_sub(self, other, operator: Literal['add', 'sub']):
+    def _temperature_difference_add_sub(
+            self: Quantity[Temperature],
+            other: Quantity[TemperatureDifference],
+            operator: Literal['add', 'sub']) -> Quantity[Temperature]:
 
         v1 = self.to('degC').m
         v2 = other.to('delta_degC').m
@@ -967,7 +977,7 @@ class Quantity(PlainQuantity,
         else:
             val = v1 - v2
 
-        return Quantity[Temperature](val, 'degC')
+        return Quantity(val, 'degC')
 
     def __add__(self, other):
 

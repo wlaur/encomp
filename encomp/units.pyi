@@ -17,6 +17,7 @@ from pint.util import UnitsContainer
 from pint.facets.plain.quantity import PlainQuantity
 from pint.facets.measurement.objects import MeasurementQuantity
 from pint.facets.numpy.quantity import NumpyQuantity
+from pint.facets.nonmultiplicative.objects import NonMultiplicativeQuantity
 from pint.facets.plain.unit import PlainUnit
 from pint.facets.numpy.unit import NumpyUnit
 from pint.facets.formatting.objects import FormattingQuantity, FormattingUnit
@@ -160,13 +161,16 @@ class Unit(PlainUnit,
     ...
 
 
-class Quantity(PlainQuantity,
-               NumpyQuantity,
-               MeasurementQuantity,
-               FormattingQuantity,
-               Generic[DT],
-               SupportsAbs,
-               SupportsRound):
+class Quantity(
+    NonMultiplicativeQuantity,
+    PlainQuantity,
+    MeasurementQuantity,
+    NumpyQuantity,
+    FormattingQuantity,
+    Generic[DT],
+    SupportsAbs,
+    SupportsRound
+):
 
     def __hash__(self) -> int: ...
     def __class_getitem__(cls, dim: type[DT]) -> type[Quantity[DT]]: ...

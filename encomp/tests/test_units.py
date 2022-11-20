@@ -13,6 +13,8 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import is_list_like as pandas_is_list_like  # type: ignore
 
+from pint.errors import OffsetUnitCalculusError
+
 from ..misc import isinstance_types
 from ..conversion import convert_volume_mass
 from ..units import (Quantity,
@@ -23,7 +25,7 @@ from ..units import (Quantity,
                      DimensionalityTypeError,
                      DimensionalityError,
                      ExpectedDimensionalityError)
-from ..units import Quantity as Q
+from ..units import Quantity as Q, Unit
 from ..serialize import decode
 from ..fluids import Water
 from ..utypes import *
@@ -471,6 +473,9 @@ def test_Q():
 
     # np.ndarray magnitudes equality check
     assert (Q(s, 'bar') == Q(vals, 'bar').to('kPa')).all()
+    assert (Q([1, 2, 3], 'kg') == Q([1000, 2000, 3000], 'g')).all()
+    assert not (Q([1, 2, 3], 'kg') == Q([1000, 2000, 3001], 'g')).all()
+    assert not (Q([1, 2, 3], 'kg') == Q([1000, 2000, 300], 'g * meter')).any()
 
     # compare scalar and vector will return a vector
     assert (Q(2, 'bar') == Q(vals, 'bar').to('kPa')).any()
@@ -1186,16 +1191,15 @@ def test_mul_rmul_initialization():
 def test_decimal():
 
     # decimal.Decimal works, but it's not included in the type hints
+    # TODO: inputs are converted to float, don't use this
 
     assert Q(Decimal('1.5'), 'MSEK').to('SEK').m == Decimal('1500000.00')
 
     q = Q([Decimal('1.5'), Decimal('1.5')], 'kg')
 
-    with pytest.raises(TypeError):
+    q_gram = q.to('g')
 
-        # this does not work with pint's internal API
-        # unsupported operand type(s) for *: 'decimal.Decimal' and 'float'
-        q.to('g')
+    assert (q_gram.m == 1000 * q.m).all()
 
 
 def test_copy():
@@ -1247,24 +1251,51 @@ def test_pydantic_integration():
         )
 
 
+def test_float_cast():
+
+    assert isinstance(Q([False, False]).m[0], float)
+
+    assert (Q([False, True]) == Q(np.array([False, True]))).all()
+
+
 def test_temperature_difference():
 
-    T1 = Q(25, '°C')
-    T2 = Q(35, '°C')
+    T1 = Q(25, 'degC')
+    T2 = Q(35, 'degC')
 
-    dT = T1 - T2
-    dT_ = T2 - T1
+    dT1 = T1 - T2
+    dT2 = T2 - T1
 
-    assert isinstance(dT, Q[TemperatureDifference])
-    assert isinstance(dT.to('delta_degF'), Q[TemperatureDifference])
+    assert isinstance(dT1, Q[TemperatureDifference])
+    assert isinstance(dT2, Q[TemperatureDifference])
 
-    assert isinstance(dT_, Q[TemperatureDifference])
-    assert isinstance(dT_ + dT, Q[TemperatureDifference])
+    assert dT1.u == Unit('delta_degC')
+    assert dT2.u == Unit('delta_degC')
 
-    assert isinstance(T1 + dT, Q[Temperature])
+    assert (Q(25, 'degF') - Q(30, 'degF')).u == Unit('delta_degF')
+
+    with pytest.raises(OffsetUnitCalculusError):
+        T1 + T2
+
+    with pytest.raises(OffsetUnitCalculusError):
+        T2 + T1
+
+    with pytest.raises(OffsetUnitCalculusError):
+        T1 * 2
+
+    with pytest.raises(OffsetUnitCalculusError):
+        T1 / 2
+
+    assert isinstance(dT1, Q[TemperatureDifference])
+    assert isinstance(dT1.to('delta_degF'), Q[TemperatureDifference])
+
+    assert isinstance(dT2, Q[TemperatureDifference])
+    assert isinstance(dT2 + dT1, Q[TemperatureDifference])
+
+    assert isinstance(T1 + dT1, Q[Temperature])
 
     with pytest.raises(DimensionalityTypeError):
-        assert isinstance(dT + T1, Q[Temperature])
+        assert isinstance(dT1 + T1, Q[Temperature])
 
     with pytest.raises(DimensionalityTypeError):
         (T1 - T2).to('degC')
