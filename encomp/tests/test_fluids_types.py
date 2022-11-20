@@ -7,7 +7,8 @@ from ..fluids import Water, HumidAir
 from ..units import Quantity as Q
 
 if not TYPE_CHECKING:
-    def reveal_type(x): return x
+    def reveal_type(x):
+        return x
 
 
 @pytest.mark.mypy_testing
@@ -80,7 +81,7 @@ def test_water_init_hints() -> None:
     Water(P=Q(25, 'bar'), T=Q(25, 'degC'))
     Water(T=Q(25, 'degC'), P=Q(25, 'bar'))
     Water(P=Q(25, 'bar'), Q=Q(50, '%'))
-    Water(T=Q(25, '°C'),  Q=Q(50, '%'))
+    Water(T=Q(25, '°C'), Q=Q(50, '%'))
     Water(Q=Q(50, '%'), P=Q(25, 'kPa'))
 
     # TODO: is it possible to overload the __init__ method

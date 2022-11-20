@@ -199,7 +199,7 @@ def test_dimensionality_type_hierarchy() -> None:
         # it is better to create a completely new dimensionality
 
         class Estimation(Dimensionality):
-            pass
+            _intermediate = True
 
         class EstimatedLength(Estimation):
             dimensions = Length.dimensions
@@ -211,10 +211,12 @@ def test_dimensionality_type_hierarchy() -> None:
         class EstimatedDistance(EstimatedLength):
             dimensions = Length.dimensions
 
-        with pytest.raises(DimensionalityTypeError):
+        # the Estimation subtype cannot be used directly
+        # it's possible to create the subclass, but not create an instance
+        EstimatedQuantity = Q[Estimation]
 
-            # the Estimation subtype is abstract, cannot use directly
-            Q[Estimation](25)
+        with pytest.raises(TypeError):
+            EstimatedQuantity(25, 'm')
 
         # these quantities are not compatible with normal Length/Mass
         # (override the str literal unit overloads for mypy)
@@ -339,9 +341,11 @@ def test_Q():
     assert Q(1) == Q('1 dimensionless')
 
     # check type of "m"
-    assert isinstance(Q(1, 'meter').m, int)
+    # inputs are converted to float
+    assert isinstance(Q(1, 'meter').m, float)
     assert isinstance(Q(2.3, 'meter').m, float)
     assert isinstance(Q([2, 3.4], 'meter').m, np.ndarray)
+    assert isinstance(Q((2, 3.4), 'meter').m, np.ndarray)
     assert isinstance(Q(np.array([2, 3.4]), 'meter').m, np.ndarray)
 
     # input Quantity as unit
@@ -692,15 +696,14 @@ def test_generic_dimensionality():
     with pytest.raises(TypeError):
         Q[None]
 
-    # the Unknown dimensionality cannot
-    # be used to initialize an instance of Quantity
-    UnknownQ = Q[Unknown]
+    # the Unknown and Unset dimensionalities cannot
+    # be resolved at runtime
 
     with pytest.raises(TypeError):
-        UnknownQ(1)
+        Q[Unknown]
 
     with pytest.raises(TypeError):
-        Q[Unknown](1)
+        Q[Unset]
 
 
 def test_dynamic_dimensionalities():
@@ -1096,6 +1099,13 @@ def test_pandas_integration():
     index = pd.date_range('2020-01-01', '2020-01-02', freq='h')
     df = pd.DataFrame(index=index)
 
+    index_qty = Q(index)
+
+    assert isinstance(index_qty.m, pd.DatetimeIndex)
+
+    with pytest.raises(ValueError):
+        Q(index, 'kg')
+
     df['input'] = np.linspace(0, 1, len(df))
 
     q_vector = Q(df['input'], 'm/s')
@@ -1117,12 +1127,13 @@ def test_pandas_integration():
     assert df.dtypes.A == np.float64
     assert df.dtypes.B == object
     assert df.dtypes.C == object
-    assert df.dtypes.D == np.int64
+    # all inputs are cast to float when constructing a Quantity
+    assert df.dtypes.D == np.float64
 
     assert isinstance(df.A.values[0], np.float64)
     assert isinstance(df.B.values[-1], Q[MassFlow])
     assert isinstance(df.C.values[0], Q[MassFlow])
-    assert isinstance(df.D.values[0], np.int64)
+    assert isinstance(df.D.values[0], np.float64)
 
 
 def test_unit_compatibility():

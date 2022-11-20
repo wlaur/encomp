@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 from ..units import Quantity
@@ -14,10 +13,12 @@ def test_context():
 
         qty = Quantity(1, 'kPa')
         s = str(qty)
-        assert s == r'\SI[]{1}{\kilo\pascal}'
+
+        # NOTE: inputs are cast to float or array[float]
+        assert s == r'\SI[]{1.0}{\kilo\pascal}'
 
     s = str(Quantity(1, 'kPa'))
-    assert s == '1 kPa'
+    assert s == '1.0 kPa'
 
 
 def test_temp_dir():

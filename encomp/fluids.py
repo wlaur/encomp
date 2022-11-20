@@ -666,8 +666,8 @@ class CoolPropFluid(ABC):
 
         unit_output = self.get_coolprop_unit(output)
 
-        # this Quantity is not known until runtime
-        qty: Quantity[Unknown] = Quantity(val, unit_output)
+        # the dimensionality is not known until runtime
+        qty = Quantity(val, unit_output)
 
         # value with dimensions present in CoolProp (pressure, temperature, etc...) cannot be zero
         # CoolProp uses 0.0 for missing data, change this to NaN
@@ -936,7 +936,7 @@ class Fluid(CoolPropFluid):
     def M(self) -> Quantity[MolarMass]:
         return self.__getattr__('M').asdim(MolarMass)
 
-    def __getattr__(self, attr: CProperty) -> Quantity[Unknown]:
+    def __getattr__(self, attr: CProperty) -> Quantity:
 
         if attr not in self.ALL_PROPERTIES:
             raise AttributeError(attr)
@@ -1179,7 +1179,7 @@ class HumidAir(CoolPropFluid):
     def Vha(self) -> Quantity[MixtureVolumePerHumidAir]:
         return self.__getattr__('Vha').asdim(MixtureVolumePerHumidAir)
 
-    def __getattr__(self, attr: CProperty) -> Quantity[Unknown]:
+    def __getattr__(self, attr: CProperty) -> Quantity:
 
         if attr not in self.ALL_PROPERTIES:
             raise AttributeError(attr)

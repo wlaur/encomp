@@ -22,6 +22,7 @@ from abc import ABC
 
 
 import numpy as np
+import numpy.typing as npt
 from pint.util import UnitsContainer
 
 MagnitudeScalar = Union[float, int]
@@ -30,7 +31,8 @@ MagnitudeScalar = Union[float, int]
 @runtime_checkable
 class SupportsNumpyConversion(Protocol):
 
-    def to_numpy(self) -> np.ndarray:
+    def to_numpy(self) -> npt.NDArray[np.float64]:
+        # returns a float array (maybe not 64-bit, does not really matter)
         ...
 
 
@@ -42,7 +44,9 @@ MagnitudeInput = Union[
     SupportsNumpyConversion
 ]
 
-Magnitude = Union[MagnitudeScalar, np.ndarray]
+
+Magnitude = Union[float, npt.NDArray[np.float64]]
+
 
 _BASE_SI_UNITS = ('m', 'kg', 's', 'K', 'mol', 'A', 'cd')
 
@@ -276,7 +280,14 @@ class Dimensionality(ABC):
     # purely based on the dimensions
     _distinct: Optional[bool] = None
 
-    dimensions: Optional[UnitsContainer] = None
+    # set to True for intermediate subclasses of Dimensionality
+    # these cannot be initialized directly, the must be subclassed further
+    _intermediate: bool = False
+
+    # sentinel object to indicate unset UnitsContainer
+    _UnsetUC = UnitsContainer()
+
+    dimensions: UnitsContainer = _UnsetUC
 
     # keeps track of all the dimensionalities that have been
     # used in the current process
@@ -290,10 +301,13 @@ class Dimensionality(ABC):
 
     def __init_subclass__(cls) -> None:
 
-        if not hasattr(cls, 'dimensions'):
-            raise AttributeError(
-                'Subtypes of Dimensionality must define the '
-                'attribute "dimensions" (instance of pint.unit.UnitsContainer)'
+        if cls._intermediate:
+            return
+
+        if cls.dimensions is cls._UnsetUC:
+            raise TypeError(
+                f'Cannot initialize {cls}, class attribute '
+                '"dimensionality" is not defined for this subclass'
             )
 
         # ensure that the subclass names are unique
@@ -320,23 +334,26 @@ class Dimensionality(ABC):
         # it will never be used at runtime, only during type checking
         # a subclass that will be used to create more subclasses
         # might also have dimensions=None
+        # it's necessary to use "type: ignore" when defining dimensions = None
         if cls.dimensions is None:
             return
 
         if not isinstance(cls.dimensions, UnitsContainer):
             raise TypeError(
                 'The "dimensions" attribute of the Dimensionality type '
-                'must be an instance of pint.unit.UnitsContainer, '
-                f'passed {cls} with dimensions: {cls.dimensions} ({type(cls.dimensions)})'
+                'must be an instance of pint.util.UnitsContainer, '
+                f'{cls} has dimensions: {cls.dimensions} ({type(cls.dimensions)})'
             )
 
         # make sure a subclass of an existing Dimensionality has the same dimensions
         # the first element in __mro__ is the class that is being created, the
         # second is the direct parent class
         # parent must be either Dimensionality or a subclass
-        parent: type[Dimensionality] = cls.__mro__[1]
+        parent: type[Dimensionality] = cls.__mro__[1]  # type: ignore
 
-        if parent.dimensions is not None:
+        # ignore this check if the parent is the base class Dimensionality
+        if parent.dimensions is not cls._UnsetUC:
+
             if parent.dimensions != cls.dimensions:
                 raise TypeError(
                     f'Cannot create subclass of {parent} where '
@@ -381,6 +398,7 @@ class Dimensionality(ABC):
 
         if cls._distinct is None:
 
+            # special case if dimensions was overridden to None
             if cls.dimensions is None:
                 return True
 
@@ -418,8 +436,16 @@ _LuminosityUC = UnitsContainer({'[luminosity]': 1})
 # NOTE: each subclass definition will create an entry in Dimensionality._registry
 # reloading (re-importing) this module will clear and reset the registry
 
+# the Unknown and Unset dimensionalities override dimensions to None
+# NOTE: never initialize subclasses Q[Unknown] or Q[Unset] at runtime,
+# this is only meant for type checking
+
 class Unknown(Dimensionality):
-    dimensions = None
+    dimensions = None  # type: ignore
+
+
+class Unset(Dimensionality):
+    dimensions = None  # type: ignore
 
 
 class Dimensionless(Dimensionality):
@@ -687,6 +713,7 @@ class SpecificEntropy(Dimensionality):
 # combination of dimensions can be mean multiple things
 
 class IndistinctDimensionality(Dimensionality):
+    _intermediate = True
     _distinct = False
 
 

@@ -43,7 +43,7 @@ def test_simple_signatures() -> None:
 
 
 class Estimation(Dimensionality):
-    pass
+    _intermediate = True
 
 
 class EstimatedLength(Estimation):

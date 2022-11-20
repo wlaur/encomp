@@ -62,6 +62,7 @@ from .utypes import (DimensionlessUnits,
 
 from .utypes import (MagnitudeInput,
                      MagnitudeScalar,
+                     Magnitude,
                      DT,
                      DT_,
                      Dimensionality,
@@ -154,7 +155,8 @@ def set_quantity_format(fmt: str = ...) -> None: ...
 
 class Unit(PlainUnit,
            NumpyUnit,
-           FormattingUnit):
+           FormattingUnit,
+           Generic[DT]):
     ...
 
 
@@ -172,9 +174,11 @@ class Quantity(PlainQuantity,
     def get_unit(cls, unit_name: str) -> Unit: ...
     def __len__(self) -> int: ...
     @property
-    def m(self) -> Union[MagnitudeScalar, np.ndarray]: ...
+    def m(self) -> Magnitude: ...
     @property
-    def u(self) -> Unit: ...
+    def u(self) -> Unit[DT]: ...
+    @property
+    def units(self) -> Unit[DT]: ...
     @property
     def ndim(self) -> int: ...
     def to_reduced_units(self) -> Quantity[DT]: ...
@@ -427,8 +431,7 @@ class Quantity(PlainQuantity,
     def __new__(
         cls,
         val: Union[MagnitudeInput, Quantity[DT], str],
-        unit: Union[Unit, UnitsContainer,
-                    str, Quantity[DT], None] = None,
+        unit: Union[Unit, UnitsContainer, str, Quantity[DT], None] = None,
         _dt: type[DT] = Unknown  # type: ignore
     ) -> Quantity[DT]:
         ...

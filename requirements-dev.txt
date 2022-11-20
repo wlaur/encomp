@@ -13,3 +13,5 @@ sphinx-inline-tabs
 sphinx-copybutton
 sphinx-gallery
 sphinx-autodoc-typehints
+flake8
+pep8-naming

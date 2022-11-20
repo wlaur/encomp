@@ -36,7 +36,6 @@ def test_serialize():
 
         json_str = json.dumps(s)
         d_ = decode(json.loads(json_str))
-
         assert d == d_
 
     d = Q(np.linspace(0, 1), 'kg/s')
