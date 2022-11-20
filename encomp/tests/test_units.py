@@ -189,6 +189,32 @@ def test_custom_dimensionality():
                 dimensions = Temperature.dimensions**3 / Length.dimensions
 
 
+def test_function_annotations():
+
+    # this results in Quantity[Variable]
+    Q[DT]
+
+    # not possible to create an instance of Quantity[Variable]
+    with pytest.raises(TypeError):
+        Q[DT](1, 'kg')
+
+    # Quantity[Variable] works as type annotations at runtime
+
+    def return_input(q: Q[DT]) -> Q[DT]:
+        return q
+
+    a = return_input(Q(25, 'm'))
+
+    assert isinstance(a, Q[Length])
+
+    # not possible to determine output dimensionality for this
+    def divide_by_time(q: Q[DT]) -> Q:
+        return q / Q(1, 'h')
+
+    # this will be resolved to MassFlow at runtime
+    assert isinstance(divide_by_time(Q(25, 'kg')), Q[MassFlow])
+
+
 def test_dimensionality_type_hierarchy() -> None:
 
     with _reset_dimensionality_registry():
@@ -517,7 +543,7 @@ def test_wraps():
 def test_numpy_integration():
 
     assert isinstance(Q(np.linspace(0, 1), 'kg'), Q[Mass])
-    assert isinstance(np.linspace(Q(0, 'kg'),  Q(1, 'kg')), Q[Mass])
+    assert isinstance(np.linspace(Q(0, 'kg'), Q(1, 'kg')), Q[Mass])
 
     assert isinstance(np.linspace(Q(2), Q(25, '%')), Q[Dimensionless])
     assert isinstance(np.linspace(Q(2, 'cm'), Q(25, 'km')), Q[Length])

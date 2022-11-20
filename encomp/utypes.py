@@ -87,7 +87,7 @@ CurrencyPerVolumeUnits = L[
 ]
 
 CurrencyPerTimeUnits = L[
-    'SEK/h', 'EUR/h',  'SEK/hr', 'EUR/hr',
+    'SEK/h', 'EUR/h', 'SEK/hr', 'EUR/hr',
     'SEK/hour', 'EUR/hour', 'SEK/d', 'EUR/d',
     'SEK/day', 'EUR/day', 'SEK/w', 'EUR/w',
     'SEK/week', 'EUR/week', 'SEK/y', 'EUR/y',
@@ -445,6 +445,10 @@ class Unknown(Dimensionality):
 
 
 class Unset(Dimensionality):
+    dimensions = None  # type: ignore
+
+
+class Variable(Dimensionality):
     dimensions = None  # type: ignore
 
 

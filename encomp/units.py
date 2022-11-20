@@ -49,6 +49,7 @@ from .utypes import (_BASE_SI_UNITS,
                      Dimensionality,
                      Temperature,
                      TemperatureDifference,
+                     Variable,
                      Unknown,
                      Unset)
 
@@ -297,9 +298,8 @@ class Quantity(PlainQuantity,
 
     def __class_getitem__(cls, dim: type[DT]) -> type[Quantity[DT]]:
 
-        # use Unknown as a placeholder for type variables
         if isinstance(dim, TypeVar):
-            dim = Unknown  # type: ignore
+            return cls._get_dimensional_subclass(Variable)
 
         if not isinstance(dim, type):
             raise TypeError(
@@ -421,6 +421,9 @@ class Quantity(PlainQuantity,
     ) -> Quantity[DT]:
 
         if cls.dimensionality_type is Unknown:
+            raise TypeError
+
+        if cls.dimensionality_type is Variable:
             raise TypeError
 
         if unit is None:
