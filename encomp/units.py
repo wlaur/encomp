@@ -275,10 +275,19 @@ class Quantity(
     @classmethod
     def _get_dimensional_subclass(cls, dim: type[DT], mt: type[MT]) -> type[Quantity[DT, MT]]:
 
-        if cached := cls._subclasses.get((dim.__name__, mt.__name__)):
+        dim_name = dim.__name__
+
+        try:
+            mt_name = mt.__name__
+        except AttributeError:
+            raise TypeError(
+                f'Cannot use magnitude type: {mt}'
+            )
+
+        if cached := cls._subclasses.get((dim_name, mt_name)):
             return cached
 
-        quantity_name = f'Quantity[{dim.__name__}, {mt.__name__}]'
+        quantity_name = f'Quantity[{dim_name}, {mt_name}]'
 
         DimensionalQuantity = type(
             quantity_name,
@@ -290,7 +299,7 @@ class Quantity(
             }
         )
 
-        cls._subclasses[dim.__name__, mt.__name__] = DimensionalQuantity
+        cls._subclasses[dim_name, mt_name] = DimensionalQuantity
 
         return DimensionalQuantity
 
@@ -1103,7 +1112,8 @@ class Quantity(
         else:
             dim = other
 
-        return Quantity[dim](self)
+        subcls = self._get_dimensional_subclass(dim, self._magnitude_type)
+        return subcls(self, _allow_quantity_input=True)
 
 
 # override the implementations for the Quantity and Unit classes for the current registry

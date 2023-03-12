@@ -2,45 +2,44 @@
 Functions related to converting quantities.
 """
 
-from typing import overload
+from typing import Any, overload
 
 from .units import Quantity
 from .utypes import Mass, MassFlow, Density, Volume, VolumeFlow
 
 
 @overload
-def convert_volume_mass(inp: Quantity[Mass],
-                        rho: Quantity[Density] | None = None) -> Quantity[Volume]:
+def convert_volume_mass(inp: Quantity[Mass, Any]) -> Quantity[Volume, Any]:
     ...
 
 
 @overload
-def convert_volume_mass(inp: Quantity[MassFlow],
-                        rho: Quantity[Density] | None = None) -> Quantity[VolumeFlow]:
+def convert_volume_mass(inp: Quantity[MassFlow, Any]) -> Quantity[VolumeFlow, Any]:
     ...
 
 
 @overload
-def convert_volume_mass(inp: Quantity[Volume],
-                        rho: Quantity[Density] | None = None) -> Quantity[Mass]:
+def convert_volume_mass(inp: Quantity[Volume, Any]) -> Quantity[Mass, Any]:
     ...
 
 
 @overload
-def convert_volume_mass(inp: Quantity[VolumeFlow],
-                        rho: Quantity[Density] | None = None) -> Quantity[MassFlow]:
+def convert_volume_mass(inp: Quantity[VolumeFlow, Any]) -> Quantity[MassFlow, Any]:
     ...
 
 
 @overload
 def convert_volume_mass(
     inp: Quantity,
-    rho: Quantity[Density] | None = None
-) -> Quantity[Mass] | Quantity[MassFlow] | Quantity[Volume] | Quantity[VolumeFlow]:
+    rho: Quantity[Density, Any] | None = None
+) -> Quantity[Mass, Any] | Quantity[MassFlow, Any] | Quantity[Volume, Any] | Quantity[VolumeFlow, Any]:
     ...
 
 
-def convert_volume_mass(inp, rho=None):
+def convert_volume_mass(
+    inp: Quantity[Mass, Any] | Quantity[MassFlow, Any] | Quantity[Volume, Any] | Quantity[VolumeFlow, Any],
+        rho: Quantity[Density, Any] | None = None
+) -> Quantity[Mass, Any] | Quantity[MassFlow, Any] | Quantity[Volume, Any] | Quantity[VolumeFlow, Any]:
     """
     Converts mass to volume or vice versa.
 
@@ -48,7 +47,7 @@ def convert_volume_mass(inp, rho=None):
     ----------
     inp : M | V
         Input mass or volume (or flow)
-    rho : Quantity[Density], optional
+    rho : Quantity[Density, Any], optional
         Density, by default 997 kg/m³
 
     Returns
@@ -58,17 +57,17 @@ def convert_volume_mass(inp, rho=None):
     """
 
     if rho is None:
-        rho = Quantity[Density](997, 'kg/m³')
+        rho = Quantity[Density, Any](997, 'kg/m³')
 
-    if not isinstance(rho, Quantity[Density]):  # type: ignore
+    if not isinstance(rho, Quantity[Density, Any]):  # type: ignore
         raise TypeError(
             f'Incorrect type for rho: {rho}'
         )
 
-    if isinstance(inp, (Quantity[Mass], Quantity[MassFlow])):  # type: ignore
+    if isinstance(inp, (Quantity[Mass, Any], Quantity[MassFlow, Any])):  # type: ignore
         return (inp / rho).to_reduced_units()
 
-    elif isinstance(inp, (Quantity[Volume], Quantity[VolumeFlow])):  # type: ignore
+    elif isinstance(inp, (Quantity[Volume, Any], Quantity[VolumeFlow, Any])):  # type: ignore
         return (inp * rho).to_reduced_units()
 
     else:

@@ -140,7 +140,7 @@ VolumeFlowUnits = Literal[
     'm**3/s', 'm**3/h', 'm**3/hr',
     'm^3/s', 'm^3/h', 'm^3/hr',
     'm³/s', 'm³/h', 'm³/hr',
-    'liter/second', 'l/s', 'L/s',
+    'liter/second', 'l/s', 'L/s', 'liter/s',
     'liter/hour', 'l/h', 'L/h',
     'L/hr', 'l/hr'
 ]

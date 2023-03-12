@@ -77,6 +77,9 @@ CProperty = Annotated[str, 'CoolProp property name']
 CName = Annotated[str, 'CoolProp fluid name']
 UnitString = Annotated[str, 'Unit string']
 
+# TODO: the type hints for the Quantity magnitude is incorrectly set to
+# np.ndarray, it could be float also if all inputs are scalar
+# might be best to change this API to always use np.ndarray for the outputs
 
 class CoolPropFluid(ABC):
 
@@ -800,139 +803,139 @@ class Fluid(CoolPropFluid):
         )
 
     @property
-    def PHASE(self) -> Quantity[Dimensionless]:
+    def PHASE(self) -> Quantity[Dimensionless, np.ndarray]:
         return self.__getattr__('PHASE').asdim(Dimensionless)
 
     @property
-    def PRANDTL(self) -> Quantity[Dimensionless]:
+    def PRANDTL(self) -> Quantity[Dimensionless, np.ndarray]:
         return self.__getattr__('PRANDTL').asdim(Dimensionless)
 
     @property
-    def P(self) -> Quantity[Pressure]:
+    def P(self) -> Quantity[Pressure, np.ndarray]:
         return self.__getattr__('P').asdim(Pressure)
 
     @property
-    def PCRIT(self) -> Quantity[Pressure]:
+    def PCRIT(self) -> Quantity[Pressure, np.ndarray]:
         return self.__getattr__('PCRIT').asdim(Pressure)
 
     @property
-    def PMAX(self) -> Quantity[Pressure]:
+    def PMAX(self) -> Quantity[Pressure, np.ndarray]:
         return self.__getattr__('PMAX').asdim(Pressure)
 
     @property
-    def PMIN(self) -> Quantity[Pressure]:
+    def PMIN(self) -> Quantity[Pressure, np.ndarray]:
         return self.__getattr__('PMIN').asdim(Pressure)
 
     @property
-    def PTRIPLE(self) -> Quantity[Pressure]:
+    def PTRIPLE(self) -> Quantity[Pressure, np.ndarray]:
         return self.__getattr__('PTRIPLE').asdim(Pressure)
 
     @property
-    def P_REDUCING(self) -> Quantity[Pressure]:
+    def P_REDUCING(self) -> Quantity[Pressure, np.ndarray]:
         return self.__getattr__('P_REDUCING').asdim(Pressure)
 
     @property
-    def T(self) -> Quantity[Temperature]:
+    def T(self) -> Quantity[Temperature, np.ndarray]:
         return self.__getattr__('T').asdim(Temperature)
 
     @property
-    def TCRIT(self) -> Quantity[Temperature]:
+    def TCRIT(self) -> Quantity[Temperature, np.ndarray]:
         return self.__getattr__('TCRIT').asdim(Temperature)
 
     @property
-    def TMAX(self) -> Quantity[Temperature]:
+    def TMAX(self) -> Quantity[Temperature, np.ndarray]:
         return self.__getattr__('TMAX').asdim(Temperature)
 
     @property
-    def TMIN(self) -> Quantity[Temperature]:
+    def TMIN(self) -> Quantity[Temperature, np.ndarray]:
         return self.__getattr__('TMIN').asdim(Temperature)
 
     @property
-    def TTRIPLE(self) -> Quantity[Temperature]:
+    def TTRIPLE(self) -> Quantity[Temperature, np.ndarray]:
         return self.__getattr__('TTRIPLE').asdim(Temperature)
 
     @property
-    def T_FREEZING(self) -> Quantity[Temperature]:
+    def T_FREEZING(self) -> Quantity[Temperature, np.ndarray]:
         return self.__getattr__('T_FREEZING').asdim(Temperature)
 
     @property
-    def T_REDUCING(self) -> Quantity[Temperature]:
+    def T_REDUCING(self) -> Quantity[Temperature, np.ndarray]:
         return self.__getattr__('T_REDUCING').asdim(Temperature)
 
     @property
-    def Q(self) -> Quantity[Dimensionless]:
+    def Q(self) -> Quantity[Dimensionless, np.ndarray]:
         return self.__getattr__('Q').asdim(Dimensionless)
 
     @property
-    def H(self) -> Quantity[SpecificEnthalpy]:
+    def H(self) -> Quantity[SpecificEnthalpy, np.ndarray]:
         return self.__getattr__('H').asdim(SpecificEnthalpy)
 
     @property
-    def HMOLAR(self) -> Quantity[MolarSpecificEnthalpy]:
+    def HMOLAR(self) -> Quantity[MolarSpecificEnthalpy, np.ndarray]:
         return self.__getattr__('HMOLAR').asdim(MolarSpecificEnthalpy)
 
     @property
-    def S(self) -> Quantity[SpecificEntropy]:
+    def S(self) -> Quantity[SpecificEntropy, np.ndarray]:
         return self.__getattr__('S').asdim(SpecificEntropy)
 
     @property
-    def SMOLAR(self) -> Quantity[MolarSpecificEntropy]:
+    def SMOLAR(self) -> Quantity[MolarSpecificEntropy, np.ndarray]:
         return self.__getattr__('SMOLAR').asdim(MolarSpecificEntropy)
 
     @property
-    def U(self) -> Quantity[SpecificInternalEnergy]:
+    def U(self) -> Quantity[SpecificInternalEnergy, np.ndarray]:
         return self.__getattr__('U').asdim(SpecificInternalEnergy)
 
     @property
-    def UMOLAR(self) -> Quantity[MolarSpecificInternalEnergy]:
+    def UMOLAR(self) -> Quantity[MolarSpecificInternalEnergy, np.ndarray]:
         return self.__getattr__('UMOLAR').asdim(MolarSpecificInternalEnergy)
 
     @property
-    def V(self) -> Quantity[DynamicViscosity]:
+    def V(self) -> Quantity[DynamicViscosity, np.ndarray]:
         return self.__getattr__('V').asdim(DynamicViscosity)
 
     @property
-    def Z(self) -> Quantity[Dimensionless]:
+    def Z(self) -> Quantity[Dimensionless, np.ndarray]:
         return self.__getattr__('Z').asdim(Dimensionless)
 
     @property
-    def DELTA(self) -> Quantity[Dimensionless]:
+    def DELTA(self) -> Quantity[Dimensionless, np.ndarray]:
         return self.__getattr__('DELTA').asdim(Dimensionless)
 
     @property
-    def D(self) -> Quantity[Density]:
+    def D(self) -> Quantity[Density, np.ndarray]:
         return self.__getattr__('D').asdim(Density)
 
     @property
-    def RHOMASS_REDUCING(self) -> Quantity[Density]:
+    def RHOMASS_REDUCING(self) -> Quantity[Density, np.ndarray]:
         return self.__getattr__('RHOMASS_REDUCING').asdim(Density)
 
     @property
-    def RHOMOLAR_CRITICAL(self) -> Quantity[MolarDensity]:
+    def RHOMOLAR_CRITICAL(self) -> Quantity[MolarDensity, np.ndarray]:
         return self.__getattr__('RHOMOLAR_CRITICAL').asdim(MolarDensity)
 
     @property
-    def RHOMOLAR_REDUCING(self) -> Quantity[MolarDensity]:
+    def RHOMOLAR_REDUCING(self) -> Quantity[MolarDensity, np.ndarray]:
         return self.__getattr__('RHOMOLAR_REDUCING').asdim(MolarDensity)
 
     @property
-    def DMOLAR(self) -> Quantity[MolarDensity]:
+    def DMOLAR(self) -> Quantity[MolarDensity, np.ndarray]:
         return self.__getattr__('DMOLAR').asdim(MolarDensity)
 
     @property
-    def A(self) -> Quantity[Velocity]:
+    def A(self) -> Quantity[Velocity, np.ndarray]:
         return self.__getattr__('A').asdim(Velocity)
 
     @property
-    def L(self) -> Quantity[ThermalConductivity]:
+    def L(self) -> Quantity[ThermalConductivity, np.ndarray]:
         return self.__getattr__('L').asdim(ThermalConductivity)
 
     @property
-    def C(self) -> Quantity[SpecificHeatCapacity]:
+    def C(self) -> Quantity[SpecificHeatCapacity, np.ndarray]:
         return self.__getattr__('C').asdim(SpecificHeatCapacity)
 
     @property
-    def M(self) -> Quantity[MolarMass]:
+    def M(self) -> Quantity[MolarMass, np.ndarray]:
         return self.__getattr__('M').asdim(MolarMass)
 
     def __getattr__(self, attr: CProperty) -> Quantity:
@@ -1103,79 +1106,79 @@ class HumidAir(CoolPropFluid):
         ]
 
     @property
-    def psi_w(self) -> Quantity[Dimensionless]:
+    def psi_w(self) -> Quantity[Dimensionless, np.ndarray]:
         return self.__getattr__('psi_w').asdim(Dimensionless)
 
     @property
-    def W(self) -> Quantity[Dimensionless]:
+    def W(self) -> Quantity[Dimensionless, np.ndarray]:
         return self.__getattr__('W').asdim(Dimensionless)
 
     @property
-    def Z(self) -> Quantity[Dimensionless]:
+    def Z(self) -> Quantity[Dimensionless, np.ndarray]:
         return self.__getattr__('Z').asdim(Dimensionless)
 
     @property
-    def R(self) -> Quantity[Dimensionless]:
+    def R(self) -> Quantity[Dimensionless, np.ndarray]:
         return self.__getattr__('R').asdim(Dimensionless)
 
     @property
-    def P(self) -> Quantity[Pressure]:
+    def P(self) -> Quantity[Pressure, np.ndarray]:
         return self.__getattr__('P').asdim(Pressure)
 
     @property
-    def P_w(self) -> Quantity[Pressure]:
+    def P_w(self) -> Quantity[Pressure, np.ndarray]:
         return self.__getattr__('P_w').asdim(Pressure)
 
     @property
-    def B(self) -> Quantity[Temperature]:
+    def B(self) -> Quantity[Temperature, np.ndarray]:
         return self.__getattr__('B').asdim(Temperature)
 
     @property
-    def T(self) -> Quantity[Temperature]:
+    def T(self) -> Quantity[Temperature, np.ndarray]:
         return self.__getattr__('T').asdim(Temperature)
 
     @property
-    def D(self) -> Quantity[Temperature]:
+    def D(self) -> Quantity[Temperature, np.ndarray]:
         return self.__getattr__('D').asdim(Temperature)
 
     @property
-    def K(self) -> Quantity[ThermalConductivity]:
+    def K(self) -> Quantity[ThermalConductivity, np.ndarray]:
         return self.__getattr__('K').asdim(ThermalConductivity)
 
     @property
-    def M(self) -> Quantity[DynamicViscosity]:
+    def M(self) -> Quantity[DynamicViscosity, np.ndarray]:
         return self.__getattr__('M').asdim(DynamicViscosity)
 
     @property
-    def C(self) -> Quantity[SpecificHeatPerDryAir]:
+    def C(self) -> Quantity[SpecificHeatPerDryAir, np.ndarray]:
         return self.__getattr__('C').asdim(SpecificHeatPerDryAir)
 
     @property
-    def Cha(self) -> Quantity[SpecificHeatPerHumidAir]:
+    def Cha(self) -> Quantity[SpecificHeatPerHumidAir, np.ndarray]:
         return self.__getattr__('Cha').asdim(SpecificHeatPerHumidAir)
 
     @property
-    def H(self) -> Quantity[MixtureEnthalpyPerDryAir]:
+    def H(self) -> Quantity[MixtureEnthalpyPerDryAir, np.ndarray]:
         return self.__getattr__('H').asdim(MixtureEnthalpyPerDryAir)
 
     @property
-    def Hha(self) -> Quantity[MixtureEnthalpyPerHumidAir]:
+    def Hha(self) -> Quantity[MixtureEnthalpyPerHumidAir, np.ndarray]:
         return self.__getattr__('Hha').asdim(MixtureEnthalpyPerHumidAir)
 
     @property
-    def S(self) -> Quantity[MixtureEntropyPerDryAir]:
+    def S(self) -> Quantity[MixtureEntropyPerDryAir, np.ndarray]:
         return self.__getattr__('S').asdim(MixtureEntropyPerDryAir)
 
     @property
-    def Sha(self) -> Quantity[MixtureEntropyPerHumidAir]:
+    def Sha(self) -> Quantity[MixtureEntropyPerHumidAir, np.ndarray]:
         return self.__getattr__('Sha').asdim(MixtureEntropyPerHumidAir)
 
     @property
-    def V(self) -> Quantity[MixtureVolumePerDryAir]:
+    def V(self) -> Quantity[MixtureVolumePerDryAir, np.ndarray]:
         return self.__getattr__('V').asdim(MixtureVolumePerDryAir)
 
     @property
-    def Vha(self) -> Quantity[MixtureVolumePerHumidAir]:
+    def Vha(self) -> Quantity[MixtureVolumePerHumidAir, np.ndarray]:
         return self.__getattr__('Vha').asdim(MixtureVolumePerHumidAir)
 
     def __getattr__(self, attr: CProperty) -> Quantity:
@@ -1196,3 +1199,11 @@ class HumidAir(CoolPropFluid):
         s = f'<{self.__class__.__name__}, {props_str}>'
 
         return s
+
+
+from .units import Quantity as Q
+
+
+w = Water(T=Q(25, 'degC'), P=Q(25, 'kPa'))
+
+w.P
