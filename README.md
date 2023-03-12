@@ -278,14 +278,9 @@ pytest -W ignore --pyargs encomp -p no:mypy-testing
 The attributes in the `encomp.settings.Settings` class can be modified with an `.env`-file.
 Place a file named `.env` in the current working directory to override the default settings.
 The attribute names are prefixed with `ENCOMP_`.
-See the file `.env.example` in the base of this repository for examples.
 
 ## TODO
 
--   Possible to use a secondary type variable / generic to figure out the magnitude type?
-    -   This could use `TypeVarTuple` (import from `typing_extensions` until Python 3.11)
-    -   Not supported by `mypy` yet, need to wait with this
-    -   Might also need to wait for https://peps.python.org/pep-0696/ to do stuff like `S = TypeVar('S', default=int)`
 -   Document the `Quantity[Dimensionality]` type system
 -   What is the license of this package?
     -   For example, `pint` uses _3-Clause BSD License_, this should be compatible with `MIT`

@@ -710,5 +710,4 @@ def test_quantity_temperature_types() -> None:
     with pytest.raises(DimensionalityTypeError):
         (T1 - T2) - T2   # E: Unsupported operand types for - ("Quantity[TemperatureDifference]" and "Quantity[Temperature]")
 
-
      # autopep8: on

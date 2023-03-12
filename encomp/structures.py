@@ -2,7 +2,7 @@
 Data structures and related functions.
 """
 
-from typing import Sequence, Iterator, Optional, Any, Iterable, TypeVar, overload
+from typing import Sequence, Iterator, Any, Iterable, TypeVar, overload
 
 import numpy as np
 import pandas as pd
@@ -71,7 +71,7 @@ def divide_chunks(container, N):
 
 
 def flatten(container: Iterable[Any],
-            max_depth: Optional[int] = None,
+            max_depth: int | None = None,
             _depth: int = 0) -> Iterator[Any]:
     """
     Generator that flattens a nested container.
@@ -93,7 +93,7 @@ def flatten(container: Iterable[Any],
     ----------
     container : Iterable[Any]
         The container to be flattened
-    max_depth : int, optional
+    max_depth : int | None, optional
         The maximum level to flatten to, by default None (flatten all)
 
     Yields

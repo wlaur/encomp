@@ -7,14 +7,12 @@ import os
 from pathlib import Path
 from contextlib import contextmanager
 import tempfile
-from typing import Union
-
 
 from .units import set_quantity_format, ureg
 
 
 @contextmanager
-def working_dir(path: Union[Path, str]):
+def working_dir(path: Path | str):
     """
     Context manager that changes the working directory.
     The working directory is changed back after the context
@@ -22,7 +20,7 @@ def working_dir(path: Union[Path, str]):
 
     Parameters
     ----------
-    path : Union[Path, str]
+    path : Path | str
         The new working directory
     """
 

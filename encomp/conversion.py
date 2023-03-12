@@ -2,7 +2,7 @@
 Functions related to converting quantities.
 """
 
-from typing import Optional, Union, overload
+from typing import overload
 
 from .units import Quantity
 from .utypes import Mass, MassFlow, Density, Volume, VolumeFlow
@@ -10,36 +10,33 @@ from .utypes import Mass, MassFlow, Density, Volume, VolumeFlow
 
 @overload
 def convert_volume_mass(inp: Quantity[Mass],
-                        rho: Optional[Quantity[Density]] = None) -> Quantity[Volume]:
+                        rho: Quantity[Density] | None = None) -> Quantity[Volume]:
     ...
 
 
 @overload
 def convert_volume_mass(inp: Quantity[MassFlow],
-                        rho: Optional[Quantity[Density]] = None) -> Quantity[VolumeFlow]:
+                        rho: Quantity[Density] | None = None) -> Quantity[VolumeFlow]:
     ...
 
 
 @overload
 def convert_volume_mass(inp: Quantity[Volume],
-                        rho: Optional[Quantity[Density]] = None) -> Quantity[Mass]:
+                        rho: Quantity[Density] | None = None) -> Quantity[Mass]:
     ...
 
 
 @overload
 def convert_volume_mass(inp: Quantity[VolumeFlow],
-                        rho: Optional[Quantity[Density]] = None) -> Quantity[MassFlow]:
+                        rho: Quantity[Density] | None = None) -> Quantity[MassFlow]:
     ...
 
 
 @overload
-def convert_volume_mass(inp: Quantity,
-                        rho: Optional[Quantity[Density]] = None
-                        ) -> Union[Quantity[Mass],
-                                   Quantity[MassFlow],
-                                   Quantity[Volume],
-                                   Quantity[VolumeFlow]
-                                   ]:
+def convert_volume_mass(
+    inp: Quantity,
+    rho: Quantity[Density] | None = None
+) -> Quantity[Mass] | Quantity[MassFlow] | Quantity[Volume] | Quantity[VolumeFlow]:
     ...
 
 
@@ -49,14 +46,14 @@ def convert_volume_mass(inp, rho=None):
 
     Parameters
     ----------
-    inp : Union[M, V]
+    inp : M | V
         Input mass or volume (or flow)
     rho : Quantity[Density], optional
         Density, by default 997 kg/m³
 
     Returns
     -------
-    Union[V, M]
+    M | V
         Calculated volume or mass (or flow)
     """
 

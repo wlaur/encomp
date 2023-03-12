@@ -14,9 +14,7 @@ import re
 import warnings
 import copy
 import numbers
-from typing import (Union,
-                    Optional,
-                    Generic,
+from typing import (Generic,
                     Any,
                     TypeVar,
                     Literal)
@@ -253,7 +251,7 @@ class Quantity(
     _magnitude_type: type[MT]
     _original_magnitude_type: type[MT] | None = None
 
-    _dimension_symbol_map: Optional[dict[sp.Basic, Unit]] = None
+    _dimension_symbol_map: dict[sp.Basic, Unit] | None = None
 
     # compact, Latex, HTML, Latex/siunitx formatting
     FORMATTING_SPECS = ('~P', '~L', '~H', '~Lx')
@@ -878,7 +876,7 @@ class Quantity(
     def validate(cls, qty: Quantity[DT, MT]) -> Quantity[DT, MT]:
         raise NotImplementedError
 
-    def check_compatibility(self, other: Quantity | float) -> None:
+    def check_compatibility(self, other: Quantity | float | int) -> None:
         """
         Checks compatibility for addition and subtraction.
         """
@@ -927,7 +925,7 @@ class Quantity(
                 f'{type(self)} and {type(other)}. '
             )
 
-    def is_compatible_with(self, other, *contexts, **ctx_kwargs):
+    def is_compatible_with(self, other: Quantity | float | int, *contexts, **ctx_kwargs) -> bool:
 
         # add an additional check of the dimensionality types
         is_compatible = super().is_compatible_with(
@@ -1008,8 +1006,7 @@ class Quantity(
 
             if not isinstance_types(
                     [self, other],
-                    list[Union[Quantity[Temperature],
-                               Quantity[TemperatureDifference]]]
+                    list[Quantity[Temperature] | Quantity[TemperatureDifference]]
             ):
                 raise e
 
@@ -1030,8 +1027,7 @@ class Quantity(
 
             if not isinstance_types(
                     [self, other],
-                    list[Union[Quantity[Temperature],
-                               Quantity[TemperatureDifference]]]
+                    list[Quantity[Temperature] | Quantity[TemperatureDifference]]
             ):
                 raise e
 
@@ -1078,7 +1074,7 @@ class Quantity(
         except ValueError as e:
             raise DimensionalityComparisonError(str(e)) from e
 
-    def __round__(self, ndigits: Optional[int] = None) -> Quantity[DT]:
+    def __round__(self, ndigits: int | None = None) -> Quantity[DT]:
 
         if isinstance(self.m, np.ndarray):
             return self.__class__(np.round(self.m, ndigits or 0), self.u)

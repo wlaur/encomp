@@ -4,7 +4,7 @@ Miscellaneous functions that do not fit anywhere else.
 import ast
 import asttokens
 
-from typing import Any, Type, Union, TypeVar, overload
+from typing import Any, TypeVar, Type, overload
 from typing import _TypedDictMeta, _GenericAlias  # type: ignore
 
 from typeguard import check_type
@@ -27,7 +27,7 @@ def isinstance_types(obj: Any, expected: T) -> bool:
     ...
 
 
-def isinstance_types(obj: Any, expected: Union[_GenericAlias, Type]) -> bool:
+def isinstance_types(obj: Any, expected: _GenericAlias | type) -> bool:
     """
     Checks if the input object matches the expected type.
     This function also supports complex type annotations that cannot
@@ -50,7 +50,7 @@ def isinstance_types(obj: Any, expected: Union[_GenericAlias, Type]) -> bool:
 
         .. code-block:: python
 
-            a: Union[str, int] = ...
+            a: str | int = ...
 
             if isinstance_types(a, int):
                 reveal_type(a)  # int
@@ -66,9 +66,9 @@ def isinstance_types(obj: Any, expected: Union[_GenericAlias, Type]) -> bool:
 
     Parameters
     ----------
-    obj : Union[_GenericAlias, Type]
+    obj : Any
         Object to check
-    expected : type
+    expected : _GenericAlias | type
         Expected type or type alias
 
     Returns
@@ -146,7 +146,8 @@ def grid_dimensions(N: int, nrows: int, ncols: int) -> tuple[int, int]:
         if nrows * ncols < N:
 
             raise ValueError(
-                f'{N} items cannot be placed in a {nrows} × {ncols} grid')
+                f'{N} items cannot be placed in a {nrows} x {ncols} grid'
+            )
 
     return nrows, ncols
 

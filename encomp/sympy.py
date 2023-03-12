@@ -4,7 +4,7 @@ Contains tools for converting Sympy expressions to Python modules and functions.
 """
 
 import re
-from typing import Callable, Optional, Union, Literal
+from typing import Callable, Literal
 from functools import lru_cache
 
 import numpy as np
@@ -27,7 +27,7 @@ from .units import Quantity
 
 
 @lru_cache()
-def to_identifier(s: Union[sp.Symbol, str]) -> str:
+def to_identifier(s: sp.Symbol | str) -> str:
     """
     Converts a Sympy symbol to a valid Python identifier.
     This function will only remove special characters.
@@ -38,7 +38,7 @@ def to_identifier(s: Union[sp.Symbol, str]) -> str:
 
     Parameters
     ----------
-    s : Union[sp.Symbol, str])
+    s : sp.Symbol | str
         Input symbol or string representation
 
     Returns
@@ -182,9 +182,9 @@ def simplify_exponents(e: sp.Basic) -> sp.Basic:
             return type(e)(*new_args)
 
 
-def get_sol_expr(eqns: Union[sp.Equality, list[sp.Equality]],
+def get_sol_expr(eqns: sp.Equality | list[sp.Equality],
                  symbol: sp.Symbol,
-                 avoid: Optional[set[sp.Symbol]] = None) -> Optional[sp.Basic]:
+                 avoid: set[sp.Symbol] | None = None) -> sp.Basic | None:
     """
     Wrapper around ``sp.solve`` that returns the solution expression
     for a *single* symbol, or None in case Sympy could not solve for the specified symbol.
@@ -193,16 +193,16 @@ def get_sol_expr(eqns: Union[sp.Equality, list[sp.Equality]],
 
     Parameters
     ----------
-    eqns : Union[sp.Equality, list[sp.Equality]]
+    eqns : sp.Equality | list[sp.Equality]
         List of equations or a single equation
     symbol : sp.Symbol
         Symbol to solve for (isolate)
-    avoid : Optional[set[sp.Symbol]], optional
+    avoid : set[sp.Symbol] | None, optional
         Set of symbols to avoid in the substitution expressions, by default None
 
     Returns
     -------
-    Optional[sp.Basic]
+    sp.Basic | None
         Expression that equals ``symbol``, or None in case the
         equation(s) could not be solved
     """
@@ -260,9 +260,9 @@ def get_sol_expr(eqns: Union[sp.Equality, list[sp.Equality]],
                   key=default_sort_key)[0]
 
 
-def get_lambda_kwargs(value_map: dict[Union[sp.Symbol, str], Union[Quantity, np.ndarray]],
-                      include: Optional[list[Union[sp.Symbol, str]]] = None, *,
-                      units: bool = False) -> dict[str, Union[Quantity, np.ndarray]]:
+def get_lambda_kwargs(value_map: dict[sp.Symbol | str, Quantity | np.ndarray],
+                      include: list[sp.Symbol | str] | None = None, *,
+                      units: bool = False) -> dict[str, Quantity | np.ndarray]:
     """
     Returns a mapping from identifier to value (Quantity or float)
     based on the input value map (Symbol to value).
@@ -270,9 +270,9 @@ def get_lambda_kwargs(value_map: dict[Union[sp.Symbol, str], Union[Quantity, np.
 
     Parameters
     ----------
-    value_map : dict[Union[sp.Symbol, str], Union[Quantity, np.ndarray]]
+    value_map : dict[sp.Symbol | str, Quantity | np.ndarray]
         Mapping from symbol or symbol identifier to value
-    include : Optional[list[Union[sp.Symbol, str]]], optional
+    include : list[sp.Symbol | str] | None, optional
         Optional list of symbols or symbol identifiers to include, by default None
     units : bool, optional
         Whether to keep the units, if False Quantity is converted
@@ -280,7 +280,7 @@ def get_lambda_kwargs(value_map: dict[Union[sp.Symbol, str], Union[Quantity, np.
 
     Returns
     -------
-    dict[str, Union[Quantity, np.ndarray]]
+    dict[str | Quantity | np.ndarray]
         Mapping from identifier to value
     """
 
@@ -304,7 +304,7 @@ def get_lambda_kwargs(value_map: dict[Union[sp.Symbol, str], Union[Quantity, np.
 
 @lru_cache()
 def get_lambda(e: sp.Basic, *,
-               to_str: bool = False) -> tuple[Union[Callable, str], list[str]]:
+               to_str: bool = False) -> tuple[Callable | str, list[str]]:
     """
     Converts the input expression to a lambda function
     with valid identifiers as parameter names.
@@ -318,7 +318,7 @@ def get_lambda(e: sp.Basic, *,
 
     Returns
     -------
-    Tuple[Union[Callable, str], list[str]]
+    tuple[Callable | str, list[str]]
         The lambda function (or string representation) and the list
         of parameters to the function
     """
@@ -423,8 +423,9 @@ def get_function(e: sp.Basic, *, units: bool = False) -> Callable:
 
 
 def evaluate(e: sp.Basic,
-             value_map: dict[sp.Symbol, Union[Quantity, np.ndarray]], *,
-             units: bool = False) -> Union[Quantity, np.ndarray]:
+             value_map: dict[sp.Symbol, Quantity | np.ndarray],
+             *,
+             units: bool = False) -> Quantity | np.ndarray:
     """
     Evaluates the input expression, given the mapping of symbol to
     value in ``value_map``.
@@ -433,7 +434,7 @@ def evaluate(e: sp.Basic,
     ----------
     e : sp.Basic
         Input expression to evaluate
-    value_map : dict[sp.Symbol, Union[Quantity, np.ndarray]]
+    value_map : dict[sp.Symbol, Quantity | np.ndarray]
         Mapping from symbol to value for all required symbols in ``e``,
         additional symbols may be present
     units : bool, optional
@@ -442,7 +443,7 @@ def evaluate(e: sp.Basic,
 
     Returns
     -------
-    Union[Quantity, np.ndarray]
+    Quantity | np.ndarray
         Value of the expression, Quantity if ``units=True`` otherwise float
     """
 
@@ -453,7 +454,7 @@ def evaluate(e: sp.Basic,
 def substitute_unknowns(e: sp.Basic,
                         knowns: set[sp.Symbol],
                         eqns: list[sp.Equality],
-                        avoid: Optional[set[sp.Symbol]] = None) -> sp.Basic:
+                        avoid: set[sp.Symbol] | None = None) -> sp.Basic:
     """
     Uses the equations ``eqns`` to substitute the unknown symbols
     in the input expression. Uses recursion to deal with nested substitutions.
@@ -466,7 +467,7 @@ def substitute_unknowns(e: sp.Basic,
         Set of known symbols
     eqns : list[sp.Equality]
         List of equations that define the unknown symbols in terms of known ones
-    avoid : Optional[set[sp.Symbol]], optional
+    avoid : set[sp.Symbol] | None, optional
         Set of symbols to avoid in the substitution expressions, by default None
 
     Returns
@@ -555,7 +556,7 @@ def typeset_chemical(s: str) -> str:
     return ret
 
 
-def typeset(x: Union[str, int]) -> str:
+def typeset(x: str | int) -> str:
     """
     Does some additional typesetting for the input
     Latex string, for example ``\\text{}`` around
@@ -579,7 +580,7 @@ def typeset(x: Union[str, int]) -> str:
 
     Parameters
     ----------
-    x : Union[str, int]
+    x : str | int
         Input string or int (will be converted to str)
 
     Returns
@@ -626,12 +627,12 @@ def typeset(x: Union[str, int]) -> str:
 
 
 def decorate(self,
-             prefix: Optional[Union[str, int]] = None,
-             suffix: Optional[Union[str, int]] = None,
-             prefix_sub: Optional[Union[str, int]] = None,
-             prefix_sup: Optional[Union[str, int]] = None,
-             suffix_sub: Optional[Union[str, int]] = None,
-             suffix_sup: Optional[Union[str, int]] = None
+             prefix: str | int | None = None,
+             suffix: str | int | None = None,
+             prefix_sub: str | int | None = None,
+             prefix_sup: str | int | None = None,
+             suffix_sub: str | int | None = None,
+             suffix_sup: str | int | None = None
              ) -> sp.Symbol:
     """
     Method for ``sp.Symbol`` that decorates a symbol with
@@ -659,17 +660,17 @@ def decorate(self,
 
     Parameters
     ----------
-    prefix : Optional[Union[str, int]], optional
+    prefix : str | int | None, optional
         Prefix added before the symbol, by default None
-    suffix : Optional[Union[str, int]], optional
+    suffix : str | int | None, optional
         Suffix added after the symbol, by default None
-    prefix_sub : Optional[Union[str, int]], optional
+    prefix_sub : str | int | None, optional
         Subscript prefix before the symbol and after ``prefix``, by default None
-    prefix_sup : Optional[Union[str, int]], optional
+    prefix_sup : str | int | None, optional
         Superscript prefix before the symbol and after ``prefix``, by default None
-    suffix_sub : Optional[Union[str, int]], optional
+    suffix_sub : str | int | None, optional
         Subscript suffix after the symbol and before ``suffix``, by default None
-    suffix_sup : Optional[Union[str, int]], optional
+    suffix_sup : str | int | None, optional
         Superscript suffix after the symbol and before ``suffix``, by default None
 
     Returns
@@ -711,7 +712,7 @@ def decorate(self,
     return sp.Symbol(decorated_symbol, **self.assumptions0)
 
 
-def append(self, s: Union[str, int],
+def append(self, s: str | int,
            where: Literal['sub', 'sup'] = 'sub') -> sp.Symbol:
     """
     Adds the input ``s`` to an existing sub- or superscript.
@@ -720,7 +721,7 @@ def append(self, s: Union[str, int],
 
     Parameters
     ----------
-    s : Union[str, int]
+    s : str | int
         Text or index to be added
     where : Literal['sub', 'sup'], optional
         Whether to append to the subscript or superscript, by default 'sub'
@@ -775,8 +776,7 @@ sp.Symbol.__ = lambda s, x: s.append(x, where='sup')  # type: ignore
 sp.Symbol.delta = lambda s: s.decorate(prefix='\\Delta')  # type: ignore
 
 
-def display_equation(eqn: sp.Equality,
-                     tag: Optional[str] = None, **kwargs) -> None:
+def display_equation(eqn: sp.Equality, tag: str | None = None, **kwargs) -> None:
     """
     Displays a Sympy equation (``sp.Equality``) using
     the package ``symbolic_equation``, which displays
@@ -788,7 +788,7 @@ def display_equation(eqn: sp.Equality,
     ----------
     eqn : sp.Equality
         Equation to display
-    tag : Optional[str], optional
+    tag : str | None, optional
         Equation tag displayed on the right side inside parens, by default None
     """
     from IPython.display import display

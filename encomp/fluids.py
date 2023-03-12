@@ -479,8 +479,8 @@ class CoolPropFluid(ABC):
     def evaluate(
             self,
             output: CProperty,
-            *points: tuple[CProperty, Magnitude]
-    ) -> Magnitude:
+            *points: tuple[CProperty, float | np.ndarray]
+    ) -> float | np.ndarray:
 
         # case 1: all inputs are scalar, output is scalar
         if all(isinstance_types(pt[1], float) for pt in points):
@@ -489,8 +489,8 @@ class CoolPropFluid(ABC):
         # at this point, the output will be a vector of at least length 1
 
         def single_element_vector_to_float(
-            x: Magnitude
-        ) -> Magnitude:
+            x: float | np.ndarray
+        ) -> float | np.ndarray:
 
             if isinstance(x, float):
                 return x
@@ -534,7 +534,7 @@ class CoolPropFluid(ABC):
             N = 1
             shape = (1, )
 
-        def expand_scalars(x: Magnitude) -> np.ndarray:
+        def expand_scalars(x: float | np.ndarray) -> np.ndarray:
 
             if isinstance_types(x, float):
                 return np.repeat(float(x), N).astype(float).reshape(shape)
@@ -660,7 +660,7 @@ class CoolPropFluid(ABC):
         return validate_output(val)
 
     def construct_quantity(self,
-                           val: Magnitude,
+                           val: float | np.ndarray,
                            output: CProperty) -> Quantity:
 
         unit_output = self.get_coolprop_unit(output)
@@ -697,7 +697,7 @@ class CoolPropFluid(ABC):
 
     def to_numeric(self,
                    prop: CProperty,
-                   qty: Quantity) -> Magnitude:
+                   qty: Quantity) -> float | np.ndarray:
 
         unit = self.get_coolprop_unit(prop)
 

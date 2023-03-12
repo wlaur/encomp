@@ -1,4 +1,4 @@
-from typing import Union, Callable, Optional, Mapping, Any
+from typing import Callable, Mapping, Any
 
 import numpy as np
 from sympy import geometry
@@ -12,8 +12,8 @@ except ImportError:
 def interpolate(
     x: Mapping[int, float],
     y: Mapping[int, float],
-    fill_value: Union[str, tuple[float, float]] = 'nan'
-) -> Callable[[Union[float, np.ndarray]], Union[float, np.ndarray]]:
+    fill_value: str | tuple[float, float] = 'nan'
+) -> Callable[[float | np.ndarray], float | np.ndarray]:
     """
     Wrapper around ``scipy.interpolate.interp1d``
     that returns function for interpolating :math:`x` vs :math:`x`.
@@ -32,7 +32,7 @@ def interpolate(
         Sequence of :math:`x`-values
     y : Mapping[int, float]
         Sequence of :math:`y`-values with same length as ``x``
-    fill_value : str, optional
+    fill_value : str | tuple[float, float], optional
         What to do outside the interpolation range, by default 'nan'
 
         - 'limits': Values outside bounds are set to the upper and lower limit
@@ -43,7 +43,7 @@ def interpolate(
 
     Returns
     -------
-    Callable[[Union[float, np.ndarray]], Union[float, np.ndarray]]
+    Callable[[float | np.ndarray], float | np.ndarray]
         An interpolation function based on the input dataset
     """
 
@@ -210,11 +210,11 @@ def r_squared(y_pred: np.ndarray,
     return R2
 
 
-def circle_line_intersection(A: Union[tuple[float, float], geometry.Point2D],
-                             B: Union[tuple[float, float], geometry.Point2D],
+def circle_line_intersection(A: tuple[float, float] | geometry.Point2D,
+                             B: tuple[float, float] | geometry.Point2D,
                              x0: float,
                              y0: float,
-                             r: float) -> Optional[list[tuple[float, float]]]:
+                             r: float) -> list[tuple[float, float]] | None:
     """
     Finds the intersection point(s) between:
 
@@ -225,9 +225,9 @@ def circle_line_intersection(A: Union[tuple[float, float], geometry.Point2D],
 
     Parameters
     ----------
-    A : Union[tuple[float], geometry.Point2D]
+    A : tuple[float, float] | geometry.Point2D
         start of the line
-    B : Union[tuple[float], geometry.Point2D]
+    B : tuple[float, float] | geometry.Point2D
         end of the line
     x0 : float
         x-coordinate for circle center
@@ -238,7 +238,7 @@ def circle_line_intersection(A: Union[tuple[float, float], geometry.Point2D],
 
     Returns
     -------
-    Optional[list[tuple[float, float]]]
+    list[tuple[float, float]] | None
         One or two intersection points between the circle and the line,
         or None in case the line and circle do no intersect.
     """

@@ -2,8 +2,6 @@
 Functions relating to thermodynamics.
 """
 
-from typing import Union
-
 try:
     from scipy.optimize import fsolve
 except ImportError:
@@ -29,18 +27,10 @@ DEFAULT_CP = Quantity(4.18, 'kJ/kg/K').asdim(SpecificHeatCapacity)
 
 
 def heat_balance(
-    *args: Union[Quantity[Mass],
-                 Quantity[MassFlow],
-                 Quantity[Energy],
-                 Quantity[Power],
-                 Quantity[TemperatureDifference],
-                 Quantity[Temperature]],
+    *args: Quantity[Mass] | Quantity[MassFlow] | Quantity[Energy] | Quantity[Power] |
+    Quantity[TemperatureDifference] | Quantity[Temperature],
     cp: Quantity[SpecificHeatCapacity] = DEFAULT_CP
-) -> Union[Quantity[Mass],
-           Quantity[MassFlow],
-           Quantity[Energy],
-           Quantity[Power],
-           Quantity[TemperatureDifference]]:
+) -> Quantity[Mass] | Quantity[MassFlow] | Quantity[Energy] | Quantity[Power] | Quantity[TemperatureDifference] | Quantity[Temperature]:
     """
     Solves the heat balance equation
 
@@ -70,9 +60,9 @@ def heat_balance(
             'Must pass exactly two parameters out of dT, Q_h and m')
 
     params = {
-        'm': (Union[Quantity[Mass], Quantity[MassFlow]], ('kg', 'kg/s')),
-        'dT': (Union[Quantity[TemperatureDifference], Quantity[Temperature]], ('delta_degC', )),
-        'Q_h': (Union[Quantity[Energy], Quantity[Power]], ('kJ', 'kW'))
+        'm': (Quantity[Mass] | Quantity[MassFlow], ('kg', 'kg/s')),
+        'dT': (Quantity[TemperatureDifference] | Quantity[Temperature], ('delta_degC', )),
+        'Q_h': (Quantity[Energy] | Quantity[Power], ('kJ', 'kW'))
     }
 
     vals = {}
@@ -95,8 +85,7 @@ def heat_balance(
         vals['dT'] = vals['dT'].to('delta_degC')
 
     # whether the calculation is per unit time or amount of mass / energy
-    per_time = any(isinstance_types(
-        a, Union[Quantity[MassFlow], Quantity[Power]]) for a in args)
+    per_time = any(isinstance_types(a, Quantity[MassFlow] | Quantity[Power]) for a in args)
 
     if per_time:
         unit_idx = 1

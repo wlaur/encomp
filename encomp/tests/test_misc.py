@@ -1,6 +1,4 @@
-from typing import Optional
 from textwrap import dedent
-
 
 from ..misc import name_assignments, isinstance_types, grid_dimensions
 
@@ -54,6 +52,6 @@ def test_isinstance_types():
         'dsa': [1, 3.2, 4, 22, None]
     }
 
-    assert isinstance_types(d, dict[str, list[Optional[float]]])
-    assert not isinstance_types(d, dict[str, list[Optional[int]]])
+    assert isinstance_types(d, dict[str, list[float | None]])
+    assert not isinstance_types(d, dict[str, list[int | None]])
     assert not isinstance_types(d, dict[str, list[float]])

@@ -21,7 +21,7 @@ The general structure for custom object classes is
             def from_dict(cls, d: dict) -> 'CustomClass':
                 return cls(**d)
 
-            def to_json(self) -> Union[dict, str]:
+            def to_json(self) -> dict | str:
                 d = {'A': self.A, 'B': self.B}
 
                 # return JSON string or dict
@@ -56,7 +56,7 @@ This same name must be used when passing the class implementation for decoding.
 
 """
 
-from typing import Any, Union, Callable, Type, Optional
+from typing import Any, Callable
 import inspect
 import json
 from pathlib import Path
@@ -72,17 +72,9 @@ from .utypes import Dimensionality
 from .misc import isinstance_types
 
 # type alias for objects that can be serialized using json.dumps()
-JSONBase = Union[dict,
-                 list,
-                 float,
-                 int,
-                 str,
-                 bool,
-                 None]
+JSONBase = dict | list | float | int | str | bool | None
 
-JSON = Union[JSONBase,
-             list[JSONBase],
-             dict[str, JSONBase]]  # don't use int/float dict keys
+JSON = JSONBase | list[JSONBase] | dict[str, JSONBase]
 
 
 def is_serializable(x: Any) -> bool:
@@ -287,8 +279,7 @@ def custom_serializer(obj: Any) -> JSON:
     return str(obj)
 
 
-def decode(inp: JSON,
-           custom: Optional[Union[Type, list[Type]]] = None) -> Any:
+def decode(inp: JSON, custom: type | list[type] | None = None) -> Any:
     """
     Decodes objects that were serialized
     with :py:func:`encomp.serialize.custom_serializer`.
@@ -306,7 +297,7 @@ def decode(inp: JSON,
     ----------
     inp : JSON
         Serialized representation of an object
-    custom : Optional[Union[Type, list[Type]]]
+    custom : type | list[type] | None
         Potential custom class implementation(s). The class name
         is stored as the ``type`` key in the input JSON (if the object
         was serialized with :py:func:`encomp.serialize.custom_serializer`).
@@ -355,12 +346,12 @@ def decode(inp: JSON,
 
                 # optional key with the name of the dimensionality class
                 dimensionality_name = inp.get('dimensionality')
-                val, unit = inp['data']  # type: ignore
+                val, unit = inp['data']
 
                 if unit is None:
                     unit = ''
 
-                dimensionality: Optional[type[Dimensionality]] = None
+                dimensionality: type[Dimensionality] | None = None
 
                 for d in Dimensionality._registry:
                     if d.__name__ == dimensionality_name:
@@ -370,7 +361,7 @@ def decode(inp: JSON,
                 val = decode(val)
 
                 # check if this list has types that matches a serialized Quantity
-                if (isinstance_types(unit, Union[Unit, str])):
+                if (isinstance_types(unit, Unit | str)):
 
                     if dimensionality is None:
                         return Quantity(val, unit)
@@ -452,7 +443,7 @@ def decode(inp: JSON,
 
 
 def save(names: dict[str, Any],
-         path: Union[str, Path] = 'variables.json') -> None:
+         path: str | Path = 'variables.json') -> None:
     """
     Saves variables from a Jupyter Notebook session as JSON.
 
@@ -460,7 +451,7 @@ def save(names: dict[str, Any],
     ----------
     names : dict[str, Any]
         Names and their corresponding objects, for example output from ``locals()``
-    path : Union[str, Path]
+    path : str | Path
         File path or name of a JSON file, by default 'variables.json'
     """
 
@@ -490,13 +481,13 @@ def save(names: dict[str, Any],
                            indent=4))
 
 
-def load(path: Union[str, Path] = 'variables.json') -> dict[str, Any]:
+def load(path: str | Path = 'variables.json') -> dict[str, Any]:
     """
     Load variables from a JSON file.
 
     Parameters
     ----------
-    path : Union[str, Path]
+    path : str | Path
         File path or name of a JSON file, by default 'variables.json'
 
     Returns

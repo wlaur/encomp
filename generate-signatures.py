@@ -1,5 +1,4 @@
 import itertools
-from typing import Union
 from textwrap import dedent, indent
 
 import autopep8
@@ -33,32 +32,31 @@ def get_dim(dim: type[Dimensionality]) -> type[Dimensionality]:
     return dim
 
 
-def get_signature(self: Union[type[Dimensionality], str],
-                  other: Union[type[Dimensionality], str],
-                  output: Union[type[Dimensionality], str],
+def get_signature(self: type[Dimensionality] | str,
+                  other: type[Dimensionality] | str,
+                  output: type[Dimensionality] | str,
                   method: str) -> str:
 
     if isinstance(self, str):
         t_self = self
     else:
-        t_self = f'Quantity[{get_dim(self).__name__}]'
+        t_self = f'Quantity[{get_dim(self).__name__}, MT]'
 
     if isinstance(other, str):
         t_other = other
     else:
-        t_other = f'Quantity[{get_dim(other).__name__}]'
+        t_other = f'Quantity[{get_dim(other).__name__}, Any]'
 
     if isinstance(output, str):
         t_output = output
     else:
-        t_output = f'Quantity[{get_dim(output).__name__}]'
+        t_output = f'Quantity[{get_dim(output).__name__}, MT]'
 
     return dedent(
         f"""
 
         @overload
-        def {method}(self: {t_self}, other: {t_other}  # type: ignore
-            ) -> {t_output}:
+        def {method}(self: {t_self}, other: {t_other}) -> {t_output}:
             ...
     """
     ).strip()
@@ -214,11 +212,15 @@ def write_overload_signatures() -> None:
 
     mul, div, rdiv = get_overload_signatures()
 
-    with open('mul.py', 'w') as f:
+    with open('generated/__mul__.py', 'w') as f:
         f.write(mul)
 
-    with open('div.py', 'w') as f:
+    with open('generated/__truediv__.py', 'w') as f:
         f.write(div)
 
-    with open('rdiv.py', 'w') as f:
+    with open('generated/__rdiv__.py', 'w') as f:
         f.write(rdiv)
+
+
+if __name__ == '__main__':
+    write_overload_signatures()

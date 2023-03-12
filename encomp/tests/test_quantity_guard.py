@@ -2,8 +2,6 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from typing import Union
-
 from ..units import Quantity as Q
 from ..utypes import *
 from ..misc import isinstance_types
@@ -19,7 +17,7 @@ def test_quantity_typeguard() -> None:
     # autopep8: off
 
 
-    q: Union[Q[Length], Q[Velocity]]
+    q: Q[Length] | Q[Velocity]
 
     q = Q(25, 'kg')  # E: Incompatible types in assignment (expression has type "Quantity[Mass]", variable has type "Union[Quantity[Length], Quantity[Velocity]]")
 

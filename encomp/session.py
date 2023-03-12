@@ -1,7 +1,6 @@
-import numpy as np
-import pandas as pd
-import polars as pl
-
+import numpy as np  # noqa
+import pandas as pd  # noqa
+import polars as pl  # noqa
 
 from .settings import SETTINGS  # noqa
 from .misc import grid_dimensions as _grid_dimensions  # noqa
@@ -13,16 +12,9 @@ from .utypes import *  # noqa
 from .fluids import Fluid, Water, HumidAir  # noqa
 
 
-q = Q(pl.col('asd'), 'bar')
-q2 = Q([2.5, 35.2], 'bar')
+a = Q(np.array([2.5, 5.23]), 'kg')
 
 
-q3 = Q([2, 4], 'bar')
-q3 = Q(np.array([3, 4, 51,]), 'bar')
-from typing import Any
+b = a / Q(125, 'd') * 2 / 2
 
-aa = Q([1, 2, 3], 'kg')
-aa._magnitude
-
-
-dd = Q([1, 2, 4], 'asdss')
+aa = b[0]
