@@ -4,7 +4,7 @@
 
 Documentation at https://encomp.readthedocs.io/en/latest/
 
-`encomp` is tested on Windows and Linux, with Python versions 3.9 and 3.10.
+`encomp` is tested on Windows and Linux, with Python versions 3.10 and 3.11.
 
 ## Features
 
@@ -16,7 +16,7 @@ Main functionality of the `encomp` library:
     -   Extends the [pint](https://pypi.org/project/Pint) library
     -   Uses Python's type system to validate dimensionalities
     -   Compatible with `mypy` and other type checkers
-    -   Integrates with `np.ndarray` and `pd.Series`
+    -   Integrates with Numpy arrays, Pandas series and Polars series and expressions
     -   JSON serialization and decoding
 
 -   Implements a flexible interface to [CoolProp](http://www.coolprop.org)
@@ -31,11 +31,6 @@ Main functionality of the `encomp` library:
     -   Adds convenience methods for creating symbols with sub- and superscripts
     -   Additional functions to convert (algebraic) expressions and systems to Python code that supports Numpy arrays
 
--   Jupyter Notebook integration
-
-    -   Module `encomp.notebook`
-    -   Imports commonly used functions and classes
-    -   Defines custom Jupyter magics
 
 The other modules implement calculations related to process engineering and thermodynamics.
 The module `encomp.serialize` implements custom JSON serialization and decoding for classes used elsewhere in the library.
@@ -57,14 +52,13 @@ pip install encomp[optional,dev,full]
 
 ## Getting started
 
-To use `encomp` in a Jupyter Notebook (or REPL), import the `encomp.notebook` module:
+To use `encomp` in a Jupyter Notebook (or REPL), star-import the `encomp.session` module:
 
 ```python
-from encomp.notebook import *
+from encomp.session import *
 ```
 
 This will import commonly used functions and classes.
-It also registers the `%read` and `%%write` Jupyter magics for reading and writing custom objects from and to JSON.
 
 ### The `Quantity` class
 

@@ -44,14 +44,6 @@ encomp.gases module
    :undoc-members:
    :show-inheritance:
 
-encomp.magics module
---------------------
-
-.. automodule:: encomp.magics
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 encomp.math module
 ------------------
 
@@ -68,18 +60,18 @@ encomp.misc module
    :undoc-members:
    :show-inheritance:
 
-encomp.notebook module
-----------------------
-
-.. automodule:: encomp.notebook
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 encomp.serialize module
 -----------------------
 
 .. automodule:: encomp.serialize
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+encomp.session module
+---------------------
+
+.. automodule:: encomp.session
    :members:
    :undoc-members:
    :show-inheritance:

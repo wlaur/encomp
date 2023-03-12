@@ -3,7 +3,6 @@ Miscellaneous functions that do not fit anywhere else.
 """
 import ast
 import asttokens
-import numpy as np
 
 from typing import Any, Type, Union, TypeVar, overload
 from typing import _TypedDictMeta, _GenericAlias  # type: ignore
@@ -15,15 +14,17 @@ from typing_extensions import TypeGuard
 T = TypeVar('T')
 
 
-# NOTE: these overloads are a hack to avoid issues with type[T] -> T
+# NOTE: these overloads are a workaround to avoid issues with type[T] -> T
 # signatures with mypy
 
 @overload
-def isinstance_types(obj: Any, expected: type[T]) -> TypeGuard[T]: ...
+def isinstance_types(obj: Any, expected: type[T]) -> TypeGuard[T]:
+    ...
 
 
 @overload
-def isinstance_types(obj: Any, expected: T) -> bool: ...
+def isinstance_types(obj: Any, expected: T) -> bool:
+    ...
 
 
 def isinstance_types(obj: Any, expected: Union[_GenericAlias, Type]) -> bool:
@@ -40,7 +41,7 @@ def isinstance_types(obj: Any, expected: Union[_GenericAlias, Type]) -> bool:
 
         This does not work with complex types using ``mypy`` (https://github.com/python/mypy/issues/9003).
         However, it does work with Pylance.
-        The current implementation is a hack to avoid ``mypy`` errors when calling
+        The current implementation is a workaround to avoid ``mypy`` errors when calling
         this function. The type guard does not work with ``mypy`` (the type will not be narrowed at all).
 
         ``mypy`` and Pylance do not support type negation using ``TypeGuard``.
@@ -181,5 +182,3 @@ def name_assignments(src: str) -> list[tuple[str, str]]:
                     assigned_names.append((node.targets[0].id, assignment_src))
 
     return assigned_names
-
-

@@ -5,13 +5,12 @@ from encomp import __version__
 
 def get_requirements(fname: str) -> list[str]:
     with open(fname, encoding='utf-8') as f:
-        return [n for n in f.read().splitlines() if n.strip()]
+        return [n for n in f.read().splitlines() if n.strip() and not n.startswith('#')]
 
 
 install_requires = get_requirements('requirements.txt')
 requirements_optional = get_requirements('requirements-optional.txt')
 requirements_dev = get_requirements('requirements-dev.txt')
-
 
 with open('README.md', encoding='utf-8') as f:
     long_description = f.read()

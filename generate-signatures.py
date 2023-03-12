@@ -4,17 +4,17 @@ from textwrap import dedent, indent
 
 import autopep8
 
-from .utypes import (Dimensionality,
-                     Dimensionless,
-                     Energy,
-                     Mass,
-                     Temperature,
-                     TemperatureDifference,
-                     EnergyPerMass,
-                     HeatingValue,
-                     SpecificHeatCapacity,
-                     LowerHeatingValue,
-                     HigherHeatingValue)
+from encomp.utypes import (Dimensionality,
+                           Dimensionless,
+                           Energy,
+                           Mass,
+                           Temperature,
+                           TemperatureDifference,
+                           EnergyPerMass,
+                           HeatingValue,
+                           SpecificHeatCapacity,
+                           LowerHeatingValue,
+                           HigherHeatingValue)
 
 
 def get_registry():
@@ -130,7 +130,7 @@ def generate_overloaded_signatures(
 
         rquotient_signatures.append(
             get_signature(
-                self, 'MagnitudeScalar', inverted_dimensionality, '__rtruediv__'
+                self, 'float', inverted_dimensionality, '__rtruediv__'
             )
         )
 

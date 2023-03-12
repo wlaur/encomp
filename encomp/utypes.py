@@ -11,63 +11,39 @@ be imported in this case.
 from __future__ import annotations
 
 from typing import (TypeVar,
-                    Union,
-                    Optional,
-                    Protocol,
-                    Literal as L,
-                    runtime_checkable)
+                    Literal,
+                    TYPE_CHECKING)
 from typing import _LiteralGenericAlias  # type: ignore
 
 from abc import ABC
 
 
 import numpy as np
-import numpy.typing as npt
+import pandas as pd
+import polars as pl
 from pint.util import UnitsContainer
-
-MagnitudeScalar = Union[float, int]
-
-
-@runtime_checkable
-class SupportsNumpyConversion(Protocol):
-
-    def to_numpy(self) -> npt.NDArray[np.float64]:
-        # returns a float array (maybe not 64-bit, does not really matter)
-        ...
-
-
-MagnitudeInput = Union[
-    MagnitudeScalar,
-    list[MagnitudeScalar],
-    tuple[MagnitudeScalar, ...],
-    np.ndarray,
-    SupportsNumpyConversion
-]
-
-
-Magnitude = Union[float, npt.NDArray[np.float64]]
 
 
 _BASE_SI_UNITS = ('m', 'kg', 's', 'K', 'mol', 'A', 'cd')
 
 # these string literals are used to infer the dimensionality of commonly created quantities
 # they are only used by type checkers and ignored at runtime
-DimensionlessUnits = L['', '%', '-', 'dimensionless', None]
+DimensionlessUnits = Literal['', '%', '-', 'dimensionless', None]
 
-CurrencyUnits = L[
+CurrencyUnits = Literal[
     'SEK', 'EUR', 'USD',
     'kSEK', 'kEUR', 'kUSD',
     'MSEK', 'MEUR', 'MUSD'
 ]
 
-CurrencyPerEnergyUnits = L[
+CurrencyPerEnergyUnits = Literal[
     'SEK/MWh', 'EUR/MWh',
     'SEK/kWh', 'EUR/kWh',
     'SEK/GWh', 'EUR/GWh',
     'SEK/TWh', 'EUR/TWh'
 ]
 
-CurrencyPerMassUnits = L[
+CurrencyPerMassUnits = Literal[
     'SEK/kg', 'EUR/kg',
     'SEK/t', 'EUR/t',
     'SEK/ton', 'EUR/ton',
@@ -76,7 +52,7 @@ CurrencyPerMassUnits = L[
     'SEK/ug', 'EUR/ug'
 ]
 
-CurrencyPerVolumeUnits = L[
+CurrencyPerVolumeUnits = Literal[
     'SEK/L', 'EUR/L',
     'SEK/l', 'EUR/l',
     'SEK/liter', 'EUR/liter',
@@ -86,7 +62,7 @@ CurrencyPerVolumeUnits = L[
     'SEK/m³', 'EUR/m³'
 ]
 
-CurrencyPerTimeUnits = L[
+CurrencyPerTimeUnits = Literal[
     'SEK/h', 'EUR/h', 'SEK/hr', 'EUR/hr',
     'SEK/hour', 'EUR/hour', 'SEK/d', 'EUR/d',
     'SEK/day', 'EUR/day', 'SEK/w', 'EUR/w',
@@ -96,11 +72,11 @@ CurrencyPerTimeUnits = L[
 ]
 
 
-LengthUnits = L['m', 'meter', 'km', 'cm', 'mm', 'um']
+LengthUnits = Literal['m', 'meter', 'km', 'cm', 'mm', 'um']
 
-MassUnits = L['kg', 'g', 'ton', 'tonne', 't', 'mg', 'ug']
+MassUnits = Literal['kg', 'g', 'ton', 'tonne', 't', 'mg', 'ug']
 
-TimeUnits = L[
+TimeUnits = Literal[
     's', 'second', 'min',
     'minute', 'h', 'hr',
     'hour', 'd', 'day',
@@ -108,48 +84,48 @@ TimeUnits = L[
     'a', 'year', 'ms', 'us'
 ]
 
-TemperatureUnits = L[
+TemperatureUnits = Literal[
     'degC', '°C', 'K',
     'degF', '°F',
     '℃', '℉'
 ]
 
-TemperatureDifferenceUnits = L[
+TemperatureDifferenceUnits = Literal[
     'delta_°C', 'delta_degC', 'Δ°C', 'Δ℃',
     'delta_°F', 'delta_degF', 'Δ°F', 'Δ℉'
 ]
 
-SubstanceUnits = L['mol', 'kmol']
+SubstanceUnits = Literal['mol', 'kmol']
 
-MolarMassUnits = L['g/mol', 'kg/kmol']
+MolarMassUnits = Literal['g/mol', 'kg/kmol']
 
-SubstancePerMassUnits = L['mol/g', 'kmol/kg']
+SubstancePerMassUnits = Literal['mol/g', 'kmol/kg']
 
-CurrentUnits = L['A', 'mA']
+CurrentUnits = Literal['A', 'mA']
 
-LuminosityUnits = L['lm']
+LuminosityUnits = Literal['lm']
 
-AreaUnits = L[
+AreaUnits = Literal[
     'm2', 'm^2', 'm**2', 'm²',
     'cm2', 'cm^2', 'cm**2', 'cm²'
 ]
 
-VolumeUnits = L[
+VolumeUnits = Literal[
     'L', 'l', 'liter',
     'm3', 'm^3', 'm³', 'm**3',
     'dm3', 'dm^3', 'dm³', 'dm**3',
     'cm3', 'cm^3', 'cm³', 'cm**3'
 ]
 
-NormalVolumeUnits = L[
+NormalVolumeUnits = Literal[
     'normal liter', 'Nm3',
     'nm3', 'Nm^3', 'nm^3', 'Nm³',
     'nm³', 'Nm**3', 'nm**3'
 ]
 
-PressureUnits = L['bar', 'kPa', 'Pa', 'MPa', 'mbar', 'mmHg', 'atm']
+PressureUnits = Literal['bar', 'kPa', 'Pa', 'MPa', 'mbar', 'mmHg', 'atm']
 
-MassFlowUnits = L[
+MassFlowUnits = Literal[
     'kg/s', 'kg/h', 'kg/hr',
     'g/s', 'g/h', 'g/hr',
     'ton/h', 't/h', 'ton/hr',
@@ -159,7 +135,7 @@ MassFlowUnits = L[
     'ton/a', 'ton/year'
 ]
 
-VolumeFlowUnits = L[
+VolumeFlowUnits = Literal[
     'm3/s', 'm3/h', 'm3/hr',
     'm**3/s', 'm**3/h', 'm**3/hr',
     'm^3/s', 'm^3/h', 'm^3/hr',
@@ -169,7 +145,7 @@ VolumeFlowUnits = L[
     'L/hr', 'l/hr'
 ]
 
-NormalVolumeFlowUnits = L[
+NormalVolumeFlowUnits = Literal[
     'Nm3/s', 'Nm3/h', 'Nm3/hr',
     'nm3/s', 'nm3/h', 'nm3/hr',
     'Nm^3/s', 'Nm^3/h', 'Nm^3/hr',
@@ -180,7 +156,7 @@ NormalVolumeFlowUnits = L[
     'nm**3/s', 'nm**3/h', 'nm**3/hr'
 ]
 
-DensityUnits = L[
+DensityUnits = Literal[
     'kg/m3', 'kg/m**3',
     'kg/m^3', 'kg/m³',
     'kg/liter', 'g/l',
@@ -188,26 +164,26 @@ DensityUnits = L[
 ]
 
 
-SpecificVolumeUnits = L[
+SpecificVolumeUnits = Literal[
     'm3/kg', 'm^3/kg', 'm³/kg',
     'l/g', 'L/g'
 ]
 
 
-NormalVolumePerMassUnits = L[
+NormalVolumePerMassUnits = Literal[
     'Nm3/kg', 'Nm^3/kg', 'Nm³/kg',
     'nm3/kg', 'nm^3/kg', 'nm³/kg',
 ]
 
 
-EnergyUnits = L[
+EnergyUnits = Literal[
     'J', 'kJ', 'MJ',
     'GJ', 'TJ', 'PJ',
     'kWh', 'MWh', 'Wh',
     'GWh', 'TWh'
 ]
 
-PowerUnits = L[
+PowerUnits = Literal[
     'W', 'kW', 'MW', 'GW', 'TW', 'mW',
     'kWh/d', 'kWh/w', 'kWh/y', 'kWh/yr', 'kWh/year',
     'MWh/d', 'MWh/w', 'MWh/y', 'MWh/yr', 'MWh/year',
@@ -215,27 +191,27 @@ PowerUnits = L[
     'TWh/d', 'TWh/w', 'TWh/y', 'TWh/yr', 'TWh/year'
 ]
 
-VelocityUnits = L[
+VelocityUnits = Literal[
     'm/s', 'km/s', 'm/min',
     'cm/s', 'cm/min',
     'km/h', 'kmh', 'kph'
 ]
 
-DynamicViscosityUnits = L['Pa*s', 'Pa s', 'cP']
+DynamicViscosityUnits = Literal['Pa*s', 'Pa s', 'cP']
 
-KinematicViscosityUnits = L[
+KinematicViscosityUnits = Literal[
     'm2/s', 'm**2/s', 'm^2/s',
     'm²/s', 'cSt', 'cm2/s',
     'cm**2/s', 'cm^2/s', 'cm²/s'
 ]
 
-EnergyPerMassUnits = L[
+EnergyPerMassUnits = Literal[
     'MJ/kg', 'MWh/kg', 'kJ/kg', 'kWh/kg',
     'MJ/t', 'MWh/t', 'kJ/t', 'kWh/t',
     'MJ/ton', 'MWh/ton', 'kJ/ton', 'kWh/ton'
 ]
 
-SpecificHeatCapacityUnits = L[
+SpecificHeatCapacityUnits = Literal[
     'kJ/kg/K', 'kJ/kg/delta_degC', 'kJ/kg/Δ°C', 'kJ/kg/Δ℃', 'kJ/kg/°C', 'kJ/kg/℃', 'kJ/kg/degC',
     'J/kg/K', 'J/kg/delta_degC', 'J/kg/Δ°C', 'J/kg/Δ℃', 'J/kg/°C', 'J/kg/℃', 'J/kg/degC',
     'J/g/K', 'J/g/delta_degC', 'J/g/Δ°C', 'J/g/Δ℃', 'J/g/°C', 'J/g/℃', 'J/g/degC'
@@ -278,7 +254,7 @@ class Dimensionality(ABC):
 
     # set _distinct to False for dimensionalities that are not distinct
     # purely based on the dimensions
-    _distinct: Optional[bool] = None
+    _distinct: bool | None = None
 
     # set to True for intermediate subclasses of Dimensionality
     # these cannot be initialized directly, the must be subclassed further
@@ -411,16 +387,6 @@ class Dimensionality(ABC):
         return cls._distinct
 
 
-# type variables that represent a certain dimensionality
-# the DT_ type variable is used to signify a different dimensionality than DT
-# these type variables are invariant, since
-# Q[DimA] is not a subclass of Q[DimB] if DimA is a subclass of DimB
-# all Q[DT] subclasses are direct subclasses of Q
-# it might make sense to consider DT as covariant, but it won't have any practical advantages,
-# and it does not match the actual implementation
-DT = TypeVar('DT', bound=Dimensionality)
-DT_ = TypeVar('DT_', bound=Dimensionality)
-
 _DimensionlessUC = UnitsContainer({})
 _CurrencyUC = UnitsContainer({'[currency]': 1})
 _NormalUC = UnitsContainer({'[normal]': 1})
@@ -442,6 +408,54 @@ _LuminosityUC = UnitsContainer({'[luminosity]': 1})
 
 class Unknown(Dimensionality):
     dimensions = None  # type: ignore
+
+
+# pyright supports TypeVar default (PEP 696), but it raises an error at runtime
+# this will be implemented in Python 3.12
+# TODO: this will likely not work with mypy
+if TYPE_CHECKING:
+
+    # NOTE: int and float are interchangeable as far as the type checker is concerned,
+    # but list[int] and list[float] are distinct
+    MT = TypeVar(
+        'MT',
+        float,
+        list[float],
+        np.ndarray,
+        pd.Series,
+        pd.DatetimeIndex,
+        pd.Timestamp,
+        pl.Series,
+        pl.Expr,
+        default=np.ndarray
+    )
+
+    # type variables that represent a certain dimensionality
+    # the DT_ type variable is used to signify a different (possible identical) dimensionality than DT
+    # these type variables are invariant, since
+    # Q[DimA] is not a subclass of Q[DimB] if DimA is a subclass of DimB
+    # all Q[DT] subclasses are direct subclasses of Q
+    # it might make sense to consider DT as covariant, but it won't have any practical advantages,
+    # and it does not match the actual implementation
+    DT = TypeVar('DT', bound=Dimensionality, default=Unknown)
+    DT_ = TypeVar('DT_', bound=Dimensionality, default=Unknown)
+
+else:
+    # this does nothing at runtime
+    MT = TypeVar(
+        'MT',
+        float,
+        list[float],
+        np.ndarray,
+        pd.Series,
+        pd.DatetimeIndex,
+        pd.Timestamp,
+        pl.Series,
+        pl.Expr
+    )
+
+    DT = TypeVar('DT', bound=Dimensionality)
+    DT_ = TypeVar('DT_', bound=Dimensionality)
 
 
 class Unset(Dimensionality):

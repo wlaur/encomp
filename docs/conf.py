@@ -59,10 +59,6 @@ templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '**.ipynb_checkpoints']
 
 
-# add mock imports to avoid running modules:
-# autodoc_mock_imports = ['encomp.notebook', 'encomp.magics']
-
-
 # -- Options for HTML output -------------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for

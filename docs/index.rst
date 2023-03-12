@@ -20,7 +20,7 @@ Main functionality of the ``encomp`` library:
    * Extends the `pint <https://pypi.org/project/Pint/>`_ library
    * Uses Python's type system to validate dimensionalities
    * Compatible with ``mypy`` and other type checkers
-   * Integrates with ``np.ndarray`` and ``pd.Series``
+   * Integrates with with Numpy arrays, Pandas series and Polars series and expressions
    * JSON serialization and decoding
 * Implements a flexible interface to `CoolProp <http://www.coolprop.org>`_
    * Module :py:mod:`encomp.fluids`
@@ -29,11 +29,9 @@ Main functionality of the ``encomp`` library:
 * Extends `Sympy <https://pypi.org/project/sympy/>`_
    * Module :py:mod:`encomp.sympy`
    * Adds convenience methods for creating symbols with sub- and superscripts
-   * Additional functions to convert (algebraic) expressions and systems to Python code that supports Numpy arrays
-* Jupyter Notebook integration
-   * Module :py:mod:`encomp.notebook`
-   * Imports commonly used functions and classes
-   * Defines custom Jupyter magics (module :py:mod:`encomp.magics`)
+   * Additional functions to convert (algebraic) expressions and systems to Python code that supports Numpy arrays# add mock imports to avoid running modules:
+# autodoc_mock_imports = ['encomp.notebook', 'encomp.magics']
+
 
 
 The other modules implement calculations related to process engineering and thermodynamics.

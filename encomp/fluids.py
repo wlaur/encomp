@@ -22,7 +22,9 @@ try:
 except ImportError:
 
     warnings.warn(
-        'CoolProp package not installed, install with conda:'
+        'CoolProp package not installed, install with'
+        '\npip install coolprop\n'
+        'or'
         '\nconda install conda-forge::coolprop'
     )
 
@@ -37,10 +39,7 @@ from .structures import flatten
 from .settings import SETTINGS
 from .misc import isinstance_types
 from .units import Quantity, Unit, DimensionalityError, ExpectedDimensionalityError
-from .utypes import (Magnitude,
-                     MagnitudeScalar,
-                     Unknown,
-                     Pressure,
+from .utypes import (Pressure,
                      Temperature,
                      Dimensionless,
                      MolarDensity,
@@ -124,67 +123,67 @@ class CoolPropFluid(ABC):
     # (name1, name2, ...): (unit, description)
     # names are case-sensitive
     PROPERTY_MAP: dict[tuple[CProperty, ...], tuple[UnitString, str]] = {
-        ('DELTA', 'Delta'):                             ('dimensionless', 'Reduced density (rho/rhoc)'),
-        ('DMOLAR', 'Dmolar'):                           ('mol/m³', 'Molar density'),
-        ('D', 'DMASS', 'Dmass'):                        ('kg/m³', 'Mass density'),
-        ('HMOLAR', 'Hmolar'):                           ('J/mol', 'Molar specific enthalpy'),
-        ('H', 'HMASS', 'Hmass'):                        ('J/kg', 'Mass specific enthalpy'),
-        ('P', ):                                        ('Pa', 'Pressure'),
-        ('Q', ):                                        ('dimensionless', 'Mass vapor quality'),
-        ('SMOLAR', 'Smolar'):                           ('J/mol/K', 'Molar specific entropy'),
-        ('S', 'SMASS', 'Smass'):                        ('J/kg/K', 'Mass specific entropy'),
-        ('TAU', 'Tau'):                                 ('dimensionless', 'Reciprocal reduced temperature (Tc/T)'),
-        ('T', ):                                        ('K', 'Temperature'),
-        ('UMOLAR', 'Umolar'):                           ('J/mol', 'Molar specific internal energy'),
-        ('U', 'UMASS', 'Umass'):                        ('J/kg', 'Mass specific internal energy'),
-        ('A', 'SPEED_OF_SOUND', 'speed_of_sound'):      ('m/s', 'Speed of sound'),
-        ('CONDUCTIVITY', 'L', 'conductivity'):          ('W/m/K', 'Thermal conductivity'),
-        ('CP0MASS', 'Cp0mass'):                         ('J/kg/K', 'Ideal gas mass specific constant pressure specific heat'),
-        ('CP0MOLAR', 'Cp0molar'):                       ('J/mol/K', 'Ideal gas molar specific constant pressure specific heat'),
-        ('CPMOLAR', 'Cpmolar'):                         ('J/mol/K', 'Molar specific constant pressure specific heat'),
-        ('CVMASS', 'Cvmass', 'O'):                      ('J/kg/K', 'Mass specific constant volume specific heat'),
-        ('CVMOLAR', 'Cvmolar'):                         ('J/mol/K', 'Molar specific constant volume specific heat'),
-        ('C', 'CPMASS', 'Cpmass'):                      ('J/kg/K', 'Mass specific constant pressure specific heat'),
-        ('DIPOLE_MOMENT', 'dipole_moment'):             ('C*m', 'Dipole moment'),
-        ('GAS_CONSTANT', 'gas_constant'):               ('J/mol/K', 'Molar gas constant'),
-        ('GMOLAR_RESIDUAL', 'Gmolar_residual'):         ('J/mol/K', 'Residual molar Gibbs energy'),
-        ('GMOLAR', 'Gmolar'):                           ('J/mol', 'Molar specific Gibbs energy'),
-        ('G', 'GAMES', 'Gmass'):                        ('J/kg', 'Mass specific Gibbs energy'),
-        ('HELMHOLTZMASS', 'Helmholtzmass'):             ('J/kg', 'Mass specific Helmholtz energy'),
-        ('HELMHOLTZMOLAR', 'Helmholtzmolar'):           ('J/mol', 'Molar specific Helmholtz energy'),
-        ('HMOLAR_RESIDUAL', 'Hmolar_residual'):         ('J/mol/K', 'Residual molar enthalpy'),
+        ('DELTA', 'Delta'): ('dimensionless', 'Reduced density (rho/rhoc)'),
+        ('DMOLAR', 'Dmolar'): ('mol/m³', 'Molar density'),
+        ('D', 'DMASS', 'Dmass'): ('kg/m³', 'Mass density'),
+        ('HMOLAR', 'Hmolar'): ('J/mol', 'Molar specific enthalpy'),
+        ('H', 'HMASS', 'Hmass'): ('J/kg', 'Mass specific enthalpy'),
+        ('P', ): ('Pa', 'Pressure'),
+        ('Q', ): ('dimensionless', 'Mass vapor quality'),
+        ('SMOLAR', 'Smolar'): ('J/mol/K', 'Molar specific entropy'),
+        ('S', 'SMASS', 'Smass'): ('J/kg/K', 'Mass specific entropy'),
+        ('TAU', 'Tau'): ('dimensionless', 'Reciprocal reduced temperature (Tc/T)'),
+        ('T', ): ('K', 'Temperature'),
+        ('UMOLAR', 'Umolar'): ('J/mol', 'Molar specific internal energy'),
+        ('U', 'UMASS', 'Umass'): ('J/kg', 'Mass specific internal energy'),
+        ('A', 'SPEED_OF_SOUND', 'speed_of_sound'): ('m/s', 'Speed of sound'),
+        ('CONDUCTIVITY', 'L', 'conductivity'): ('W/m/K', 'Thermal conductivity'),
+        ('CP0MASS', 'Cp0mass'): ('J/kg/K', 'Ideal gas mass specific constant pressure specific heat'),
+        ('CP0MOLAR', 'Cp0molar'): ('J/mol/K', 'Ideal gas molar specific constant pressure specific heat'),
+        ('CPMOLAR', 'Cpmolar'): ('J/mol/K', 'Molar specific constant pressure specific heat'),
+        ('CVMASS', 'Cvmass', 'O'): ('J/kg/K', 'Mass specific constant volume specific heat'),
+        ('CVMOLAR', 'Cvmolar'): ('J/mol/K', 'Molar specific constant volume specific heat'),
+        ('C', 'CPMASS', 'Cpmass'): ('J/kg/K', 'Mass specific constant pressure specific heat'),
+        ('DIPOLE_MOMENT', 'dipole_moment'): ('C*m', 'Dipole moment'),
+        ('GAS_CONSTANT', 'gas_constant'): ('J/mol/K', 'Molar gas constant'),
+        ('GMOLAR_RESIDUAL', 'Gmolar_residual'): ('J/mol/K', 'Residual molar Gibbs energy'),
+        ('GMOLAR', 'Gmolar'): ('J/mol', 'Molar specific Gibbs energy'),
+        ('G', 'GAMES', 'Gmass'): ('J/kg', 'Mass specific Gibbs energy'),
+        ('HELMHOLTZMASS', 'Helmholtzmass'): ('J/kg', 'Mass specific Helmholtz energy'),
+        ('HELMHOLTZMOLAR', 'Helmholtzmolar'): ('J/mol', 'Molar specific Helmholtz energy'),
+        ('HMOLAR_RESIDUAL', 'Hmolar_residual'): ('J/mol/K', 'Residual molar enthalpy'),
         ('ISENTROPIC_EXPANSION_COEFFICIENT',
-         'isentropic_expansion_coefficient'):           ('dimensionless', 'Isentropic expansion coefficient'),
+         'isentropic_expansion_coefficient'): ('dimensionless', 'Isentropic expansion coefficient'),
         ('ISOBARIC_EXPANSION_COEFFICIENT',
-         'isobaric_expansion_coefficient'):             ('1/K', 'Isobaric expansion coefficient'),
+         'isobaric_expansion_coefficient'): ('1/K', 'Isobaric expansion coefficient'),
         ('ISOTHERMAL_COMPRESSIBILITY',
-         'isothermal_compressibility'):                 ('1/Pa', 'Isothermal compressibility'),
-        ('I', 'SURFACE_TENSION', 'surface_tension'):    ('N/m', 'Surface tension'),
+         'isothermal_compressibility'): ('1/Pa', 'Isothermal compressibility'),
+        ('I', 'SURFACE_TENSION', 'surface_tension'): ('N/m', 'Surface tension'),
         ('M', 'MOLARMASS', 'MOLAR_MASS', 'MOLEMASS',
-         'molar_mass', 'molarmass', 'molemass'):        ('kg/mol', 'Molar mass'),
+         'molar_mass', 'molarmass', 'molemass'): ('kg/mol', 'Molar mass'),
         ('PCRIT', 'P_CRITICAL', 'Pcrit',
-         'p_critical', 'pcrit'):                        ('Pa', 'Pressure at the critical point'),
-        ('PHASE', 'Phase'):                             ('dimensionless', 'Phase index as a float'),
-        ('PMAX', 'P_MAX', 'P_max', 'pmax'):             ('Pa', 'Maximum pressure limit'),
-        ('PMIN', 'P_MIN', 'P_min', 'pmin'):             ('Pa', 'Minimum pressure limit'),
-        ('PRANDTL', 'Prandtl'):                         ('dimensionless', 'Prandtl number'),
+         'p_critical', 'pcrit'): ('Pa', 'Pressure at the critical point'),
+        ('PHASE', 'Phase'): ('dimensionless', 'Phase index as a float'),
+        ('PMAX', 'P_MAX', 'P_max', 'pmax'): ('Pa', 'Maximum pressure limit'),
+        ('PMIN', 'P_MIN', 'P_min', 'pmin'): ('Pa', 'Minimum pressure limit'),
+        ('PRANDTL', 'Prandtl'): ('dimensionless', 'Prandtl number'),
         ('PTRIPLE', 'P_TRIPLE', 'p_triple', 'ptriple'): ('Pa', 'Pressure at the triple point (pure only)'),
-        ('P_REDUCING', 'p_reducing'):                   ('Pa', 'Pressure at the reducing point'),
+        ('P_REDUCING', 'p_reducing'): ('Pa', 'Pressure at the reducing point'),
         ('RHOCRIT', 'RHOMASS_CRITICAL',
-         'rhocrit', 'rhomass_critical'):                ('kg/m³', 'Mass density at critical point'),
-        ('RHOMASS_REDUCING', 'rhomass_reducing'):       ('kg/m³', 'Mass density at reducing point'),
-        ('RHOMOLAR_CRITICAL', 'rhomolar_critical'):     ('mol/m³', 'Molar density at critical point'),
-        ('RHOMOLAR_REDUCING', 'rhomolar_reducing'):     ('mol/m³', 'Molar density at reducing point'),
-        ('SMOLAR_RESIDUAL', 'Smolar_residual'):         ('J/mol/K', 'Residual molar entropy'),
+         'rhocrit', 'rhomass_critical'): ('kg/m³', 'Mass density at critical point'),
+        ('RHOMASS_REDUCING', 'rhomass_reducing'): ('kg/m³', 'Mass density at reducing point'),
+        ('RHOMOLAR_CRITICAL', 'rhomolar_critical'): ('mol/m³', 'Molar density at critical point'),
+        ('RHOMOLAR_REDUCING', 'rhomolar_reducing'): ('mol/m³', 'Molar density at reducing point'),
+        ('SMOLAR_RESIDUAL', 'Smolar_residual'): ('J/mol/K', 'Residual molar entropy'),
         ('TCRIT', 'T_CRITICAL',
-         'T_critical', 'Tcrit'):                        ('K', 'Temperature at the critical point'),
-        ('TMAX', 'T_MAX', 'T_max', 'Tmax'):             ('K', 'Maximum temperature limit'),
-        ('TMIN', 'T_MIN', 'T_min', 'Tmin'):             ('K', 'Minimum temperature limit'),
+         'T_critical', 'Tcrit'): ('K', 'Temperature at the critical point'),
+        ('TMAX', 'T_MAX', 'T_max', 'Tmax'): ('K', 'Maximum temperature limit'),
+        ('TMIN', 'T_MIN', 'T_min', 'Tmin'): ('K', 'Minimum temperature limit'),
         ('TTRIPLE', 'T_TRIPLE', 'T_triple', 'Ttriple'): ('K', 'Temperature at the triple point'),
-        ('T_FREEZE', 'T_freeze'):                       ('K', 'Freezing temperature for incompressible solutions'),
-        ('T_REDUCING', 'T_reducing'):                   ('K', 'Temperature at the reducing point'),
-        ('V', 'VISCOSITY', 'viscosity'):                ('Pa*s', 'Viscosity'),
-        ('Z', ):                                        ('dimensionless', 'Compressibility factor')
+        ('T_FREEZE', 'T_freeze'): ('K', 'Freezing temperature for incompressible solutions'),
+        ('T_REDUCING', 'T_reducing'): ('K', 'Temperature at the reducing point'),
+        ('V', 'VISCOSITY', 'viscosity'): ('Pa*s', 'Viscosity'),
+        ('Z', ): ('dimensionless', 'Compressibility factor')
     }
 
     ALL_PROPERTIES: set[CProperty] = set(flatten(list(PROPERTY_MAP)))
@@ -484,7 +483,7 @@ class CoolPropFluid(ABC):
     ) -> Magnitude:
 
         # case 1: all inputs are scalar, output is scalar
-        if all(isinstance_types(pt[1], MagnitudeScalar) for pt in points):
+        if all(isinstance_types(pt[1], float) for pt in points):
             return self.evaluate_single(output, *points)  # type: ignore
 
         # at this point, the output will be a vector of at least length 1
@@ -537,7 +536,7 @@ class CoolPropFluid(ABC):
 
         def expand_scalars(x: Magnitude) -> np.ndarray:
 
-            if isinstance_types(x, MagnitudeScalar):
+            if isinstance_types(x, float):
                 return np.repeat(float(x), N).astype(float).reshape(shape)
 
             # TODO: typing.TypeGuard if-else constructs are not handled by the type checker
@@ -1025,27 +1024,27 @@ class HumidAir(CoolPropFluid):
     # unit and description for properties in function HAPropsSI
     PROPERTY_MAP: dict[tuple[CProperty, ...], tuple[str, str]] = {
 
-        ('B', 'Twb', 'T_wb', 'WetBulb'):  ('K', 'Wet-Bulb Temperature'),
-        ('C', 'cp'):                      ('J/kg/K', 'Mixture specific heat per unit dry air'),
-        ('Cha', 'cp_ha'):                 ('J/kg/K', 'Mixture specific heat per unit humid air'),
-        ('CV', ):                         ('J/kg/K', 'Mixture specific heat at constant volume per unit dry air'),
-        ('CVha', 'cv_ha'):                ('J/kg/K', 'Mixture specific heat at constant volume per unit humid air'),
+        ('B', 'Twb', 'T_wb', 'WetBulb'): ('K', 'Wet-Bulb Temperature'),
+        ('C', 'cp'): ('J/kg/K', 'Mixture specific heat per unit dry air'),
+        ('Cha', 'cp_ha'): ('J/kg/K', 'Mixture specific heat per unit humid air'),
+        ('CV', ): ('J/kg/K', 'Mixture specific heat at constant volume per unit dry air'),
+        ('CVha', 'cv_ha'): ('J/kg/K', 'Mixture specific heat at constant volume per unit humid air'),
         ('D', 'Tdp', 'DewPoint', 'T_dp'): ('K', 'Dew-Point Temperature'),
-        ('H', 'Hda', 'Enthalpy'):         ('J/kg', 'Mixture enthalpy per dry air'),
-        ('Hha', ):                        ('J/kg', 'Mixture enthalpy per humid air'),
-        ('K', 'k', 'Conductivity'):       ('W/m/K', 'Mixture thermal conductivity'),
-        ('M', 'Visc', 'mu'):              ('Pa*s', 'Mixture viscosity'),
-        ('psi_w', 'Y'):                   ('dimensionless', 'Water mole fraction'),
-        ('P', ):                          ('Pa', 'Pressure'),
-        ('P_w', ):                        ('Pa', 'Partial pressure of water vapor'),
-        ('R', 'RH', 'RelHum'):            ('dimensionless', 'Relative humidity in [0, 1]'),
-        ('S', 'Sda', 'Entropy'):          ('J/kg/K', 'Mixture entropy per unit dry air'),
-        ('Sha', ):                        ('J/kg/K', 'Mixture entropy per unit humid air'),
-        ('T', 'Tdb', 'T_db'):             ('K', 'Dry-Bulb Temperature'),
-        ('V', 'Vda'):                     ('m³/kg', 'Mixture volume per unit dry air'),
-        ('Vha', ):                        ('m³/kg', 'Mixture volume per unit humid air'),
-        ('W', 'Omega', 'HumRat'):         ('dimensionless', 'Humidity Rat mass water per mass dry air'),
-        ('Z', ):                          ('dimensionless', 'Compressibility factor')
+        ('H', 'Hda', 'Enthalpy'): ('J/kg', 'Mixture enthalpy per dry air'),
+        ('Hha', ): ('J/kg', 'Mixture enthalpy per humid air'),
+        ('K', 'k', 'Conductivity'): ('W/m/K', 'Mixture thermal conductivity'),
+        ('M', 'Visc', 'mu'): ('Pa*s', 'Mixture viscosity'),
+        ('psi_w', 'Y'): ('dimensionless', 'Water mole fraction'),
+        ('P', ): ('Pa', 'Pressure'),
+        ('P_w', ): ('Pa', 'Partial pressure of water vapor'),
+        ('R', 'RH', 'RelHum'): ('dimensionless', 'Relative humidity in [0, 1]'),
+        ('S', 'Sda', 'Entropy'): ('J/kg/K', 'Mixture entropy per unit dry air'),
+        ('Sha', ): ('J/kg/K', 'Mixture entropy per unit humid air'),
+        ('T', 'Tdb', 'T_db'): ('K', 'Dry-Bulb Temperature'),
+        ('V', 'Vda'): ('m³/kg', 'Mixture volume per unit dry air'),
+        ('Vha', ): ('m³/kg', 'Mixture volume per unit humid air'),
+        ('W', 'Omega', 'HumRat'): ('dimensionless', 'Humidity Rat mass water per mass dry air'),
+        ('Z', ): ('dimensionless', 'Compressibility factor')
     }
 
     ALL_PROPERTIES: set[CProperty] = set(flatten(list(PROPERTY_MAP)))

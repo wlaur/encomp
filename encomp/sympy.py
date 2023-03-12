@@ -26,11 +26,6 @@ from .settings import SETTINGS
 from .units import Quantity
 
 
-# TODO: what is this map used for?
-# to_identifier already uses lru_cache
-_IDENTIFIER_MAP: dict[str, str] = {}
-
-
 @lru_cache()
 def to_identifier(s: Union[sp.Symbol, str]) -> str:
     """
@@ -51,11 +46,6 @@ def to_identifier(s: Union[sp.Symbol, str]) -> str:
     str
         Valid Python identifier created from the input symbol
     """
-
-    s_inp = s
-
-    if isinstance(s, str) and s in _IDENTIFIER_MAP:
-        return _IDENTIFIER_MAP[s]
 
     # assume that input strings are already identifiers
     if isinstance(s, str):
@@ -81,9 +71,8 @@ def to_identifier(s: Union[sp.Symbol, str]) -> str:
 
     if not s.isidentifier():
         raise ValueError(
-            f'Symbol could not be converted to a valid Python identifer: {s_orig}')
-
-    _IDENTIFIER_MAP[str(s_inp)] = s
+            f'Symbol could not be converted to a valid Python identifer: {s_orig}'
+        )
 
     return s
 
@@ -549,7 +538,7 @@ def typeset_chemical(s: str) -> str:
     for n in re.sub(r'[A-Z]_\d', r'|\g<0>|', s).split('|'):
 
         if re.match(r'[A-Z]_\d', n):
-            parts.extend([f'{n[:-2]}', '}',  f'_{n[-1]}', '\\text{'])
+            parts.extend([f'{n[:-2]}', '}', f'_{n[-1]}', '\\text{'])
         else:
             parts.append(n)
 

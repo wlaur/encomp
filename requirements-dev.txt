@@ -1,3 +1,5 @@
+fire
+jupyter
 autopep8
 pytest
 coverage

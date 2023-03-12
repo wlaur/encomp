@@ -2,10 +2,7 @@ from typing import Optional
 from textwrap import dedent
 
 
-from ..misc import (name_assignments,
-                    isinstance_types,
-                    name_assignments,
-                    grid_dimensions)
+from ..misc import name_assignments, isinstance_types, grid_dimensions
 
 
 def test_grid_dimensions():

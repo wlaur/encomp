@@ -68,7 +68,7 @@ from uncertainties import ufloat
 from uncertainties.core import AffineScalarFunc
 
 from .units import Quantity, Unit
-from .utypes import Magnitude, Dimensionality
+from .utypes import Dimensionality
 from .misc import isinstance_types
 
 # type alias for objects that can be serialized using json.dumps()
@@ -204,7 +204,7 @@ def custom_serializer(obj: Any) -> JSON:
 
         return {
             'type': 'Quantity',
-            'dimensionality': obj.dimensionality_type.__name__,
+            'dimensionality': obj.__dimensionality_type.__name__,
             'data': [serialize(obj.m), str(obj.u._units)]
         }
 
@@ -370,8 +370,7 @@ def decode(inp: JSON,
                 val = decode(val)
 
                 # check if this list has types that matches a serialized Quantity
-                if (isinstance_types(val, Magnitude) and
-                        isinstance_types(unit, Union[Unit, str])):
+                if (isinstance_types(unit, Union[Unit, str])):
 
                     if dimensionality is None:
                         return Quantity(val, unit)

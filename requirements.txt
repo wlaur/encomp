@@ -6,6 +6,7 @@ typing-extensions
 asttokens
 numpy
 pandas
+polars
 coolprop
 sympy
 pint>=0.20.1

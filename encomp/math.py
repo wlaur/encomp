@@ -49,7 +49,7 @@ def interpolate(
 
     if interp1d is None:
         raise ModuleNotFoundError(
-            f'Module scipy.interpolate was not found, '
+            'Module scipy.interpolate was not found, '
             'install with "pip install scipy"'
         )
 
@@ -128,7 +128,8 @@ def exponential(x_start: float,
     :math:`(x_{\\text{start}}, y_{\\text{start}}) \\rightarrow (x_{\\text{end}}, y_{\\text{end}})`
 
     .. math::
-        y(x) = A + B \\cdot \\exp{\\left(k \\cdot \\frac{x - x_{\\text{start}}}{x_{\\text{end}} - x_{\\text{start}}}\\right)}
+        y(x) = A + B
+        \\cdot \\exp{\\left(k \\cdot \\frac{x - x_{\\text{start}}}{x_{\\text{end}} - x_{\\text{start}}}\\right)}
 
     The parameter ``k`` is used to control the shape of the curve.
 

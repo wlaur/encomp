@@ -70,7 +70,7 @@ def heat_balance(
             'Must pass exactly two parameters out of dT, Q_h and m')
 
     params = {
-        'm':  (Union[Quantity[Mass], Quantity[MassFlow]], ('kg', 'kg/s')),
+        'm': (Union[Quantity[Mass], Quantity[MassFlow]], ('kg', 'kg/s')),
         'dT': (Union[Quantity[TemperatureDifference], Quantity[Temperature]], ('delta_degC', )),
         'Q_h': (Union[Quantity[Energy], Quantity[Power]], ('kJ', 'kW'))
     }
@@ -186,7 +186,7 @@ def intermediate_temperatures(
 
     if fsolve is None:
         raise ModuleNotFoundError(
-            f'Module scipy.optimize was not found, '
+            'Module scipy.optimize was not found, '
             'install with "pip install scipy"'
         )
 
