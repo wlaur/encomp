@@ -27,7 +27,7 @@ DEFAULT_CP = Quantity(4.18, 'kJ/kg/K').asdim(SpecificHeatCapacity)
 
 def heat_balance(
     *args: Quantity[Mass] | Quantity[MassFlow] | Quantity[Energy] | Quantity[Power] |
-    Quantity[TemperatureDifference],
+    Quantity[TemperatureDifference] | Quantity[Temperature],
     cp: Quantity[SpecificHeatCapacity] = DEFAULT_CP
 ) -> Quantity[Mass] | Quantity[MassFlow] | Quantity[Energy] | Quantity[Power] | Quantity[TemperatureDifference]:
     """
@@ -42,7 +42,8 @@ def heat_balance(
     ----------
     args : Quantity
         The two known variables in the heat balance equation:
-        mass, mass flow, energy, power or temperature difference
+        mass, mass flow, energy, power or temperature difference.
+        Temperature input is interpreted as temperature difference.
     cp : Quantity[SpecificHeatCapacity], optional
         Heat capacity, by default 4.18 kg/kJ/K (water)
 
@@ -61,7 +62,7 @@ def heat_balance(
 
     params = {
         'm': (Quantity[Mass] | Quantity[MassFlow], ('kg', 'kg/s')),
-        'dT': (Quantity[TemperatureDifference], ('delta_degC', )),
+        'dT': (Quantity[TemperatureDifference] | Quantity[Temperature], ('delta_degC', )),
         'Q_h': (Quantity[Energy] | Quantity[Power], ('kJ', 'kW'))
     }
 
@@ -90,7 +91,6 @@ def heat_balance(
         unit_idx = 1
     else:
         unit_idx = 0
-
 
     if 'Q_h' not in vals:
         ret = cp * vals['m'] * vals['dT']

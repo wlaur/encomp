@@ -2,7 +2,7 @@
 Functions related to converting quantities.
 """
 
-from typing import Any, overload
+from typing import overload
 
 from .units import Quantity
 from .utypes import Mass, MassFlow, Density, Volume, VolumeFlow, MT

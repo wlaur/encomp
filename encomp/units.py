@@ -176,7 +176,8 @@ def define_dimensionality(name: str, symbol: str | None = None) -> None:
     if name in CUSTOM_DIMENSIONS:
         raise DimensionalityRedefinitionError(
             'Cannot define new dimensionality with '
-            f'name: {name}, a dimensionality with this name was already defined')
+            f'name: {name}, a dimensionality with this name was already defined'
+        )
 
     definition_str = f'{name} = [{name}]'
 
@@ -335,7 +336,7 @@ class Quantity(
 
         try:
             dim, mt = types
-        except TypeError:
+        except Exception:
             dim, mt = types, None
 
         if isinstance(dim, TypeVar):
@@ -902,8 +903,8 @@ class Quantity(
         yield cls.validate
 
     @classmethod
-    def validate(cls, qty: Quantity[DT, MT]) -> Quantity[DT, MT]:
-        raise NotImplementedError
+    def validate(cls, qty) -> Quantity[DT, MT]:
+        return cls(qty, _allow_quantity_input=True)
 
     def check_compatibility(self, other: Quantity | float | int) -> None:
         """
@@ -1070,7 +1071,7 @@ class Quantity(
             self._dimensionality_type is Temperature and
             other._dimensionality_type is Temperature
         ):
-            return Quantity[TemperatureDifference](ret)
+            return Quantity[TemperatureDifference, type(ret.m)](ret.m, ret.u)
 
         return self.subclass(ret, _allow_quantity_input=True)
 

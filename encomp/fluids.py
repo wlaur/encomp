@@ -81,6 +81,7 @@ UnitString = Annotated[str, 'Unit string']
 # np.ndarray, it could be float also if all inputs are scalar
 # might be best to change this API to always use np.ndarray for the outputs
 
+
 class CoolPropFluid(ABC):
 
     name: CName
@@ -1204,11 +1205,3 @@ class HumidAir(CoolPropFluid):
         s = f'<{self.__class__.__name__}, {props_str}>'
 
         return s
-
-
-from .units import Quantity as Q
-
-
-w = Water(T=Q(25, 'degC'), P=Q(25, 'kPa'))
-
-w.P
