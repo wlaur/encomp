@@ -206,8 +206,7 @@ class QuantityMeta(type):
 class Unit(PlainUnit,
            NumpyUnit,
            FormattingUnit,
-           Generic[DT]
-           ):
+           Generic[DT]):
 
     pass
 
@@ -222,7 +221,7 @@ class Quantity(
     metaclass=QuantityMeta
 ):
     """
-    Subclass of ``PlainQuantity`` with additional functionality
+    Subclass of pint's ``Quantity`` with additional type hints,  functionality
     and integration with other libraries.
 
     Encodes the output dimensionalities of some common operations,
@@ -241,7 +240,7 @@ class Quantity(
     # mapping from dimensionality subclass name to quantity subclass
     # this dict will be populated at runtime
     # use a custom class attribute (not cls.__subclasses__()) for more control
-    _subclasses: dict[tuple[str, str], type[Quantity]] = {}
+    _subclasses: dict[tuple[str, str | None], type[Quantity]] = {}
 
     # used to validate dimensionality and magnitude type,
     # if None the dimensionality is not checked
@@ -273,43 +272,63 @@ class Quantity(
         return self.__format__(self._REGISTRY.default_format)
 
     @classmethod
-    def _get_dimensional_subclass(cls, dim: type[DT], mt: type[MT]) -> type[Quantity[DT, MT]]:
+    def _get_dimensional_subclass(cls, dim: type[DT], mt: type[MT] | None) -> type[Quantity[DT, MT]]:
+
+        # there are two levels of subclasses to Quantity: DimensionalQuantity and
+        # DimensionalMagnitudeQuantity, which is a subclass of DimensionalQuantity
+        # this distinction only exists at runtime, the type checker will use the
+        # default magnitude type (np.ndarray) in case the magnitude generic is omitted
 
         dim_name = dim.__name__
 
-        try:
-            mt_name = mt.__name__
-        except AttributeError:
-            raise TypeError(
-                f'Cannot use magnitude type: {mt}'
+        # check if an existing DimensionalQuantity subclass already has been created
+        if cached_dim_qty := cls._subclasses.get((dim_name, None)):
+            DimensionalQuantity = cached_dim_qty
+
+        else:
+
+            DimensionalQuantity = type(
+                f'Quantity[{dim_name}]',
+                (Quantity,),
+                {
+                    '_dimensionality_type': dim,
+                    '_magnitude_type': None,
+                    '__class__': Quantity,
+                }
             )
 
-        if cached := cls._subclasses.get((dim_name, mt_name)):
-            return cached
+            cls._subclasses[dim_name, None] = DimensionalQuantity
 
-        quantity_name = f'Quantity[{dim_name}, {mt_name}]'
+        if mt is None:
+            return DimensionalQuantity
 
-        DimensionalQuantity = type(
-            quantity_name,
-            (Quantity,),
-            {
-                '_dimensionality_type': dim,
-                '_magnitude_type': mt,
-                '__class__': Quantity,
-            }
-        )
+        mt_name = mt.__name__
 
-        cls._subclasses[dim_name, mt_name] = DimensionalQuantity
+        # check if an existing DimensionalMagnitudeQuantity subclass already has been created
+        if cached_dim_magnitude_qty := cls._subclasses.get((dim_name, mt_name)):
+            DimensionalMagnitudeQuantity = cached_dim_magnitude_qty
+        else:
+            DimensionalMagnitudeQuantity = type(
+                f'Quantity[{dim_name}, {mt_name}]',
+                (DimensionalQuantity,),
+                {
+                    '_magnitude_type': mt,
+                    '__class__': DimensionalQuantity,
+                }
+            )
 
-        return DimensionalQuantity
+            cls._subclasses[dim_name, mt_name] = DimensionalMagnitudeQuantity
+
+        return DimensionalMagnitudeQuantity
 
     def __class_getitem__(cls, types: type[DT] | tuple[type[DT], type[MT]]) -> type[Quantity[DT, MT]]:
+
+        # default magnitude type is np.ndarray, this is hard-coded in several places
 
         try:
             dim, mt = types
         except TypeError:
-            # default magnitude type is np.ndarray, this is hard-coded in several places
-            dim, mt = types, np.ndarray
+            dim, mt = types, None
 
         if isinstance(dim, TypeVar):
             return cls._get_dimensional_subclass(Variable, mt)
@@ -336,6 +355,7 @@ class Quantity(
             )
 
         subcls = cls._get_dimensional_subclass(dim, mt)
+
         return subcls
 
     @staticmethod
@@ -526,7 +546,6 @@ class Quantity(
             subcls = cls._get_dimensional_subclass(dim, type(val))
 
             return subcls(val, valid_unit)
-
         if cls._dimensionality_type is Unset:
             raise TypeError
         if cls._dimensionality_type.dimensions is None:
@@ -549,7 +568,7 @@ class Quantity(
         if _magnitude_type_datetime:
             if not valid_unit.dimensionless:
                 raise ValueError(
-                    f'Setting a datetime magnitude type ({cls._magnitude_type.__qualname__}) '
+                    f'Setting a datetime magnitude type ({cls._magnitude_type.__name__}) '
                     'is only valid for dimensionless Quantities, '
                     f'passed unit {unit} ({valid_unit.dimensionality})'
                 )
@@ -631,12 +650,17 @@ class Quantity(
                     f'to {unit} (dimensionality {new_name})'
                 )
 
-    def to_reduced_units(self) -> Quantity[DT]:
+    def to_reduced_units(self) -> Quantity[DT, MT]:
 
         ret = super().to_reduced_units()
         return self.subclass(ret, _allow_quantity_input=True)
 
-    def to_base_units(self) -> Quantity[DT]:
+    def to_root_units(self) -> Quantity[DT, MT]:
+
+        ret = super().to_root_units()
+        return self.subclass(ret, _allow_quantity_input=True)
+
+    def to_base_units(self) -> Quantity[DT, MT]:
 
         self._check_temperature_compatibility(Unit('kelvin'))
 
