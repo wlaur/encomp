@@ -202,6 +202,14 @@ class QuantityMeta(type):
     def __hash__(mcls):
         return id(mcls)
 
+    def __call__(mcls, *args, **kwargs):
+
+        # TODO: determine if this is called from the underlying pint
+        # API or directly and validate the subclass and unit dimensionality
+        # based on this
+
+        return super().__call__(*args, **kwargs)
+
 
 class Unit(PlainUnit,
            NumpyUnit,
@@ -497,12 +505,6 @@ class Quantity(
                 'to separate magnitude and unit objects first.'
             )
 
-        if cls._dimensionality_type is Unknown:
-            raise TypeError
-
-        if cls._dimensionality_type is Variable:
-            raise TypeError
-
         valid_unit = cls._validate_unit(unit)
 
         # bool is always converted to float, the type hints don't consider bool at all
@@ -522,66 +524,57 @@ class Quantity(
         if isinstance(val, int):
             val = float(val)
 
-        _original_magnitude_type = cls._get_magnitude_type(val)
+        _original_magnitude_type = cls._original_magnitude_type or cls._get_magnitude_type(val)
 
-        if cls._dimensionality_type is Unset:
+        if isinstance(val, pd.Series):
+            val = val.to_numpy()
+
+        # TODO: how to validate that the subclass has the same dimensionality
+        # as the input unit?
+        # cannot raise error here since this breaks the pint.PlainQuantity methods
+        # that use return self.__class__(...)
+        if (
+            cls._dimensionality_type is Unset or
+            str(cls._dimensionality_type.dimensions) != str(valid_unit.dimensionality)
+        ):
 
             # special case for temperature difference
             if valid_unit._units in cls.TEMPERATURE_DIFFERENCE_UCS:
                 subcls = cls._get_dimensional_subclass(TemperatureDifference, type(val))
                 return subcls(val, valid_unit)
 
-            # in case this Quantity was initialized without specifying
-            # the dimensionality, check the dimensionality and return the
-            # subclass with correct dimensionality
-            # the name of the dimensionality class will be the first one
-            # defined with this UnitsContainer, i.e. custom dimensions
-            # will not override the defaults when creating Quantities with
-            # a dynamically determined subclass
             dim = Dimensionality.get_dimensionality(
                 valid_unit.dimensionality
             )
 
             # the __new__ method of the new subclass will be called instead
             subcls = cls._get_dimensional_subclass(dim, type(val))
+            subcls._original_magnitude_type = _original_magnitude_type
 
             return subcls(val, valid_unit)
-        if cls._dimensionality_type is Unset:
-            raise TypeError
-        if cls._dimensionality_type.dimensions is None:
-            raise TypeError
-        if cls._dimensionality_type.dimensions is Dimensionality._UnsetUC:
-            raise TypeError
+
+        # TODO:
 
         _val_datetime = isinstance(val, (pd.DatetimeIndex, pl.Datetime, pd.Timestamp))
 
         if _val_datetime:
-            if not valid_unit.dimensionless:
+            if not valid_unit.dimensionless or Quantity(1, valid_unit).to_base_units().m != 1:
                 raise ValueError(
                     f'Passing datetime magnitude(s) ({val}) '
-                    'is only valid for dimensionless Quantities, '
+                    'is only valid for dimensionless Quantities with no scaling factor, '
                     f'passed unit {unit} ({valid_unit.dimensionality})'
                 )
 
         _magnitude_type_datetime = cls._magnitude_type in (pd.Timestamp, pd.DatetimeIndex, pl.Datetime)
 
         if _magnitude_type_datetime:
-            if not valid_unit.dimensionless:
+
+            if not valid_unit.dimensionless or Quantity(1, valid_unit).to_base_units().m != 1:
                 raise ValueError(
                     f'Setting a datetime magnitude type ({cls._magnitude_type.__name__}) '
-                    'is only valid for dimensionless Quantities, '
+                    'is only valid for dimensionless Quantities with no scaling factor, '
                     f'passed unit {unit} ({valid_unit.dimensionality})'
                 )
-
-        expected_dimensionality = cls._dimensionality_type
-
-        # compare string representation to avoid issues with float accuracy and hashing
-        if str(valid_unit.dimensionality) != str(expected_dimensionality.dimensions):
-            raise ExpectedDimensionalityError(
-                f'Quantity with unit "{str(valid_unit) or "dimensionless"}" has incorrect '
-                f'dimensionality {valid_unit.dimensionality}, '
-                f'expected {expected_dimensionality.dimensions}'
-            )
 
         # at this point the value and dimensionality of the units are verified to be correct
         # pass the inputs to pint to actually construct the Quantity
@@ -621,6 +614,9 @@ class Quantity(
 
         if self._original_magnitude_type == pd.Timestamp:
             return pd.Timestamp(self._magnitude)
+
+        if self._original_magnitude_type == pd.Series:
+            return pd.Series(self._magnitude)
 
         return self._magnitude
 
@@ -1005,7 +1001,6 @@ class Quantity(
         return self.subclass(ret, _allow_quantity_input=True)
 
     def __truediv__(self, other):
-
         ret = super().__truediv__(other)
 
         if isinstance(other, (Quantity, Unit)):

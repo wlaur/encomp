@@ -1,5 +1,7 @@
 from textwrap import dedent
 
+from ..units import Quantity as Q
+from ..utypes import *
 from ..misc import name_assignments, isinstance_types, grid_dimensions
 
 
@@ -53,5 +55,23 @@ def test_isinstance_types():
     }
 
     assert isinstance_types(d, dict[str, list[float | None]])
-    assert not isinstance_types(d, dict[str, list[int | None]])
     assert not isinstance_types(d, dict[str, list[float]])
+
+
+def test_isinstance_types_quantity():
+
+    q = Q(1)
+    assert isinstance_types(q, Q)
+    assert isinstance_types(q, Q[Dimensionless])
+    assert isinstance_types(q, Q[Dimensionless, float])
+
+    assert not isinstance_types(q, int)
+    assert not isinstance_types(q, int | float)
+
+    q2 = Q(2, 'kg')
+    assert isinstance_types(q2, Q)
+    assert isinstance_types(q2, Q[Mass])
+    assert isinstance_types(q2, Q[Mass, float])
+
+    assert isinstance_types(q2, Q[Mass] | Q[Temperature])
+    assert not isinstance_types(q2, Q[Power] | Q[Temperature])

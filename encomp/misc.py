@@ -6,6 +6,7 @@ import asttokens
 
 from typing import Any, TypeVar, Type, overload
 from typing import _TypedDictMeta, _GenericAlias  # type: ignore
+from types import UnionType
 
 from typeguard import check_type
 from typing_extensions import TypeGuard
@@ -84,6 +85,9 @@ def isinstance_types(obj: Any, expected: _GenericAlias | type) -> bool:
         # typing.TypedDict is a special case
         if not isinstance(expected, _TypedDictMeta):
             return isinstance(obj, expected)
+
+    if type(expected) is UnionType:
+        return isinstance(obj, expected)
 
     try:
 

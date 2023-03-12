@@ -7,7 +7,6 @@ try:
 except ImportError:
     fsolve = None
 
-from .misc import isinstance_types
 from .units import Quantity
 from .constants import CONSTANTS
 from .utypes import (Mass,
@@ -28,9 +27,9 @@ DEFAULT_CP = Quantity(4.18, 'kJ/kg/K').asdim(SpecificHeatCapacity)
 
 def heat_balance(
     *args: Quantity[Mass] | Quantity[MassFlow] | Quantity[Energy] | Quantity[Power] |
-    Quantity[TemperatureDifference] | Quantity[Temperature],
+    Quantity[TemperatureDifference],
     cp: Quantity[SpecificHeatCapacity] = DEFAULT_CP
-) -> Quantity[Mass] | Quantity[MassFlow] | Quantity[Energy] | Quantity[Power] | Quantity[TemperatureDifference] | Quantity[Temperature]:
+) -> Quantity[Mass] | Quantity[MassFlow] | Quantity[Energy] | Quantity[Power] | Quantity[TemperatureDifference]:
     """
     Solves the heat balance equation
 
@@ -57,11 +56,12 @@ def heat_balance(
 
     if len(args) != 2:
         raise ValueError(
-            'Must pass exactly two parameters out of dT, Q_h and m')
+            'Must pass exactly two parameters out of dT, Q_h and m'
+        )
 
     params = {
         'm': (Quantity[Mass] | Quantity[MassFlow], ('kg', 'kg/s')),
-        'dT': (Quantity[TemperatureDifference] | Quantity[Temperature], ('delta_degC', )),
+        'dT': (Quantity[TemperatureDifference], ('delta_degC', )),
         'Q_h': (Quantity[Energy] | Quantity[Power], ('kJ', 'kW'))
     }
 
@@ -70,7 +70,7 @@ def heat_balance(
 
     for a in args:
         for param_name, tp in params.items():
-            if isinstance_types(a, tp[0]):
+            if isinstance(a, tp[0]):
 
                 if param_name == 'dT' and not a._ok_for_muldiv():
                     raise ValueError(
@@ -80,19 +80,17 @@ def heat_balance(
 
                 vals[param_name] = (a)
 
-    # convert the temperature to a delta_T unit
     if 'dT' in vals:
         vals['dT'] = vals['dT'].to('delta_degC')
 
     # whether the calculation is per unit time or amount of mass / energy
-    per_time = any(isinstance_types(a, Quantity[MassFlow] | Quantity[Power]) for a in args)
+    per_time = any(isinstance(a, Quantity[MassFlow] | Quantity[Power]) for a in args)
 
     if per_time:
         unit_idx = 1
     else:
         unit_idx = 0
 
-    ret: Quantity
 
     if 'Q_h' not in vals:
         ret = cp * vals['m'] * vals['dT']

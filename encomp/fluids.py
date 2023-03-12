@@ -543,7 +543,7 @@ class CoolPropFluid(ABC):
                 return np.repeat(float(x), N).astype(float).reshape(shape)
 
             # TODO: typing.TypeGuard if-else constructs are not handled by the type checker
-            return x.astype(float)  # type: ignore
+            return x
 
         points_arr = tuple(
             (p, expand_scalars(v)) for p, v in points
@@ -705,13 +705,18 @@ class CoolPropFluid(ABC):
         unit = self.get_coolprop_unit(prop)
 
         try:
-            return qty.to(unit).m
+            m = qty.to(unit).m
         except DimensionalityError:
             raise ExpectedDimensionalityError(
                 f'CoolProp input for property "{prop}" is incorrect. '
                 f'expected {unit} ({unit.dimensionality}), but passed '
                 f'{qty.u} ({qty.dimensionality})'
             )
+
+        if isinstance(m, list):
+            m = np.array(m)
+
+        return m
 
     def get(self,
             output: CProperty,

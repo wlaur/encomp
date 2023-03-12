@@ -196,7 +196,7 @@ def custom_serializer(obj: Any) -> JSON:
 
         return {
             'type': 'Quantity',
-            'dimensionality': obj.__dimensionality_type.__name__,
+            'dimensionality': obj._dimensionality_type.__name__,
             'data': [serialize(obj.m), str(obj.u._units)]
         }
 
