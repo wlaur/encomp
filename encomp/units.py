@@ -469,7 +469,7 @@ class Quantity(
 
     def __new__(  # type: ignore
         cls,
-        val: MT,
+        val: MT | Quantity[DT, MT],
         unit: Unit[DT] | UnitsContainer | str | None = None,
 
         # # this is a hack to force the type checker to default to Unknown
@@ -477,19 +477,16 @@ class Quantity(
         # # do not pass the _dt parameter directly, always use square brackets to
         # # specify the dimensionality type
         # TODO: why is this required when the TypeVar has default=Unknown?
-        _dt: type[DT] = Unknown,  # type: ignore
-        _allow_quantity_input: bool = False
+        _dt: type[DT] = Unknown  # type: ignore
     ) -> Quantity[DT]:
 
         if isinstance(val, Quantity):
 
-            # this is not supported by the type hints, but needs to
-            # be possible for the internal API
-            if not _allow_quantity_input:
-                raise TypeError(
-                    f'Input parameter "val" has incorrect type Quantity: {val}. '
-                    'Do not create nested Quantity objects, convert '
-                    'to separate magnitude and unit objects first.'
+            if unit is not None:
+                raise ValueError(
+                    f'Cannot pass unit: {unit} when '
+                    f'input val is a Quantity: {val}. '
+                    'The unit must be None when passing a Quantity as val'
                 )
 
             val, unit = val.m, val.u
@@ -650,19 +647,19 @@ class Quantity(
     def to_reduced_units(self) -> Quantity[DT, MT]:
 
         ret = super().to_reduced_units()
-        return self.subclass(ret, _allow_quantity_input=True)
+        return self.subclass(ret)
 
     def to_root_units(self) -> Quantity[DT, MT]:
 
         ret = super().to_root_units()
-        return self.subclass(ret, _allow_quantity_input=True)
+        return self.subclass(ret)
 
     def to_base_units(self) -> Quantity[DT, MT]:
 
         self._check_temperature_compatibility(Unit('kelvin'))
 
         ret = super().to_base_units()
-        return self.subclass(ret, _allow_quantity_input=True)
+        return self.subclass(ret)
 
     def _to_unit(self, unit: Unit[DT_] | UnitsContainer | str | dict) -> Unit[DT_]:
         return self._validate_unit(unit)
@@ -898,13 +895,22 @@ class Quantity(
 
     @classmethod
     def __get_validators__(cls):
-
         # used by pydantic.BaseModel to validate fields
         yield cls.validate
 
     @classmethod
     def validate(cls, qty) -> Quantity[DT, MT]:
-        return cls(qty, _allow_quantity_input=True)
+
+        # convert non-Quantity inputs to Quantity before checking subclass
+        ret = cls(qty)
+
+        if isinstance(ret, cls):
+            return ret
+
+        raise ExpectedDimensionalityError(
+            f'Value {ret} ({type(ret).__name__}) does not '
+            f'match the expected dimensionality {cls.__name__}'
+        )
 
     def check_compatibility(self, other: Quantity | float | int) -> None:
         """
@@ -993,13 +999,13 @@ class Quantity(
         if isinstance(other, (Quantity, Unit)):
             return ret
 
-        return self.subclass(ret, _allow_quantity_input=True)
+        return self.subclass(ret)
 
     def __rmul__(self, other):
 
         ret = super().__rmul__(other)
 
-        return self.subclass(ret, _allow_quantity_input=True)
+        return self.subclass(ret)
 
     def __truediv__(self, other):
         ret = super().__truediv__(other)
@@ -1007,7 +1013,7 @@ class Quantity(
         if isinstance(other, (Quantity, Unit)):
             return ret
 
-        return self.subclass(ret, _allow_quantity_input=True)
+        return self.subclass(ret)
 
     def _temperature_difference_add_sub(
             self: Quantity[Temperature, MT],
@@ -1046,7 +1052,7 @@ class Quantity(
 
         ret = super().__add__(other)
 
-        return self.subclass(ret, _allow_quantity_input=True)
+        return self.subclass(ret)
 
     def __sub__(self, other):
 
@@ -1073,7 +1079,7 @@ class Quantity(
         ):
             return Quantity[TemperatureDifference, type(ret.m)](ret.m, ret.u)
 
-        return self.subclass(ret, _allow_quantity_input=True)
+        return self.subclass(ret)
 
     def __gt__(self, other):
 
@@ -1133,7 +1139,7 @@ class Quantity(
             dim = other
 
         subcls = self._get_dimensional_subclass(dim, self._magnitude_type)
-        return subcls(self, _allow_quantity_input=True)
+        return subcls(self)
 
 
 # override the implementations for the Quantity and Unit classes for the current registry

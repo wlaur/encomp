@@ -349,17 +349,19 @@ def test_Q():
     assert type(Q(1)) is type(Quantity(1))
     assert type(Q) is type(Quantity)
 
-    # inputs cannot be nested
-    with pytest.raises(TypeError):
-        Q(Q(1, 'kg'))
+    # inputs can be nested
+    Q(Q(1, 'kg'))
 
     mass = Q(12, 'kg')
 
-    with pytest.raises(TypeError):
-        Q(Q(Q(Q(mass))))
-    with pytest.raises(TypeError):
+    Q(Q(Q(Q(mass))))
+
+    # mixing Quantity and unit input is not allowed
+
+    with pytest.raises(ValueError):
         Q(Q(Q(Q(mass), 'lbs')))
-    with pytest.raises(TypeError):
+
+    with pytest.raises(ValueError):
         Q(Q(Q(Q(mass), 'lbs')), 'stone')
 
     # no unit input defaults to dimensionless
@@ -1216,41 +1218,38 @@ def test_copy():
 
 
 def test_pydantic_integration():
-    pass
 
-    # TODO: this does not currently work, see the Quantity.validate classmethod
+    class Model(BaseModel):
 
-    # class Model(BaseModel):
+        # a can be any dimensionality
+        a: Q
 
-    #     # a can be any dimensionality
-    #     a: Q
+        m: Q[Mass]
+        s: Q[Length]
 
-    #     m: Q[Mass]
-    #     s: Q[Length]
+        # float can be converted to Quantity[Dimensionless]
+        r: Q[Dimensionless] = 0.5
 
-    #     # float can be converted to Quantity[Dimensionless]
-    #     r: Q[Dimensionless] = 0.5
+        # float cannot be converted to Quantity[Length]
+        # this raises pydantic.ValidationError (if Config.validate_all is set)
+        # d: Q[Length] = 0.5
 
-    #     # float cannot be converted to Quantity[Length]
-    #     # this raises pydantic.ValidationError (if Config.validate_all is set)
-    #     # d: Q[Length] = 0.5
+        class Config:
+            validate_all = True
 
-    #     class Config:
-    #         validate_all = True
+    Model(
+        a=Q(25, 'cSt'),
+        m=Q(25, 'kg'),
+        s=Q(25, 'cm')
+    )
 
-    # Model(
-    #     a=Q(25, 'cSt'),
-    #     m=Q(25, 'kg'),
-    #     s=Q(25, 'cm')
-    # )
+    with pytest.raises(ValidationError):
 
-    # with pytest.raises(ValidationError):
-
-    #     Model(
-    #         a=Q(25, 'cSt'),
-    #         m=Q(25, 'kg/day'),
-    #         s=Q(25, 'cm')
-    #     )
+        Model(
+            a=Q(25, 'cSt'),
+            m=Q(25, 'kg/day'),
+            s=Q(25, 'cm')
+        )
 
 
 def test_float_cast():
@@ -1353,3 +1352,14 @@ def test_temperature_unit_inputs():
 
         vol_per_dT = Q(1, f'm3/{unit}')
         assert vol_per_dT.dimensionality == Volume.dimensions / Temperature.dimensions
+
+
+def test_nested_quantity_input():
+
+    q = Q(25, 'bar')
+    q2 = Q(q)
+
+    assert type(q) is type(q2)
+    assert q == q2
+
+    assert Q(Q(Q(Q(15, 'm')) * 2)) * 2 == Q(60, 'm')

@@ -403,6 +403,10 @@ class Quantity(
     def __new__(cls, val: MT, unit: str | UnitsContainer) -> Quantity[Unknown, MT]:
         ...
 
+    @overload
+    def __new__(cls, val: Quantity[DT, MT]) -> Quantity[DT, MT]:
+        ...
+
     # endregion
 
     # region: overload __floordiv__, __pow__, __add__, __sub__, __gt__, __ge__, __lt__, __le__
