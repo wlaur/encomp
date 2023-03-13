@@ -8,6 +8,7 @@ pandas-stubs
 hypothesis
 twine
 Sphinx
+numpydoc
 jinja2
 nbsphinx
 furo

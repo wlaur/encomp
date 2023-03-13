@@ -54,7 +54,7 @@ def divide_chunks(container, N):
         Number of element for one chunk (last chunk might be shorter)
 
     Yields
-    -------
+    ------
     Iterator[Sequence[T]]
         Generator of chunks
     """
@@ -97,7 +97,7 @@ def flatten(container: Iterable[Any],
         The maximum level to flatten to, by default None (flatten all)
 
     Yields
-    -------
+    ------
     Iterator[Any]
         Generator of non-nested objects
     """

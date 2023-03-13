@@ -238,8 +238,8 @@ class Quantity(
     ``__mul__, __truediv__, __rtruediv__, __pow__`` methods.
 
     .. note::
-
         The overload signatures are defined in a separate file (``units.pyi``)
+
     """
 
     _magnitude: MT

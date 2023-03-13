@@ -199,7 +199,8 @@ Usage with Pandas
 ~~~~~~~~~~~~~~~~~
 
 
-Pandas ``Series`` objects are converted to ``ndarray`` when constructing the quantity, which means that all metadata (such as index and name) is removed.
+Pandas ``Series`` objects are temporarily converted to ``ndarray`` when constructing the quantity, which means that all metadata (such as index and name) is removed.
+When accessing the magnitude with the `.m` property, it will be converted back from ``ndarray`` to ``pd.Series``.
 
 
 .. code-block:: python
@@ -208,7 +209,7 @@ Pandas ``Series`` objects are converted to ``ndarray`` when constructing the qua
 
     s = pd.Series(arr, name='series_name')
 
-    pressure_ = Q(s, 'bar') # pd.Series is converted to np.ndarray
+    pressure_ = Q(s, 'bar')
     # "series_name" will no longer be associated with pressure_ or pressure_.m
 
 In most cases, the *magnitude* (not the quantity instance) should be assigned to a DataFrame column.
@@ -258,6 +259,13 @@ Assigning the quantity instance will create a column with ``dtype=object``.
 .. tip::
 
     To avoid issues with ``dtype`` when assigning both vector and scalar quantities to a DataFrame column, make sure to always explicitly assing the *magnitude* (attribute ``m``) of the quantity.
+
+
+
+
+.. todo::
+
+    Document integration with Polars series and expressions.
 
 
 Combining quantities

@@ -23,7 +23,7 @@ from encomp import __version__  # noqa: E402
 # -- Project information -----------------------------------------------------
 
 project = 'encomp'
-copyright = '2022, William Laurén'
+copyright = '2023, William Laurén'
 author = 'William Laurén'
 
 
@@ -38,6 +38,7 @@ release = __version__
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
+    'numpydoc',
     'sphinx.ext.viewcode',
     'sphinx.ext.todo',
     'sphinx.ext.autosectionlabel',

@@ -30,8 +30,6 @@ Main functionality of the ``encomp`` library:
    * Module :py:mod:`encomp.sympy`
    * Adds convenience methods for creating symbols with sub- and superscripts
    * Additional functions to convert (algebraic) expressions and systems to Python code that supports Numpy arrays# add mock imports to avoid running modules:
-# autodoc_mock_imports = ['encomp.notebook', 'encomp.magics']
-
 
 
 The other modules implement calculations related to process engineering and thermodynamics.
