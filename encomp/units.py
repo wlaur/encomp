@@ -996,22 +996,21 @@ class Quantity(
         ret = super().__mul__(other)
         ret._original_magnitude_type = self._original_magnitude_type
 
-        if isinstance(other, (Quantity, Unit)):
-            return ret
+        if self.dimensionless and isinstance(other, Quantity):
+            return other.subclass(ret)
 
         return self.subclass(ret)
 
     def __rmul__(self, other):
 
         ret = super().__rmul__(other)
+        ret._original_magnitude_type = self._original_magnitude_type
 
         return self.subclass(ret)
 
     def __truediv__(self, other):
-        ret = super().__truediv__(other)
 
-        if isinstance(other, (Quantity, Unit)):
-            return ret
+        ret = super().__truediv__(other)
 
         return self.subclass(ret)
 
@@ -1039,16 +1038,17 @@ class Quantity(
 
         except DimensionalityTypeError as e:
 
-            if not isinstance_types(
-                    [self, other],
-                    list[Quantity[Temperature] | Quantity[TemperatureDifference]]
+            if (
+                isinstance_types(self, Quantity[Temperature] | Quantity[TemperatureDifference]) and
+                isinstance_types(other, Quantity[Temperature] | Quantity[TemperatureDifference])
             ):
-                raise e
 
-            if self._dimensionality_type is TemperatureDifference:
-                raise e
+                if self._dimensionality_type is TemperatureDifference:
+                    raise e
 
-            return self._temperature_difference_add_sub(other, 'add')
+                return self._temperature_difference_add_sub(other, 'add')
+
+            raise e
 
         ret = super().__add__(other)
 
@@ -1060,16 +1060,17 @@ class Quantity(
             self.check_compatibility(other)
         except DimensionalityTypeError as e:
 
-            if not isinstance_types(
-                    [self, other],
-                    list[Quantity[Temperature] | Quantity[TemperatureDifference]]
+            if (
+                isinstance_types(self, Quantity[Temperature] | Quantity[TemperatureDifference]) and
+                isinstance_types(other, Quantity[Temperature] | Quantity[TemperatureDifference])
             ):
-                raise e
 
-            if self._dimensionality_type is TemperatureDifference:
-                raise e
+                if self._dimensionality_type is TemperatureDifference:
+                    raise e
 
-            return self._temperature_difference_add_sub(other, 'sub')
+                return self._temperature_difference_add_sub(other, 'sub')
+
+            raise e
 
         ret = super().__sub__(other)
 
@@ -1153,6 +1154,13 @@ class Quantity(
             assert dim is not None
         else:
             dim = other
+
+        if str(self._dimensionality_type.dimensions) != str(dim.dimensions):
+            raise TypeError(
+                f'Cannot convert {self} to dimensionality {dim}, '
+                f'the dimensions do not match: {self._dimensionality_type.dimensions} != '
+                f'{dim.dimensions}'
+            )
 
         subcls = self._get_dimensional_subclass(dim, self._magnitude_type)
         return subcls(self)

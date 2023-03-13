@@ -272,11 +272,8 @@ def test_dimensionality_type_hierarchy() -> None:
         assert isinstance(2 * s + s, Q[EstimatedLength])
         assert isinstance(2 * s - s / 2, Q[EstimatedLength])
 
-        # Q[Dimensionless] will override this and output Q[Length]
-        # the Length dimensionality that is imported on module-level
-        # cannot be used inside this context manager
-        assert not isinstance(Q(1) * s, Q[EstimatedLength])
-        assert not isinstance(s * Q(1), Q[EstimatedLength])
+        assert isinstance(Q(1) * s, Q[EstimatedLength])
+        assert isinstance(s * Q(1), Q[EstimatedLength])
 
         # these quantities are not compatible with normal Length/Mass
         # TODO: use a more specific exception here
