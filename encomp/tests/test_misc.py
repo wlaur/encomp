@@ -57,6 +57,13 @@ def test_isinstance_types():
     assert isinstance_types(d, dict[str, list[float | None]])
     assert not isinstance_types(d, dict[str, list[float]])
 
+    x = (2, 2, 3)
+    assert not isinstance_types(x, tuple[int, int] | tuple[str, str])
+    assert isinstance_types(x, tuple[int, int, int] | tuple[str, str])
+
+    y = (2, 2, '3')
+    assert isinstance_types(y, tuple[int, int, str] | str)
+
 
 def test_isinstance_types_quantity():
 

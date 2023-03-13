@@ -1363,3 +1363,18 @@ def test_nested_quantity_input():
     assert q == q2
 
     assert Q(Q(Q(Q(15, 'm')) * 2)) * 2 == Q(60, 'm')
+
+
+def test_getitem():
+
+    ms = Q([1.2, 1.3], 'kg')
+    assert isinstance(ms, Q[Mass, list[float]])
+
+    m0 = ms[0]
+    assert isinstance(m0, Q[Mass, float])
+
+    ts = Q(pd.DatetimeIndex([pd.Timestamp.now(), pd.Timestamp.now()]))
+    assert isinstance(ts, Q[Dimensionless, pd.DatetimeIndex])
+
+    t0 = ts[0]
+    assert isinstance(t0, Q[Dimensionless, pd.Timestamp])

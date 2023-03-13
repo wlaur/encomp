@@ -1111,10 +1111,26 @@ class Quantity(
 
     def __round__(self, ndigits: int | None = None) -> Quantity[DT]:
 
-        if isinstance(self.m, np.ndarray):
-            return self.__class__(np.round(self.m, ndigits or 0), self.u)
+        if isinstance(self.m, float):
+            return super().__round__(ndigits)
 
-        return super().__round__(ndigits)  # type: ignore
+        return self.__class__(np.round(self.m, ndigits or 0), self.u)
+
+    def __getitem__(self, index: int) -> Quantity[DT]:
+
+        ret = super().__getitem__(index)
+
+        if isinstance(ret._magnitude, pd.Timestamp):
+            scalar_type = pd.Timestamp
+        else:
+            scalar_type = float
+
+        ret._original_magnitude_type = scalar_type
+
+        subcls = self._get_dimensional_subclass(self._dimensionality_type, scalar_type)
+        subcls._original_magnitude_type = scalar_type
+
+        return subcls(ret.m, ret.u)
 
     @property
     def ndim(self) -> int:

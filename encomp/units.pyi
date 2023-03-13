@@ -2330,7 +2330,7 @@ class Quantity(
         ...
 
     @overload
-    def __truediv__(self, other: float | int) -> Quantity[DT, MT]:
+    def __truediv__(self, other: float | int | np.ndarray) -> Quantity[DT, MT]:
         ...
 
     @overload

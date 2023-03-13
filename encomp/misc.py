@@ -87,7 +87,13 @@ def isinstance_types(obj: Any, expected: _GenericAlias | type) -> bool:
             return isinstance(obj, expected)
 
     if type(expected) is UnionType:
-        return isinstance(obj, expected)
+
+        try:
+            return isinstance(obj, expected)
+        except TypeError:
+            return any(
+                isinstance_types(obj, n) for n in expected.__args__
+            )
 
     try:
 
