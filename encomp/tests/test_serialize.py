@@ -1,32 +1,27 @@
 import json
-from pathlib import Path
 from dataclasses import dataclass
+from decimal import Decimal
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from decimal import Decimal
+from uncertainties import ufloat
 
-try:
-    from uncertainties import ufloat
-except ImportError:
-    ufloat = None
-
+from ..serialize import decode, is_serializable, serialize
 from ..units import Quantity as Q
-from ..serialize import serialize, decode, is_serializable
 
 
 def test_serialize():
-
     p = Path().absolute()
     d = serialize(p)
     assert decode(d) == p
     assert decode(d) is not p
 
-    P1 = Q(1, 'bar')
+    P1 = Q(1, "bar")
 
     ds = [
-        {'key': P1},
-        {'key': list(np.linspace(P1, P1 * 20))}  # np.array does not support ==
+        {"key": P1},
+        {"key": list(np.linspace(P1, P1 * 20))},  # np.array does not support ==
     ]
 
     for d in ds:
@@ -38,7 +33,7 @@ def test_serialize():
         d_ = decode(json.loads(json_str))
         assert d == d_
 
-    d = Q(np.linspace(0, 1), 'kg/s')
+    d = Q(np.linspace(0, 1), "kg/s")
 
     s = serialize(d)
 
@@ -50,52 +45,49 @@ def test_serialize():
     assert np.array_equal(d_.m, d.m)
     assert d_.dimensionality == d.dimensionality
 
-    qty = Q(Decimal('1.123'), 'kg') * 100
+    qty = Q(Decimal("1.123"), "kg") * 100
     s = serialize(qty)
     json_str = json.dumps(s)
     d_ = decode(json.loads(json_str))
 
-    qty = Q([Decimal('1.123'), Decimal('1.125')], 'kg') * 100
+    qty = Q([Decimal("1.123"), Decimal("1.125")], "kg") * 100
     s = serialize(qty)
     json_str = json.dumps(s)
     d_ = decode(json.loads(json_str))
 
-    qty = Q(np.array([Decimal('1.123'), Decimal('1.125')]), 'kg') * 100
+    qty = Q(np.array([Decimal("1.123"), Decimal("1.125")]), "kg") * 100
     s = serialize(qty)
     json_str = json.dumps(s)
     d_ = decode(json.loads(json_str))
 
-    qty = Q(np.zeros((5, 5)), 'kg')
+    qty = Q(np.zeros((5, 5)), "kg")
     s = serialize(qty)
     json_str = json.dumps(s)
     d_ = decode(json.loads(json_str))
 
     if ufloat is not None:
-
         x = ufloat(1, 0.1)
 
-        qty = Q([x * 2] * 5, 'kg')
+        qty = Q([x * 2] * 5, "kg")
         s = serialize(qty)
         json_str = json.dumps(s)
         d_ = decode(json.loads(json_str))
 
-    qty = Q([1, 2], 'kg')
+    qty = Q([1, 2], "kg")
     s = serialize(qty)
     json_str = json.dumps(s)
     d_ = decode(json.loads(json_str))
 
     # pd.Series is converted to array in Quantity.__new__, the name is stripped
-    qty = Q(pd.Series(np.array([1, 2, 3]), name='test'), 'kg')
+    qty = Q(pd.Series(np.array([1, 2, 3]), name="test"), "kg")
     s = serialize(qty)
     json_str = json.dumps(s)
     d_ = decode(json.loads(json_str))
 
 
 def test_custom_object():
-
     @dataclass
     class CustomOtherClass:
-
         s: pd.Series
         df: pd.DataFrame
 
@@ -104,13 +96,11 @@ def test_custom_object():
             return cls(**d)
 
         def to_json(self):
-
             # str repr of JSON
             return json.dumps(serialize(self.__dict__))
 
     @dataclass
     class CustomClass:
-
         arr: np.ndarray
         name: str
 
@@ -122,19 +112,18 @@ def test_custom_object():
             return cls(**d)
 
         def to_json(self):
-
             # dict repr of JSON, does not have
             # to be serializable
             return self.__dict__
 
-    s = pd.Series(np.random.rand(10), name='test')
-    df = pd.DataFrame(np.random.rand(5, 5), columns=['A', 2, '3', '4', '5'])
+    s = pd.Series(np.random.rand(10), name="test")
+    df = pd.DataFrame(np.random.rand(5, 5), columns=["A", 2, "3", "4", "5"])
 
     b = CustomOtherClass(s=s, df=df)
 
-    a = CustomClass(arr=np.random.rand(19, 2), name='asd',
-                    nested=b,
-                    nested_list=[b, b, b])
+    a = CustomClass(
+        arr=np.random.rand(19, 2), name="asd", nested=b, nested_list=[b, b, b]
+    )
 
     json_dict = serialize(a)
 

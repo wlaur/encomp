@@ -39,7 +39,7 @@ Convert the pressure to another unit:
     # pressure_kPa is a new Quantity instance
     pressure_kPa = pressure.to('kPa')
 
-Refer to the unit definition file (``encomp/data/units.txt``) for a list of accepted unit names.
+Refer to the unit definition file (``encomp/defs/units.txt``) for a list of accepted unit names.
 This definition file is based on the ``defaults_en.txt`` file from ``pint``, with some slight modifications.
 
 Quantities can also be constructed by combining unit objects.

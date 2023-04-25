@@ -2,14 +2,14 @@
 Data structures and related functions.
 """
 
-from typing import Sequence, Iterator, Any, Iterable, TypeVar, overload
+from typing import Any, Iterable, Iterator, Sequence, TypeVar, overload
 
 import numpy as np
 import pandas as pd
 
 from .units import Quantity
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 _BASE_TYPES = (str, Quantity, pd.Series, pd.DataFrame, np.ndarray)
@@ -60,19 +60,18 @@ def divide_chunks(container, N):
     """
 
     if not len(container):
-        raise ValueError('Cannot chunk empty container')
+        raise ValueError("Cannot chunk empty container")
 
     if N < 1:
-        raise ValueError(
-            f'Cannot split container with into {N} chunks')
+        raise ValueError(f"Cannot split container with into {N} chunks")
 
     for i in range(0, len(container), N):
-        yield container[i:i + N]
+        yield container[i : i + N]
 
 
-def flatten(container: Iterable[Any],
-            max_depth: int | None = None,
-            _depth: int = 0) -> Iterator[Any]:
+def flatten(
+    container: Iterable[Any], max_depth: int | None = None, _depth: int = 0
+) -> Iterator[Any]:
     """
     Generator that flattens a nested container.
 
@@ -107,14 +106,12 @@ def flatten(container: Iterable[Any],
         return
 
     for obj in container:
-
         if isinstance(obj, _BASE_TYPES):
             yield obj
             continue
 
         # check if this object can be flattened further
         if isinstance(obj, Iterable):
-
             for sub_obj in flatten(obj, max_depth=max_depth, _depth=_depth + 1):
                 yield sub_obj
 

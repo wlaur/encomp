@@ -1,8 +1,0 @@
-matplotlib
-scipy
-fire
-fluids
-thermo
-ht
-uncertainties
-seaborn

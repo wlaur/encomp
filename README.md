@@ -2,7 +2,7 @@
 
 > General-purpose library for *en*gineering *comp*utations, with focus on clean and consistent interfaces.
 
-Documentation at https://encomp.readthedocs.io/en/latest/
+Documentation at <https://encomp.readthedocs.io/en/latest/>
 
 `encomp` is tested on Windows and Linux, with Python versions 3.10 and 3.11.
 
@@ -10,27 +10,26 @@ Documentation at https://encomp.readthedocs.io/en/latest/
 
 Main functionality of the `encomp` library:
 
--   Handles physical quantities with magnitude(s), dimensionality and units
+- Handles physical quantities with magnitude(s), dimensionality and units
 
-    -   Modules `encomp.units`, `encomp.utypes`
-    -   Extends the [pint](https://pypi.org/project/Pint) library
-    -   Uses Python's type system to validate dimensionalities
-    -   Compatible with `mypy` and other type checkers
-    -   Integrates with Numpy arrays, Pandas series and Polars series and expressions
-    -   JSON serialization and decoding
+  - Modules `encomp.units`, `encomp.utypes`
+  - Extends the [pint](https://pypi.org/project/Pint) library
+  - Uses Python's type system to validate dimensionalities
+  - Compatible with `mypy` and other type checkers
+  - Integrates with Numpy arrays, Pandas series and Polars series and expressions
+  - JSON serialization and decoding
 
--   Implements a flexible interface to [CoolProp](http://www.coolprop.org)
+- Implements a flexible interface to [CoolProp](http://www.coolprop.org)
 
-    -   Module `encomp.fluids`
-    -   Uses quantities for all inputs and outputs
-    -   Fluids are represented as class instances, the properties are class attributes
+  - Module `encomp.fluids`
+  - Uses quantities for all inputs and outputs
+  - Fluids are represented as class instances, the properties are class attributes
 
--   Extends [Sympy](https://pypi.org/project/sympy/)
+- Extends [Sympy](https://pypi.org/project/sympy/)
 
-    -   Module `encomp.sympy`
-    -   Adds convenience methods for creating symbols with sub- and superscripts
-    -   Additional functions to convert (algebraic) expressions and systems to Python code that supports Numpy arrays
-
+  - Module `encomp.sympy`
+  - Adds convenience methods for creating symbols with sub- and superscripts
+  - Additional functions to convert (algebraic) expressions and systems to Python code that supports Numpy arrays
 
 The other modules implement calculations related to process engineering and thermodynamics.
 The module `encomp.serialize` implements custom JSON serialization and decoding for classes used elsewhere in the library.
@@ -39,15 +38,15 @@ The module `encomp.serialize` implements custom JSON serialization and decoding 
 
 Install with `pip`:
 
-```
+```bash
 pip install encomp
 ```
 
 This will install `encomp` along with its dependencies into the currently active Python environment.
-To also install optional or development dependencies, use the extras ``optional``, ``dev`` or ``full``.
+To also install optional dependencies:
 
-```
-pip install encomp[optional,dev,full]
+```bash
+pip install encomp[optional]
 ```
 
 ## Getting started
@@ -63,8 +62,8 @@ This will import commonly used functions and classes.
 ### The `Quantity` class
 
 The fundamental building block of `encomp` is the `encomp.units.Quantity` class (shorthand alias `Q`), which is an extension of `pint.Quantity`.
-This class is used to construct objects with a _magnitude_ and _unit_.
-Each unit also has a _dimensionality_ (combination of the base dimensions), and each dimensionality will have multiple associated units.
+This class is used to construct objects with a *magnitude* and *unit*.
+Each unit also has a *dimensionality* (combination of the base dimensions), and each dimensionality will have multiple associated units.
 
 ```python
 from encomp.units import Quantity as Q
@@ -85,7 +84,7 @@ Q(0.1) == Q(10, '%')
 #### `Quantity` type system
 
 The `Quantity` object has an associated `Dimensionality` type parameter that is dynamically determined based on the unit.
-Each dimensionality (for example _pressure_, _length_, _time_, _dimensionless_) is represented by a subclass of `Quantity`.
+Each dimensionality (for example *pressure*, *length*, *time*, *dimensionless*) is represented by a subclass of `Quantity`.
 
 Common dimensionalities can be statically determined based on overload variants of the `Quantity.__new__` method (see `encomp.utypes.get_registered_units` for a list of units that support this).
 Additionally, operations using `*`, `**` and `/` are also defined using overload variants for combinations of the default dimensionalities.
@@ -211,7 +210,7 @@ assert type(q1) is type(q2)
 
 ### The `Fluid` class
 
-The class `encomp.fluids.Fluid` is a wrapper around the _CoolProp_ library.
+The class `encomp.fluids.Fluid` is a wrapper around the *CoolProp* library.
 The class uses two input points (three for humid air) that fix the state of the fluid.
 Other fluid parameters can be evaluated using attribute access.
 The outputs and inputs are `Quantity` objects.
@@ -236,7 +235,7 @@ air.search('density')
 air.Dmolar # 80.73061937328056 mole/meter3
 ```
 
-The fluid name `'water'` (or the subclass `Water`) uses _IAPWS_ to evaluate steam and water properties.
+The fluid name `'water'` (or the subclass `Water`) uses *IAPWS* to evaluate steam and water properties.
 
 ```python
 from encomp.units import Quantity as Q
@@ -269,7 +268,7 @@ HumidAir(P=Q(1, 'bar'), T=Q(100, 'degC'), R=Q(0.5))
 First, make sure the development dependencies are installed with `pip install encomp[dev]` or `pip install encomp[full]`.
 Run the tests with
 
-```
+```bash
 pytest -W ignore --pyargs encomp -p no:mypy-testing
 ```
 
@@ -281,8 +280,8 @@ The attribute names are prefixed with `ENCOMP_`.
 
 ## TODO
 
--   Document the `Quantity[Dimensionality]` type system
--   What is the license of this package?
-    -   For example, `pint` uses _3-Clause BSD License_, this should be compatible with `MIT`
-    -   Should this package include the `pint` license text somewhere?
-        -   Extending the `pint` package counts as modification
+- Document the `Quantity[Dimensionality]` type system
+- What is the license of this package?
+  - For example, `pint` uses *3-Clause BSD License*, this should be compatible with `MIT`
+  - Should this package include the `pint` license text somewhere?
+    - Extending the `pint` package counts as modification

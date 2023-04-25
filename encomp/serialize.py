@@ -56,20 +56,21 @@ This same name must be used when passing the class implementation for decoding.
 
 """
 
-from typing import Any, Callable
 import inspect
 import json
+from decimal import Decimal
 from pathlib import Path
+from typing import Any, Callable
+
 import numpy as np
 import pandas as pd
 import sympy as sp
-from decimal import Decimal
 from uncertainties import ufloat
 from uncertainties.core import AffineScalarFunc
 
+from .misc import isinstance_types
 from .units import Quantity, Unit
 from .utypes import Dimensionality
-from .misc import isinstance_types
 
 # type alias for objects that can be serialized using json.dumps()
 JSONBase = dict | list | float | int | str | bool | None
@@ -135,7 +136,6 @@ def serialize(obj: Any) -> JSON:
 
     # only allow dict or list containers
     if isinstance(obj, list):
-
         lst = []
 
         for n in obj:
@@ -144,14 +144,14 @@ def serialize(obj: Any) -> JSON:
         return lst
 
     if isinstance(obj, dict):
-
         dct = {}
 
         for key in obj:
-
             if isinstance(key, tuple):
-                raise TypeError('Tuples cannot be used as dictionary keys when '
-                                f'serializing to JSON: {key}')
+                raise TypeError(
+                    "Tuples cannot be used as dictionary keys when "
+                    f"serializing to JSON: {key}"
+                )
 
             dct[key] = serialize(obj[key])
 
@@ -187,70 +187,49 @@ def custom_serializer(obj: Any) -> JSON:
     """
 
     if isinstance(obj, Path):
-        return {
-            'type': 'Path',
-            'data': str(obj.absolute())
-        }
+        return {"type": "Path", "data": str(obj.absolute())}
 
     if isinstance(obj, Quantity):
-
         return {
-            'type': 'Quantity',
-            'dimensionality': obj._dimensionality_type.__name__,
-            'data': [serialize(obj.m), str(obj.u._units)]
+            "type": "Quantity",
+            "dimensionality": obj._dimensionality_type.__name__,
+            "data": [serialize(obj.m), str(obj.u._units)],
         }
 
     if isinstance(obj, pd.Series):
-
         return {
-            'type': 'Series',
-            'data': obj.to_json(orient='split',  # type: ignore
-                                default_handler=custom_serializer)
+            "type": "Series",
+            "data": obj.to_json(
+                orient="split", default_handler=custom_serializer  # type: ignore
+            ),
         }
 
     if isinstance(obj, pd.DataFrame):
-
         return {
-            'type': 'DataFrame',
-            'data': obj.to_json(orient='split',  # type: ignore
-                                default_handler=custom_serializer)
+            "type": "DataFrame",
+            "data": obj.to_json(
+                orient="split", default_handler=custom_serializer  # type: ignore
+            ),
         }
 
     if isinstance(obj, np.ndarray):
-
-        return {
-            'type': 'ndarray',
-            'data': [serialize(x) for x in obj.tolist()]
-        }
+        return {"type": "ndarray", "data": [serialize(x) for x in obj.tolist()]}
 
     if isinstance(obj, Decimal):
-
-        return {
-            'type': 'Decimal',
-            'data': str(obj)
-        }
+        return {"type": "Decimal", "data": str(obj)}
 
     if isinstance(obj, AffineScalarFunc):
-
-        return {
-            'type': 'AffineScalarFunc',
-            'data': [obj.nominal_value, obj.std_dev]
-        }
+        return {"type": "AffineScalarFunc", "data": [obj.nominal_value, obj.std_dev]}
 
     if isinstance(obj, sp.Basic):
-
-        return {
-            'type': 'Sympy',
-            'data': sp.srepr(obj)
-        }
+        return {"type": "Sympy", "data": sp.srepr(obj)}
 
     # method named "to_json" or @property named "json"
-    if hasattr(obj, 'to_json') or hasattr(obj, 'json'):
-
+    if hasattr(obj, "to_json") or hasattr(obj, "json"):
         # this method can return a dict or a string
         # JSON representation
-        if hasattr(obj, 'json'):
-            json_repr = getattr(obj, 'json')
+        if hasattr(obj, "json"):
+            json_repr = getattr(obj, "json")
         else:
             json_repr = obj.to_json()
 
@@ -264,12 +243,9 @@ def custom_serializer(obj: Any) -> JSON:
         # the custom class must implement classmethod
         # from_dict, which takes json_repr as input and
         # returns a class instance
-        return {
-            'type': obj_type,
-            'data': json_repr
-        }
+        return {"type": obj_type, "data": json_repr}
 
-    if hasattr(obj, '__dict__'):
+    if hasattr(obj, "__dict__"):
         return obj.__dict__
 
     if is_serializable(obj):
@@ -324,32 +300,28 @@ def decode(inp: JSON, custom: type | list[type] | None = None) -> Any:
         return [decode(n, custom=custom) for n in inp]
 
     if isinstance(inp, dict):
-
         # serialized pint.Quantity with array as magnitude
         # NOTE: this is for compatibility with units that are
         # serialized directly from pint (i.e. without the encomp.units extension)
-        if {'_units', '_magnitude'} <= set(inp):
-
+        if {"_units", "_magnitude"} <= set(inp):
             # decode custom np.array objects
             # not necessary to pass on the custom kwarg,
             # the Quantity magnitude cannot be a custom class
-            m = decode(inp['_magnitude'])
-            units: str = inp['_units']  # type: ignore
+            m = decode(inp["_magnitude"])
+            units: str = inp["_units"]  # type: ignore
             return Quantity(m, units)
 
         # check if this dict is output from custom_serializer
         # it might also be a regular dict that just happens to
         # have the key "type", in this case it will be decoded normally
-        if 'type' in inp:
-
-            if inp['type'] == 'Quantity':
-
+        if "type" in inp:
+            if inp["type"] == "Quantity":
                 # optional key with the name of the dimensionality class
-                dimensionality_name = inp.get('dimensionality')
-                val, unit = inp['data']
+                dimensionality_name = inp.get("dimensionality")
+                val, unit = inp["data"]
 
                 if unit is None:
-                    unit = ''
+                    unit = ""
 
                 dimensionality: type[Dimensionality] | None = None
 
@@ -361,60 +333,52 @@ def decode(inp: JSON, custom: type | list[type] | None = None) -> Any:
                 val = decode(val)
 
                 # check if this list has types that matches a serialized Quantity
-                if (isinstance_types(unit, Unit | str)):
-
+                if isinstance_types(unit, Unit | str):
                     if dimensionality is None:
                         return Quantity(val, unit)
 
                     else:
+                        return Quantity[dimensionality](val, unit)  # type: ignore
 
-                        return Quantity[dimensionality](  # type: ignore
-                            val, unit
-                        )
+            if inp["type"] == "Path":
+                return Path(inp["data"])  # type: ignore
 
-            if inp['type'] == 'Path':
-                return Path(inp['data'])  # type: ignore
+            if inp["type"] == "Series":
+                return pd.read_json(inp["data"], typ="series", orient="split")
 
-            if inp['type'] == 'Series':
-                return pd.read_json(inp['data'],
-                                    typ='series', orient='split')
+            if inp["type"] == "DataFrame":
+                return pd.read_json(inp["data"], typ="frame", orient="split")
 
-            if inp['type'] == 'DataFrame':
-                return pd.read_json(inp['data'],
-                                    typ='frame', orient='split')
-
-            if inp['type'] == 'ndarray':
-
+            if inp["type"] == "ndarray":
                 # not necessary to pass on the custom kwarg
-                data = [decode(x) for x in inp['data']]  # type: ignore
+                data = [decode(x) for x in inp["data"]]  # type: ignore
                 return np.array(data)
 
-            if inp['type'] == 'Decimal':
-                return Decimal(inp['data'])  # type: ignore
+            if inp["type"] == "Decimal":
+                return Decimal(inp["data"])  # type: ignore
 
-            if inp['type'] == 'AffineScalarFunc':
-                return ufloat(*inp['data'])
+            if inp["type"] == "AffineScalarFunc":
+                return ufloat(*inp["data"])
 
-            if inp['type'] == 'Sympy':
-                return sp.sympify(inp['data'])
+            if inp["type"] == "Sympy":
+                return sp.sympify(inp["data"])
 
             # load custom classes, based on list of classes
             custom_dict = {n.__name__: n for n in custom}
 
-            if inp['type'] in custom_dict:
+            if inp["type"] in custom_dict:
+                custom_class = custom_dict[inp["type"]]  # type: ignore
 
-                custom_class = custom_dict[inp['type']]  # type: ignore
-
-                if not hasattr(custom_class, 'from_dict'):
-
+                if not hasattr(custom_class, "from_dict"):
                     # want to raise an error here
                     # implementation is incorrect if this method is missing
                     raise AttributeError(
-                        f'Custom class {custom_class} '
+                        f"Custom class {custom_class} "
                         'must contain a classmethod named "from_dict" '
-                        'that takes a dict as input and returns a class instance')
+                        "that takes a dict as input and returns a class instance"
+                    )
 
-                d = inp['data']  # type: ignore
+                d = inp["data"]  # type: ignore
 
                 # in case the to_json() method returns a string,
                 # the string must be loaded into a dict
@@ -435,15 +399,13 @@ def decode(inp: JSON, custom: type | list[type] | None = None) -> Any:
         # so this function will not convert numeric str to int
         # to avoid issues with this, avoid using integer / float keys
         # need to pass on the custom class list here
-        return {a: decode(b, custom=custom)
-                for a, b in inp.items()}
+        return {a: decode(b, custom=custom) for a, b in inp.items()}
 
     # basic types should be returned as-is
     return inp
 
 
-def save(names: dict[str, Any],
-         path: str | Path = 'variables.json') -> None:
+def save(names: dict[str, Any], path: str | Path = "variables.json") -> None:
     """
     Saves variables from a Jupyter Notebook session as JSON.
 
@@ -456,32 +418,31 @@ def save(names: dict[str, Any],
     """
 
     skip = [
-        'In',
-        'Out',
-        'ipython',
-        'get_ipython',
-        'exit',
-        'quit',
-        'getsizeof',
-        'SNS_BLUE',
-        'SNS_PALETTE'
+        "In",
+        "Out",
+        "ipython",
+        "get_ipython",
+        "exit",
+        "quit",
+        "getsizeof",
+        "SNS_BLUE",
+        "SNS_PALETTE",
     ]
 
     names = {
-        a: b for a, b in names.items() if
-        not a.startswith('_') and
-        not inspect.ismodule(b) and
-        not isinstance(b, Callable) and  # type: ignore
-        a not in skip
+        a: b
+        for a, b in names.items()
+        if not a.startswith("_")
+        and not inspect.ismodule(b)
+        and not isinstance(b, Callable)
+        and a not in skip  # type: ignore
     }
 
-    with open(path, 'w', encoding='utf-8') as f:
-        f.write(json.dumps(names,
-                           default=serialize,
-                           indent=4))
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(json.dumps(names, default=serialize, indent=4))
 
 
-def load(path: str | Path = 'variables.json') -> dict[str, Any]:
+def load(path: str | Path = "variables.json") -> dict[str, Any]:
     """
     Load variables from a JSON file.
 
@@ -496,7 +457,7 @@ def load(path: str | Path = 'variables.json') -> dict[str, Any]:
         Dictionary with names and their corresponding objects
     """
 
-    with open(path, 'r', encoding='utf-8') as f:
+    with open(path, "r", encoding="utf-8") as f:
         names = json.loads(f.read())
 
     names_decoded = {}

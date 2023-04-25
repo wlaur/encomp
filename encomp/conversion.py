@@ -5,7 +5,7 @@ Functions related to converting quantities.
 from typing import overload
 
 from .units import Quantity
-from .utypes import Mass, MassFlow, Density, Volume, VolumeFlow, MT
+from .utypes import MT, Density, Mass, MassFlow, Volume, VolumeFlow
 
 
 @overload
@@ -30,16 +30,28 @@ def convert_volume_mass(inp: Quantity[VolumeFlow, MT]) -> Quantity[MassFlow, MT]
 
 @overload
 def convert_volume_mass(
-    inp: Quantity,
-    rho: Quantity[Density, MT] | None = None
-) -> Quantity[Mass, MT] | Quantity[MassFlow, MT] | Quantity[Volume, MT] | Quantity[VolumeFlow, MT]:
+    inp: Quantity, rho: Quantity[Density, MT] | None = None
+) -> (
+    Quantity[Mass, MT]
+    | Quantity[MassFlow, MT]
+    | Quantity[Volume, MT]
+    | Quantity[VolumeFlow, MT]
+):
     ...
 
 
 def convert_volume_mass(
-    inp: Quantity[Mass, MT] | Quantity[MassFlow, MT] | Quantity[Volume, MT] | Quantity[VolumeFlow, MT],
-        rho: Quantity[Density, MT] | None = None
-) -> Quantity[Mass, MT] | Quantity[MassFlow, MT] | Quantity[Volume, MT] | Quantity[VolumeFlow, MT]:
+    inp: Quantity[Mass, MT]
+    | Quantity[MassFlow, MT]
+    | Quantity[Volume, MT]
+    | Quantity[VolumeFlow, MT],
+    rho: Quantity[Density, MT] | None = None,
+) -> (
+    Quantity[Mass, MT]
+    | Quantity[MassFlow, MT]
+    | Quantity[Volume, MT]
+    | Quantity[VolumeFlow, MT]
+):
     """
     Converts mass to volume or vice versa.
 
@@ -57,12 +69,10 @@ def convert_volume_mass(
     """
 
     if rho is None:
-        rho = Quantity[Density, MT](997, 'kg/m³')
+        rho = Quantity[Density, MT](997, "kg/m³")
 
     if not isinstance(rho, Quantity[Density]):  # type: ignore
-        raise TypeError(
-            f'Incorrect type for rho: {rho}'
-        )
+        raise TypeError(f"Incorrect type for rho: {rho}")
 
     if isinstance(inp, (Quantity[Mass], Quantity[MassFlow])):  # type: ignore
         return (inp / rho).to_reduced_units()
@@ -71,9 +81,7 @@ def convert_volume_mass(
         return (inp * rho).to_reduced_units()
 
     else:
-        raise TypeError(
-            f'Incorrect input: {inp}'
-        )
+        raise TypeError(f"Incorrect input: {inp}")
 
 
-a = convert_volume_mass(Quantity([25.2, 2.2], 'kg'))
+a = convert_volume_mass(Quantity([25.2, 2.2], "kg"))

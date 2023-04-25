@@ -10,8 +10,8 @@ Uses CoolProp as backend.
 """
 
 import warnings
-from typing import Annotated, Callable
 from abc import ABC, abstractmethod
+from typing import Annotated, Callable
 
 import numpy as np
 
@@ -20,12 +20,11 @@ try:
     from CoolProp.HumidAirProp import HAPropsSI
 
 except ImportError:
-
     warnings.warn(
-        'CoolProp package not installed, install with'
-        '\npip install coolprop\n'
-        'or'
-        '\nconda install conda-forge::coolprop'
+        "CoolProp package not installed, install with"
+        "\npip install coolprop\n"
+        "or"
+        "\nconda install conda-forge::coolprop"
     )
 
     def PropsSI(*args, **kwargs):
@@ -35,47 +34,44 @@ except ImportError:
         raise NotImplementedError()
 
 
-from .structures import flatten
-from .settings import SETTINGS
 from .misc import isinstance_types
-from .units import Quantity, Unit, DimensionalityError, ExpectedDimensionalityError
-from .utypes import (Pressure,
-                     Temperature,
-                     Dimensionless,
-                     MolarDensity,
-                     Density,
-                     SpecificHeatCapacity,
-                     SpecificEnthalpy,
-                     MolarSpecificEnthalpy,
-                     SpecificEntropy,
-                     MolarSpecificEntropy,
-                     SpecificInternalEnergy,
-                     MolarSpecificInternalEnergy,
-                     SpecificHeatPerDryAir,
-                     SpecificHeatPerHumidAir,
-                     MixtureEnthalpyPerDryAir,
-                     MixtureEnthalpyPerHumidAir,
-                     MixtureEntropyPerDryAir,
-                     MixtureEntropyPerHumidAir,
-                     MixtureVolumePerDryAir,
-                     MixtureVolumePerHumidAir,
-                     Velocity,
-                     ThermalConductivity,
-                     MolarMass,
-                     DynamicViscosity)
-
+from .settings import SETTINGS
+from .structures import flatten
+from .units import DimensionalityError, ExpectedDimensionalityError, Quantity, Unit
+from .utypes import (
+    Density,
+    Dimensionless,
+    DynamicViscosity,
+    MixtureEnthalpyPerDryAir,
+    MixtureEnthalpyPerHumidAir,
+    MixtureEntropyPerDryAir,
+    MixtureEntropyPerHumidAir,
+    MixtureVolumePerDryAir,
+    MixtureVolumePerHumidAir,
+    MolarDensity,
+    MolarMass,
+    MolarSpecificEnthalpy,
+    MolarSpecificEntropy,
+    MolarSpecificInternalEnergy,
+    Pressure,
+    SpecificEnthalpy,
+    SpecificEntropy,
+    SpecificHeatCapacity,
+    SpecificHeatPerDryAir,
+    SpecificHeatPerHumidAir,
+    SpecificInternalEnergy,
+    Temperature,
+    ThermalConductivity,
+    Velocity,
+)
 
 if SETTINGS.ignore_coolprop_warnings:
-
-    warnings.filterwarnings(
-        'ignore',
-        message='CoolProp could not calculate'
-    )
+    warnings.filterwarnings("ignore", message="CoolProp could not calculate")
 
 
-CProperty = Annotated[str, 'CoolProp property name']
-CName = Annotated[str, 'CoolProp fluid name']
-UnitString = Annotated[str, 'Unit string']
+CProperty = Annotated[str, "CoolProp property name"]
+CName = Annotated[str, "CoolProp fluid name"]
+UnitString = Annotated[str, "Unit string"]
 
 # TODO: the type hints for the Quantity magnitude is incorrectly set to
 # np.ndarray, it could be float also if all inputs are scalar
@@ -83,7 +79,6 @@ UnitString = Annotated[str, 'Unit string']
 
 
 class CoolPropFluid(ABC):
-
     name: CName
     points: list[tuple[CProperty, Quantity]]
 
@@ -100,123 +95,184 @@ class CoolPropFluid(ABC):
     # not valid or not implemented (CoolProp will always raise ValueError, no matter the error)
     # in case the error message does not match any of these, a warning is emitted
     COOLPROP_ERROR_MESSAGES = (
-        'is not valid for keyed_output',
-        'is not valid for trivial_keyed_output',
+        "is not valid for keyed_output",
+        "is not valid for trivial_keyed_output",
         "For now, we don't support",
-        'is not implemented for this backend',
-        'is only defined within the two-phase region',
-        'failed ungracefully',
-        'value to T_phase_determination_pure_or_pseudopure is invalid',
+        "is not implemented for this backend",
+        "is only defined within the two-phase region",
+        "failed ungracefully",
+        "value to T_phase_determination_pure_or_pseudopure is invalid",
         "Brent's method f(b) is NAN",
-        'do not bracket the root',
-        'was unable to find a solution for',
-        'is outside the range of validity'
+        "do not bracket the root",
+        "was unable to find a solution for",
+        "is outside the range of validity",
     )
 
     PHASES: dict[float, str] = {
-        0.0: 'Liquid',
-        5.0: 'Gas',
-        6.0: 'Two-phase',
-        3.0: 'Supercritical liquid',  # P > P_crit
-        2.0: 'Supercritical gas',     # T > T_crit
-        1.0: 'Supercritical fluid',   # P > P_crit and T > T_crit
-        8.0: 'Not imposed'
+        0.0: "Liquid",
+        5.0: "Gas",
+        6.0: "Two-phase",
+        3.0: "Supercritical liquid",  # P > P_crit
+        2.0: "Supercritical gas",  # T > T_crit
+        1.0: "Supercritical fluid",  # P > P_crit and T > T_crit
+        8.0: "Not imposed",
     }
 
     # unit and description for properties in function PropsSI
     # (name1, name2, ...): (unit, description)
     # names are case-sensitive
     PROPERTY_MAP: dict[tuple[CProperty, ...], tuple[UnitString, str]] = {
-        ('DELTA', 'Delta'): ('dimensionless', 'Reduced density (rho/rhoc)'),
-        ('DMOLAR', 'Dmolar'): ('mol/m³', 'Molar density'),
-        ('D', 'DMASS', 'Dmass'): ('kg/m³', 'Mass density'),
-        ('HMOLAR', 'Hmolar'): ('J/mol', 'Molar specific enthalpy'),
-        ('H', 'HMASS', 'Hmass'): ('J/kg', 'Mass specific enthalpy'),
-        ('P', ): ('Pa', 'Pressure'),
-        ('Q', ): ('dimensionless', 'Mass vapor quality'),
-        ('SMOLAR', 'Smolar'): ('J/mol/K', 'Molar specific entropy'),
-        ('S', 'SMASS', 'Smass'): ('J/kg/K', 'Mass specific entropy'),
-        ('TAU', 'Tau'): ('dimensionless', 'Reciprocal reduced temperature (Tc/T)'),
-        ('T', ): ('K', 'Temperature'),
-        ('UMOLAR', 'Umolar'): ('J/mol', 'Molar specific internal energy'),
-        ('U', 'UMASS', 'Umass'): ('J/kg', 'Mass specific internal energy'),
-        ('A', 'SPEED_OF_SOUND', 'speed_of_sound'): ('m/s', 'Speed of sound'),
-        ('CONDUCTIVITY', 'L', 'conductivity'): ('W/m/K', 'Thermal conductivity'),
-        ('CP0MASS', 'Cp0mass'): ('J/kg/K', 'Ideal gas mass specific constant pressure specific heat'),
-        ('CP0MOLAR', 'Cp0molar'): ('J/mol/K', 'Ideal gas molar specific constant pressure specific heat'),
-        ('CPMOLAR', 'Cpmolar'): ('J/mol/K', 'Molar specific constant pressure specific heat'),
-        ('CVMASS', 'Cvmass', 'O'): ('J/kg/K', 'Mass specific constant volume specific heat'),
-        ('CVMOLAR', 'Cvmolar'): ('J/mol/K', 'Molar specific constant volume specific heat'),
-        ('C', 'CPMASS', 'Cpmass'): ('J/kg/K', 'Mass specific constant pressure specific heat'),
-        ('DIPOLE_MOMENT', 'dipole_moment'): ('C*m', 'Dipole moment'),
-        ('GAS_CONSTANT', 'gas_constant'): ('J/mol/K', 'Molar gas constant'),
-        ('GMOLAR_RESIDUAL', 'Gmolar_residual'): ('J/mol/K', 'Residual molar Gibbs energy'),
-        ('GMOLAR', 'Gmolar'): ('J/mol', 'Molar specific Gibbs energy'),
-        ('G', 'GAMES', 'Gmass'): ('J/kg', 'Mass specific Gibbs energy'),
-        ('HELMHOLTZMASS', 'Helmholtzmass'): ('J/kg', 'Mass specific Helmholtz energy'),
-        ('HELMHOLTZMOLAR', 'Helmholtzmolar'): ('J/mol', 'Molar specific Helmholtz energy'),
-        ('HMOLAR_RESIDUAL', 'Hmolar_residual'): ('J/mol/K', 'Residual molar enthalpy'),
-        ('ISENTROPIC_EXPANSION_COEFFICIENT',
-         'isentropic_expansion_coefficient'): ('dimensionless', 'Isentropic expansion coefficient'),
-        ('ISOBARIC_EXPANSION_COEFFICIENT',
-         'isobaric_expansion_coefficient'): ('1/K', 'Isobaric expansion coefficient'),
-        ('ISOTHERMAL_COMPRESSIBILITY',
-         'isothermal_compressibility'): ('1/Pa', 'Isothermal compressibility'),
-        ('I', 'SURFACE_TENSION', 'surface_tension'): ('N/m', 'Surface tension'),
-        ('M', 'MOLARMASS', 'MOLAR_MASS', 'MOLEMASS',
-         'molar_mass', 'molarmass', 'molemass'): ('kg/mol', 'Molar mass'),
-        ('PCRIT', 'P_CRITICAL', 'Pcrit',
-         'p_critical', 'pcrit'): ('Pa', 'Pressure at the critical point'),
-        ('PHASE', 'Phase'): ('dimensionless', 'Phase index as a float'),
-        ('PMAX', 'P_MAX', 'P_max', 'pmax'): ('Pa', 'Maximum pressure limit'),
-        ('PMIN', 'P_MIN', 'P_min', 'pmin'): ('Pa', 'Minimum pressure limit'),
-        ('PRANDTL', 'Prandtl'): ('dimensionless', 'Prandtl number'),
-        ('PTRIPLE', 'P_TRIPLE', 'p_triple', 'ptriple'): ('Pa', 'Pressure at the triple point (pure only)'),
-        ('P_REDUCING', 'p_reducing'): ('Pa', 'Pressure at the reducing point'),
-        ('RHOCRIT', 'RHOMASS_CRITICAL',
-         'rhocrit', 'rhomass_critical'): ('kg/m³', 'Mass density at critical point'),
-        ('RHOMASS_REDUCING', 'rhomass_reducing'): ('kg/m³', 'Mass density at reducing point'),
-        ('RHOMOLAR_CRITICAL', 'rhomolar_critical'): ('mol/m³', 'Molar density at critical point'),
-        ('RHOMOLAR_REDUCING', 'rhomolar_reducing'): ('mol/m³', 'Molar density at reducing point'),
-        ('SMOLAR_RESIDUAL', 'Smolar_residual'): ('J/mol/K', 'Residual molar entropy'),
-        ('TCRIT', 'T_CRITICAL',
-         'T_critical', 'Tcrit'): ('K', 'Temperature at the critical point'),
-        ('TMAX', 'T_MAX', 'T_max', 'Tmax'): ('K', 'Maximum temperature limit'),
-        ('TMIN', 'T_MIN', 'T_min', 'Tmin'): ('K', 'Minimum temperature limit'),
-        ('TTRIPLE', 'T_TRIPLE', 'T_triple', 'Ttriple'): ('K', 'Temperature at the triple point'),
-        ('T_FREEZE', 'T_freeze'): ('K', 'Freezing temperature for incompressible solutions'),
-        ('T_REDUCING', 'T_reducing'): ('K', 'Temperature at the reducing point'),
-        ('V', 'VISCOSITY', 'viscosity'): ('Pa*s', 'Viscosity'),
-        ('Z', ): ('dimensionless', 'Compressibility factor')
+        ("DELTA", "Delta"): ("dimensionless", "Reduced density (rho/rhoc)"),
+        ("DMOLAR", "Dmolar"): ("mol/m³", "Molar density"),
+        ("D", "DMASS", "Dmass"): ("kg/m³", "Mass density"),
+        ("HMOLAR", "Hmolar"): ("J/mol", "Molar specific enthalpy"),
+        ("H", "HMASS", "Hmass"): ("J/kg", "Mass specific enthalpy"),
+        ("P",): ("Pa", "Pressure"),
+        ("Q",): ("dimensionless", "Mass vapor quality"),
+        ("SMOLAR", "Smolar"): ("J/mol/K", "Molar specific entropy"),
+        ("S", "SMASS", "Smass"): ("J/kg/K", "Mass specific entropy"),
+        ("TAU", "Tau"): ("dimensionless", "Reciprocal reduced temperature (Tc/T)"),
+        ("T",): ("K", "Temperature"),
+        ("UMOLAR", "Umolar"): ("J/mol", "Molar specific internal energy"),
+        ("U", "UMASS", "Umass"): ("J/kg", "Mass specific internal energy"),
+        ("A", "SPEED_OF_SOUND", "speed_of_sound"): ("m/s", "Speed of sound"),
+        ("CONDUCTIVITY", "L", "conductivity"): ("W/m/K", "Thermal conductivity"),
+        ("CP0MASS", "Cp0mass"): (
+            "J/kg/K",
+            "Ideal gas mass specific constant pressure specific heat",
+        ),
+        ("CP0MOLAR", "Cp0molar"): (
+            "J/mol/K",
+            "Ideal gas molar specific constant pressure specific heat",
+        ),
+        ("CPMOLAR", "Cpmolar"): (
+            "J/mol/K",
+            "Molar specific constant pressure specific heat",
+        ),
+        ("CVMASS", "Cvmass", "O"): (
+            "J/kg/K",
+            "Mass specific constant volume specific heat",
+        ),
+        ("CVMOLAR", "Cvmolar"): (
+            "J/mol/K",
+            "Molar specific constant volume specific heat",
+        ),
+        ("C", "CPMASS", "Cpmass"): (
+            "J/kg/K",
+            "Mass specific constant pressure specific heat",
+        ),
+        ("DIPOLE_MOMENT", "dipole_moment"): ("C*m", "Dipole moment"),
+        ("GAS_CONSTANT", "gas_constant"): ("J/mol/K", "Molar gas constant"),
+        ("GMOLAR_RESIDUAL", "Gmolar_residual"): (
+            "J/mol/K",
+            "Residual molar Gibbs energy",
+        ),
+        ("GMOLAR", "Gmolar"): ("J/mol", "Molar specific Gibbs energy"),
+        ("G", "GAMES", "Gmass"): ("J/kg", "Mass specific Gibbs energy"),
+        ("HELMHOLTZMASS", "Helmholtzmass"): ("J/kg", "Mass specific Helmholtz energy"),
+        ("HELMHOLTZMOLAR", "Helmholtzmolar"): (
+            "J/mol",
+            "Molar specific Helmholtz energy",
+        ),
+        ("HMOLAR_RESIDUAL", "Hmolar_residual"): ("J/mol/K", "Residual molar enthalpy"),
+        ("ISENTROPIC_EXPANSION_COEFFICIENT", "isentropic_expansion_coefficient"): (
+            "dimensionless",
+            "Isentropic expansion coefficient",
+        ),
+        ("ISOBARIC_EXPANSION_COEFFICIENT", "isobaric_expansion_coefficient"): (
+            "1/K",
+            "Isobaric expansion coefficient",
+        ),
+        ("ISOTHERMAL_COMPRESSIBILITY", "isothermal_compressibility"): (
+            "1/Pa",
+            "Isothermal compressibility",
+        ),
+        ("I", "SURFACE_TENSION", "surface_tension"): ("N/m", "Surface tension"),
+        (
+            "M",
+            "MOLARMASS",
+            "MOLAR_MASS",
+            "MOLEMASS",
+            "molar_mass",
+            "molarmass",
+            "molemass",
+        ): ("kg/mol", "Molar mass"),
+        ("PCRIT", "P_CRITICAL", "Pcrit", "p_critical", "pcrit"): (
+            "Pa",
+            "Pressure at the critical point",
+        ),
+        ("PHASE", "Phase"): ("dimensionless", "Phase index as a float"),
+        ("PMAX", "P_MAX", "P_max", "pmax"): ("Pa", "Maximum pressure limit"),
+        ("PMIN", "P_MIN", "P_min", "pmin"): ("Pa", "Minimum pressure limit"),
+        ("PRANDTL", "Prandtl"): ("dimensionless", "Prandtl number"),
+        ("PTRIPLE", "P_TRIPLE", "p_triple", "ptriple"): (
+            "Pa",
+            "Pressure at the triple point (pure only)",
+        ),
+        ("P_REDUCING", "p_reducing"): ("Pa", "Pressure at the reducing point"),
+        ("RHOCRIT", "RHOMASS_CRITICAL", "rhocrit", "rhomass_critical"): (
+            "kg/m³",
+            "Mass density at critical point",
+        ),
+        ("RHOMASS_REDUCING", "rhomass_reducing"): (
+            "kg/m³",
+            "Mass density at reducing point",
+        ),
+        ("RHOMOLAR_CRITICAL", "rhomolar_critical"): (
+            "mol/m³",
+            "Molar density at critical point",
+        ),
+        ("RHOMOLAR_REDUCING", "rhomolar_reducing"): (
+            "mol/m³",
+            "Molar density at reducing point",
+        ),
+        ("SMOLAR_RESIDUAL", "Smolar_residual"): ("J/mol/K", "Residual molar entropy"),
+        ("TCRIT", "T_CRITICAL", "T_critical", "Tcrit"): (
+            "K",
+            "Temperature at the critical point",
+        ),
+        ("TMAX", "T_MAX", "T_max", "Tmax"): ("K", "Maximum temperature limit"),
+        ("TMIN", "T_MIN", "T_min", "Tmin"): ("K", "Minimum temperature limit"),
+        ("TTRIPLE", "T_TRIPLE", "T_triple", "Ttriple"): (
+            "K",
+            "Temperature at the triple point",
+        ),
+        ("T_FREEZE", "T_freeze"): (
+            "K",
+            "Freezing temperature for incompressible solutions",
+        ),
+        ("T_REDUCING", "T_reducing"): ("K", "Temperature at the reducing point"),
+        ("V", "VISCOSITY", "viscosity"): ("Pa*s", "Viscosity"),
+        ("Z",): ("dimensionless", "Compressibility factor"),
     }
 
     ALL_PROPERTIES: set[CProperty] = set(flatten(list(PROPERTY_MAP)))
     REPR_PROPERTIES: tuple[tuple[CProperty, str], ...] = (
-        ('P', '.0f'),
-        ('T', '.1f'),
-        ('D', '.1f'),
-        ('V', '.2g')
+        ("P", ".0f"),
+        ("T", ".1f"),
+        ("D", ".1f"),
+        ("V", ".2g"),
     )
 
     # preferred return units
     # key is the first name in the tuple used in PROPERTY_MAP
     RETURN_UNITS: dict[CProperty, UnitString] = {
-        'P': 'kPa',
-        'T': '°C',
-        'TMAX': '°C',
-        'TMIN': '°C',
-        'TTRIPLE': '°C',
-        'T_FREEZE': '°C',
-        'V': 'cP',
-        'H': 'kJ/kg',
-        'C': 'kJ/kg/K'
+        "P": "kPa",
+        "T": "°C",
+        "TMAX": "°C",
+        "TMIN": "°C",
+        "TTRIPLE": "°C",
+        "T_FREEZE": "°C",
+        "V": "cP",
+        "H": "kJ/kg",
+        "C": "kJ/kg/K",
     }
 
     # numerical accuracy, determines if return values are zero
     _EPS: float = 1e-9
 
     # skip checking for zero for these properties
-    _SKIP_ZERO_CHECK: tuple[CProperty, ...] = ('PHASE', )
+    _SKIP_ZERO_CHECK: tuple[CProperty, ...] = ("PHASE",)
 
     @abstractmethod
     def __init__(self, name: CName, **kwargs: Quantity):
@@ -348,23 +404,17 @@ class CoolPropFluid(ABC):
 
     @classmethod
     def get_prop_key(cls, prop: CProperty) -> tuple[CProperty, ...]:
-
         if prop not in cls.ALL_PROPERTIES:
-            raise ValueError(
-                f'Property "{prop}" is not a valid CoolProp property name'
-            )
+            raise ValueError(f'Property "{prop}" is not a valid CoolProp property name')
 
         for names in cls.PROPERTY_MAP:
             if prop in names:
                 return names
 
-        raise ValueError(
-            f'Property "{prop}" is not a valid CoolProp property name'
-        )
+        raise ValueError(f'Property "{prop}" is not a valid CoolProp property name')
 
     @classmethod
     def get_coolprop_unit(cls, prop: CProperty) -> Unit:
-
         key = cls.get_prop_key(prop)
 
         if key in cls.PROPERTY_MAP:
@@ -375,7 +425,6 @@ class CoolPropFluid(ABC):
 
     @classmethod
     def is_valid_prop(cls, prop: CProperty) -> bool:
-
         try:
             cls.get_prop_key(prop)
             return True
@@ -411,22 +460,19 @@ class CoolPropFluid(ABC):
 
     @classmethod
     def describe(cls, prop: CProperty) -> str:
-
         key = cls.get_prop_key(prop)
 
         if key in cls.PROPERTY_MAP:
-
             unit_str, description = cls.PROPERTY_MAP[key]
             unit = Quantity.get_unit(unit_str)
-            unit_repr = f'{unit:~P}'
+            unit_repr = f"{unit:~P}"
 
             if not unit_repr:
-                unit_repr = 'dimensionless'
+                unit_repr = "dimensionless"
 
             return f'{", ".join(key)}: {description} [{unit_repr}]'
 
-        raise ValueError(
-            f'Could not get description, key "{key}" does not exist')
+        raise ValueError(f'Could not get description, key "{key}" does not exist')
 
     @classmethod
     def search(cls, inp: str) -> list[str]:
@@ -454,48 +500,42 @@ class CoolPropFluid(ABC):
         return matches
 
     def check_exception(self, prop: CProperty, e: ValueError) -> None:
-
         msg = str(e)
 
         # this error occurs in case the input values are outside
         # the allowable range for this property
         # in this case the return value will be NaN, no exception is raised
-        if 'No outputs were able to be calculated' in msg:
+        if "No outputs were able to be calculated" in msg:
             return
 
         # if CoolProp has not implemented prop as output, return NaN
         if any(n in msg for n in self.COOLPROP_ERROR_MESSAGES):
             return
 
-        if 'Output string is invalid' in msg:
+        if "Output string is invalid" in msg:
             return
 
-        if 'Initialize failed for backend' in msg:
+        if "Initialize failed for backend" in msg:
             raise ValueError(
                 f'Fluid "{self.name}" could not be initalized, '
-                'ensure that the name is a valid CoolProp fluid name') from e
+                "ensure that the name is a valid CoolProp fluid name"
+            ) from e
 
         warnings.warn(
             f'CoolProp could not calculate "{prop}" for fluid "{self.name}", '
-            f'output is NaN: {msg}'
+            f"output is NaN: {msg}"
         )
 
     def evaluate(
-            self,
-            output: CProperty,
-            *points: tuple[CProperty, float | np.ndarray]
+        self, output: CProperty, *points: tuple[CProperty, float | np.ndarray]
     ) -> float | np.ndarray:
-
         # case 1: all inputs are scalar, output is scalar
         if all(isinstance_types(pt[1], float) for pt in points):
             return self.evaluate_single(output, *points)  # type: ignore
 
         # at this point, the output will be a vector of at least length 1
 
-        def single_element_vector_to_float(
-            x: float | np.ndarray
-        ) -> float | np.ndarray:
-
+        def single_element_vector_to_float(x: float | np.ndarray) -> float | np.ndarray:
             if isinstance(x, float):
                 return x
 
@@ -504,59 +544,48 @@ class CoolPropFluid(ABC):
 
             return x
 
-        points = tuple(
-            (p, single_element_vector_to_float(v)) for p, v in points
-        )
+        points = tuple((p, single_element_vector_to_float(v)) for p, v in points)
 
-        sizes = [v.size for p, v in points
-                 if isinstance(v, np.ndarray)]
+        sizes = [v.size for p, v in points if isinstance(v, np.ndarray)]
 
-        shapes = [v.shape for p, v in points
-                  if isinstance(v, np.ndarray)]
+        shapes = [v.shape for p, v in points if isinstance(v, np.ndarray)]
 
         # the sizes list is empty if all inputs were 1-element vectors
         if len(sizes):
-
             N = sizes[0]
             shape = shapes[0]
 
             # 1-length vectors were converted to float, so this error will be relevant
             if len(set(sizes)) != 1:
                 raise ValueError(
-                    'All inputs must have the same size, '
-                    f'passed {points} with sizes {sizes}'
+                    "All inputs must have the same size, "
+                    f"passed {points} with sizes {sizes}"
                 )
 
             if len(set(shapes)) != 1:
                 raise ValueError(
-                    'All inputs must have the same shape, '
-                    f'passed {points} with shapes {shapes}'
+                    "All inputs must have the same shape, "
+                    f"passed {points} with shapes {shapes}"
                 )
 
         else:
-
             N = 1
-            shape = (1, )
+            shape = (1,)
 
         def expand_scalars(x: float | np.ndarray) -> np.ndarray:
-
             if isinstance_types(x, float):
                 return np.repeat(float(x), N).astype(float).reshape(shape)
 
             # TODO: typing.TypeGuard if-else constructs are not handled by the type checker
             return x
 
-        points_arr = tuple(
-            (p, expand_scalars(v)) for p, v in points
-        )
+        points_arr = tuple((p, expand_scalars(v)) for p, v in points)
 
         return self.evaluate_multiple(output, *points_arr)
 
     def evaluate_single(
-            self,
-            output: CProperty,
-            *points: tuple[CProperty, float]) -> float:
-
+        self, output: CProperty, *points: tuple[CProperty, float]
+    ) -> float:
         inputs = list(flatten(points))
 
         if self._append_name_to_cp_inputs:
@@ -575,20 +604,18 @@ class CoolPropFluid(ABC):
             return np.nan
 
     def evaluate_multiple_separately(
-            self,
-            output: CProperty,
-            props: list[CProperty],
-            arrs_flat_masked: list[np.ndarray],
-            N: int) -> np.ndarray:
-
+        self,
+        output: CProperty,
+        props: list[CProperty],
+        arrs_flat_masked: list[np.ndarray],
+        N: int,
+    ) -> np.ndarray:
         vals = []
 
         for i in range(N):
-
             arrs_flat_masked_i = [n[i] for n in arrs_flat_masked]
 
-            inputs_i = list(flatten(list(zip(props,
-                                             arrs_flat_masked_i))))
+            inputs_i = list(flatten(list(zip(props, arrs_flat_masked_i))))
 
             if self._append_name_to_cp_inputs:
                 inputs_i.append(self.name)
@@ -604,19 +631,15 @@ class CoolPropFluid(ABC):
         return np.array(vals)
 
     def evaluate_multiple(
-            self,
-            output: CProperty,
-            *points: tuple[CProperty, np.ndarray]) -> np.ndarray:
-
+        self, output: CProperty, *points: tuple[CProperty, np.ndarray]
+    ) -> np.ndarray:
         props = [pt[0] for pt in points]
         arrs = [pt[1] for pt in points]
         shape = arrs[0].shape
 
         arrs_flat = [n.flatten() for n in arrs]
 
-        mask: np.ndarray = np.logical_and.reduce(
-            [np.isfinite(n) for n in arrs_flat]
-        )
+        mask: np.ndarray = np.logical_and.reduce([np.isfinite(n) for n in arrs_flat])
 
         def get_empty_like(x: np.ndarray) -> np.ndarray:
             empty = np.empty_like(x).astype(float)
@@ -629,7 +652,6 @@ class CoolPropFluid(ABC):
         N = mask.astype(int).sum()
 
         if N > 0:
-
             arrs_flat_masked = [n[mask] for n in arrs_flat]
 
             inputs = list(flatten(list(zip(props, arrs_flat_masked))))
@@ -643,7 +665,6 @@ class CoolPropFluid(ABC):
                 val_masked: np.ndarray = self.BACKEND(output, *inputs)
 
             except ValueError as e:
-
                 self.check_exception(output, e)
 
                 if self._evaluate_invalid_separately:
@@ -658,15 +679,14 @@ class CoolPropFluid(ABC):
 
         def validate_output(x: np.ndarray) -> np.ndarray:
             x[x == np.inf] = np.nan
-            x[x == - np.inf] = np.nan
+            x[x == -np.inf] = np.nan
             return x.reshape(shape)
 
         return validate_output(val)
 
-    def construct_quantity(self,
-                           val: float | np.ndarray,
-                           output: CProperty) -> Quantity:
-
+    def construct_quantity(
+        self, val: float | np.ndarray, output: CProperty
+    ) -> Quantity:
         unit_output = self.get_coolprop_unit(output)
 
         # the dimensionality is not known until runtime
@@ -677,9 +697,7 @@ class CoolPropFluid(ABC):
         # the values are not always exactly 0, use the _EPS class attribute to check this
         # skip this check for some properties
         if not not qty.dimensionless and output not in self._SKIP_ZERO_CHECK:
-
             if isinstance(qty.m, np.ndarray):
-
                 # Quantity.m is a @property, cannot be set
                 m = qty.m
 
@@ -687,7 +705,6 @@ class CoolPropFluid(ABC):
                 qty = Quantity(m, unit_output)
 
             else:
-
                 if qty.m < self._EPS:
                     qty = Quantity(np.nan, unit_output)
 
@@ -699,10 +716,7 @@ class CoolPropFluid(ABC):
 
         return qty
 
-    def to_numeric(self,
-                   prop: CProperty,
-                   qty: Quantity) -> float | np.ndarray:
-
+    def to_numeric(self, prop: CProperty, qty: Quantity) -> float | np.ndarray:
         unit = self.get_coolprop_unit(prop)
 
         try:
@@ -710,8 +724,8 @@ class CoolPropFluid(ABC):
         except DimensionalityError:
             raise ExpectedDimensionalityError(
                 f'CoolProp input for property "{prop}" is incorrect. '
-                f'expected {unit} ({unit.dimensionality}), but passed '
-                f'{qty.u} ({qty.dimensionality})'
+                f"expected {unit} ({unit.dimensionality}), but passed "
+                f"{qty.u} ({qty.dimensionality})"
             )
 
         if isinstance(m, list):
@@ -719,9 +733,7 @@ class CoolPropFluid(ABC):
 
         return m
 
-    def get(self,
-            output: CProperty,
-            *points: tuple[CProperty, Quantity]) -> Quantity:
+    def get(self, output: CProperty, *points: tuple[CProperty, Quantity]) -> Quantity:
         """
         Wraps the function ``CoolProp.CoolProp.PropsSI``, handles input
         and output with :py:class:`encomp.units.Quantity` objects.
@@ -741,9 +753,7 @@ class CoolPropFluid(ABC):
             Value (and unit) of the output property
         """
 
-        points_numeric = [
-            (pt[0], self.to_numeric(*pt)) for pt in points
-        ]
+        points_numeric = [(pt[0], self.to_numeric(*pt)) for pt in points]
 
         val = self.evaluate(output, *points_numeric)
 
@@ -751,7 +761,6 @@ class CoolPropFluid(ABC):
 
 
 class Fluid(CoolPropFluid):
-
     def __init__(self, name: CName, **kwargs: Quantity):
         """
         Represents a fluid at a fixed state, for example at a
@@ -772,193 +781,183 @@ class Fluid(CoolPropFluid):
 
         if len(kwargs) != 2:
             raise ValueError(
-                f'Exactly two fixed points are required, passed {list(kwargs)}')
+                f"Exactly two fixed points are required, passed {list(kwargs)}"
+            )
 
         kwargs_list = list(kwargs.items())
 
         self.point_1 = kwargs_list[0]
         self.point_2 = kwargs_list[1]
 
-        self.points = [
-            self.point_1,
-            self.point_2
-        ]
+        self.points = [self.point_1, self.point_2]
 
     @property
     def phase(self) -> str:
-
         phase_idx = self.PHASE
         phase_idx_val = phase_idx.m
 
         if isinstance(phase_idx_val, np.ndarray):
-
             if len(set(phase_idx_val)) == 1:
                 phase_idx_val = float(phase_idx_val[0])
-                return self.PHASES.get(phase_idx_val, 'N/A')
+                return self.PHASES.get(phase_idx_val, "N/A")
 
             else:
-                return 'Variable'
+                return "Variable"
 
         elif isinstance(phase_idx_val, (int, float)):
+            return self.PHASES.get(float(phase_idx_val), "N/A")
 
-            return self.PHASES.get(float(phase_idx_val), 'N/A')
-
-        raise TypeError(
-            f'Cannot determine phase of {self} when '
-            f'{phase_idx=}'
-        )
+        raise TypeError(f"Cannot determine phase of {self} when " f"{phase_idx=}")
 
     @property
     def PHASE(self) -> Quantity[Dimensionless, np.ndarray]:
-        return self.__getattr__('PHASE').asdim(Dimensionless)
+        return self.__getattr__("PHASE").asdim(Dimensionless)
 
     @property
     def PRANDTL(self) -> Quantity[Dimensionless, np.ndarray]:
-        return self.__getattr__('PRANDTL').asdim(Dimensionless)
+        return self.__getattr__("PRANDTL").asdim(Dimensionless)
 
     @property
     def P(self) -> Quantity[Pressure, np.ndarray]:
-        return self.__getattr__('P').asdim(Pressure)
+        return self.__getattr__("P").asdim(Pressure)
 
     @property
     def PCRIT(self) -> Quantity[Pressure, np.ndarray]:
-        return self.__getattr__('PCRIT').asdim(Pressure)
+        return self.__getattr__("PCRIT").asdim(Pressure)
 
     @property
     def PMAX(self) -> Quantity[Pressure, np.ndarray]:
-        return self.__getattr__('PMAX').asdim(Pressure)
+        return self.__getattr__("PMAX").asdim(Pressure)
 
     @property
     def PMIN(self) -> Quantity[Pressure, np.ndarray]:
-        return self.__getattr__('PMIN').asdim(Pressure)
+        return self.__getattr__("PMIN").asdim(Pressure)
 
     @property
     def PTRIPLE(self) -> Quantity[Pressure, np.ndarray]:
-        return self.__getattr__('PTRIPLE').asdim(Pressure)
+        return self.__getattr__("PTRIPLE").asdim(Pressure)
 
     @property
     def P_REDUCING(self) -> Quantity[Pressure, np.ndarray]:
-        return self.__getattr__('P_REDUCING').asdim(Pressure)
+        return self.__getattr__("P_REDUCING").asdim(Pressure)
 
     @property
     def T(self) -> Quantity[Temperature, np.ndarray]:
-        return self.__getattr__('T').asdim(Temperature)
+        return self.__getattr__("T").asdim(Temperature)
 
     @property
     def TCRIT(self) -> Quantity[Temperature, np.ndarray]:
-        return self.__getattr__('TCRIT').asdim(Temperature)
+        return self.__getattr__("TCRIT").asdim(Temperature)
 
     @property
     def TMAX(self) -> Quantity[Temperature, np.ndarray]:
-        return self.__getattr__('TMAX').asdim(Temperature)
+        return self.__getattr__("TMAX").asdim(Temperature)
 
     @property
     def TMIN(self) -> Quantity[Temperature, np.ndarray]:
-        return self.__getattr__('TMIN').asdim(Temperature)
+        return self.__getattr__("TMIN").asdim(Temperature)
 
     @property
     def TTRIPLE(self) -> Quantity[Temperature, np.ndarray]:
-        return self.__getattr__('TTRIPLE').asdim(Temperature)
+        return self.__getattr__("TTRIPLE").asdim(Temperature)
 
     @property
     def T_FREEZING(self) -> Quantity[Temperature, np.ndarray]:
-        return self.__getattr__('T_FREEZING').asdim(Temperature)
+        return self.__getattr__("T_FREEZING").asdim(Temperature)
 
     @property
     def T_REDUCING(self) -> Quantity[Temperature, np.ndarray]:
-        return self.__getattr__('T_REDUCING').asdim(Temperature)
+        return self.__getattr__("T_REDUCING").asdim(Temperature)
 
     @property
     def Q(self) -> Quantity[Dimensionless, np.ndarray]:
-        return self.__getattr__('Q').asdim(Dimensionless)
+        return self.__getattr__("Q").asdim(Dimensionless)
 
     @property
     def H(self) -> Quantity[SpecificEnthalpy, np.ndarray]:
-        return self.__getattr__('H').asdim(SpecificEnthalpy)
+        return self.__getattr__("H").asdim(SpecificEnthalpy)
 
     @property
     def HMOLAR(self) -> Quantity[MolarSpecificEnthalpy, np.ndarray]:
-        return self.__getattr__('HMOLAR').asdim(MolarSpecificEnthalpy)
+        return self.__getattr__("HMOLAR").asdim(MolarSpecificEnthalpy)
 
     @property
     def S(self) -> Quantity[SpecificEntropy, np.ndarray]:
-        return self.__getattr__('S').asdim(SpecificEntropy)
+        return self.__getattr__("S").asdim(SpecificEntropy)
 
     @property
     def SMOLAR(self) -> Quantity[MolarSpecificEntropy, np.ndarray]:
-        return self.__getattr__('SMOLAR').asdim(MolarSpecificEntropy)
+        return self.__getattr__("SMOLAR").asdim(MolarSpecificEntropy)
 
     @property
     def U(self) -> Quantity[SpecificInternalEnergy, np.ndarray]:
-        return self.__getattr__('U').asdim(SpecificInternalEnergy)
+        return self.__getattr__("U").asdim(SpecificInternalEnergy)
 
     @property
     def UMOLAR(self) -> Quantity[MolarSpecificInternalEnergy, np.ndarray]:
-        return self.__getattr__('UMOLAR').asdim(MolarSpecificInternalEnergy)
+        return self.__getattr__("UMOLAR").asdim(MolarSpecificInternalEnergy)
 
     @property
     def V(self) -> Quantity[DynamicViscosity, np.ndarray]:
-        return self.__getattr__('V').asdim(DynamicViscosity)
+        return self.__getattr__("V").asdim(DynamicViscosity)
 
     @property
     def Z(self) -> Quantity[Dimensionless, np.ndarray]:
-        return self.__getattr__('Z').asdim(Dimensionless)
+        return self.__getattr__("Z").asdim(Dimensionless)
 
     @property
     def DELTA(self) -> Quantity[Dimensionless, np.ndarray]:
-        return self.__getattr__('DELTA').asdim(Dimensionless)
+        return self.__getattr__("DELTA").asdim(Dimensionless)
 
     @property
     def D(self) -> Quantity[Density, np.ndarray]:
-        return self.__getattr__('D').asdim(Density)
+        return self.__getattr__("D").asdim(Density)
 
     @property
     def RHOMASS_REDUCING(self) -> Quantity[Density, np.ndarray]:
-        return self.__getattr__('RHOMASS_REDUCING').asdim(Density)
+        return self.__getattr__("RHOMASS_REDUCING").asdim(Density)
 
     @property
     def RHOMOLAR_CRITICAL(self) -> Quantity[MolarDensity, np.ndarray]:
-        return self.__getattr__('RHOMOLAR_CRITICAL').asdim(MolarDensity)
+        return self.__getattr__("RHOMOLAR_CRITICAL").asdim(MolarDensity)
 
     @property
     def RHOMOLAR_REDUCING(self) -> Quantity[MolarDensity, np.ndarray]:
-        return self.__getattr__('RHOMOLAR_REDUCING').asdim(MolarDensity)
+        return self.__getattr__("RHOMOLAR_REDUCING").asdim(MolarDensity)
 
     @property
     def DMOLAR(self) -> Quantity[MolarDensity, np.ndarray]:
-        return self.__getattr__('DMOLAR').asdim(MolarDensity)
+        return self.__getattr__("DMOLAR").asdim(MolarDensity)
 
     @property
     def A(self) -> Quantity[Velocity, np.ndarray]:
-        return self.__getattr__('A').asdim(Velocity)
+        return self.__getattr__("A").asdim(Velocity)
 
     @property
     def L(self) -> Quantity[ThermalConductivity, np.ndarray]:
-        return self.__getattr__('L').asdim(ThermalConductivity)
+        return self.__getattr__("L").asdim(ThermalConductivity)
 
     @property
     def C(self) -> Quantity[SpecificHeatCapacity, np.ndarray]:
-        return self.__getattr__('C').asdim(SpecificHeatCapacity)
+        return self.__getattr__("C").asdim(SpecificHeatCapacity)
 
     @property
     def M(self) -> Quantity[MolarMass, np.ndarray]:
-        return self.__getattr__('M').asdim(MolarMass)
+        return self.__getattr__("M").asdim(MolarMass)
 
     def __getattr__(self, attr: CProperty) -> Quantity:
-
         if attr not in self.ALL_PROPERTIES:
             raise AttributeError(attr)
 
         return super().get(attr, *self.points)
 
     def __repr__(self) -> str:
-
         props = []
 
         for p, fmt in self.REPR_PROPERTIES:
-            props.append(f'{p}={self.__getattr__(p):{fmt}}')
+            props.append(f"{p}={self.__getattr__(p):{fmt}}")
 
-        props_str = ', '.join(props)
+        props_str = ", ".join(props)
 
         s = f'<{self.__class__.__name__} "{self.name}", {props_str}>'
 
@@ -966,12 +965,11 @@ class Fluid(CoolPropFluid):
 
 
 class Water(Fluid):
-
     REPR_PROPERTIES: tuple[tuple[str, str], ...] = (
-        ('P', '.0f'),
-        ('T', '.1f'),
-        ('D', '.1f'),
-        ('V', '.1f')
+        ("P", ".0f"),
+        ("T", ".1f"),
+        ("D", ".1f"),
+        ("V", ".1f"),
     )
 
     def __init__(self, **kwargs: Quantity):
@@ -985,75 +983,77 @@ class Water(Fluid):
             CoolProp property name.
         """
 
-        self.name = 'Water'
+        self.name = "Water"
 
         self.check_inputs(kwargs)
 
         if len(kwargs) != 2:
-
-            if set(kwargs) == {'P', 'T', 'Q'}:
-
+            if set(kwargs) == {"P", "T", "Q"}:
                 raise ValueError(
-                    'Cannot set both P, T and vapor quality Q. Remove one of P, T to '
-                    'get properties of saturated steam.')
+                    "Cannot set both P, T and vapor quality Q. Remove one of P, T to "
+                    "get properties of saturated steam."
+                )
 
             raise ValueError(
-                f'Exactly two fixed points are required, passed {list(kwargs)}')
+                f"Exactly two fixed points are required, passed {list(kwargs)}"
+            )
 
         kwargs_list = list(kwargs.items())
 
         self.point_1 = kwargs_list[0]
         self.point_2 = kwargs_list[1]
 
-        self.points = [
-            self.point_1,
-            self.point_2
-        ]
+        self.points = [self.point_1, self.point_2]
 
     def __repr__(self) -> str:
-
         repr_properties = self.REPR_PROPERTIES
 
-        props_str = ', '.join(
-            f'{p}={self.__getattr__(p):{fmt}}'
-            for p, fmt in repr_properties
+        props_str = ", ".join(
+            f"{p}={self.__getattr__(p):{fmt}}" for p, fmt in repr_properties
         )
 
-        s = f'<{self.__class__.__name__} ({self.phase}), {props_str}>'
+        s = f"<{self.__class__.__name__} ({self.phase}), {props_str}>"
 
         return s
 
 
 class HumidAir(CoolPropFluid):
-
     BACKEND = HAPropsSI
     _append_name_to_cp_inputs = False
     _evaluate_invalid_separately = True
 
     # unit and description for properties in function HAPropsSI
     PROPERTY_MAP: dict[tuple[CProperty, ...], tuple[str, str]] = {
-
-        ('B', 'Twb', 'T_wb', 'WetBulb'): ('K', 'Wet-Bulb Temperature'),
-        ('C', 'cp'): ('J/kg/K', 'Mixture specific heat per unit dry air'),
-        ('Cha', 'cp_ha'): ('J/kg/K', 'Mixture specific heat per unit humid air'),
-        ('CV', ): ('J/kg/K', 'Mixture specific heat at constant volume per unit dry air'),
-        ('CVha', 'cv_ha'): ('J/kg/K', 'Mixture specific heat at constant volume per unit humid air'),
-        ('D', 'Tdp', 'DewPoint', 'T_dp'): ('K', 'Dew-Point Temperature'),
-        ('H', 'Hda', 'Enthalpy'): ('J/kg', 'Mixture enthalpy per dry air'),
-        ('Hha', ): ('J/kg', 'Mixture enthalpy per humid air'),
-        ('K', 'k', 'Conductivity'): ('W/m/K', 'Mixture thermal conductivity'),
-        ('M', 'Visc', 'mu'): ('Pa*s', 'Mixture viscosity'),
-        ('psi_w', 'Y'): ('dimensionless', 'Water mole fraction'),
-        ('P', ): ('Pa', 'Pressure'),
-        ('P_w', ): ('Pa', 'Partial pressure of water vapor'),
-        ('R', 'RH', 'RelHum'): ('dimensionless', 'Relative humidity in [0, 1]'),
-        ('S', 'Sda', 'Entropy'): ('J/kg/K', 'Mixture entropy per unit dry air'),
-        ('Sha', ): ('J/kg/K', 'Mixture entropy per unit humid air'),
-        ('T', 'Tdb', 'T_db'): ('K', 'Dry-Bulb Temperature'),
-        ('V', 'Vda'): ('m³/kg', 'Mixture volume per unit dry air'),
-        ('Vha', ): ('m³/kg', 'Mixture volume per unit humid air'),
-        ('W', 'Omega', 'HumRat'): ('dimensionless', 'Humidity Rat mass water per mass dry air'),
-        ('Z', ): ('dimensionless', 'Compressibility factor')
+        ("B", "Twb", "T_wb", "WetBulb"): ("K", "Wet-Bulb Temperature"),
+        ("C", "cp"): ("J/kg/K", "Mixture specific heat per unit dry air"),
+        ("Cha", "cp_ha"): ("J/kg/K", "Mixture specific heat per unit humid air"),
+        ("CV",): (
+            "J/kg/K",
+            "Mixture specific heat at constant volume per unit dry air",
+        ),
+        ("CVha", "cv_ha"): (
+            "J/kg/K",
+            "Mixture specific heat at constant volume per unit humid air",
+        ),
+        ("D", "Tdp", "DewPoint", "T_dp"): ("K", "Dew-Point Temperature"),
+        ("H", "Hda", "Enthalpy"): ("J/kg", "Mixture enthalpy per dry air"),
+        ("Hha",): ("J/kg", "Mixture enthalpy per humid air"),
+        ("K", "k", "Conductivity"): ("W/m/K", "Mixture thermal conductivity"),
+        ("M", "Visc", "mu"): ("Pa*s", "Mixture viscosity"),
+        ("psi_w", "Y"): ("dimensionless", "Water mole fraction"),
+        ("P",): ("Pa", "Pressure"),
+        ("P_w",): ("Pa", "Partial pressure of water vapor"),
+        ("R", "RH", "RelHum"): ("dimensionless", "Relative humidity in [0, 1]"),
+        ("S", "Sda", "Entropy"): ("J/kg/K", "Mixture entropy per unit dry air"),
+        ("Sha",): ("J/kg/K", "Mixture entropy per unit humid air"),
+        ("T", "Tdb", "T_db"): ("K", "Dry-Bulb Temperature"),
+        ("V", "Vda"): ("m³/kg", "Mixture volume per unit dry air"),
+        ("Vha",): ("m³/kg", "Mixture volume per unit humid air"),
+        ("W", "Omega", "HumRat"): (
+            "dimensionless",
+            "Humidity Rat mass water per mass dry air",
+        ),
+        ("Z",): ("dimensionless", "Compressibility factor"),
     }
 
     ALL_PROPERTIES: set[CProperty] = set(flatten(list(PROPERTY_MAP)))
@@ -1062,21 +1062,21 @@ class HumidAir(CoolPropFluid):
     # density is not defined, need to use either Vda (volume per dry air)
     # or Vha (per humid air)
     RETURN_UNITS: dict[CProperty, str] = {
-        'P': 'kPa',
-        'P_w': 'kPa',
-        'M': 'cP',
-        'T': '°C',
-        'D': '°C',
-        'B': '°C',
+        "P": "kPa",
+        "P_w": "kPa",
+        "M": "cP",
+        "T": "°C",
+        "D": "°C",
+        "B": "°C",
     }
 
     REPR_PROPERTIES: tuple[tuple[CProperty, str], ...] = (
-        ('P', '.0f'),
-        ('T', '.1f'),
-        ('R', '.2f'),
-        ('Vda', '.1f'),
-        ('Vha', '.1f'),
-        ('M', '.2g')
+        ("P", ".0f"),
+        ("T", ".1f"),
+        ("R", ".2f"),
+        ("Vda", ".1f"),
+        ("Vha", ".1f"),
+        ("M", ".2g"),
     )
 
     def __init__(self, **kwargs: Quantity):
@@ -1091,13 +1091,14 @@ class HumidAir(CoolPropFluid):
             CoolProp property name.
         """
 
-        self.name = 'Humid air'
+        self.name = "Humid air"
 
         self.check_inputs(kwargs)
 
         if len(kwargs) != 3:
             raise ValueError(
-                f'Exactly three fixed points are required, passed {list(kwargs)}')
+                f"Exactly three fixed points are required, passed {list(kwargs)}"
+            )
 
         kwargs_list = list(kwargs.items())
 
@@ -1105,90 +1106,85 @@ class HumidAir(CoolPropFluid):
         self.point_2 = kwargs_list[1]
         self.point_3 = kwargs_list[2]
 
-        self.points = [
-            self.point_1,
-            self.point_2,
-            self.point_3
-        ]
+        self.points = [self.point_1, self.point_2, self.point_3]
 
     @property
     def psi_w(self) -> Quantity[Dimensionless, np.ndarray]:
-        return self.__getattr__('psi_w').asdim(Dimensionless)
+        return self.__getattr__("psi_w").asdim(Dimensionless)
 
     @property
     def W(self) -> Quantity[Dimensionless, np.ndarray]:
-        return self.__getattr__('W').asdim(Dimensionless)
+        return self.__getattr__("W").asdim(Dimensionless)
 
     @property
     def Z(self) -> Quantity[Dimensionless, np.ndarray]:
-        return self.__getattr__('Z').asdim(Dimensionless)
+        return self.__getattr__("Z").asdim(Dimensionless)
 
     @property
     def R(self) -> Quantity[Dimensionless, np.ndarray]:
-        return self.__getattr__('R').asdim(Dimensionless)
+        return self.__getattr__("R").asdim(Dimensionless)
 
     @property
     def P(self) -> Quantity[Pressure, np.ndarray]:
-        return self.__getattr__('P').asdim(Pressure)
+        return self.__getattr__("P").asdim(Pressure)
 
     @property
     def P_w(self) -> Quantity[Pressure, np.ndarray]:
-        return self.__getattr__('P_w').asdim(Pressure)
+        return self.__getattr__("P_w").asdim(Pressure)
 
     @property
     def B(self) -> Quantity[Temperature, np.ndarray]:
-        return self.__getattr__('B').asdim(Temperature)
+        return self.__getattr__("B").asdim(Temperature)
 
     @property
     def T(self) -> Quantity[Temperature, np.ndarray]:
-        return self.__getattr__('T').asdim(Temperature)
+        return self.__getattr__("T").asdim(Temperature)
 
     @property
     def D(self) -> Quantity[Temperature, np.ndarray]:
-        return self.__getattr__('D').asdim(Temperature)
+        return self.__getattr__("D").asdim(Temperature)
 
     @property
     def K(self) -> Quantity[ThermalConductivity, np.ndarray]:
-        return self.__getattr__('K').asdim(ThermalConductivity)
+        return self.__getattr__("K").asdim(ThermalConductivity)
 
     @property
     def M(self) -> Quantity[DynamicViscosity, np.ndarray]:
-        return self.__getattr__('M').asdim(DynamicViscosity)
+        return self.__getattr__("M").asdim(DynamicViscosity)
 
     @property
     def C(self) -> Quantity[SpecificHeatPerDryAir, np.ndarray]:
-        return self.__getattr__('C').asdim(SpecificHeatPerDryAir)
+        return self.__getattr__("C").asdim(SpecificHeatPerDryAir)
 
     @property
     def Cha(self) -> Quantity[SpecificHeatPerHumidAir, np.ndarray]:
-        return self.__getattr__('Cha').asdim(SpecificHeatPerHumidAir)
+        return self.__getattr__("Cha").asdim(SpecificHeatPerHumidAir)
 
     @property
     def H(self) -> Quantity[MixtureEnthalpyPerDryAir, np.ndarray]:
-        return self.__getattr__('H').asdim(MixtureEnthalpyPerDryAir)
+        return self.__getattr__("H").asdim(MixtureEnthalpyPerDryAir)
 
     @property
     def Hha(self) -> Quantity[MixtureEnthalpyPerHumidAir, np.ndarray]:
-        return self.__getattr__('Hha').asdim(MixtureEnthalpyPerHumidAir)
+        return self.__getattr__("Hha").asdim(MixtureEnthalpyPerHumidAir)
 
     @property
     def S(self) -> Quantity[MixtureEntropyPerDryAir, np.ndarray]:
-        return self.__getattr__('S').asdim(MixtureEntropyPerDryAir)
+        return self.__getattr__("S").asdim(MixtureEntropyPerDryAir)
 
     @property
     def Sha(self) -> Quantity[MixtureEntropyPerHumidAir, np.ndarray]:
-        return self.__getattr__('Sha').asdim(MixtureEntropyPerHumidAir)
+        return self.__getattr__("Sha").asdim(MixtureEntropyPerHumidAir)
 
     @property
     def V(self) -> Quantity[MixtureVolumePerDryAir, np.ndarray]:
-        return self.__getattr__('V').asdim(MixtureVolumePerDryAir)
+        return self.__getattr__("V").asdim(MixtureVolumePerDryAir)
 
     @property
     def Vha(self) -> Quantity[MixtureVolumePerHumidAir, np.ndarray]:
-        return self.__getattr__('Vha').asdim(MixtureVolumePerHumidAir)
+        return self.__getattr__("Vha").asdim(MixtureVolumePerHumidAir)
 
     def __getattr__(self, attr: CProperty) -> Quantity:
-
         if attr not in self.ALL_PROPERTIES:
             raise AttributeError(attr)
 
@@ -1196,12 +1192,10 @@ class HumidAir(CoolPropFluid):
         return super().get(attr, *self.points)
 
     def __repr__(self) -> str:
-
-        props_str = ', '.join(
-            f'{p}={self.__getattr__(p):{fmt}}'
-            for p, fmt in self.REPR_PROPERTIES
+        props_str = ", ".join(
+            f"{p}={self.__getattr__(p):{fmt}}" for p, fmt in self.REPR_PROPERTIES
         )
 
-        s = f'<{self.__class__.__name__}, {props_str}>'
+        s = f"<{self.__class__.__name__}, {props_str}>"
 
         return s

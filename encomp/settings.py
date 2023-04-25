@@ -2,13 +2,14 @@
 Contains settings used elsewhere in the library.
 """
 
-from typing import Literal
 from pathlib import Path
+from typing import Literal
+
+from dotenv import find_dotenv, load_dotenv
 from pydantic import BaseSettings, FilePath
-from dotenv import load_dotenv, find_dotenv
 
 # find the first file named ".env" in the current directory or a parent directory
-load_dotenv(dotenv_path=find_dotenv(filename='.env'))
+load_dotenv(dotenv_path=find_dotenv(filename=".env"))
 
 ENCOMP_BASE = Path(__file__).parent.resolve()
 
@@ -47,19 +48,19 @@ class Settings(BaseSettings):
 
     """
 
-    units: FilePath = ENCOMP_BASE / 'data/units.txt'
+    units: FilePath = ENCOMP_BASE / "defs/units.txt"
 
     typeset_symbol_scripts: bool = True
     ignore_ndarray_unit_stripped_warning: bool = True
     ignore_coolprop_warnings: bool = True
 
     autoconvert_offset_to_baseunit: bool = False
-    default_unit_format: Literal['~P', '~L', '~H', '~Lx'] = '~P'
+    default_unit_format: Literal["~P", "~L", "~H", "~Lx"] = "~P"
 
     class Config:
-        env_prefix = 'ENCOMP_'
-        env_file = '.env'
-        env_file_encoding = 'utf-8'
+        env_prefix = "ENCOMP_"
+        env_file = ".env"
+        env_file_encoding = "utf-8"
         case_sensitive = False
 
 

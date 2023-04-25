@@ -2,21 +2,19 @@
 Miscellaneous functions that do not fit anywhere else.
 """
 import ast
-import asttokens
-
-from typing import Any, TypeVar, Type, overload
-from typing import _TypedDictMeta, _GenericAlias  # type: ignore
 from types import UnionType
+from typing import Any, Type, TypeVar, _GenericAlias, _TypedDictMeta, overload  # type: ignore
 
+import asttokens
 from typeguard import check_type
 from typing_extensions import TypeGuard
 
-
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 # NOTE: these overloads are a workaround to avoid issues with type[T] -> T
 # signatures with mypy
+
 
 @overload
 def isinstance_types(obj: Any, expected: type[T]) -> TypeGuard[T]:
@@ -81,28 +79,23 @@ def isinstance_types(obj: Any, expected: _GenericAlias | type) -> bool:
     # normal types are checked with isinstance()
     # note: this check must use typing.Type, not the builtin type (lower case)
     if isinstance(expected, Type):  # type: ignore
-
         # typing.TypedDict is a special case
         if not isinstance(expected, _TypedDictMeta):
             return isinstance(obj, expected)
 
     if type(expected) is UnionType:
-
         try:
             return isinstance(obj, expected)
         except TypeError:
-            return any(
-                isinstance_types(obj, n) for n in expected.__args__
-            )
+            return any(isinstance_types(obj, n) for n in expected.__args__)
 
     try:
-
-        # this function raises TypeError in case the object type
+        # this function raises an exception in case the object type
         # does not match the expected type
-        check_type('obj', obj, expected)
+        check_type("obj", obj, expected)
         return True
 
-    except TypeError:
+    except Exception:
         return False
 
 
@@ -127,7 +120,6 @@ def grid_dimensions(N: int, nrows: int, ncols: int) -> tuple[int, int]:
     """
 
     if nrows == -1 and ncols == -1:
-
         # start with a square grid
         nrows = ncols = int(N**0.5)
 
@@ -138,26 +130,20 @@ def grid_dimensions(N: int, nrows: int, ncols: int) -> tuple[int, int]:
         return nrows, ncols
 
     if nrows == -1:
-
         if N % ncols == 0:
             nrows = N // ncols
         else:
             nrows = N // ncols + 1
 
     elif ncols == -1:
-
         if N % nrows == 0:
             ncols = N // nrows
         else:
             ncols = N // nrows + 1
 
     else:
-
         if nrows * ncols < N:
-
-            raise ValueError(
-                f'{N} items cannot be placed in a {nrows} x {ncols} grid'
-            )
+            raise ValueError(f"{N} items cannot be placed in a {nrows} x {ncols} grid")
 
     return nrows, ncols
 
@@ -182,10 +168,9 @@ def name_assignments(src: str) -> list[tuple[str, str]]:
     atok = asttokens.ASTTokens(src, parse=True)
 
     for node in ast.walk(atok.tree):
-        if hasattr(node, 'lineno'):
+        if hasattr(node, "lineno"):
             if isinstance(node, ast.Assign):
                 if isinstance(node.targets[0], ast.Name):
-
                     start = node.first_token.startpos  # type: ignore
                     end = node.last_token.endpos  # type: ignore
                     assignment_src = atok.text[start:end]

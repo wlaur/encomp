@@ -1,14 +1,11 @@
 import pytest
-
 from hypothesis import given
-from hypothesis.strategies import lists, integers
+from hypothesis.strategies import integers, lists
 
-
-from ..structures import flatten, divide_chunks
+from ..structures import divide_chunks, flatten
 
 
 def test_flatten():
-
     nested = [(1, 2, 3), 3, [6, 7]]
 
     flat = list(flatten(nested))
@@ -41,7 +38,6 @@ def test_flatten():
     recursive[0] = recursive
 
     with pytest.raises(RecursionError):
-
         next(flatten(recursive))
 
     y = next(flatten(recursive, max_depth=100))
@@ -56,7 +52,6 @@ def test_flatten():
     lst=lists(integers(), min_size=1, max_size=100),
 )
 def test_divide_chunks(lst):
-
     m = len(lst)
 
     for N in range(1, m + 1):
@@ -71,7 +66,6 @@ def test_divide_chunks(lst):
 
 
 def test_divide_chunks_errors():
-
     with pytest.raises(TypeError):
         divide_chunks([])
 

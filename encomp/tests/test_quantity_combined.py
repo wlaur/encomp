@@ -2,33 +2,37 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from ..units import Quantity as Q
 from ..conversion import convert_volume_mass
-from ..utypes import (Dimensionless,
-                      Time,
-                      Length,
-                      MassFlow,
-                      Mass,
-                      VolumeFlow,
-                      Volume,
-                      Energy,
-                      NormalVolumeFlow,
-                      ThermalConductivity,
-                      Power,
-                      Temperature)
+from ..units import Quantity as Q
+from ..utypes import (
+    Dimensionless,
+    Energy,
+    Length,
+    Mass,
+    MassFlow,
+    NormalVolumeFlow,
+    Power,
+    Temperature,
+    ThermalConductivity,
+    Time,
+    Volume,
+    VolumeFlow,
+)
 
 if not TYPE_CHECKING:
-    def reveal_type(x): return x
+
+    def reveal_type(x):
+        return x
 
 
 @pytest.mark.mypy_testing
 def test_quantity_to_types() -> None:
     return
 
-    q = Q[Temperature](25, 'degC')
-    s = Q[Power](1, 'kW/(cm/m)')
+    q = Q[Temperature](25, "degC")
+    s = Q[Power](1, "kW/(cm/m)")
 
-    q_K = q.to('K')
+    q_K = q.to("K")
 
     reveal_type(q_K)  # R: encomp.units.Quantity[encomp.utypes.Temperature]
 
@@ -52,10 +56,10 @@ def test_quantity_to_types() -> None:
 def test_quantity_combined_types() -> None:
     return
 
-    m = Q[MassFlow](25, 'kg/s')
-    d = Q[Dimensionless](25, '%')
+    m = Q[MassFlow](25, "kg/s")
+    d = Q[Dimensionless](25, "%")
 
-    p1 = ((m / m) * d)**2 / (1 - d / 2)
+    p1 = ((m / m) * d) ** 2 / (1 - d / 2)
     reveal_type(p1)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
 
 
@@ -63,9 +67,9 @@ def test_quantity_combined_types() -> None:
 def test_quantity_custom_mul_div_types() -> None:
     return
 
-    s = Q[Length](1, 'm')
+    s = Q[Length](1, "m")
 
-    # autopep8: off
+    # fmt: off
 
     reveal_type(s * s)  # R: encomp.units.Quantity[encomp.utypes.Area]
 
@@ -73,35 +77,36 @@ def test_quantity_custom_mul_div_types() -> None:
     reveal_type((s * s) * s)  # R: encomp.units.Quantity[encomp.utypes.Volume]
     reveal_type(s * (s * s))  # R: encomp.units.Quantity[encomp.utypes.Volume]
 
+    reveal_type(s * (s * s) / s)  # R: encomp.units.Quantity[encomp.utypes.Area]
+    reveal_type(s * (s * s) / s / s)  # R: encomp.units.Quantity[encomp.utypes.Length]
+    reveal_type(
+        s * s * s / s / s / s
+    )  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
 
-    reveal_type(s * (s * s) / s) # R: encomp.units.Quantity[encomp.utypes.Area]
-    reveal_type(s * (s * s) / s / s) # R: encomp.units.Quantity[encomp.utypes.Length]
-    reveal_type(s * s * s / s / s / s) # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
+    mf = Q[MassFlow](1, "kg/s")
+    vf = Q[VolumeFlow](1, "liter/s")
+    nvf = Q[NormalVolumeFlow](1, "Nm3/s")
+    v = Q[Volume](1, "liter")
+    m = Q[Mass](25, "kg")
 
-    mf = Q[MassFlow](1, 'kg/s')
-    vf = Q[VolumeFlow](1, 'liter/s')
-    nvf = Q[NormalVolumeFlow](1, 'Nm3/s')
-    v = Q[Volume](1, 'liter')
-    m = Q[Mass](25, 'kg')
-
-    t = Q[Time](1, 's')
+    t = Q[Time](1, "s")
 
     reveal_type(mf * t)  # R: encomp.units.Quantity[encomp.utypes.Mass]
     reveal_type(t * vf)  # R: encomp.units.Quantity[encomp.utypes.Volume]
     reveal_type(nvf * t)  # R: encomp.units.Quantity[encomp.utypes.NormalVolume]
 
-
     reveal_type((mf * t) / t)  # R: encomp.units.Quantity[encomp.utypes.MassFlow]
     reveal_type((t * vf) / t)  # R: encomp.units.Quantity[encomp.utypes.VolumeFlow]
-    reveal_type((nvf * t) / t)  # R: encomp.units.Quantity[encomp.utypes.NormalVolumeFlow]
-
+    reveal_type(
+        (nvf * t) / t
+    )  # R: encomp.units.Quantity[encomp.utypes.NormalVolumeFlow]
 
     reveal_type(m / v)  # R: encomp.units.Quantity[encomp.utypes.Density]
     reveal_type(v / m)  # R: encomp.units.Quantity[encomp.utypes.SpecificVolume]
 
-    # autopep8: on
+    # fmt: on
 
-    e = Q[Energy](25, 'MJ')
+    e = Q[Energy](25, "MJ")
 
     reveal_type(e / t)  # R: encomp.units.Quantity[encomp.utypes.Power]
     reveal_type(t * (e / t))  # R: encomp.units.Quantity[encomp.utypes.Energy]
@@ -119,7 +124,7 @@ def test_quantity_custom_mul_div_types() -> None:
 def test_quantity_custom_pow_types() -> None:
     return
 
-    s = Q[Length](1, 'm')
+    s = Q[Length](1, "m")
 
     # NOTE: this only works with int 1, 2, 3, it's not possible to
     # represent literal floats like "Literal[1.0]"
@@ -140,19 +145,19 @@ def test_quantity_custom_pow_types() -> None:
 def test_convert_mass_flow_types() -> None:
     return
 
-    mf = Q[MassFlow](25, 'kg/s')
+    mf = Q[MassFlow](25, "kg/s")
 
     vf = convert_volume_mass(mf)
 
     reveal_type(vf)  # R: encomp.units.Quantity[encomp.utypes.VolumeFlow]
 
-    v = Q(25, 'liter')
+    v = Q(25, "liter")
 
-    m = convert_volume_mass(v, Q(25, 'g/liter'))
+    m = convert_volume_mass(v, Q(25, "g/liter"))
 
     reveal_type(m)  # R: encomp.units.Quantity[encomp.utypes.Mass]
 
-    p1 = Q(25, 'liter/week')  # E: Need type annotation for "p1"
+    p1 = Q(25, "liter/week")  # E: Need type annotation for "p1"
 
     unknown_output = convert_volume_mass(p1)
 
@@ -166,13 +171,21 @@ def test_various_mul_div_types() -> None:
 
     # these signatures are autogenerated
 
-    # autopep8: off
+    # fmt: off
 
-    reveal_type(Q(25, 'cSt') * Q(25, 'm'))  # R: encomp.units.Quantity[encomp.utypes.VolumeFlow]
+    reveal_type(
+        Q(25, "cSt") * Q(25, "m")
+    )  # R: encomp.units.Quantity[encomp.utypes.VolumeFlow]
 
-    reveal_type(Q[ThermalConductivity](25, 'W/m/K') * Q(25, 'm'))  # R: encomp.units.Quantity[encomp.utypes.PowerPerTemperature]
+    reveal_type(
+        Q[ThermalConductivity](25, "W/m/K") * Q(25, "m")
+    )  # R: encomp.units.Quantity[encomp.utypes.PowerPerTemperature]
 
-    reveal_type(Q(25, 'MWh') / Q(25, 'kg'))  # R: encomp.units.Quantity[encomp.utypes.EnergyPerMass]
-    reveal_type((Q(2, 'd') * Q(25, 'kW')) / (Q(25, 'kg/s') * Q(2, 'w')))  # R: encomp.units.Quantity[encomp.utypes.EnergyPerMass]
+    reveal_type(
+        Q(25, "MWh") / Q(25, "kg")
+    )  # R: encomp.units.Quantity[encomp.utypes.EnergyPerMass]
+    reveal_type(
+        (Q(2, "d") * Q(25, "kW")) / (Q(25, "kg/s") * Q(2, "w"))
+    )  # R: encomp.units.Quantity[encomp.utypes.EnergyPerMass]
 
-    # autopep8: on
+    # fmt: on

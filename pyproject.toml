@@ -1,0 +1,141 @@
+[tool.poetry]
+name = "encomp"
+version = "0.9.0"
+description = "General-purpose library for engineering calculations"
+authors = ["William Laurén <lauren.william.a@gmail.com>"]
+readme = "README.md"
+license = "MIT"
+packages = [{ include = "encomp" }]
+include = ["encomp/defs"]
+
+
+[tool.poetry.dependencies]
+python = "^3.10"
+python-dateutil = "*"
+python-dotenv = "*"
+pydantic = "*"
+typeguard = "*"
+typing-extensions = "*"
+asttokens = "*"
+numpy = "*"
+pandas = "*"
+polars = "*"
+sympy = "*"
+symbolic-equation = "*"
+pint = "^0.20"
+coolprop = "^6.4"
+uncertainties = "*"
+
+
+[tool.poetry.extras]
+optional = ["matplotlib", "seaborn", "scipy", "fire", "fluids", "thermo", "ht"]
+
+[tool.poetry.group.dev.dependencies]
+fire = "*"
+jupyterlab = "*"
+jupyter_server = "*"
+jupyterlab_server = "*"
+pkginfo = "*"
+wheel = "*"
+setuptools = "*"
+black = { version = "*", extras = ["jupyter"] }
+mypy = "*"
+ruff = "*"
+pytest = "*"
+hypothesis = "*"
+pytest-asyncio = "*"
+pandas-stubs = "*"
+coverage = "*"
+Sphinx = "*"
+nbsphinx = "*"
+furo = "*"
+sphinx-inline-tabs = "*"
+sphinx-copybutton = "*"
+sphinx-gallery = "*"
+sphinx-autodoc-typehints = "*"
+sphinx-autobuild = "*"
+matplotlib = "*"
+seaborn = "*"
+types-requests = "*"
+types-PyYAML = "*"
+types-python-dateutil = "*"
+jupyterlab-code-formatter = "*"
+jupyterlab-spellchecker = "*"
+pyinstrument = "*"
+pre-commit = "*"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+
+[tool.black]
+line-length = 88
+target-version = ["py310"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+  | generated
+)/
+'''
+
+
+[tool.ruff]
+select = ["E", "F"]
+ignore = ["N817", "N806", "N803", "N802", "N811", "N814"]
+exclude = [
+  ".bzr",
+  ".direnv",
+  ".eggs",
+  ".git",
+  ".hg",
+  ".mypy_cache",
+  ".nox",
+  ".pants.d",
+  ".pytype",
+  ".ruff_cache",
+  ".svn",
+  ".tox",
+  ".venv",
+  "__pypackages__",
+  "__pycache__",
+  "_build",
+  "buck-out",
+  "build",
+  "dist",
+  "node_modules",
+  "venv",
+  "generated",
+]
+
+line-length = 120
+
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+target-version = "py310"
+
+[tool.ruff.mccabe]
+max-complexity = 10
+
+[tool.pytest.ini_options]
+filterwarnings = [
+  # ignore the mypy-testing marks when this plugin is disabled
+  "ignore::_pytest.warning_types.PytestUnknownMarkWarning",
+
+  # ignore CoolProp warnings for NaN/out of bounds inputs
+  "ignore:CoolProp could not calculate*:UserWarning",
+
+  "ignore::pint.UnitStrippedWarning",
+]

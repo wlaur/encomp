@@ -2,26 +2,22 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-
-from ..fluids import Water, HumidAir
+from ..fluids import HumidAir, Water
 from ..units import Quantity as Q
 
 if not TYPE_CHECKING:
+
     def reveal_type(x):
         return x
 
 
 @pytest.mark.mypy_testing
 def test_fluids_properties_types() -> None:
-
     return
 
-    w = Water(
-        P=Q(25, 'bar'),
-        T=Q(250, 'degC')
-    )
+    w = Water(P=Q(25, "bar"), T=Q(250, "degC"))
 
-    # autopep8: off
+    # fmt: off
 
     reveal_type(w.phase)  # R: builtins.str
     reveal_type(w.PHASE)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
@@ -36,18 +32,14 @@ def test_fluids_properties_types() -> None:
     reveal_type(w.Z)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
     reveal_type(w.C)  # R: encomp.units.Quantity[encomp.utypes.SpecificHeatCapacity]
 
-    m = w.D * Q(25, 'liter')
+    m = w.D * Q(25, "liter")
     reveal_type(m)  # R: encomp.units.Quantity[encomp.utypes.Mass]
 
     # only the first synonym for each property has a type hint
 
     reveal_type(w.SURFACE_TENSION)  # R: encomp.units.Quantity[encomp.utypes.Unknown]
 
-    ha = HumidAir(
-        P=Q(25, 'bar'),
-        T=Q(250, 'degC'),
-        R=Q(25, '%')
-    )
+    ha = HumidAir(P=Q(25, "bar"), T=Q(250, "degC"), R=Q(25, "%"))
 
     # the attribute names for HumidAir are different (this is based on HAPropsSI from CoolProp)
 
@@ -58,31 +50,33 @@ def test_fluids_properties_types() -> None:
 
     reveal_type(ha.Z)  # R: encomp.units.Quantity[encomp.utypes.Dimensionless]
 
-    # autopep8: on
+    # fmt: on
 
 
 @pytest.mark.mypy_testing
 def test_water_init_hints() -> None:
-
     return
 
     # NOTE: this is not actually type checked beyond the Quantity superclass
     # however, incorrect inputs will raise ValueError at runtime
 
-    # autopep8: off
+    # fmt: off
 
-    Water(T=25, P=Q(25, 'bar'))  # E: Argument "T" to "Water" has incompatible type "int"; expected "Quantity[Any]"
+    Water(
+        T=25, P=Q(25, "bar")
+    )  # E: Argument "T" to "Water" has incompatible type "int"; expected "Quantity[Any]"
 
-    Water(T=(25, 'degC'), P=Q(25, 'bar'))  # E: Argument "T" to "Water" has incompatible type "Tuple[int, str]"; expected "Quantity[Any]"
+    Water(
+        T=(25, "degC"), P=Q(25, "bar")
+    )  # E: Argument "T" to "Water" has incompatible type "Tuple[int, str]"; expected "Quantity[Any]"
 
+    # fmt: on
 
-    # autopep8: on
-
-    Water(P=Q(25, 'bar'), T=Q(25, 'degC'))
-    Water(T=Q(25, 'degC'), P=Q(25, 'bar'))
-    Water(P=Q(25, 'bar'), Q=Q(50, '%'))
-    Water(T=Q(25, '°C'), Q=Q(50, '%'))
-    Water(Q=Q(50, '%'), P=Q(25, 'kPa'))
+    Water(P=Q(25, "bar"), T=Q(25, "degC"))
+    Water(T=Q(25, "degC"), P=Q(25, "bar"))
+    Water(P=Q(25, "bar"), Q=Q(50, "%"))
+    Water(T=Q(25, "°C"), Q=Q(50, "%"))
+    Water(Q=Q(50, "%"), P=Q(25, "kPa"))
 
     # TODO: is it possible to overload the __init__ method
     # to accept "P: Q[Pressure], T: Q[Temperature]", but not "P: Q[Mass]",

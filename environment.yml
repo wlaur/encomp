@@ -1,12 +1,11 @@
 name: encomp-env
 channels:
   - conda-forge
-  - defaults
+  - nodefaults
 dependencies:
-  - python=3.10
-  - pip
-  - pandoc
+  - python=3.10.9
+  - pip=23.0.1
+  - pandoc=3.1.1
+
   - pip:
-    - -r requirements.txt
-    - -r requirements-optional.txt
-    - -r requirements-dev.txt
+      - poetry==1.4.2

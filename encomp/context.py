@@ -2,11 +2,11 @@
 Various context managers.
 """
 
-import sys
 import os
-from pathlib import Path
-from contextlib import contextmanager
+import sys
 import tempfile
+from contextlib import contextmanager
+from pathlib import Path
 
 from .units import set_quantity_format, ureg
 
@@ -65,7 +65,7 @@ def silence_stdout():
     old_target = sys.stdout
 
     try:
-        with open(os.devnull, 'w') as new_target:
+        with open(os.devnull, "w") as new_target:
             sys.stdout = new_target
             yield
     finally:
@@ -73,7 +73,7 @@ def silence_stdout():
 
 
 @contextmanager
-def quantity_format(fmt: str = 'compact'):
+def quantity_format(fmt: str = "compact"):
     """
     Context manager version of :py:func:`encomp.units.set_quantity_format`
     that resets to the previous value afterwards.
@@ -85,7 +85,7 @@ def quantity_format(fmt: str = 'compact'):
         Also accepts aliases: ``'compact': '~P'`` and ``'siunitx': '~Lx'``.
     """
 
-    default = getattr(ureg, 'default_format', '~P') or '~P'
+    default = getattr(ureg, "default_format", "~P") or "~P"
 
     set_quantity_format(fmt)
 

@@ -4,15 +4,15 @@ Contains tools for converting Sympy expressions to Python modules and functions.
 """
 
 import re
-from typing import Callable, Literal
 from functools import lru_cache
+from typing import Callable, Literal
 
 import numpy as np
 import sympy as sp
 from sympy import default_sort_key
 
 try:
-    from sympy.utilities.lambdify import lambdify, lambdastr
+    from sympy.utilities.lambdify import lambdastr, lambdify
 except ImportError:
 
     def lambdify(*args, **kwargs) -> None:
@@ -55,23 +55,23 @@ def to_identifier(s: sp.Symbol | str) -> str:
 
     s_orig = s
 
-    s = s.replace(',', '_')
-    s = s.replace('^', '__')
-    s = s.replace("'", 'prime')
+    s = s.replace(",", "_")
+    s = s.replace("^", "__")
+    s = s.replace("'", "prime")
 
     # need to differentiate between symbols "\text{m}" and "m"
     # the string "text" is a bit long, replace with "T"
-    s = s.replace('text', 'T')
+    s = s.replace("text", "T")
 
     # the substring "lambda" cannot exist in the identifier
-    s = s.replace('lambda', 'lam')
+    s = s.replace("lambda", "lam")
 
     # remove all non-alphanumeric or _
-    s = re.sub(r'\W+', '', s)
+    s = re.sub(r"\W+", "", s)
 
     if not s.isidentifier():
         raise ValueError(
-            f'Symbol could not be converted to a valid Python identifer: {s_orig}'
+            f"Symbol could not be converted to a valid Python identifer: {s_orig}"
         )
 
     return s
@@ -96,12 +96,12 @@ def get_args(e: sp.Basic) -> list[str]:
         Sorted list of identifiers for each free symbol
     """
 
-    return sorted(list(map(to_identifier,
-                           e.free_symbols)))
+    return sorted(list(map(to_identifier, e.free_symbols)))
 
 
-def recursive_subs(e: sp.Basic,
-                   replacements: list[tuple[sp.Symbol, sp.Basic]]) -> sp.Basic:
+def recursive_subs(
+    e: sp.Basic, replacements: list[tuple[sp.Symbol, sp.Basic]]
+) -> sp.Basic:
     """
     Substitute the expressions in ``replacements`` recursively.
     This might not be necessary in all cases, Sympy's builtin
@@ -126,7 +126,6 @@ def recursive_subs(e: sp.Basic,
     """
 
     for _ in range(0, len(replacements) + 1):
-
         new_e = e.subs(replacements)
 
         if new_e == e:
@@ -157,7 +156,6 @@ def simplify_exponents(e: sp.Basic) -> sp.Basic:
     """
 
     def rewrite(expr, new_args):
-
         new_args = list(new_args)
         pow_val = new_args[1]
         pow_val_int = int(new_args[1])
@@ -182,9 +180,11 @@ def simplify_exponents(e: sp.Basic) -> sp.Basic:
             return type(e)(*new_args)
 
 
-def get_sol_expr(eqns: sp.Equality | list[sp.Equality],
-                 symbol: sp.Symbol,
-                 avoid: set[sp.Symbol] | None = None) -> sp.Basic | None:
+def get_sol_expr(
+    eqns: sp.Equality | list[sp.Equality],
+    symbol: sp.Symbol,
+    avoid: set[sp.Symbol] | None = None,
+) -> sp.Basic | None:
     """
     Wrapper around ``sp.solve`` that returns the solution expression
     for a *single* symbol, or None in case Sympy could not solve for the specified symbol.
@@ -222,16 +222,15 @@ def get_sol_expr(eqns: sp.Equality | list[sp.Equality],
     def eqn_simplicity(eqn):
         return len(eqn.lhs.free_symbols), default_sort_key(eqn)
 
-    eqns = sorted(set(filter(lambda eqn: symbol in eqn.free_symbols, eqns)),
-                  key=eqn_simplicity)
+    eqns = sorted(
+        set(filter(lambda eqn: symbol in eqn.free_symbols, eqns)), key=eqn_simplicity
+    )
 
     # in case there are multiple equations containing the requested symbol,
     # first check if any of the equations directly contain the symbol on the LHS
     if len(eqns) > 1:
         for eqn in eqns:
-
             if symbol in eqn.lhs.free_symbols:
-
                 ret = get_sol_expr(eqn, symbol)
 
                 # don't return an expression that contains symbols to be avoided
@@ -256,13 +255,15 @@ def get_sol_expr(eqns: sp.Equality | list[sp.Equality],
     # (quadratic equations might have multiple solutions, etc...)
     # sort with default_sort_key to keep the output consistent
     # Sympy might otherwise order expressions randomly
-    return sorted(sol.values(),
-                  key=default_sort_key)[0]
+    return sorted(sol.values(), key=default_sort_key)[0]
 
 
-def get_lambda_kwargs(value_map: dict[sp.Symbol | str, Quantity | np.ndarray],
-                      include: list[sp.Symbol | str] | None = None, *,
-                      units: bool = False) -> dict[str, Quantity | np.ndarray]:
+def get_lambda_kwargs(
+    value_map: dict[sp.Symbol | str, Quantity | np.ndarray],
+    include: list[sp.Symbol | str] | None = None,
+    *,
+    units: bool = False,
+) -> dict[str, Quantity | np.ndarray]:
     """
     Returns a mapping from identifier to value (Quantity or float)
     based on the input value map (Symbol to value).
@@ -288,7 +289,6 @@ def get_lambda_kwargs(value_map: dict[sp.Symbol | str, Quantity | np.ndarray],
         include = [to_identifier(n) for n in include]
 
     def _get_val(x):
-
         if not isinstance(x, Quantity):
             return x
 
@@ -297,14 +297,17 @@ def get_lambda_kwargs(value_map: dict[sp.Symbol | str, Quantity | np.ndarray],
         else:
             return x.to_base_units().m
 
-    return {to_identifier(a): _get_val(b)
-            for a, b in value_map.items()
-            if include is None or to_identifier(a) in include}
+    return {
+        to_identifier(a): _get_val(b)
+        for a, b in value_map.items()
+        if include is None or to_identifier(a) in include
+    }
 
 
 @lru_cache()
-def get_lambda(e: sp.Basic, *,
-               to_str: bool = False) -> tuple[Callable | str, list[str]]:
+def get_lambda(
+    e: sp.Basic, *, to_str: bool = False
+) -> tuple[Callable | str, list[str]]:
     """
     Converts the input expression to a lambda function
     with valid identifiers as parameter names.
@@ -328,9 +331,9 @@ def get_lambda(e: sp.Basic, *,
 
     # substitute the symbols with the identifier version,
     # otherwise they will be converted to dummy identifiers (even if dummify=False)
-    e_identifiers = e.subs({n: sp.Symbol(to_identifier(n),
-                                         **n.assumptions0)
-                            for n in e.free_symbols})
+    e_identifiers = e.subs(
+        {n: sp.Symbol(to_identifier(n), **n.assumptions0) for n in e.free_symbols}
+    )
 
     _lambda_func = lambdastr if to_str else lambdify
     fcn = _lambda_func(args, e_identifiers, dummify=False)
@@ -364,26 +367,23 @@ def get_lambda_matrix(M: sp.MutableDenseMatrix) -> tuple[str, list[str]]:
 
     for i in range(nrows):
         for j in range(ncols):
-
             fcn_str, n_args = get_lambda(M[i, j], to_str=True)
             args |= set(n_args)
 
             if isinstance(fcn_str, str):
-
                 # remove the "lambda x, y, x:" part and extra parens,
                 # they are added back later
                 fcn_str = (
-                    fcn_str
-                    .split(':', 1)[-1]
+                    fcn_str.split(":", 1)[-1]
                     .strip()
-                    .removeprefix('(')
-                    .removesuffix(')')
+                    .removeprefix("(")
+                    .removesuffix(")")
                 )
 
                 arr[i, j] = fcn_str
 
     # remove quotes around strings, they are mathematical expressions
-    funcs = str(arr.tolist()).replace("'", '').replace('"', '')
+    funcs = str(arr.tolist()).replace("'", "").replace('"', "")
 
     # TODO: "VisibleDeprecationWarning: Creating an ndarray from ragged..."
     # when mixing input vectors and floats
@@ -422,10 +422,12 @@ def get_function(e: sp.Basic, *, units: bool = False) -> Callable:
     return expr_func
 
 
-def evaluate(e: sp.Basic,
-             value_map: dict[sp.Symbol, Quantity | np.ndarray],
-             *,
-             units: bool = False) -> Quantity | np.ndarray:
+def evaluate(
+    e: sp.Basic,
+    value_map: dict[sp.Symbol, Quantity | np.ndarray],
+    *,
+    units: bool = False,
+) -> Quantity | np.ndarray:
     """
     Evaluates the input expression, given the mapping of symbol to
     value in ``value_map``.
@@ -451,10 +453,12 @@ def evaluate(e: sp.Basic,
     return fcn(value_map)
 
 
-def substitute_unknowns(e: sp.Basic,
-                        knowns: set[sp.Symbol],
-                        eqns: list[sp.Equality],
-                        avoid: set[sp.Symbol] | None = None) -> sp.Basic:
+def substitute_unknowns(
+    e: sp.Basic,
+    knowns: set[sp.Symbol],
+    eqns: list[sp.Equality],
+    avoid: set[sp.Symbol] | None = None,
+) -> sp.Basic:
     """
     Uses the equations ``eqns`` to substitute the unknown symbols
     in the input expression. Uses recursion to deal with nested substitutions.
@@ -482,14 +486,15 @@ def substitute_unknowns(e: sp.Basic,
     replacements: list[tuple[sp.Symbol, sp.Basic]] = []
 
     def _get_unknowns(expr):
-
-        all_symbols: list[sp.Symbol] = sorted(expr.free_symbols,
-                                              key=default_sort_key)
+        all_symbols: list[sp.Symbol] = sorted(expr.free_symbols, key=default_sort_key)
 
         already_replaced = [m[0] for m in replacements]
 
-        return [n for n in all_symbols if n not in (knowns | avoid) and
-                n not in already_replaced]
+        return [
+            n
+            for n in all_symbols
+            if n not in (knowns | avoid) and n not in already_replaced
+        ]
 
     unknowns_list = _get_unknowns(e)
 
@@ -498,7 +503,8 @@ def substitute_unknowns(e: sp.Basic,
 
         if n_expr is None:
             raise ValueError(
-                f'Symbol {n} could not be isolated based on the specified equations.')
+                f"Symbol {n} could not be isolated based on the specified equations."
+            )
 
         # check if the expression for n contains even more unknown symbols
         # extend the list that is iterated over to account for these symbols
@@ -536,22 +542,21 @@ def typeset_chemical(s: str) -> str:
 
     parts = []
 
-    for n in re.sub(r'[A-Z]_\d', r'|\g<0>|', s).split('|'):
-
-        if re.match(r'[A-Z]_\d', n):
-            parts.extend([f'{n[:-2]}', '}', f'_{n[-1]}', '\\text{'])
+    for n in re.sub(r"[A-Z]_\d", r"|\g<0>|", s).split("|"):
+        if re.match(r"[A-Z]_\d", n):
+            parts.extend([f"{n[:-2]}", "}", f"_{n[-1]}", "\\text{"])
         else:
             parts.append(n)
 
-    parts = ['\\text{'] + [n for n in parts if n]
+    parts = ["\\text{"] + [n for n in parts if n]
 
-    if parts[-1] == '\\text{':
+    if parts[-1] == "\\text{":
         parts = parts[:-1]
 
-    ret = ''.join(parts)
+    ret = "".join(parts)
 
-    if ret.count('{') == ret.count('}') + 1:
-        ret += '}'
+    if ret.count("{") == ret.count("}") + 1:
+        ret += "}"
 
     return ret
 
@@ -594,46 +599,46 @@ def typeset(x: str | int) -> str:
     if not SETTINGS.typeset_symbol_scripts:
         return x
 
-    parts = [n.strip() for n in x.split(',')]
+    parts = [n.strip() for n in x.split(",")]
 
     for i, p in enumerate(parts):
-
         # avoid typesetting single upper-case letters as text
         # if they start with ~
-        if p.startswith('~') and p[1].isupper():
+        if p.startswith("~") and p[1].isupper():
             parts[i] = p[1]
             continue
 
         # only typeset single words, also ignore Latex code
-        if ' ' in p or '\\' in p:
+        if " " in p or "\\" in p:
             continue
 
-        alpha_str = ''.join(n for n in p if n.isalpha())
+        alpha_str = "".join(n for n in p if n.isalpha())
 
         # typeset everything except 1-letter lower case as text
         typeset_text = len(alpha_str) >= 2 or (
-            len(alpha_str) == 1 and alpha_str.isupper())
+            len(alpha_str) == 1 and alpha_str.isupper()
+        )
 
         if typeset_text:
-
             # handle chemical compounds
-            if re.match('[A-Z]', p):
+            if re.match("[A-Z]", p):
                 p = typeset_chemical(p)
                 parts[i] = p
             else:
-                parts[i] = '\\text{' + p + '}'
+                parts[i] = "\\text{" + p + "}"
 
-    return ','.join(parts)
+    return ",".join(parts)
 
 
-def decorate(self,
-             prefix: str | int | None = None,
-             suffix: str | int | None = None,
-             prefix_sub: str | int | None = None,
-             prefix_sup: str | int | None = None,
-             suffix_sub: str | int | None = None,
-             suffix_sup: str | int | None = None
-             ) -> sp.Symbol:
+def decorate(
+    self,
+    prefix: str | int | None = None,
+    suffix: str | int | None = None,
+    prefix_sub: str | int | None = None,
+    prefix_sup: str | int | None = None,
+    suffix_sub: str | int | None = None,
+    suffix_sup: str | int | None = None,
+) -> sp.Symbol:
     """
     Method for ``sp.Symbol`` that decorates a symbol with
     subscripts and/or superscripts before or after the symbol.
@@ -686,15 +691,14 @@ def decorate(self,
         self.name,
         typeset(suffix_sub) if suffix_sub is not None else None,
         typeset(suffix_sup) if suffix_sup is not None else None,
-        suffix
+        suffix,
     ]
 
-    delimiters = ['', '^', '_', '', '_', '^', '']
+    delimiters = ["", "^", "_", "", "_", "^", ""]
 
     decorated_parts = []
 
     for p, d in zip(parts, delimiters):
-
         if p is None:
             continue
 
@@ -702,18 +706,17 @@ def decorate(self,
 
         # don't add extra braces around the base symbol
         if p != self.name:
-            p = '{' + p + '}'
+            p = "{" + p + "}"
 
         decorated_parts.append(d + p)
 
-    decorated_symbol = ''.join(decorated_parts)
+    decorated_symbol = "".join(decorated_parts)
 
     # assumptions0 contains assumptions that are not None
     return sp.Symbol(decorated_symbol, **self.assumptions0)
 
 
-def append(self, s: str | int,
-           where: Literal['sub', 'sup'] = 'sub') -> sp.Symbol:
+def append(self, s: str | int, where: Literal["sub", "sup"] = "sub") -> sp.Symbol:
     """
     Adds the input ``s`` to an existing sub- or superscript.
     Does not append to prefixes.
@@ -732,31 +735,31 @@ def append(self, s: str | int,
         A new symbol with the same assumptions as the input, with updated sub- or superscript
     """
 
-    if where == 'sub':
-        delimiter = '_'
+    if where == "sub":
+        delimiter = "_"
     else:
-        delimiter = '^'
+        delimiter = "^"
 
     symbol = self.name
 
     s = typeset(s)
 
     if delimiter not in symbol:
-        decorated_parts = [symbol, delimiter, '{' + s + '}']
+        decorated_parts = [symbol, delimiter, "{" + s + "}"]
 
     else:
         *base_symbol, existing_suffix = symbol.split(delimiter)
 
-        base_symbol = ''.join(base_symbol)
+        base_symbol = "".join(base_symbol)
 
         # assume that the input Latex symbol is correct, don't deal with unbalanced braces
-        existing_suffix = existing_suffix.removeprefix('{').removesuffix('}')
+        existing_suffix = existing_suffix.removeprefix("{").removesuffix("}")
 
         existing_suffix += str(s)
 
-        decorated_parts = [base_symbol, delimiter, '{' + existing_suffix + '}']
+        decorated_parts = [base_symbol, delimiter, "{" + existing_suffix + "}"]
 
-    decorated_symbol = ''.join(decorated_parts)
+    decorated_symbol = "".join(decorated_parts)
     return sp.Symbol(decorated_symbol, **self.assumptions0)
 
 
@@ -769,11 +772,11 @@ sp.Symbol.decorate = decorate  # type: ignore
 sp.Symbol.append = append  # type: ignore
 
 # shorthand to add suffixes to an existing symbol
-sp.Symbol._ = lambda s, x: s.append(x, where='sub')  # type: ignore
-sp.Symbol.__ = lambda s, x: s.append(x, where='sup')  # type: ignore
+sp.Symbol._ = lambda s, x: s.append(x, where="sub")  # type: ignore
+sp.Symbol.__ = lambda s, x: s.append(x, where="sup")  # type: ignore
 
 # shorthand to add Delta before a symbol
-sp.Symbol.delta = lambda s: s.decorate(prefix='\\Delta')  # type: ignore
+sp.Symbol.delta = lambda s: s.decorate(prefix="\\Delta")  # type: ignore
 
 
 def display_equation(eqn: sp.Equality, tag: str | None = None, **kwargs) -> None:
@@ -793,7 +796,5 @@ def display_equation(eqn: sp.Equality, tag: str | None = None, **kwargs) -> None
     """
     from IPython.display import display
 
-    eqn = Eq_symbolic(lhs=eqn.lhs,
-                      rhs=eqn.rhs,
-                      tag=tag, **kwargs)
+    eqn = Eq_symbolic(lhs=eqn.lhs, rhs=eqn.rhs, tag=tag, **kwargs)
     display(eqn)

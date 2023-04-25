@@ -1,4 +1,4 @@
-from typing import Callable, Mapping, Any
+from typing import Any, Callable, Mapping
 
 import numpy as np
 from sympy import geometry
@@ -12,7 +12,7 @@ except ImportError:
 def interpolate(
     x: Mapping[int, float],
     y: Mapping[int, float],
-    fill_value: str | tuple[float, float] = 'nan'
+    fill_value: str | tuple[float, float] = "nan",
 ) -> Callable[[float | np.ndarray], float | np.ndarray]:
     """
     Wrapper around ``scipy.interpolate.interp1d``
@@ -49,39 +49,37 @@ def interpolate(
 
     if interp1d is None:
         raise ModuleNotFoundError(
-            'Module scipy.interpolate was not found, '
+            "Module scipy.interpolate was not found, "
             'install with "pip install scipy"'
         )
 
-    kwargs: dict[str, Any] = {'bounds_error': False}
+    kwargs: dict[str, Any] = {"bounds_error": False}
 
     if isinstance(fill_value, str):
-
         fill_value = fill_value.lower().strip()
 
-        if fill_value not in ('nan', 'limits', 'extrapolate'):
+        if fill_value not in ("nan", "limits", "extrapolate"):
             raise ValueError(
-                f'Incorrect input for fill_value: {fill_value}, '
-                'possible options are str "nan", "limits", "extrapolate" or float (lower, upper)')
+                f"Incorrect input for fill_value: {fill_value}, "
+                'possible options are str "nan", "limits", "extrapolate" or float (lower, upper)'
+            )
 
-    if fill_value == 'limits':
-        kwargs['fill_value'] = (y[0], y[-1])
+    if fill_value == "limits":
+        kwargs["fill_value"] = (y[0], y[-1])
 
-    elif fill_value == 'nan':
-        kwargs['fill_value'] = (np.nan, np.nan)
+    elif fill_value == "nan":
+        kwargs["fill_value"] = (np.nan, np.nan)
 
-    elif fill_value == 'error':
-        kwargs['bounds_error'] = True
+    elif fill_value == "error":
+        kwargs["bounds_error"] = True
 
     else:
-        kwargs['fill_value'] = fill_value
+        kwargs["fill_value"] = fill_value
 
     return interp1d(x, y, **kwargs)
 
 
-def polynomial(x: np.ndarray,
-               y: np.ndarray,
-               order: int = 2) -> np.poly1d:
+def polynomial(x: np.ndarray, y: np.ndarray, order: int = 2) -> np.poly1d:
     """
     Wrapper around ``np.poly1d`` and ``np.polyfit``
     that returns a polynomial function :math:`p(x)` based on a least-squares fit to
@@ -116,19 +114,22 @@ def polynomial(x: np.ndarray,
     return np.poly1d(np.polyfit(x, y, order))
 
 
-def exponential(x_start: float,
-                x_end: float,
-                y_start: float,
-                y_end: float,
-                k: float,
-                eps: float = 1e-6) -> Callable[[float], float]:
+def exponential(
+    x_start: float,
+    x_end: float,
+    y_start: float,
+    y_end: float,
+    k: float,
+    eps: float = 1e-6,
+) -> Callable[[float], float]:
     """
     Returns an exponential curve between the points
 
     :math:`(x_{\\text{start}}, y_{\\text{start}}) \\rightarrow (x_{\\text{end}}, y_{\\text{end}})`
 
     .. math::
-        y(x) = A + B \\cdot \\exp{\\left(k \\cdot \\frac{x - x_{\\text{start}}}{x_{\\text{end}} - x_{\\text{start}}}\\right)}
+        y(x) = A + B \\cdot \\exp{\\left(k \\cdot
+        \\frac{x - x_{\\text{start}}}{x_{\\text{end}} - x_{\\text{start}}}\\right)}
 
     The parameter ``k`` is used to control the shape of the curve.
 
@@ -172,13 +173,15 @@ def exponential(x_start: float,
     if abs(k - 0) < eps:
         k = eps
 
-    return lambda x: (y_start + (y_end - y_start) /
-                      (1 - np.exp(k)) *
-                      (1 - np.exp(k * (x - x_start) / (x_end - x_start))))
+    return lambda x: (
+        y_start
+        + (y_end - y_start)
+        / (1 - np.exp(k))
+        * (1 - np.exp(k * (x - x_start) / (x_end - x_start)))
+    )
 
 
-def r_squared(y_pred: np.ndarray,
-              y_data: np.ndarray) -> float:
+def r_squared(y_pred: np.ndarray, y_data: np.ndarray) -> float:
     """
     Calculates the :math:`R^2`-value for predicted values ``y_pred``
     based on known data in ``y_data``.
@@ -202,18 +205,20 @@ def r_squared(y_pred: np.ndarray,
     residual = y_pred - y_data
 
     ss_res = np.sum(residual**2)
-    ss_tot = np.sum((y_pred - np.mean(y_pred))**2)
+    ss_tot = np.sum((y_pred - np.mean(y_pred)) ** 2)
 
     R2 = 1 - (ss_res / ss_tot)
 
     return R2
 
 
-def circle_line_intersection(A: tuple[float, float] | geometry.Point2D,
-                             B: tuple[float, float] | geometry.Point2D,
-                             x0: float,
-                             y0: float,
-                             r: float) -> list[tuple[float, float]] | None:
+def circle_line_intersection(
+    A: tuple[float, float] | geometry.Point2D,
+    B: tuple[float, float] | geometry.Point2D,
+    x0: float,
+    y0: float,
+    r: float,
+) -> list[tuple[float, float]] | None:
     """
     Finds the intersection point(s) between:
 
