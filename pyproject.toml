@@ -14,7 +14,7 @@ python = "^3.10"
 python-dateutil = "*"
 python-dotenv = "*"
 pydantic = "*"
-typeguard = "*"
+typeguard = "^3"
 typing-extensions = "*"
 asttokens = "*"
 numpy = "*"
@@ -25,6 +25,13 @@ symbolic-equation = "*"
 pint = "^0.20"
 coolprop = "^6.4"
 uncertainties = "*"
+matplotlib = { version = "*", optional = true }
+seaborn = { version = "*", optional = true }
+scipy = { version = "*", optional = true }
+fire = { version = "*", optional = true }
+fluids = { version = "*", optional = true }
+thermo = { version = "*", optional = true }
+ht = { version = "*", optional = true }
 
 
 [tool.poetry.extras]
@@ -63,6 +70,7 @@ jupyterlab-code-formatter = "*"
 jupyterlab-spellchecker = "*"
 pyinstrument = "*"
 pre-commit = "*"
+numpydoc = "^1.5.0"
 
 
 [build-system]

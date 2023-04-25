@@ -43,7 +43,8 @@ def test_isinstance_types():
     assert not isinstance_types((1, 4), tuple[str, int])
     assert not isinstance_types((1, 4), tuple[int])
 
-    d = {"asd": [1, 3, 4], "dsa": [1, 3.2, 4, 22, None]}
+    # NOTE: only the first element in each collection is type checked at runtime
+    d = {"dsa": [None, 1, 3.2, 4, 22], "asd": [1, 3, 4]}
 
     assert isinstance_types(d, dict[str, list[float | None]])
     assert not isinstance_types(d, dict[str, list[float]])

@@ -29,22 +29,7 @@ def build_docs():
         os.system(n)
 
 
-def local_install():
-    os.system("pip install .")
-
-
-def build():
-    cmds = [
-        "rmdir /s/q build",
-        "rmdir /s/q dist",
-        "python setup.py bdist_wheel",
-    ]
-
-    for n in cmds:
-        os.system(n)
-
-
-def pip_upload():
+def pypi_upload():
     cmds = ["twine upload dist/*"]
 
     for n in cmds:
@@ -52,22 +37,11 @@ def pip_upload():
 
 
 def main(task=None):
-    if task is None:
-        build_docs()
-        local_install()
-
-    elif task == "build":
-        build()
-
-    elif task == "pip":
-        build()
-        pip_upload()
+    if task == "pypi":
+        pypi_upload()
 
     elif task == "docs":
         build_docs()
-
-    elif task == "install":
-        local_install()
 
     else:
         raise ValueError(f"Unknown task: {task}")

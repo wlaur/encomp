@@ -33,6 +33,12 @@ def isinstance_types(obj: Any, expected: _GenericAlias | type) -> bool:
     be checked with the builtin ``isinstance()``.
     Uses ``typeguard.check_type`` for runtime checks of complex types.
 
+    .. note::
+
+        For mappings (e.g. ``dict[str, list[float]]``), only the
+        first item is checked. Use custom validation logic to ensure
+        that all elements are checked.
+
     .. todo::
 
         Return type hint should be a ``TypeGuard`` that helps static type checkers
@@ -92,7 +98,7 @@ def isinstance_types(obj: Any, expected: _GenericAlias | type) -> bool:
     try:
         # this function raises an exception in case the object type
         # does not match the expected type
-        check_type("obj", obj, expected)
+        check_type(obj, expected)
         return True
 
     except Exception:
