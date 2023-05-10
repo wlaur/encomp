@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "encomp"
-version = "0.9.0"
+version = "0.9.1"
 description = "General-purpose library for engineering calculations"
 authors = ["William Laurén <lauren.william.a@gmail.com>"]
 readme = "README.md"
@@ -11,6 +11,7 @@ include = ["encomp/defs"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
+urllib3 = "^1"             # https://github.com/urllib3/urllib3/issues/3010
 python-dateutil = "*"
 python-dotenv = "*"
 pydantic = "*"
@@ -22,7 +23,7 @@ pandas = "*"
 polars = "*"
 sympy = "*"
 symbolic-equation = "*"
-pint = "^0.20"
+pint = "~0.21"
 coolprop = "^6.4"
 uncertainties = "*"
 matplotlib = { version = "*", optional = true }
@@ -80,7 +81,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.black]
 line-length = 88
-target-version = ["py310"]
+target-version = ["py311"]
 include = '\.pyi?$'
 exclude = '''
 /(
@@ -132,7 +133,7 @@ line-length = 120
 # Allow unused variables when underscore-prefixed.
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.mccabe]
 max-complexity = 10

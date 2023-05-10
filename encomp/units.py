@@ -241,6 +241,7 @@ class Quantity(
     _dimensionality_type: type[Dimensionality] = Unset
     _magnitude_type: type[MT]
     _original_magnitude_type: type[MT] | None = None
+    _original_magnitude_kwargs: dict[str, Any] | None = None
 
     _dimension_symbol_map: dict[sp.Basic, Unit] | None = None
 
@@ -482,10 +483,24 @@ class Quantity(
             val = float(val)
 
         _original_magnitude_type = (
-            cls._original_magnitude_type or cls._get_magnitude_type(val)
+            cls._original_magnitude_type
+            if cls._original_magnitude_type is not None
+            else cls._get_magnitude_type(val)
+        )
+
+        _original_magnitude_kwargs = (
+            cls._original_magnitude_kwargs
+            if cls._original_magnitude_kwargs is not None
+            else {}
         )
 
         if isinstance(val, pd.Series):
+            _original_magnitude_kwargs |= {
+                "index": val.index,
+                "dtype": val.dtype,
+                "name": val.name,
+            }
+
             val = val.to_numpy()
 
         # TODO: how to validate that the subclass has the same dimensionality
@@ -505,6 +520,7 @@ class Quantity(
             # the __new__ method of the new subclass will be called instead
             subcls = cls._get_dimensional_subclass(dim, type(val))
             subcls._original_magnitude_type = _original_magnitude_type
+            subcls._original_magnitude_kwargs = _original_magnitude_kwargs
 
             return subcls(val, valid_unit)
 
@@ -550,6 +566,7 @@ class Quantity(
         )
 
         qty._original_magnitude_type = _original_magnitude_type
+        qty._original_magnitude_kwargs = _original_magnitude_kwargs
 
         # ensure that pint did not change the dtype of numpy arrays
         if isinstance(qty._magnitude, np.ndarray):
@@ -564,6 +581,12 @@ class Quantity(
 
         # TODO: is it possible to make this generic?
 
+        kwargs = (
+            self._original_magnitude_kwargs
+            if self._original_magnitude_kwargs is not None
+            else {}
+        )
+
         # NOTE: this is a workaround to match the type checker output
         # list[int] and list[float] are not interchangeable,
         # but int and float are (mostly?)
@@ -574,10 +597,10 @@ class Quantity(
             return [float(n) for n in self._magnitude]
 
         if self._original_magnitude_type == pd.Timestamp:
-            return pd.Timestamp(self._magnitude)
+            return pd.Timestamp(self._magnitude, **kwargs)
 
         if self._original_magnitude_type == pd.Series:
-            return pd.Series(self._magnitude)
+            return pd.Series(self._magnitude, **kwargs)
 
         return self._magnitude
 
