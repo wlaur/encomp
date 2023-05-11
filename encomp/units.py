@@ -14,6 +14,7 @@ import copy
 import numbers
 import re
 import warnings
+from types import UnionType
 from typing import Any, ClassVar, Generic, Iterable, Literal, TypeVar
 
 import numpy as np
@@ -238,7 +239,9 @@ class Quantity(
     # mapping from dimensionality subclass name to quantity subclass
     # this dict will be populated at runtime
     # use a custom class attribute (not cls.__subclasses__()) for more control
-    _subclasses: ClassVar[dict[tuple[str, str | None], type[Quantity]]] = {}
+    _subclasses: ClassVar[
+        dict[tuple[str, str | None], type[Quantity[Variable, Any]]]
+    ] = {}
     _dimension_symbol_map: ClassVar[dict[sp.Basic, Unit]] = {}
 
     # used to validate dimensionality and magnitude type,
@@ -258,6 +261,28 @@ class Quantity(
 
     def __str__(self) -> str:
         return self.__format__(self._REGISTRY.default_format)
+
+    @classmethod
+    def _construct_dimensional_magnitude_quantity(
+        cls,
+        dimensional_cls: type[Quantity[DT, Any]],
+        dim_name: str,
+        mt: type[MT],
+        mt_name: str,
+    ) -> type[Quantity[DT, MT]]:
+        subcls = type(
+            f"Quantity[{dim_name}, {mt_name}]",
+            (dimensional_cls,),
+            {
+                "_magnitude_type": mt,
+                "__class__": dimensional_cls,
+            },
+        )
+
+        # store the subclass for future lookups
+        cls._subclasses[dim_name, mt_name] = subcls
+
+        return subcls
 
     @classmethod
     def _get_dimensional_subclass(
@@ -290,24 +315,21 @@ class Quantity(
         if mt is None:
             return DimensionalQuantity
 
+        # TODO: properly support union magnitude types, e.g. float | np.ndarray
+        # this will just use the first potential type
+        # this is related to co-variant etc., figure out how this works
+        if isinstance(mt, UnionType):
+            mt = mt.__args__[0]
+
         mt_name = mt.__name__
 
         # check if an existing DimensionalMagnitudeQuantity subclass already has been created
         if cached_dim_magnitude_qty := cls._subclasses.get((dim_name, mt_name)):
-            DimensionalMagnitudeQuantity = cached_dim_magnitude_qty
+            return cached_dim_magnitude_qty
         else:
-            DimensionalMagnitudeQuantity = type(
-                f"Quantity[{dim_name}, {mt_name}]",
-                (DimensionalQuantity,),
-                {
-                    "_magnitude_type": mt,
-                    "__class__": DimensionalQuantity,
-                },
+            return cls._construct_dimensional_magnitude_quantity(
+                DimensionalQuantity, dim_name, mt, mt_name
             )
-
-            cls._subclasses[dim_name, mt_name] = DimensionalMagnitudeQuantity
-
-        return DimensionalMagnitudeQuantity
 
     def __class_getitem__(
         cls, types: type[DT] | tuple[type[DT], type[MT]]
