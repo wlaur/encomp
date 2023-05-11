@@ -14,7 +14,7 @@ import copy
 import numbers
 import re
 import warnings
-from typing import Any, Generic, Literal, TypeVar
+from typing import Any, ClassVar, Generic, Literal, TypeVar
 
 import numpy as np
 import pandas as pd
@@ -225,32 +225,32 @@ class Quantity(
 
     """
 
-    _magnitude: MT
+    # constants
+    NORMAL_M3_VARIANTS = ("nm³", "Nm³", "nm3", "Nm3", "nm**3", "Nm**3", "nm^3", "Nm^3")
+    TEMPERATURE_DIFFERENCE_UCS = (Unit("delta_degC")._units, Unit("delta_degF")._units)
+    # compact, Latex, HTML, Latex/siunitx formatting
+    FORMATTING_SPECS = ("~P", "~L", "~H", "~Lx")
 
-    _REGISTRY: UnitRegistry = ureg  # type: ignore
+    # class attributes
+    _REGISTRY: ClassVar[UnitRegistry] = ureg
 
     # mapping from dimensionality subclass name to quantity subclass
     # this dict will be populated at runtime
     # use a custom class attribute (not cls.__subclasses__()) for more control
-    _subclasses: dict[tuple[str, str | None], type[Quantity]] = {}
+    _subclasses: ClassVar[dict[tuple[str, str | None], type[Quantity]]] = {}
+    _dimension_symbol_map: ClassVar[dict[sp.Basic, Unit]] = {}
 
     # used to validate dimensionality and magnitude type,
     # if None the dimensionality is not checked
     # subclasses of Quantity have this class attribute set, which
     # will restrict the dimensionality when creating the object
-    _dimensionality_type: type[Dimensionality] = Unset
+    _dimensionality_type: ClassVar[type[Dimensionality]] = Unset
+
+    # instance attributes
+    _magnitude: MT
     _magnitude_type: type[MT]
-    _original_magnitude_type: type[MT] | None = None
-    _original_magnitude_kwargs: dict[str, Any] | None = None
-
-    _dimension_symbol_map: dict[sp.Basic, Unit] | None = None
-
-    # compact, Latex, HTML, Latex/siunitx formatting
-    FORMATTING_SPECS = ("~P", "~L", "~H", "~Lx")
-
-    NORMAL_M3_VARIANTS = ("nm³", "Nm³", "nm3", "Nm3", "nm**3", "Nm**3", "nm^3", "Nm^3")
-
-    TEMPERATURE_DIFFERENCE_UCS = (Unit("delta_degC")._units, Unit("delta_degF")._units)
+    _original_magnitude_type: type[MT]
+    _original_magnitude_kwargs: dict[str, Any]
 
     def __hash__(self) -> int:
         return super().__hash__()
@@ -350,6 +350,13 @@ class Quantity(
     def _validate_unit(
         unit: Unit[DT_] | UnitsContainer | str | dict[str, numbers.Number] | None
     ) -> Unit[DT_]:
+        if isinstance(unit, Quantity):
+            raise TypeError(
+                f"Input unit has incorrect type Quantity: {unit}. "
+                "Do not create nested Quantity objects, convert "
+                "to separate magnitude and unit objects first."
+            )
+
         if unit is None:
             return Unit("dimensionless")
 
@@ -373,12 +380,42 @@ class Quantity(
         )
 
     @staticmethod
+    def _validate_magnitude(val: MT) -> MT:
+        # NOTE: container types (e.g. list[int]) are tested using only the first element
+
+        if isinstance(val, str):
+            raise TypeError(f'Input magnitude has incorrect type str: "{val}"')
+
+        # bool is always converted to float, the type hints don't consider bool at all
+        if isinstance(val, bool):
+            val = float(val)
+        if isinstance_types(val, list[bool]):
+            val = [float(n) for n in val]
+
+        # TODO: list of int is converted to np.ndarray, type hints cannot represent this properly
+        # do not input list[int] in code that should be type checked
+        # however, this input is still allowed for convenience, for example Q([1, 2, 3], 'kg')
+        if isinstance_types(val, list[int]):
+            val = np.array(val)
+
+        # list[float] is not converted
+        if isinstance_types(val, list[float]):
+            pass
+
+        # int is considered equivalent to float by type checkers
+        if isinstance(val, int):
+            val = float(val)
+
+        return val
+
+    @staticmethod
     def _get_magnitude_type(val: MT) -> type[MT]:
         if isinstance(val, list):
             if not len(val):
                 return list
 
-            # NOTE: this does not work for lists with multiple types
+            # NOTE: this does not work for heterogenous lists,
+            # don't use this type of input to avoid issues
             return list[type(val[0])]
 
         return type(val)
@@ -392,6 +429,12 @@ class Quantity(
         return self._get_dimensional_subclass(
             self._dimensionality_type, self._magnitude_type
         )
+
+    def _set_original_magnitude_attributes(
+        self, mt_orig: MT, mt_orig_kwargs: dict[str, Any]
+    ) -> None:
+        self._original_magnitude_type = mt_orig
+        self._original_magnitude_kwargs = mt_orig_kwargs
 
     def __len__(self) -> int:
         # __len__() must return an integer
@@ -409,7 +452,7 @@ class Quantity(
         return len(self._magnitude)
 
     def __copy__(self) -> Quantity[DT, MT]:
-        ret = self.subclass(copy.copy(self._magnitude), self._units)
+        ret = self._call_subclass(copy.copy(self._magnitude), self._units)
 
         return ret
 
@@ -417,116 +460,22 @@ class Quantity(
         if memo is None:
             memo = {}
 
-        ret = self.subclass(
+        ret = self._call_subclass(
             copy.deepcopy(self._magnitude, memo), copy.deepcopy(self._units, memo)
         )
 
         return ret
 
-    @staticmethod
-    def _cast_array_float(inp: np.ndarray) -> np.ndarray:
-        # don't fail in case the array contains unsupported objects,
-        # for example uncertainties.ufloat
-        try:
-            return inp.astype(np.float64, casting="unsafe", copy=True)
-        except TypeError:
-            return inp
-
-    def __new__(  # type: ignore
+    @classmethod
+    def _validate_datetime_magnitude(
         cls,
-        val: MT | Quantity[DT, MT],
-        unit: Unit[DT] | UnitsContainer | str | None = None,
-        # # this is a hack to force the type checker to default to Unknown
-        # # in case the generic type is not specified at all
-        # # do not pass the _dt parameter directly, always use square brackets to
-        # # specify the dimensionality type
-        # TODO: why is this required when the TypeVar has default=Unknown?
-        _dt: type[DT] = Unknown,  # type: ignore
-    ) -> Quantity[DT]:
-        if isinstance(val, Quantity):
-            if unit is not None:
-                raise ValueError(
-                    f"Cannot pass unit: {unit} when "
-                    f"input val is a Quantity: {val}. "
-                    "The unit must be None when passing a Quantity as val"
-                )
-
-            val, unit = val.m, val.u
-
-        if isinstance(val, str):
-            raise TypeError(f'Input parameter "val" has incorrect type str: {val}')
-
-        if isinstance(unit, Quantity):
-            raise TypeError(
-                f'Input parameter "units" has incorrect type Quantity: {val}. '
-                "Do not create nested Quantity objects, convert "
-                "to separate magnitude and unit objects first."
-            )
-
-        valid_unit = cls._validate_unit(unit)
-
-        # bool is always converted to float, the type hints don't consider bool at all
-        if isinstance(val, bool):
-            val = float(val)
-
-        if isinstance_types(val, list[bool]):
-            val = [float(n) for n in val]
-
-        # TODO: list of int is converted to np.ndarray, type hints cannot represent this properly
-        # do not input list[int] in code that should be type checked
-        # however, this input is still allowed for convenience, for example Q([1, 2, 3], 'kg')
-        if isinstance_types(val, list[int]):
-            val = np.array(val)
-
-        # int is considered equivalent to float by type checkers
-        if isinstance(val, int):
-            val = float(val)
-
-        _original_magnitude_type = (
-            cls._original_magnitude_type
-            if cls._original_magnitude_type is not None
-            else cls._get_magnitude_type(val)
+        magnitude: MT,
+        unit: Unit[DT] | UnitsContainer | str | None,
+        valid_unit: Unit[DT],
+    ) -> None:
+        _val_datetime = isinstance(
+            magnitude, (pd.DatetimeIndex, pl.Datetime, pd.Timestamp)
         )
-
-        _original_magnitude_kwargs = (
-            cls._original_magnitude_kwargs
-            if cls._original_magnitude_kwargs is not None
-            else {}
-        )
-
-        if isinstance(val, pd.Series):
-            _original_magnitude_kwargs |= {
-                "index": val.index,
-                "dtype": val.dtype,
-                "name": val.name,
-            }
-
-            val = val.to_numpy()
-
-        # TODO: how to validate that the subclass has the same dimensionality
-        # as the input unit?
-        # cannot raise error here since this breaks the pint.PlainQuantity methods
-        # that use return self.__class__(...)
-        if cls._dimensionality_type is Unset or str(
-            cls._dimensionality_type.dimensions
-        ) != str(valid_unit.dimensionality):
-            # special case for temperature difference
-            if valid_unit._units in cls.TEMPERATURE_DIFFERENCE_UCS:
-                subcls = cls._get_dimensional_subclass(TemperatureDifference, type(val))
-                return subcls(val, valid_unit)
-
-            dim = Dimensionality.get_dimensionality(valid_unit.dimensionality)
-
-            # the __new__ method of the new subclass will be called instead
-            subcls = cls._get_dimensional_subclass(dim, type(val))
-            subcls._original_magnitude_type = _original_magnitude_type
-            subcls._original_magnitude_kwargs = _original_magnitude_kwargs
-
-            return subcls(val, valid_unit)
-
-        # TODO:
-
-        _val_datetime = isinstance(val, (pd.DatetimeIndex, pl.Datetime, pd.Timestamp))
 
         if _val_datetime:
             if (
@@ -534,7 +483,7 @@ class Quantity(
                 or Quantity(1, valid_unit).to_base_units().m != 1
             ):
                 raise ValueError(
-                    f"Passing datetime magnitude(s) ({val}) "
+                    f"Passing datetime magnitude(s) ({magnitude}) "
                     "is only valid for dimensionless Quantities with no scaling factor, "
                     f"passed unit {unit} ({valid_unit.dimensionality})"
                 )
@@ -556,53 +505,132 @@ class Quantity(
                     f"passed unit {unit} ({valid_unit.dimensionality})"
                 )
 
-        # at this point the value and dimensionality of the units are verified to be correct
-        # pass the inputs to pint to actually construct the Quantity
+    @staticmethod
+    def _cast_array_float(inp: np.ndarray) -> np.ndarray:
+        # don't fail in case the array contains unsupported objects,
+        # for example uncertainties.ufloat
+        try:
+            return inp.astype(np.float64, casting="unsafe", copy=True)
+        except TypeError:
+            return inp
 
-        # pint.quantity.Quantity uses Generic[_MagnitudeType] instead of Generic[DT, MT],
-        # ignore this type mismatch since the Generic is overridden
-        qty: Quantity[DT, MT] = super().__new__(  # type: ignore
-            cls, val, units=valid_unit
+    def __new__(  # type: ignore
+        cls,
+        val: MT | Quantity[DT, MT],
+        unit: Unit[DT] | UnitsContainer | str | None = None,
+        # # this is a hack to force the type checker to default to Unknown
+        # # in case the generic type is not specified at all
+        # # do not pass the _dt parameter directly, always use square brackets to
+        # # specify the dimensionality type
+        # TODO: why is this required when the TypeVar has default=Unknown?
+        _dt: type[DT] = Unknown,  # type: ignore
+        _mt_orig: type[MT] | None = None,
+        _mt_orig_kwargs: dict[str, Any] | None = None,
+    ) -> Quantity[DT]:
+        if _dt is not Unknown:
+            raise ValueError(
+                f'Cannot pass a value for private parameter "_dt", passed {_dt} ({type(_dt)})'
+            )
+
+        if isinstance(val, Quantity):
+            if unit is not None:
+                raise ValueError(
+                    f"Cannot pass unit: {unit} when "
+                    f"input val is a Quantity: {val}. "
+                    "The unit must be None when passing a Quantity as input"
+                )
+
+            val, unit = val.m, val.u
+
+        valid_unit = cls._validate_unit(unit)
+        valid_magnitude = cls._validate_magnitude(val)
+
+        # NOTE: "original" in this case does not necessarily refer to the type
+        # of the input magnitude, for example list[int] is converted to np.ndarray before
+        # this magnitude type is checked
+        _original_magnitude_type = (
+            _mt_orig
+            if _mt_orig is not None
+            else cls._get_magnitude_type(valid_magnitude)
         )
 
-        qty._original_magnitude_type = _original_magnitude_type
-        qty._original_magnitude_kwargs = _original_magnitude_kwargs
+        _original_magnitude_kwargs = (
+            _mt_orig_kwargs if _mt_orig_kwargs is not None else {}
+        )
+
+        # special case for pd.Series, must convert to np.ndarray to avoid
+        # TypeError: PlainQuantity cannot wrap upcast type
+        # NOTE: pl.Series and pl.Expr don't require this type of workaround
+        if isinstance(valid_magnitude, pd.Series):
+            # preserve pd.Series metadata (not dtype, this would cause issues with float/int)
+            _original_magnitude_kwargs |= {
+                "index": valid_magnitude.index,
+                "name": valid_magnitude.name,
+            }
+
+            valid_magnitude = valid_magnitude.to_numpy()
+
+        is_incomplete_subclass = cls._dimensionality_type is Unset or str(
+            cls._dimensionality_type.dimensions
+        ) != str(valid_unit.dimensionality)
+
+        if is_incomplete_subclass:
+            # TODO: how to validate that the subclass has the same dimensionality
+            # as the input unit?
+            # cannot raise error here since this breaks the pint.PlainQuantity methods
+            # that use return self.__class__(...)
+
+            # special case for temperature difference
+            if valid_unit._units in cls.TEMPERATURE_DIFFERENCE_UCS:
+                subcls = cls._get_dimensional_subclass(
+                    TemperatureDifference, type(valid_magnitude)
+                )
+            else:
+                dim = Dimensionality.get_dimensionality(valid_unit.dimensionality)
+                subcls = cls._get_dimensional_subclass(dim, type(valid_magnitude))
+
+            return subcls(
+                valid_magnitude,
+                valid_unit,
+                _mt_orig=_original_magnitude_type,
+                _mt_orig_kwargs=_original_magnitude_kwargs,
+            )
+
+        cls._validate_datetime_magnitude(valid_magnitude, unit, valid_unit)
+
+        qty: Quantity[DT, MT] = super().__new__(  # type: ignore
+            cls, valid_magnitude, units=valid_unit
+        )
 
         # ensure that pint did not change the dtype of numpy arrays
         if isinstance(qty._magnitude, np.ndarray):
             qty._magnitude = cls._cast_array_float(qty._magnitude)
 
+        # propagate the original magnitude type and constructor kwargs
+        qty._set_original_magnitude_attributes(
+            _original_magnitude_type, _original_magnitude_kwargs
+        )
+
         return qty
 
     @property
     def m(self) -> MT:
-        if self._original_magnitude_type is None:
-            return self._magnitude
-
-        # TODO: is it possible to make this generic?
-
-        kwargs = (
-            self._original_magnitude_kwargs
-            if self._original_magnitude_kwargs is not None
-            else {}
-        )
-
-        # NOTE: this is a workaround to match the type checker output
-        # list[int] and list[float] are not interchangeable,
-        # but int and float are (mostly?)
         if self._original_magnitude_type == list[int]:
+            # NOTE: this is a workaround to match the type checker output (np.ndarray)
+            # this is not consistent with the behavior for list[float]
             return self._magnitude
 
-        if self._original_magnitude_type == list[float]:
+        elif self._original_magnitude_type == list[float]:
             return [float(n) for n in self._magnitude]
 
-        if self._original_magnitude_type == pd.Timestamp:
-            return pd.Timestamp(self._magnitude, **kwargs)
+        elif self._original_magnitude_type == pd.Timestamp:
+            return pd.Timestamp(self._magnitude, **self._original_magnitude_kwargs)
 
-        if self._original_magnitude_type == pd.Series:
-            return pd.Series(self._magnitude, **kwargs)
+        elif self._original_magnitude_type == pd.Series:
+            return pd.Series(self._magnitude, **self._original_magnitude_kwargs)
 
-        return self._magnitude
+        else:
+            return self._magnitude
 
     @property
     def u(self) -> Unit[DT]:
@@ -627,19 +655,26 @@ class Quantity(
                     f"to {unit} (dimensionality {new_name})"
                 )
 
+    def _call_subclass(self, *args) -> Quantity[DT, MT]:
+        return self.subclass(
+            *args,
+            _mt_orig=self._original_magnitude_type,
+            _mt_orig_kwargs=self._original_magnitude_kwargs,
+        )
+
     def to_reduced_units(self) -> Quantity[DT, MT]:
         ret = super().to_reduced_units()
-        return self.subclass(ret)
+        return self._call_subclass(ret)
 
     def to_root_units(self) -> Quantity[DT, MT]:
         ret = super().to_root_units()
-        return self.subclass(ret)
+        return self._call_subclass(ret)
 
     def to_base_units(self) -> Quantity[DT, MT]:
         self._check_temperature_compatibility(Unit("kelvin"))
 
         ret = super().to_base_units()
-        return self.subclass(ret)
+        return self._call_subclass(ret)
 
     def _to_unit(self, unit: Unit[DT_] | UnitsContainer | str | dict) -> Unit[DT_]:
         return self._validate_unit(unit)
@@ -648,14 +683,17 @@ class Quantity(
         unit = self._to_unit(unit)
 
         self._check_temperature_compatibility(unit)
-
         m = self._convert_magnitude_not_inplace(unit)
 
         if unit._units in self.TEMPERATURE_DIFFERENCE_UCS:
-            return Quantity[TemperatureDifference](m, unit)
+            return Quantity[TemperatureDifference](
+                m,
+                unit,
+                _mt_orig=self._original_magnitude_type,
+                _mt_orig_kwargs=self._original_magnitude_kwargs,
+            )
 
-        converted = self.subclass(m, unit)
-        converted._original_magnitude_type = self._original_magnitude_type
+        converted = self._call_subclass(m, unit)
 
         return converted
 
@@ -819,17 +857,12 @@ class Quantity(
         return sp.Symbol("\\text{" + s + "}", nonzero=True, positive=True)
 
     @classmethod
-    def get_dimension_symbol_map(cls) -> dict[sp.Basic, Unit]:
-        if cls._dimension_symbol_map is not None:
-            return cls._dimension_symbol_map
-
+    def _populate_dimension_symbol_map(cls) -> None:
         # also consider custom dimensions defined with encomp.units.define_dimensionality
-        cls._dimension_symbol_map = {
+        cls._dimension_symbol_map |= {
             cls.get_unit_symbol(n): cls.get_unit(n)
             for n in list(_BASE_SI_UNITS) + CUSTOM_DIMENSIONS
         }
-
-        return cls._dimension_symbol_map
 
     @classmethod
     def from_expr(cls, expr: sp.Basic) -> Quantity[Unknown, float]:
@@ -839,7 +872,8 @@ class Quantity(
         *only* contains base SI unit symbols.
         """
 
-        _dimension_symbol_map = cls.get_dimension_symbol_map()
+        # this needs to be populated here to account for custom dimensions
+        cls._populate_dimension_symbol_map()
 
         expr = expr.simplify()
         args = expr.args
@@ -860,7 +894,7 @@ class Quantity(
             unit_i = cls.get_unit("")
 
             for symbol, power in d.as_powers_dict().items():  # type: ignore
-                unit_i *= _dimension_symbol_map[symbol] ** power
+                unit_i *= cls._dimension_symbol_map[symbol] ** power
 
             unit *= unit_i
 
@@ -962,23 +996,24 @@ class Quantity(
 
     def __mul__(self, other):
         ret = super().__mul__(other)
-        ret._original_magnitude_type = self._original_magnitude_type
 
         if self.dimensionless and isinstance(other, Quantity):
             return other.subclass(ret)
 
-        return self.subclass(ret)
+        return self._call_subclass(ret)
 
     def __rmul__(self, other):
         ret = super().__rmul__(other)
-        ret._original_magnitude_type = self._original_magnitude_type
 
-        return self.subclass(ret)
+        return self._call_subclass(ret)
 
     def __truediv__(self, other):
         ret = super().__truediv__(other)
+        return self._call_subclass(ret)
 
-        return self.subclass(ret)
+    def __rtruediv__(self, other):
+        ret = super().__rtruediv__(other)
+        return self._call_subclass(ret)
 
     def _temperature_difference_add_sub(
         self: Quantity[Temperature, MT],
@@ -1016,7 +1051,7 @@ class Quantity(
 
         ret = super().__add__(other)
 
-        return self.subclass(ret)
+        return self._call_subclass(ret)
 
     def __sub__(self, other):
         try:
@@ -1042,7 +1077,7 @@ class Quantity(
         ):
             return Quantity[TemperatureDifference, type(ret.m)](ret.m, ret.u)
 
-        return self.subclass(ret)
+        return self._call_subclass(ret)
 
     def __gt__(self, other):
         try:
@@ -1082,12 +1117,15 @@ class Quantity(
         else:
             scalar_type = float
 
-        ret._original_magnitude_type = scalar_type
+        # NOTE: this is a special case, scalar magnitudes cannot have kwargs
 
         subcls = self._get_dimensional_subclass(self._dimensionality_type, scalar_type)
-        subcls._original_magnitude_type = scalar_type
+        ret._original_magnitude_type = scalar_type
 
-        return subcls(ret.m, ret.u)
+        return subcls(
+            ret.m,
+            ret.u,
+        )
 
     @property
     def ndim(self) -> int:
