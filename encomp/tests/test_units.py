@@ -5,6 +5,7 @@ from typing import TypedDict
 
 import numpy as np
 import pandas as pd
+import polars as pl
 import pytest
 from pandas.api.types import is_list_like as pandas_is_list_like  # type: ignore
 from pint.errors import OffsetUnitCalculusError
@@ -30,6 +31,7 @@ from ..units import (
 from ..units import Quantity as Q
 from ..utypes import (
     DT,
+    DT_,
     Area,
     Dimensionality,
     Dimensionless,
@@ -48,6 +50,7 @@ from ..utypes import (
     UnitsContainer,
     Unknown,
     Unset,
+    Variable,
     Velocity,
     Volume,
     VolumeFlow,
@@ -712,14 +715,11 @@ def test_generic_dimensionality():
     with pytest.raises(TypeError):
         Q[None]
 
-    # the Unknown and Unset dimensionalities cannot
-    # be resolved at runtime
-
-    with pytest.raises(TypeError):
-        Q[Unknown]
-
-    with pytest.raises(TypeError):
-        Q[Unset]
+    Q[Unknown]
+    Q[Unset]
+    Q[Variable]
+    Q[DT]
+    Q[DT_]
 
 
 def test_dynamic_dimensionalities():
@@ -1325,3 +1325,14 @@ def test_getitem():
 
     t0 = ts[0]
     assert isinstance(t0, Q[Dimensionless, pd.Timestamp])
+
+
+def test_astype():
+    assert isinstance(Q(25).astype(list[float]).m[0], float)
+
+    assert isinstance(Q([1, 2, 3]).astype(np.ndarray).m, np.ndarray)
+    assert isinstance(Q([1, 2, 3]).astype(pd.Series).m, pd.Series)
+    assert isinstance(Q([1, 2, 3]).astype(pl.Series).m, pl.Series)
+
+    assert Q([1, 2, 3]).astype(pd.Series, name="s1").m.name == "s1"
+    assert Q([1, 2, 3]).astype(pl.Series, name="s1").m.name == "s1"

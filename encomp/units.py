@@ -14,7 +14,7 @@ import copy
 import numbers
 import re
 import warnings
-from typing import Any, ClassVar, Generic, Literal, TypeVar
+from typing import Any, ClassVar, Generic, Iterable, Literal, TypeVar
 
 import numpy as np
 import pandas as pd
@@ -39,6 +39,7 @@ from .utypes import (
     DT,
     DT_,
     MT,
+    MT_,
     Dimensionality,
     Temperature,
     TemperatureDifference,
@@ -318,7 +319,13 @@ class Quantity(
         except Exception:
             dim, mt = types, None
 
-        if isinstance(dim, TypeVar):
+        # avoid runtime errors when evaluating type hints
+        if (
+            isinstance(dim, TypeVar)
+            or dim is Unknown
+            or dim is Variable
+            or dim is Unset
+        ):
             return cls._get_dimensional_subclass(Variable, mt)
 
         if not isinstance(dim, type):
@@ -1140,7 +1147,7 @@ class Quantity(
 
         return self.m.ndim
 
-    def asdim(self, other):
+    def asdim(self, other: type[DT_] | Quantity[DT_, MT]) -> Quantity[DT_, MT]:
         if isinstance(other, Quantity):
             dim = other._dimensionality_type
             assert dim is not None
@@ -1156,6 +1163,58 @@ class Quantity(
 
         subcls = self._get_dimensional_subclass(dim, self._magnitude_type)
         return subcls(self)
+
+    def astype(self, magnitude_type: type[MT_], **kwargs: Any) -> Quantity[DT, MT_]:
+        m, u = self.m, self.u
+
+        _is_iterable = isinstance(m, Iterable)
+
+        # astype for np.ndarray should be called directly
+        if isinstance(m, np.ndarray):
+            return self.subclass(m.astype(magnitude_type), u)
+
+        if magnitude_type in (pd.DatetimeIndex, pd.Timestamp):
+            raise ValueError(
+                f"Cannot convert to datetime magnitude type: {magnitude_type}"
+            )
+
+        if magnitude_type == pl.Expr:
+            raise ValueError("Cannot convert magnitude to Polars expression")
+
+        if magnitude_type == list[int]:
+            raise NotImplementedError(
+                "Cannot convert magnitude to list[int], use list[float] instead"
+            )
+
+        if magnitude_type in (float, int):
+            if _is_iterable:
+                return self.subclass([float(n) for n in m], u)
+            else:
+                return self.subclass(float(m), u)
+
+        if magnitude_type == list[float]:
+            if not _is_iterable:
+                m = [m]
+            return self.subclass([float(n) for n in m], u)
+
+        if magnitude_type == np.ndarray:
+            if not _is_iterable:
+                m = [m]
+            return self.subclass(np.array(m), u)
+
+        if magnitude_type == pd.Series:
+            if not _is_iterable:
+                m = [m]
+            return self.subclass(pd.Series(m, **kwargs), u)
+
+        if magnitude_type == pl.Series:
+            if not _is_iterable:
+                m = [m]
+            kwargs["values"] = m
+            return self.subclass(pl.Series(**kwargs), u)
+
+        # ensure that this method returns a new instance
+        return self.__copy__()
 
 
 # override the implementations for the Quantity and Unit classes for the current registry

@@ -543,6 +543,19 @@ if TYPE_CHECKING:
         default=np.ndarray,
     )
 
+    MT_ = TypeVar(
+        "MT_",
+        float,
+        list[float],
+        np.ndarray,
+        pd.Series,
+        pd.DatetimeIndex,
+        pd.Timestamp,
+        pl.Series,
+        pl.Expr,
+        default=np.ndarray,
+    )
+
     # type variables that represent a certain dimensionality
     # the DT_ type variable is used to signify a different (possible identical) dimensionality than DT
     # these type variables are invariant, since
@@ -557,6 +570,18 @@ else:
     # this does nothing at runtime
     MT = TypeVar(
         "MT",
+        float,
+        list[float],
+        np.ndarray,
+        pd.Series,
+        pd.DatetimeIndex,
+        pd.Timestamp,
+        pl.Series,
+        pl.Expr,
+    )
+
+    MT_ = TypeVar(
+        "MT_",
         float,
         list[float],
         np.ndarray,
