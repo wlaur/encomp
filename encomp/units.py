@@ -1169,8 +1169,10 @@ class Quantity(
 
         _is_iterable = isinstance(m, Iterable)
 
-        # astype for np.ndarray should be called directly
-        if isinstance(m, np.ndarray):
+        # astype for np.ndarray should be called directly except for some special cases
+        custom_conversion = [pd.Series, pl.Series, list[float]]
+
+        if isinstance(m, np.ndarray) and magnitude_type not in custom_conversion:
             return self.subclass(m.astype(magnitude_type), u)
 
         if magnitude_type in (pd.DatetimeIndex, pd.Timestamp):

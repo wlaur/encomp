@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import pytest
 
 from ..fluids import Fluid, HumidAir, Water
@@ -386,3 +387,24 @@ def test_properties_HumidAir():
 
         for p in props:
             getattr(ha, p)
+
+
+def test_magnitude_type():
+    index = pd.DatetimeIndex(["2021-01-01", "2021-01-02", "2021-01-03"])
+
+    s1 = pd.Series([1, 2, 3], name="s1", index=index)
+
+    assert Water(P=Q(s1, "kPa"), T=Q(25, "degC")).H.m.index[0] == pd.Timestamp(
+        "2021-01-01"
+    )
+
+    assert Fluid("water", P=Q(s1, "kPa"), T=Q(25, "degC")).H.m.index[0] == pd.Timestamp(
+        "2021-01-01"
+    )
+
+    assert HumidAir(P=Q(s1, "kPa"), T=Q(25, "degC"), R=Q(0.5)).H.m.index[
+        0
+    ] == pd.Timestamp("2021-01-01")
+
+    # in case the input dtypes are mixed, np.ndarray will be used as a fallback
+    assert isinstance(Water(T=Q(25, "degC"), P=Q(s1, "kPa")).H.m, np.ndarray)

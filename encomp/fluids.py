@@ -11,28 +11,14 @@ Uses CoolProp as backend.
 
 import warnings
 from abc import ABC, abstractmethod
-from typing import Annotated, Callable, Generic
+from typing import Annotated, Any, Callable, Generic
 
 import numpy as np
+import pandas as pd
+import polars as pl
 
-try:
-    from CoolProp.CoolProp import PropsSI
-    from CoolProp.HumidAirProp import HAPropsSI
-
-except ImportError:
-    warnings.warn(
-        "CoolProp package not installed, install with"
-        "\npip install coolprop\n"
-        "or"
-        "\nconda install conda-forge::coolprop"
-    )
-
-    def PropsSI(*args, **kwargs):
-        raise NotImplementedError()
-
-    def HAPropsSI(*args, **kwargs):
-        raise NotImplementedError()
-
+from CoolProp.CoolProp import PropsSI
+from CoolProp.HumidAirProp import HAPropsSI
 
 from .misc import isinstance_types
 from .settings import SETTINGS
@@ -40,7 +26,6 @@ from .structures import flatten
 from .units import DimensionalityError, ExpectedDimensionalityError, Quantity, Unit
 from .utypes import (
     MT,
-    Variable,
     Density,
     Dimensionless,
     DynamicViscosity,
@@ -64,6 +49,7 @@ from .utypes import (
     SpecificInternalEnergy,
     Temperature,
     ThermalConductivity,
+    Variable,
     Velocity,
 )
 
@@ -274,6 +260,23 @@ class CoolPropFluid(ABC, Generic[MT]):
 
     # skip checking for zero for these properties
     _SKIP_ZERO_CHECK: tuple[CProperty, ...] = ("PHASE",)
+
+    @property
+    def _mt(self) -> type[MT]:
+        return type(self.points[0][1].m)
+
+    @property
+    def _mt_kwargs(self) -> dict[str, Any]:
+        kwargs = {}
+
+        m0 = self.points[0][1].m
+
+        if isinstance(m0, pd.Series):
+            # NOTE: the series name should not be propagated here,
+            # the outputs will be separate series that should not have the same name
+            kwargs |= {"index": m0.index}
+
+        return kwargs
 
     @abstractmethod
     def __init__(self, name: CName, **kwargs: Quantity[Variable, MT]):
@@ -717,7 +720,9 @@ class CoolPropFluid(ABC, Generic[MT]):
 
         return qty
 
-    def to_numeric(self, prop: CProperty, qty: Quantity) -> float | np.ndarray:
+    def to_numeric(
+        self, prop: CProperty, qty: Quantity[Variable, MT]
+    ) -> float | np.ndarray:
         unit = self.get_coolprop_unit(prop)
 
         try:
@@ -729,12 +734,23 @@ class CoolPropFluid(ABC, Generic[MT]):
                 f"{qty.u} ({qty.dimensionality})"
             )
 
+        if isinstance(m, (pd.DatetimeIndex, pd.Timestamp)):
+            raise TypeError(f"Cannot pass datetime magnitude as input to CoolProp: {m}")
+
+        if isinstance(m, pl.Expr):
+            raise TypeError(f"Cannot pass Polars expression as input to CoolProp: {m}")
+
         if isinstance(m, list):
             m = np.array(m)
 
+        if isinstance(m, (pd.Series, pl.Series)):
+            m = m.to_numpy()
+
         return m
 
-    def get(self, output: CProperty, *points: tuple[CProperty, Quantity]) -> Quantity:
+    def get(
+        self, output: CProperty, *points: tuple[CProperty, Quantity[Variable, MT]]
+    ) -> Quantity:
         """
         Wraps the function ``CoolProp.CoolProp.PropsSI``, handles input
         and output with :py:class:`encomp.units.Quantity` objects.
@@ -743,7 +759,7 @@ class CoolPropFluid(ABC, Generic[MT]):
         ----------
         output : CProperty
             Name of the output property
-        points : tuple[CProperty, Quantity]
+        points : tuple[CProperty, Quantity[Variable, MT]]
             Fixed state variables: name and value of the property.
             The number of points must match the number expected
             by the CoolProp backend function.
@@ -812,139 +828,255 @@ class Fluid(CoolPropFluid[MT]):
 
     @property
     def PHASE(self) -> Quantity[Dimensionless, MT]:
-        return self.__getattr__("PHASE").asdim(Dimensionless)
+        return (
+            self.__getattr__("PHASE")
+            .asdim(Dimensionless)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def PRANDTL(self) -> Quantity[Dimensionless, MT]:
-        return self.__getattr__("PRANDTL").asdim(Dimensionless)
+        return (
+            self.__getattr__("PRANDTL")
+            .asdim(Dimensionless)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def P(self) -> Quantity[Pressure, MT]:
-        return self.__getattr__("P").asdim(Pressure)
+        return self.__getattr__("P").asdim(Pressure).astype(self._mt, **self._mt_kwargs)
 
     @property
     def PCRIT(self) -> Quantity[Pressure, MT]:
-        return self.__getattr__("PCRIT").asdim(Pressure)
+        return (
+            self.__getattr__("PCRIT")
+            .asdim(Pressure)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def PMAX(self) -> Quantity[Pressure, MT]:
-        return self.__getattr__("PMAX").asdim(Pressure)
+        return (
+            self.__getattr__("PMAX").asdim(Pressure).astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def PMIN(self) -> Quantity[Pressure, MT]:
-        return self.__getattr__("PMIN").asdim(Pressure)
+        return (
+            self.__getattr__("PMIN").asdim(Pressure).astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def PTRIPLE(self) -> Quantity[Pressure, MT]:
-        return self.__getattr__("PTRIPLE").asdim(Pressure)
+        return (
+            self.__getattr__("PTRIPLE")
+            .asdim(Pressure)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def P_REDUCING(self) -> Quantity[Pressure, MT]:
-        return self.__getattr__("P_REDUCING").asdim(Pressure)
+        return (
+            self.__getattr__("P_REDUCING")
+            .asdim(Pressure)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def T(self) -> Quantity[Temperature, MT]:
-        return self.__getattr__("T").asdim(Temperature)
+        return (
+            self.__getattr__("T").asdim(Temperature).astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def TCRIT(self) -> Quantity[Temperature, MT]:
-        return self.__getattr__("TCRIT").asdim(Temperature)
+        return (
+            self.__getattr__("TCRIT")
+            .asdim(Temperature)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def TMAX(self) -> Quantity[Temperature, MT]:
-        return self.__getattr__("TMAX").asdim(Temperature)
+        return (
+            self.__getattr__("TMAX")
+            .asdim(Temperature)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def TMIN(self) -> Quantity[Temperature, MT]:
-        return self.__getattr__("TMIN").asdim(Temperature)
+        return (
+            self.__getattr__("TMIN")
+            .asdim(Temperature)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def TTRIPLE(self) -> Quantity[Temperature, MT]:
-        return self.__getattr__("TTRIPLE").asdim(Temperature)
+        return (
+            self.__getattr__("TTRIPLE")
+            .asdim(Temperature)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def T_FREEZING(self) -> Quantity[Temperature, MT]:
-        return self.__getattr__("T_FREEZING").asdim(Temperature)
+        return (
+            self.__getattr__("T_FREEZING")
+            .asdim(Temperature)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def T_REDUCING(self) -> Quantity[Temperature, MT]:
-        return self.__getattr__("T_REDUCING").asdim(Temperature)
+        return (
+            self.__getattr__("T_REDUCING")
+            .asdim(Temperature)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def Q(self) -> Quantity[Dimensionless, MT]:
-        return self.__getattr__("Q").asdim(Dimensionless)
+        return (
+            self.__getattr__("Q")
+            .asdim(Dimensionless)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def H(self) -> Quantity[SpecificEnthalpy, MT]:
-        return self.__getattr__("H").asdim(SpecificEnthalpy)
+        return (
+            self.__getattr__("H")
+            .asdim(SpecificEnthalpy)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def HMOLAR(self) -> Quantity[MolarSpecificEnthalpy, MT]:
-        return self.__getattr__("HMOLAR").asdim(MolarSpecificEnthalpy)
+        return (
+            self.__getattr__("HMOLAR")
+            .asdim(MolarSpecificEnthalpy)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def S(self) -> Quantity[SpecificEntropy, MT]:
-        return self.__getattr__("S").asdim(SpecificEntropy)
+        return (
+            self.__getattr__("S")
+            .asdim(SpecificEntropy)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def SMOLAR(self) -> Quantity[MolarSpecificEntropy, MT]:
-        return self.__getattr__("SMOLAR").asdim(MolarSpecificEntropy)
+        return (
+            self.__getattr__("SMOLAR")
+            .asdim(MolarSpecificEntropy)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def U(self) -> Quantity[SpecificInternalEnergy, MT]:
-        return self.__getattr__("U").asdim(SpecificInternalEnergy)
+        return (
+            self.__getattr__("U")
+            .asdim(SpecificInternalEnergy)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def UMOLAR(self) -> Quantity[MolarSpecificInternalEnergy, MT]:
-        return self.__getattr__("UMOLAR").asdim(MolarSpecificInternalEnergy)
+        return (
+            self.__getattr__("UMOLAR")
+            .asdim(MolarSpecificInternalEnergy)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def V(self) -> Quantity[DynamicViscosity, MT]:
-        return self.__getattr__("V").asdim(DynamicViscosity)
+        return (
+            self.__getattr__("V")
+            .asdim(DynamicViscosity)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def Z(self) -> Quantity[Dimensionless, MT]:
-        return self.__getattr__("Z").asdim(Dimensionless)
+        return (
+            self.__getattr__("Z")
+            .asdim(Dimensionless)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def DELTA(self) -> Quantity[Dimensionless, MT]:
-        return self.__getattr__("DELTA").asdim(Dimensionless)
+        return (
+            self.__getattr__("DELTA")
+            .asdim(Dimensionless)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def D(self) -> Quantity[Density, MT]:
-        return self.__getattr__("D").asdim(Density)
+        return self.__getattr__("D").asdim(Density).astype(self._mt, **self._mt_kwargs)
 
     @property
     def RHOMASS_REDUCING(self) -> Quantity[Density, MT]:
-        return self.__getattr__("RHOMASS_REDUCING").asdim(Density)
+        return (
+            self.__getattr__("RHOMASS_REDUCING")
+            .asdim(Density)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def RHOMOLAR_CRITICAL(self) -> Quantity[MolarDensity, MT]:
-        return self.__getattr__("RHOMOLAR_CRITICAL").asdim(MolarDensity)
+        return (
+            self.__getattr__("RHOMOLAR_CRITICAL")
+            .asdim(MolarDensity)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def RHOMOLAR_REDUCING(self) -> Quantity[MolarDensity, MT]:
-        return self.__getattr__("RHOMOLAR_REDUCING").asdim(MolarDensity)
+        return (
+            self.__getattr__("RHOMOLAR_REDUCING")
+            .asdim(MolarDensity)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def DMOLAR(self) -> Quantity[MolarDensity, MT]:
-        return self.__getattr__("DMOLAR").asdim(MolarDensity)
+        return (
+            self.__getattr__("DMOLAR")
+            .asdim(MolarDensity)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def A(self) -> Quantity[Velocity, MT]:
-        return self.__getattr__("A").asdim(Velocity)
+        return self.__getattr__("A").asdim(Velocity).astype(self._mt, **self._mt_kwargs)
 
     @property
     def L(self) -> Quantity[ThermalConductivity, MT]:
-        return self.__getattr__("L").asdim(ThermalConductivity)
+        return (
+            self.__getattr__("L")
+            .asdim(ThermalConductivity)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def C(self) -> Quantity[SpecificHeatCapacity, MT]:
-        return self.__getattr__("C").asdim(SpecificHeatCapacity)
+        return (
+            self.__getattr__("C")
+            .asdim(SpecificHeatCapacity)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def M(self) -> Quantity[MolarMass, MT]:
-        return self.__getattr__("M").asdim(MolarMass)
+        return (
+            self.__getattr__("M").asdim(MolarMass).astype(self._mt, **self._mt_kwargs)
+        )
 
     def __getattr__(self, attr: CProperty) -> Quantity:
         if attr not in self.ALL_PROPERTIES:
@@ -1111,79 +1243,143 @@ class HumidAir(CoolPropFluid[MT]):
 
     @property
     def psi_w(self) -> Quantity[Dimensionless, MT]:
-        return self.__getattr__("psi_w").asdim(Dimensionless)
+        return (
+            self.__getattr__("psi_w")
+            .asdim(Dimensionless)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def W(self) -> Quantity[Dimensionless, MT]:
-        return self.__getattr__("W").asdim(Dimensionless)
+        return (
+            self.__getattr__("W")
+            .asdim(Dimensionless)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def Z(self) -> Quantity[Dimensionless, MT]:
-        return self.__getattr__("Z").asdim(Dimensionless)
+        return (
+            self.__getattr__("Z")
+            .asdim(Dimensionless)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def R(self) -> Quantity[Dimensionless, MT]:
-        return self.__getattr__("R").asdim(Dimensionless)
+        return (
+            self.__getattr__("R")
+            .asdim(Dimensionless)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def P(self) -> Quantity[Pressure, MT]:
-        return self.__getattr__("P").asdim(Pressure)
+        return self.__getattr__("P").asdim(Pressure).astype(self._mt, **self._mt_kwargs)
 
     @property
     def P_w(self) -> Quantity[Pressure, MT]:
-        return self.__getattr__("P_w").asdim(Pressure)
+        return (
+            self.__getattr__("P_w").asdim(Pressure).astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def B(self) -> Quantity[Temperature, MT]:
-        return self.__getattr__("B").asdim(Temperature)
+        return (
+            self.__getattr__("B").asdim(Temperature).astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def T(self) -> Quantity[Temperature, MT]:
-        return self.__getattr__("T").asdim(Temperature)
+        return (
+            self.__getattr__("T").asdim(Temperature).astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def D(self) -> Quantity[Temperature, MT]:
-        return self.__getattr__("D").asdim(Temperature)
+        return (
+            self.__getattr__("D").asdim(Temperature).astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def K(self) -> Quantity[ThermalConductivity, MT]:
-        return self.__getattr__("K").asdim(ThermalConductivity)
+        return (
+            self.__getattr__("K")
+            .asdim(ThermalConductivity)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def M(self) -> Quantity[DynamicViscosity, MT]:
-        return self.__getattr__("M").asdim(DynamicViscosity)
+        return (
+            self.__getattr__("M")
+            .asdim(DynamicViscosity)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def C(self) -> Quantity[SpecificHeatPerDryAir, MT]:
-        return self.__getattr__("C").asdim(SpecificHeatPerDryAir)
+        return (
+            self.__getattr__("C")
+            .asdim(SpecificHeatPerDryAir)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def Cha(self) -> Quantity[SpecificHeatPerHumidAir, MT]:
-        return self.__getattr__("Cha").asdim(SpecificHeatPerHumidAir)
+        return (
+            self.__getattr__("Cha")
+            .asdim(SpecificHeatPerHumidAir)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def H(self) -> Quantity[MixtureEnthalpyPerDryAir, MT]:
-        return self.__getattr__("H").asdim(MixtureEnthalpyPerDryAir)
+        return (
+            self.__getattr__("H")
+            .asdim(MixtureEnthalpyPerDryAir)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def Hha(self) -> Quantity[MixtureEnthalpyPerHumidAir, MT]:
-        return self.__getattr__("Hha").asdim(MixtureEnthalpyPerHumidAir)
+        return (
+            self.__getattr__("Hha")
+            .asdim(MixtureEnthalpyPerHumidAir)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def S(self) -> Quantity[MixtureEntropyPerDryAir, MT]:
-        return self.__getattr__("S").asdim(MixtureEntropyPerDryAir)
+        return (
+            self.__getattr__("S")
+            .asdim(MixtureEntropyPerDryAir)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def Sha(self) -> Quantity[MixtureEntropyPerHumidAir, MT]:
-        return self.__getattr__("Sha").asdim(MixtureEntropyPerHumidAir)
+        return (
+            self.__getattr__("Sha")
+            .asdim(MixtureEntropyPerHumidAir)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def V(self) -> Quantity[MixtureVolumePerDryAir, MT]:
-        return self.__getattr__("V").asdim(MixtureVolumePerDryAir)
+        return (
+            self.__getattr__("V")
+            .asdim(MixtureVolumePerDryAir)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     @property
     def Vha(self) -> Quantity[MixtureVolumePerHumidAir, MT]:
-        return self.__getattr__("Vha").asdim(MixtureVolumePerHumidAir)
+        return (
+            self.__getattr__("Vha")
+            .asdim(MixtureVolumePerHumidAir)
+            .astype(self._mt, **self._mt_kwargs)
+        )
 
     def __getattr__(self, attr: CProperty) -> Quantity:
         if attr not in self.ALL_PROPERTIES:
