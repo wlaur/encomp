@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import copy
 import numbers
+import logging
 import re
 import warnings
 from types import UnionType
@@ -55,6 +56,8 @@ if SETTINGS.ignore_ndarray_unit_stripped_warning:
         message="The unit of the quantity is stripped when downcasting to ndarray.",
     )
 
+
+_LOGGER = logging.getLogger(__name__)
 
 # custom errors inherit from pint.errors.DimensionalityError
 # (which inherits from TypeError)
@@ -685,6 +688,28 @@ class Quantity(
                 )
 
     def _call_subclass(self, *args) -> Quantity[DT, MT]:
+        # handle the edge case where a 1-element pd.Series is
+        # multiplied or divided by an N-element pd.Series
+
+        if "index" in self._original_magnitude_kwargs:
+            index = self._original_magnitude_kwargs["index"]
+
+            try:
+                magnitude_length = len(args[0])
+            except Exception:
+                magnitude_length = None
+
+            if magnitude_length is not None and magnitude_length != len(index):
+                _LOGGER.warning(
+                    f"Length of magnitude index {index} (length {len(index)}) does "
+                    f"not match length of {args[0]} (length {magnitude_length}), "
+                    "the index will be stripped. To avoid this warning, "
+                    "make sure to convert 1-element pd.Series to scalars before "
+                    "multiplying or dividing by another Quantity."
+                )
+
+                del self._original_magnitude_kwargs["index"]
+
         return self.subclass(
             *args,
             _mt_orig=self._original_magnitude_type,
@@ -1025,7 +1050,6 @@ class Quantity(
 
     def __mul__(self, other):
         ret = super().__mul__(other)
-
         if self.dimensionless and isinstance(other, Quantity):
             return other.subclass(ret)
 
@@ -1155,6 +1179,10 @@ class Quantity(
             ret.m,
             ret.u,
         )
+
+    @property
+    def is_scalar(self) -> bool:
+        return isinstance_types(self.m, (float, int))
 
     @property
     def ndim(self) -> int:

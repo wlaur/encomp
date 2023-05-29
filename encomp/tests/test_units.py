@@ -1336,3 +1336,20 @@ def test_astype():
 
     assert Q([1, 2, 3]).astype(pd.Series, name="s1").m.name == "s1"
     assert Q([1, 2, 3]).astype(pl.Series, name="s1").m.name == "s1"
+
+
+def test_single_element_array_magnitude():
+    s1_list = [1.0]
+    s2_list = [1.0, 2.0]
+
+    Q(s1_list, "kg") * Q(s2_list, "m") / Q(s2_list, "kg")
+
+    s1_arr = np.array([1])
+    s2_arr = np.array([1, 2])
+
+    Q(s1_arr, "kg") * Q(s2_arr, "m") / Q(s2_arr, "kg")
+
+    s1_series = pd.Series([1], name="one")
+    s2_series = pd.Series([1, 2], name="two")
+
+    Q(s1_series, "kg") * Q(s2_series, "m") / Q(s2_series, "kg")
