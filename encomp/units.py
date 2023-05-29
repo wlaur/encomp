@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import copy
 import numbers
-import logging
 import re
 import warnings
 from types import UnionType
@@ -56,8 +55,6 @@ if SETTINGS.ignore_ndarray_unit_stripped_warning:
         message="The unit of the quantity is stripped when downcasting to ndarray.",
     )
 
-
-_LOGGER = logging.getLogger(__name__)
 
 # custom errors inherit from pint.errors.DimensionalityError
 # (which inherits from TypeError)
@@ -699,15 +696,8 @@ class Quantity(
             except Exception:
                 magnitude_length = None
 
+            # strip the index in case it's not compatible
             if magnitude_length is not None and magnitude_length != len(index):
-                _LOGGER.warning(
-                    f"Length of magnitude index {index} (length {len(index)}) does "
-                    f"not match length of {args[0]} (length {magnitude_length}), "
-                    "the index will be stripped. To avoid this warning, "
-                    "make sure to convert 1-element pd.Series to scalars before "
-                    "multiplying or dividing by another Quantity."
-                )
-
                 del self._original_magnitude_kwargs["index"]
 
         return self.subclass(
