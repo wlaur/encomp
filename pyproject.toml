@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "encomp"
-version = "0.9.5"
+version = "0.9.6"
 description = "General-purpose library for engineering calculations"
 authors = ["William Laurén <lauren.william.a@gmail.com>"]
 readme = "README.md"
@@ -10,7 +10,7 @@ include = ["encomp/defs"]
 
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.10"
 urllib3 = "^1"             # https://github.com/urllib3/urllib3/issues/3010
 python-dateutil = "*"
 python-dotenv = "*"
