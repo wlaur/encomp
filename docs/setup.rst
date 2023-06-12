@@ -1,7 +1,7 @@
 Setup
 =====
 
-``encomp`` requires Python 3.10 or higher.
+``encomp`` requires Python 3.11 or higher.
 
 
 Installing with ``pip``

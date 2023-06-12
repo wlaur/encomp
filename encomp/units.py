@@ -28,8 +28,6 @@ from pint.facets.measurement.objects import MeasurementQuantity
 from pint.facets.nonmultiplicative.objects import NonMultiplicativeQuantity
 from pint.facets.numpy.quantity import NumpyQuantity
 from pint.facets.numpy.unit import NumpyUnit
-from pint.facets.plain.quantity import PlainQuantity
-from pint.facets.plain.unit import PlainUnit
 from pint.registry import LazyRegistry, UnitRegistry
 from pint.util import UnitsContainer
 
@@ -201,13 +199,12 @@ class QuantityMeta(type):
         return super().__call__(*args, **kwargs)
 
 
-class Unit(PlainUnit, NumpyUnit, FormattingUnit, Generic[DT]):
+class Unit(NumpyUnit, FormattingUnit, Generic[DT]):
     pass
 
 
 class Quantity(
     NonMultiplicativeQuantity,
-    PlainQuantity,
     MeasurementQuantity,
     NumpyQuantity,
     FormattingQuantity,

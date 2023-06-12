@@ -4,7 +4,7 @@
 
 Documentation at <https://encomp.readthedocs.io/en/latest/>
 
-`encomp` is tested on Windows and Linux, with Python versions 3.10 and 3.11.
+`encomp` is tested on Windows and Linux, with Python 3.11.
 
 ## Features
 
