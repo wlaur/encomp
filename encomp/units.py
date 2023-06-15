@@ -1169,7 +1169,7 @@ class Quantity(
 
     @property
     def is_scalar(self) -> bool:
-        return isinstance_types(self.m, (float, int))
+        return isinstance(self.m, (float, int))
 
     @property
     def ndim(self) -> int:
