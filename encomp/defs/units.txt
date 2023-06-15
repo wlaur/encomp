@@ -129,6 +129,7 @@ normal = [normal]
 
 percent = 1 / 100 = _ = pct = procent
 permille = 1 / 1000 = permil = promille
+ppm = 1 / 1000000
 
 # NOTE: these are only approximate, don't use for currency conversion
 SEK = 1 * currency
