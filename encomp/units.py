@@ -773,7 +773,6 @@ class Quantity(
         # TODO: fix typing for this method, remove type: ignore
 
         if isinstance(unit, Quantity):
-            print(self._dimensionality_type, unit._dimensionality_type)
             return self._dimensionality_type == unit._dimensionality_type
 
         if isinstance(unit, Unit):
