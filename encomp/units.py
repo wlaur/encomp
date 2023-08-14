@@ -773,7 +773,19 @@ class Quantity(
         # TODO: fix typing for this method, remove type: ignore
 
         if isinstance(unit, Quantity):
-            unit = unit.dimensionality
+            print(self._dimensionality_type, unit._dimensionality_type)
+            return self._dimensionality_type == unit._dimensionality_type
+
+        if isinstance(unit, Unit):
+            # it's not possible to know if an instance of Unit is Temperature or TemperatureDifference
+            # until it is used to construct a Quantity
+
+            unit_qty = Quantity(1, unit)
+
+            if isinstance(unit_qty, Quantity[TemperatureDifference]):
+                unit_qty = Quantity[TemperatureDifference](1.0, unit)
+
+            return self.check(unit_qty)
 
         if hasattr(unit, "dimensions"):
             unit = unit.dimensions  # type: ignore

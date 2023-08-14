@@ -1351,3 +1351,19 @@ def test_single_element_array_magnitude():
     s2_series = pd.Series([1, 2], name="two")
 
     Q(s1_series, "kg") * Q(s2_series, "m") / Q(s2_series, "kg")
+
+
+def test_check_temperature_difference():
+    assert not Q(1, "degC").check(Q(12, "kg"))
+
+    assert Q(1, "degC").check(Q(12, "degC"))
+    assert Q(1, "degC").check(Q(12, "degC").u)
+
+    assert not Q(1, "delta_degC").check(Q(12, "degC"))
+    assert not Q(1, "delta_degC").check(Q(12, "degC").u)
+
+    assert Q(1, "delta_degC").check(Q(12, "delta_degC"))
+    assert Q(1, "delta_degC").check(Q(12, "delta_degC").u)
+
+    assert not Q(1, "delta_degC").check(Q(12, "degC"))
+    assert not Q(1, "delta_degC").check(Q(12, "degC").u)
