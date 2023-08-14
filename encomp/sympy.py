@@ -6,24 +6,38 @@ Contains tools for converting Sympy expressions to Python modules and functions.
 import re
 from functools import lru_cache
 from typing import Callable, Literal
+from collections.abc import Iterable
 
 import numpy as np
 import sympy as sp
-from sympy import default_sort_key
-
-try:
-    from sympy.utilities.lambdify import lambdastr, lambdify
-except ImportError:
-
-    def lambdify(*args, **kwargs) -> None:
-        raise NotImplementedError()
-
-    lambdastr = lambdify
-
 from symbolic_equation import Eq as Eq_symbolic
+from sympy import default_sort_key
+from sympy.utilities.lambdify import lambdastr, lambdify
+from typing_extensions import Self
 
 from .settings import SETTINGS
 from .units import Quantity
+
+
+def display_equation(eqn: sp.Equality, tag: str | None = None, **kwargs) -> None:
+    """
+    Displays a Sympy equation (``sp.Equality``) using
+    the package ``symbolic_equation``, which displays
+    multi-line equations.
+    ``kwargs`` are passed to ``symbolic_equation.Eq``.
+    Calls ``IPython.display.display``.
+
+    Parameters
+    ----------
+    eqn : sp.Equality
+        Equation to display
+    tag : str | None, optional
+        Equation tag displayed on the right side inside parens, by default None
+    """
+    from IPython.display import display
+
+    eqn = Eq_symbolic(lhs=eqn.lhs, rhs=eqn.rhs, tag=tag, **kwargs)
+    display(eqn)
 
 
 @lru_cache()
@@ -630,171 +644,181 @@ def typeset(x: str | int) -> str:
     return ",".join(parts)
 
 
-def decorate(
-    self,
-    prefix: str | int | None = None,
-    suffix: str | int | None = None,
-    prefix_sub: str | int | None = None,
-    prefix_sup: str | int | None = None,
-    suffix_sub: str | int | None = None,
-    suffix_sup: str | int | None = None,
-) -> sp.Symbol:
-    """
-    Method for ``sp.Symbol`` that decorates a symbol with
-    subscripts and/or superscripts before or after the symbol.
-    Returns a new symbol object with the same assumptions (i.e. real,
-    positive, complex, etc...) as the input.
+class Symbol(sp.Symbol):
+    def decorate(
+        self,
+        prefix: str | int | None = None,
+        suffix: str | int | None = None,
+        prefix_sub: str | int | None = None,
+        prefix_sup: str | int | None = None,
+        suffix_sub: str | int | None = None,
+        suffix_sup: str | int | None = None,
+    ) -> Self:
+        """
+        Method that decorates a symbol with
+        subscripts and/or superscripts before or after the symbol.
+        Returns a new symbol object with the same assumptions (i.e. real,
+        positive, complex, etc...) as the input.
 
-    Using LaTeX syntax supported by ``sympy``:
+        Using LaTeX syntax supported by ``sympy``:
 
-    .. code:: none
+        .. code:: none
 
-        {prefix}^{prefix_sub}_{prefix_sup}{symbol}_{suffix_sub}^{suffix_sup}{suffix}
+            {prefix}^{prefix_sub}_{prefix_sup}{symbol}_{suffix_sub}^{suffix_sup}{suffix}
 
-    ``symbol`` is the input symbol.
-    The ``prefix`` and ``suffix`` parts are added without ``_`` or ``^``.
-    Each of the parts (except ``symbol``) can be empty.
+        ``symbol`` is the input symbol.
+        The ``prefix`` and ``suffix`` parts are added without ``_`` or ``^``.
+        Each of the parts (except ``symbol``) can be empty.
 
-    The decorations can be string or integer, floats are not allowed.
-    In case the input symbol already contains sub- or superscripts,
-    the decorations are not appended to those. Instead, a new level
-    is introduced. To keep things simple, make sure that the input symbol
-    is a simple symbol.
+        The decorations can be string or integer, floats are not allowed.
+        In case the input symbol already contains sub- or superscripts,
+        the decorations are not appended to those. Instead, a new level
+        is introduced. To keep things simple, make sure that the input symbol
+        is a simple symbol.
 
-    Use the ``append`` method to append to an existing sub- or superscript in the suffix.
+        Use the ``append`` method to append to an existing sub- or superscript in the suffix.
 
-    Parameters
-    ----------
-    prefix : str | int | None, optional
-        Prefix added before the symbol, by default None
-    suffix : str | int | None, optional
-        Suffix added after the symbol, by default None
-    prefix_sub : str | int | None, optional
-        Subscript prefix before the symbol and after ``prefix``, by default None
-    prefix_sup : str | int | None, optional
-        Superscript prefix before the symbol and after ``prefix``, by default None
-    suffix_sub : str | int | None, optional
-        Subscript suffix after the symbol and before ``suffix``, by default None
-    suffix_sup : str | int | None, optional
-        Superscript suffix after the symbol and before ``suffix``, by default None
+        Parameters
+        ----------
+        prefix : str | int | None, optional
+            Prefix added before the symbol, by default None
+        suffix : str | int | None, optional
+            Suffix added after the symbol, by default None
+        prefix_sub : str | int | None, optional
+            Subscript prefix before the symbol and after ``prefix``, by default None
+        prefix_sup : str | int | None, optional
+            Superscript prefix before the symbol and after ``prefix``, by default None
+        suffix_sub : str | int | None, optional
+            Subscript suffix after the symbol and before ``suffix``, by default None
+        suffix_sup : str | int | None, optional
+            Superscript suffix after the symbol and before ``suffix``, by default None
 
-    Returns
-    -------
-    sp.Symbol
-        A new symbol with the same assumptions as the input, with added decorations
-    """
+        Returns
+        -------
+        Symbol
+            A new symbol with the same assumptions as the input, with added decorations
+        """
 
-    parts = [
-        prefix,
-        typeset(prefix_sup) if prefix_sup is not None else None,
-        typeset(prefix_sub) if prefix_sub is not None else None,
-        self.name,
-        typeset(suffix_sub) if suffix_sub is not None else None,
-        typeset(suffix_sup) if suffix_sup is not None else None,
-        suffix,
-    ]
+        parts = [
+            prefix,
+            typeset(prefix_sup) if prefix_sup is not None else None,
+            typeset(prefix_sub) if prefix_sub is not None else None,
+            self.name,
+            typeset(suffix_sub) if suffix_sub is not None else None,
+            typeset(suffix_sup) if suffix_sup is not None else None,
+            suffix,
+        ]
 
-    delimiters = ["", "^", "_", "", "_", "^", ""]
+        delimiters = ["", "^", "_", "", "_", "^", ""]
 
-    decorated_parts = []
+        decorated_parts = []
 
-    for p, d in zip(parts, delimiters):
-        if p is None:
-            continue
+        for p, d in zip(parts, delimiters):
+            if p is None:
+                continue
 
-        p = str(p)
+            p = str(p)
 
-        # don't add extra braces around the base symbol
-        if p != self.name:
-            p = "{" + p + "}"
+            # don't add extra braces around the base symbol
+            if p != self.name:
+                p = "{" + p + "}"
 
-        decorated_parts.append(d + p)
+            decorated_parts.append(d + p)
 
-    decorated_symbol = "".join(decorated_parts)
+        decorated_symbol = "".join(decorated_parts)
 
-    # assumptions0 contains assumptions that are not None
-    return sp.Symbol(decorated_symbol, **self.assumptions0)
+        # assumptions0 contains assumptions that are not None
+        return self.__class__(decorated_symbol, **self.assumptions0)
+
+    def append(self, s: str | int, where: Literal["sub", "sup"] = "sub") -> Self:
+        """
+        Adds the input ``s`` to an existing sub- or superscript.
+        Does not append to prefixes.
+        Creates the sub- or superscript if it does not exist.
+
+        Parameters
+        ----------
+        s : str | int
+            Text or index to be added
+        where : Literal['sub', 'sup'], optional
+            Whether to append to the subscript or superscript, by default 'sub'
+
+        Returns
+        -------
+        Symbol
+            A new symbol with the same assumptions as the input, with updated sub- or superscript
+        """
+
+        if where == "sub":
+            delimiter = "_"
+        else:
+            delimiter = "^"
+
+        symbol = self.name
+
+        s = typeset(s)
+
+        if delimiter not in symbol:
+            decorated_parts = [symbol, delimiter, "{" + s + "}"]
+
+        else:
+            *base_symbol, existing_suffix = symbol.split(delimiter)
+
+            base_symbol = "".join(base_symbol)
+
+            # assume that the input Latex symbol is correct, don't deal with unbalanced braces
+            existing_suffix = existing_suffix.removeprefix("{").removesuffix("}")
+
+            existing_suffix += str(s)
+
+            decorated_parts = [base_symbol, delimiter, "{" + existing_suffix + "}"]
+
+        decorated_symbol = "".join(decorated_parts)
+        return self.__class__(decorated_symbol, **self.assumptions0)
+
+    def _(self, x: str) -> Self:
+        """
+        Add subscript ``x`.
+        """
+        return self.append(x, where="sub")
+
+    def __(self, x: str) -> Self:
+        """
+        Add superscript ``x`.
+        """
+        return self.append(x, where="sup")
+
+    def delta(self) -> Self:
+        """
+        Add ``\\delta`` prefix.
+        """
+        return self.decorate(prefix="\\Delta")
 
 
-def append(self, s: str | int, where: Literal["sub", "sup"] = "sub") -> sp.Symbol:
-    """
-    Adds the input ``s`` to an existing sub- or superscript.
-    Does not append to prefixes.
-    Creates the sub- or superscript if it does not exist.
-
-    Parameters
-    ----------
-    s : str | int
-        Text or index to be added
-    where : Literal['sub', 'sup'], optional
-        Whether to append to the subscript or superscript, by default 'sub'
-
-    Returns
-    -------
-    sp.Symbol
-        A new symbol with the same assumptions as the input, with updated sub- or superscript
-    """
-
-    if where == "sub":
-        delimiter = "_"
-    else:
-        delimiter = "^"
-
-    symbol = self.name
-
-    s = typeset(s)
-
-    if delimiter not in symbol:
-        decorated_parts = [symbol, delimiter, "{" + s + "}"]
-
-    else:
-        *base_symbol, existing_suffix = symbol.split(delimiter)
-
-        base_symbol = "".join(base_symbol)
-
-        # assume that the input Latex symbol is correct, don't deal with unbalanced braces
-        existing_suffix = existing_suffix.removeprefix("{").removesuffix("}")
-
-        existing_suffix += str(s)
-
-        decorated_parts = [base_symbol, delimiter, "{" + existing_suffix + "}"]
-
-    decorated_symbol = "".join(decorated_parts)
-    return sp.Symbol(decorated_symbol, **self.assumptions0)
+def _patch_symbol_class(dest: type[sp.Symbol] | sp.Symbol):
+    for n in ["append", "delta", "_", "__"]:
+        if not hasattr(dest, n):
+            method = getattr(Symbol, n)
+            setattr(dest, n, method)
 
 
-# additional methods for sp.Symbol
-# these methods (potentially) return a new sp.Symbol object
-# sympy keeps an internal symbol register: two symbols with the same
-# name and assumptions refer to the same Python object
-
-sp.Symbol.decorate = decorate  # type: ignore
-sp.Symbol.append = append  # type: ignore
-
-# shorthand to add suffixes to an existing symbol
-sp.Symbol._ = lambda s, x: s.append(x, where="sub")  # type: ignore
-sp.Symbol.__ = lambda s, x: s.append(x, where="sup")  # type: ignore
-
-# shorthand to add Delta before a symbol
-sp.Symbol.delta = lambda s: s.decorate(prefix="\\Delta")  # type: ignore
+_symbols_orig = sp.symbols
 
 
-def display_equation(eqn: sp.Equality, tag: str | None = None, **kwargs) -> None:
-    """
-    Displays a Sympy equation (``sp.Equality``) using
-    the package ``symbolic_equation``, which displays
-    multi-line equations.
-    ``kwargs`` are passed to ``symbolic_equation.Eq``.
-    Calls ``IPython.display.display``.
+def symbols(inp: str, **kwargs) -> list[Symbol]:
+    ret = _symbols_orig(inp, **kwargs)
 
-    Parameters
-    ----------
-    eqn : sp.Equality
-        Equation to display
-    tag : str | None, optional
-        Equation tag displayed on the right side inside parens, by default None
-    """
-    from IPython.display import display
+    if not isinstance(ret, Iterable):
+        raise ValueError(
+            "Expected more than one input symbol, "
+            f"use sp.Symbol('{inp}') directly to create a single symbol"
+        )
+    for n in ret:
+        _patch_symbol_class(n)
 
-    eqn = Eq_symbolic(lhs=eqn.lhs, rhs=eqn.rhs, tag=tag, **kwargs)
-    display(eqn)
+    return ret
+
+
+_patch_symbol_class(sp.Symbol)
+sp.Symbol = Symbol
+sp.symbols = symbols

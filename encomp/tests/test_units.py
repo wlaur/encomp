@@ -9,8 +9,7 @@ import polars as pl
 import pytest
 from pandas.api.types import is_list_like as pandas_is_list_like  # type: ignore
 from pint.errors import OffsetUnitCalculusError
-from pydantic import BaseModel
-from pydantic.error_wrappers import ValidationError
+from pydantic import BaseModel, ConfigDict
 from pytest import approx
 from typeguard import typechecked
 
@@ -23,6 +22,7 @@ from ..units import (
     DimensionalityError,
     DimensionalityRedefinitionError,
     DimensionalityTypeError,
+    ExpectedDimensionalityError,
     Quantity,
     Unit,
     define_dimensionality,
@@ -1191,15 +1191,13 @@ def test_pydantic_integration():
         r: Q[Dimensionless] = 0.5
 
         # float cannot be converted to Quantity[Length]
-        # this raises pydantic.ValidationError (if Config.validate_all is set)
         # d: Q[Length] = 0.5
 
-        class Config:
-            validate_all = True
+        model_config = ConfigDict(validate_default=True)
 
     Model(a=Q(25, "cSt"), m=Q(25, "kg"), s=Q(25, "cm"))
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(ExpectedDimensionalityError):
         Model(a=Q(25, "cSt"), m=Q(25, "kg/day"), s=Q(25, "cm"))
 
 

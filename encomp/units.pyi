@@ -1,6 +1,5 @@
 from typing import (
     Any,
-    Generator,
     Generic,
     Literal,
     SupportsAbs,
@@ -12,7 +11,6 @@ import numpy as np
 import pandas as pd
 import polars as pl
 import sympy as sp
-from _typeshed import Incomplete
 
 # this is not consistent with units.py
 from pint.errors import DimensionalityError as _DimensionalityError
@@ -26,6 +24,7 @@ from pint.facets.plain.unit import PlainUnit
 from pint.registry import UnitRegistry
 from pint.util import UnitsContainer
 
+from .sympy import Symbol
 from .utypes import (
     DT,
     DT_,
@@ -190,11 +189,9 @@ class Quantity(
     @staticmethod
     def correct_unit(unit: str) -> str: ...
     @staticmethod
-    def get_unit_symbol(s: str) -> sp.Symbol: ...
+    def get_unit_symbol(s: str) -> Symbol: ...
     @classmethod
     def from_expr(cls, expr: sp.Basic) -> Quantity[Unknown, float]: ...
-    @classmethod
-    def __get_validators__(cls) -> Generator[Incomplete, None, None]: ...
     @classmethod
     def validate(cls, qty: Quantity[DT, MT]) -> Quantity[DT, MT]: ...
     def is_compatible_with(

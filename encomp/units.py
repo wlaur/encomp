@@ -30,6 +30,8 @@ from pint.facets.numpy.quantity import NumpyQuantity
 from pint.facets.numpy.unit import NumpyUnit
 from pint.registry import LazyRegistry, UnitRegistry
 from pint.util import UnitsContainer
+from pydantic import GetCoreSchemaHandler
+from pydantic_core import core_schema
 
 from .misc import isinstance_types
 from .settings import SETTINGS
@@ -46,6 +48,7 @@ from .utypes import (
     Unset,
     Variable,
 )
+
 
 if SETTINGS.ignore_ndarray_unit_stripped_warning:
     warnings.filterwarnings(
@@ -888,7 +891,7 @@ class Quantity(
         # use \text{symbol} to make sure that the unit symbols
         # do not clash with commonly used symbols like "m" or "s"
         expr = sp.sympify(f"{base_qty.m} * {unit_repr}").subs(
-            {n: self.get_unit_symbol(n) for n in symbols}
+            {sp.Symbol(n): self.get_unit_symbol(n) for n in symbols}
         )
 
         return expr
@@ -942,12 +945,13 @@ class Quantity(
         return cls(magnitude, unit).to_base_units()
 
     @classmethod
-    def __get_validators__(cls):
-        # used by pydantic.BaseModel to validate fields
-        yield cls.validate
+    def __get_pydantic_core_schema__(
+        cls, source_type: Any, handler: GetCoreSchemaHandler
+    ) -> core_schema.CoreSchema:
+        return core_schema.general_plain_validator_function(cls.validate)
 
     @classmethod
-    def validate(cls, qty) -> Quantity[DT, MT]:
+    def validate(cls, qty, info) -> Quantity[DT, MT]:
         # convert non-Quantity inputs to Quantity before checking subclass
         ret = cls(qty)
 

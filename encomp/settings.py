@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Literal
 
 from dotenv import find_dotenv, load_dotenv
-from pydantic import BaseSettings, FilePath
+from pydantic import FilePath
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # find the first file named ".env" in the current directory or a parent directory
 load_dotenv(dotenv_path=find_dotenv(filename=".env"))
@@ -57,11 +58,12 @@ class Settings(BaseSettings):
     autoconvert_offset_to_baseunit: bool = False
     default_unit_format: Literal["~P", "~L", "~H", "~Lx"] = "~P"
 
-    class Config:
-        env_prefix = "ENCOMP_"
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    model_config = SettingsConfigDict(
+        env_prefix="ENCOMP_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+    )
 
 
 # the settings object is initialized the first time the library loads

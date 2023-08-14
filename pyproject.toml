@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "encomp"
-version = "0.9.8"
+version = "0.9.9"
 description = "General-purpose library for engineering calculations"
 authors = ["William Laurén <lauren.william.a@gmail.com>"]
 readme = "README.md"
@@ -11,10 +11,10 @@ include = ["encomp/defs"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-urllib3 = "^1"             # https://github.com/urllib3/urllib3/issues/3010
 python-dateutil = "*"
 python-dotenv = "*"
-pydantic = "*"
+pydantic = "~2"
+pydantic-settings = "~2"
 typeguard = "*"
 typing-extensions = "*"
 asttokens = "*"
@@ -72,7 +72,7 @@ jupyterlab-code-formatter = "*"
 jupyterlab-spellchecker = "*"
 pyinstrument = "*"
 pre-commit = "*"
-numpydoc = "^1.5.0"
+numpydoc = "*"
 
 
 [build-system]
