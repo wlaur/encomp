@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "encomp"
-version = "0.9.9"
+version = "0.9.10"
 description = "General-purpose library for engineering calculations"
 authors = ["William Laurén <lauren.william.a@gmail.com>"]
 readme = "README.md"

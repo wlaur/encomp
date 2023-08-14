@@ -796,7 +796,7 @@ class Symbol(sp.Symbol):
 
 
 def _patch_symbol_class(dest: type[sp.Symbol] | sp.Symbol):
-    for n in ["append", "delta", "_", "__"]:
+    for n in ["decorate", "append", "delta", "_", "__"]:
         if not hasattr(dest, n):
             method = getattr(Symbol, n)
             setattr(dest, n, method)
