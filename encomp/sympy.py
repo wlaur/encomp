@@ -802,11 +802,8 @@ def _patch_symbol_class(dest: type[sp.Symbol] | sp.Symbol):
             setattr(dest, n, method)
 
 
-_symbols_orig = sp.symbols
-
-
 def symbols(inp: str, **kwargs) -> list[Symbol]:
-    ret = _symbols_orig(inp, **kwargs)
+    ret = sp.symbols(inp, **kwargs)
 
     if not isinstance(ret, Iterable):
         raise ValueError(
@@ -820,5 +817,3 @@ def symbols(inp: str, **kwargs) -> list[Symbol]:
 
 
 _patch_symbol_class(sp.Symbol)
-sp.Symbol = Symbol
-sp.symbols = symbols
