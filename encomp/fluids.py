@@ -11,7 +11,7 @@ Uses CoolProp as backend.
 
 import warnings
 from abc import ABC, abstractmethod
-from typing import Annotated, Any, Callable, Generic, Iterable
+from typing import Annotated, Any, Callable, ClassVar, Generic, Iterable, Literal
 
 import numpy as np
 import pandas as pd
@@ -68,7 +68,7 @@ class CoolPropFluid(ABC, Generic[MT]):
     name: CName
     points: list[tuple[CProperty, Quantity[Variable, MT]]]
 
-    BACKEND: Callable = PropsSI
+    BACKEND: ClassVar[dict[Literal["backend"], Callable]] = {"backend": PropsSI}
 
     # PropsSI expects the fluid name as the first input, but not HAPropsSI
     _append_name_to_cp_inputs: bool = True
@@ -587,7 +587,7 @@ class CoolPropFluid(ABC, Generic[MT]):
             inputs.append(self.name)
 
         try:
-            val: float = self.BACKEND(output, *inputs)
+            val: float = self.BACKEND["backend"](output, *inputs)
 
             if val == np.inf or val == -np.inf:
                 val = np.nan
@@ -616,7 +616,7 @@ class CoolPropFluid(ABC, Generic[MT]):
                 inputs_i.append(self.name)
 
             try:
-                val_i: float = self.BACKEND(output, *inputs_i)
+                val_i: float = self.BACKEND["backend"](output, *inputs_i)
             except ValueError as e:
                 self.check_exception(output, e)
                 val_i = np.nan
@@ -657,7 +657,7 @@ class CoolPropFluid(ABC, Generic[MT]):
             # this can fail if the numeric values
             # are *all* incorrect, for example negative pressure
             try:
-                val_masked: np.ndarray = self.BACKEND(output, *inputs)
+                val_masked: np.ndarray = self.BACKEND["backend"](output, *inputs)
 
             except ValueError as e:
                 self.check_exception(output, e)
@@ -1071,7 +1071,7 @@ class Water(Fluid[MT]):
 
 
 class HumidAir(CoolPropFluid[MT]):
-    BACKEND = HAPropsSI
+    BACKEND = {"backend": HAPropsSI}
     _append_name_to_cp_inputs = False
     _evaluate_invalid_separately = True
 
