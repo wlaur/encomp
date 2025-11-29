@@ -338,7 +338,6 @@ def decode(inp: JSON, custom: type | list[type] | None = None) -> Any:  # noqa: 
                 if isinstance_types(unit, Unit | str):
                     if dimensionality is None:
                         return Quantity(val, unit)
-
                     else:
                         return Quantity[dimensionality](val, unit)  # type: ignore
 

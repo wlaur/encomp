@@ -1,10 +1,6 @@
-"""
-Miscellaneous functions that do not fit anywhere else.
-"""
-
 import ast
 from types import UnionType
-from typing import (  # type: ignore
+from typing import (
     Any,
     TypeGuard,
     TypeVar,
@@ -28,7 +24,7 @@ def isinstance_types(obj: Any, expected: type[T]) -> TypeGuard[T]: ...  # noqa: 
 
 
 @overload
-def isinstance_types(obj: Any, expected: T) -> bool: ...  # noqa: ANN401
+def isinstance_types(obj: Any, expected: Any) -> bool: ...  # noqa: ANN401
 
 
 def isinstance_types(obj: Any, expected: _GenericAlias | type) -> bool:

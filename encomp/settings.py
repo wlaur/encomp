@@ -8,8 +8,7 @@ from typing import Literal
 from pydantic import FilePath
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-ENCOMP_BASE = Path(__file__).parent.resolve()
-
+PACKAGE_ROOT = Path(__file__).parent.resolve()
 
 PintFormattingSpecifier = Literal["~P", "~L", "~H", "~Lx"]
 PINT_FORMATTING_SPECIFIERS = ("~P", "~L", "~H", "~Lx")
@@ -50,7 +49,7 @@ class Settings(BaseSettings):
 
     """
 
-    units: FilePath = ENCOMP_BASE / "defs/units.txt"
+    units: FilePath = PACKAGE_ROOT / "defs/units.txt"
 
     typeset_symbol_scripts: bool = True
     ignore_ndarray_unit_stripped_warning: bool = True

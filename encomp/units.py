@@ -16,13 +16,10 @@ import re
 import warnings
 from collections.abc import Iterable
 from types import UnionType
-from typing import Any, ClassVar, Generic, Literal, TypeVar, cast, get_args
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, TypeVar, cast, get_args
 
 import numpy as np
-import pandas as pd
 import pint
-import polars as pl
-import sympy as sp
 from pint.errors import DimensionalityError
 from pint.facets.measurement.objects import MeasurementQuantity
 from pint.facets.nonmultiplicative.objects import NonMultiplicativeQuantity
@@ -49,6 +46,28 @@ from .utypes import (
     Temperature,
     TemperatureDifference,
 )
+
+if TYPE_CHECKING:
+    import pandas as pd
+    import polars as pl
+    import sympy as sp
+else:
+    pd = None
+    pl = None
+    sp = None
+
+
+def _ensure_pandas() -> None:
+    global pd
+    if pd is None:
+        import pandas as pd
+
+
+def _ensure_sympy() -> None:
+    global sp
+    if sp is None:
+        import sympy as sp
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -170,6 +189,26 @@ pint._DEFAULT_REGISTRY = UNIT_REGISTRY
 pint.application_registry.set(UNIT_REGISTRY)
 
 
+# the default format must be set after Quantity and Unit are registered
+UNIT_REGISTRY.formatter.default_format = SETTINGS.default_unit_format
+
+
+def set_quantity_format(fmt: str = "compact") -> None:
+    fmt_aliases = {"normal": "~P", "siunitx": "~Lx"}
+
+    if fmt in fmt_aliases:
+        fmt = fmt_aliases[fmt]
+
+    if fmt not in Quantity.FORMATTING_SPECS:
+        raise ValueError(
+            f'Cannot set default format to "{fmt}", '
+            f"fmt is one of {Quantity.FORMATTING_SPECS} "
+            "or alias siunitx: ~L, compact: ~P"
+        )
+
+    UNIT_REGISTRY.formatter.default_format = fmt
+
+
 def define_dimensionality(name: str, symbol: str | None = None, if_exists: Literal["raise", "warn"] = "raise") -> None:
     """
     Defines a new dimensionality that can be combined with existing
@@ -284,7 +323,7 @@ class Quantity(
     def __str__(self) -> str:
         return self.__format__(self._REGISTRY.formatter.default_format)
 
-    # TODO: NumpyQuantity does not have copy and dtype as kwargs for __array__
+    # NOTE: pint NumpyQuantity does not have copy and dtype as kwargs for __array__
     def __array__(self, t: Any | None = None, copy: bool = False, dtype: str | None = None) -> np.ndarray:  # noqa: ANN401
         return super().__array__(t)
 
@@ -505,6 +544,7 @@ class Quantity(
         _mt_orig_kwargs: dict[str, Any] | None = None,
         _depth: int = 0,
     ) -> Quantity[DT, MT]:
+        _ensure_pandas()
         if isinstance(val, Quantity):
             if unit is not None:
                 raise ValueError(
@@ -580,6 +620,7 @@ class Quantity(
 
     @property
     def m(self) -> MT:
+        _ensure_pandas()
         if self._original_magnitude_type == pd.Series:
             assert isinstance(self._magnitude, np.ndarray)
             return cast(MT, pd.Series(self._magnitude, **self._original_magnitude_kwargs))
@@ -587,12 +628,12 @@ class Quantity(
         return self._magnitude
 
     @property
-    def u(self) -> Unit[DT]:
-        return Unit(super().u)
-
-    @property
     def units(self) -> Unit[DT]:
         return Unit(super().units)
+
+    @property
+    def u(self) -> Unit[DT]:
+        return self.units
 
     @property
     def _is_temperature_difference(self) -> bool:
@@ -827,6 +868,7 @@ class Quantity(
         Converts the unit dimensions to symbols and multiplies with the magnitude.
         Need to use base units, compound units will not cancel out otherwise.
         """
+        _ensure_sympy()
 
         if self.dimensionless:
             return sp.sympify(self.to_base_units().m)
@@ -854,6 +896,7 @@ class Quantity(
 
     @staticmethod
     def get_unit_symbol(s: str) -> sp.Symbol:
+        _ensure_sympy()
         return sp.Symbol("\\text{" + s + "}", nonzero=True, positive=True)
 
     @classmethod
@@ -982,14 +1025,14 @@ class Quantity(
     ) -> Quantity[DT, MT]:
         if isinstance(qty, dict) and "value" in qty and "magnitude_type" in qty:
             val = qty["value"]
-            mtype = qty["magnitude_type"]
+            magnitude_type = qty["magnitude_type"]
 
-            if mtype.startswith("np.ndarray"):
-                _, dtype_str, _ = mtype.split(":", 2)
+            if magnitude_type.startswith("np.ndarray"):
+                _, dtype_str, _ = magnitude_type.split(":", 2)
                 arr = np.array(val, dtype=np.dtype(dtype_str))
                 magnitude = arr
-            elif mtype.startswith("pl.Series"):
-                _, dtype_str = mtype.split(":", 1)
+            elif magnitude_type.startswith("pl.Series"):
+                _, dtype_str = magnitude_type.split(":", 1)
 
                 match dtype_str:
                     case "Float32":
@@ -1006,14 +1049,14 @@ class Quantity(
                         raise ValueError(f"Unknown Polars Series dtype: '{dtype_str}'")
 
                 magnitude = pl.Series(val, dtype=dtype)
-            elif mtype == "list":
+            elif magnitude_type == "list":
                 magnitude = val  # type: ignore[assignment]
-            elif mtype == "int":
+            elif magnitude_type == "int":
                 magnitude = int(val)  # type: ignore[arg-type]
-            elif mtype == "float":
+            elif magnitude_type == "float":
                 magnitude = float(val)  # type: ignore[arg-type]
             else:
-                raise ExpectedDimensionalityError(f"Unknown magnitude_type {mtype!r}")
+                raise ExpectedDimensionalityError(f"Unknown magnitude_type {magnitude_type!r}")
 
             ret = cls(magnitude, unit=qty.get("unit"))  # type: ignore[arg-type]
 
@@ -1022,6 +1065,7 @@ class Quantity(
 
         if isinstance(ret, cls):
             return ret  # type: ignore[return-value]
+
         raise ExpectedDimensionalityError(
             f"Value {ret} ({type(ret).__name__}) does not match expected dimensionality {cls.__name__}"
         )
@@ -1244,6 +1288,7 @@ class Quantity(
         magnitude_type: type[MT_],
         **kwargs: Any,  # noqa: ANN401
     ) -> Quantity[DT, MT_]:
+        _ensure_pandas()
         m, u = self.m, self.u
 
         _is_iterable = isinstance(m, Iterable)
@@ -1253,9 +1298,6 @@ class Quantity(
 
         if isinstance(m, np.ndarray) and magnitude_type not in custom_conversion:
             return self.subclass(m.astype(magnitude_type), u)  # type: ignore[return-value]
-
-        if magnitude_type in (pd.DatetimeIndex, pd.Timestamp):
-            raise ValueError(f"Cannot convert to datetime magnitude type: {magnitude_type}")
 
         if magnitude_type == pl.Expr:
             raise ValueError("Cannot convert magnitude to Polars expression")
@@ -1299,38 +1341,3 @@ class Quantity(
 # this ensures that all Quantity objects created with this registry are the correct type
 UNIT_REGISTRY.Quantity = Quantity  # type: ignore[assignment]
 UNIT_REGISTRY.Unit = Unit  # type: ignore[assignment]
-
-# the default format must be set after Quantity and Unit are registered
-UNIT_REGISTRY.formatter.default_format = SETTINGS.default_unit_format
-
-
-def set_quantity_format(fmt: str = "compact") -> None:
-    """
-    Sets the ``default_format`` attribute for the currently
-    active pint unit registry.
-
-    Parameters
-    ----------
-    fmt : str
-        Unit format string: one of ``'~P', '~L', '~H', '~Lx'``.
-        Also accepts aliases: ``'compact': '~P'`` and ``'siunitx': '~Lx'``.
-
-    Raises
-    ------
-    ValueError
-        In case ``fmt`` is not among the valid format strings.
-    """
-
-    fmt_aliases = {"normal": "~P", "siunitx": "~Lx"}
-
-    if fmt in fmt_aliases:
-        fmt = fmt_aliases[fmt]
-
-    if fmt not in Quantity.FORMATTING_SPECS:
-        raise ValueError(
-            f'Cannot set default format to "{fmt}", '
-            f"fmt is one of {Quantity.FORMATTING_SPECS} "
-            "or alias siunitx: ~L, compact: ~P"
-        )
-
-    UNIT_REGISTRY.formatter.default_format = fmt

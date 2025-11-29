@@ -8,12 +8,17 @@ Some commonly used derived dimensionalities (like density) are defined for conve
 from __future__ import annotations
 
 from abc import ABC
-from typing import TYPE_CHECKING, Literal, TypeVar, get_origin
+from typing import TYPE_CHECKING, Any, Literal, TypeVar, get_origin
 
 import numpy as np
-import pandas as pd
-import polars as pl
 from pint.util import UnitsContainer
+
+if TYPE_CHECKING:
+    import pandas as pd
+    import polars as pl
+else:
+    pd = None
+    pl = None
 
 BASE_SI_UNITS = (
     "m",
@@ -634,7 +639,11 @@ _LuminosityUC = UnitsContainer({"[luminosity]": 1})
 # reloading this module will clear and reset the registry
 
 Numpy1DArray = np.ndarray[tuple[int], np.dtype[np.float64]]
-Magnitude = float | Numpy1DArray | pd.Series | pl.Series | pl.Expr
+
+if TYPE_CHECKING:
+    Magnitude = float | Numpy1DArray | pd.Series | pl.Series | pl.Expr
+else:
+    Magnitude = Any
 
 # TypeVar default (PEP 696) is supported for Python 3.13+
 if TYPE_CHECKING:
