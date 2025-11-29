@@ -1,0 +1,47 @@
+import numpy as np
+import polars as pl
+from pydantic import BaseModel
+
+from ..units import Quantity
+
+
+def test_model_serialize() -> None:
+    class M(BaseModel):
+        qty: Quantity
+
+    for m in [
+        2,
+        2.5,
+        [1, 2, 3],
+        [1.0, 2.0, 3.5],
+        pl.Series([2, 34, 5]),
+        pl.Series([2, 34, 5], dtype=pl.Int64),
+        pl.Series([2, 34, 5], dtype=pl.Int32),
+        pl.Series([2, 34, 5], dtype=pl.Int16),
+        pl.Series([2, 34, 5], dtype=pl.Float32),
+        pl.Series([2, 34, 5], dtype=pl.Float64),
+        np.array([[1, 2, 3], [3, 2, 1], [2, 2, 2]]),
+        [[1, 1, 1], [1, 1, 1], [1, 1, 1]],
+    ]:
+        qty = Quantity(m, "kg")
+        serialized = M(qty=qty).model_dump_json()
+
+        deseralized = M.model_validate_json(serialized)
+
+        deseralized.qty.to_base_units().to(qty.u)
+
+        if isinstance(qty.m, np.ndarray) or isinstance(deseralized.qty.m, np.ndarray):
+            assert np.array_equal(qty.to_base_units().m, deseralized.qty.to_base_units().m)
+        elif isinstance(qty.m, pl.Series) or isinstance(deseralized.qty.m, pl.Series):
+            assert (qty.to_base_units().m == deseralized.qty.to_base_units().m).all()
+        else:
+            assert qty == deseralized.qty
+
+        if isinstance(m, float | int):
+            assert deseralized.qty.m == m
+        elif isinstance(m, list):
+            m = np.array(m)
+        else:
+            assert type(deseralized.qty.m) is type(m)
+
+    assert isinstance(M.model_json_schema(), dict)

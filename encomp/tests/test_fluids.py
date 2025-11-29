@@ -1,13 +1,23 @@
+# ruff: noqa: B018
+
 import numpy as np
 import pandas as pd
 import pytest
+from pytest import approx
 
 from ..fluids import Fluid, HumidAir, Water
 from ..units import Quantity as Q
-from ..utypes import Density, SpecificEntropy
+from ..utypes import DT, Density, SpecificEntropy
 
 
-def test_Fluid():
+def _approx_equal(q1: Q[DT, float], q2: Q[DT, float]) -> bool:
+    if not q1.is_compatible_with(q2):
+        return False
+
+    return q1.to(q2.u).m == approx(q2.m)
+
+
+def test_Fluid() -> None:
     fld = Fluid("R123", P=Q(2, "bar"), T=Q(25, "°C"))
 
     repr(fld)
@@ -15,13 +25,14 @@ def test_Fluid():
     fld.describe("P")
     fld.search("pressure")
 
-    # using __getattr__ will not call asdim()
-    assert fld.__getattr__("S") == Q(1087.7758824621442, "J/(K kg)")
+    # using __getattr__ will not call asdim(), these are Q[SpecificHeatCapacity]
+    # (default for "J/(K kg)")
+    assert _approx_equal(fld.__getattr__("S"), Q(1087.7758824621442, "J/(K kg)"))
 
-    # property access will call asdim()
-    assert fld.S == Q[SpecificEntropy](1087.7758824621442, "J/(K kg)")
+    # property access will call asdim(), these are Q[SpecificEntropy]
+    assert _approx_equal(Q[SpecificEntropy, float](1087.7758824621442, "J/(K kg)"), fld.S)
 
-    assert fld.D == fld.__getattr__("D")
+    assert _approx_equal(fld.__getattr__("D"), fld.D)
 
     water = Fluid("water", P=Q(2, "bar"), T=Q(25, "°C"))
     assert water.T.u == Q.get_unit("degC")
@@ -121,15 +132,13 @@ def test_Fluid():
     assert isinstance(Fluid("water", T=Q(23, "°C"), P=Q(1, "bar")).H.m, float)
 
     with pytest.raises(ValueError):
-        Fluid(
-            "water", T=Q([np.nan, np.nan], "°C"), P=Q([np.nan, np.nan, np.nan], "bar")
-        ).H
+        Fluid("water", T=Q([np.nan, np.nan], "°C"), P=Q([np.nan, np.nan, np.nan], "bar")).H
 
     with pytest.raises(ValueError):
         Fluid("water", T=Q([np.nan, np.nan], "°C"), P=Q([], "bar")).H
 
 
-def test_incorrect_inputs():
+def test_incorrect_inputs() -> None:
     # NOTE: the name cannot be checked until CoolProp is actually
     # called, so the name is not validated in __init__
     invalid = Fluid("this fluid name does not exist", P=Q(2, "bar"), T=Q(25, "°C"))
@@ -162,7 +171,7 @@ def test_incorrect_inputs():
         Fluid("water", P=Q(2, "bar"), T=Q(25, "°C")).THIS_ATTRIBUTE_DOES_NOT_EXIST
 
 
-def test_Water():
+def test_Water() -> None:
     water_single = Water(T=Q(25, "°C"), P=Q(5, "bar"))
 
     repr(water_single)
@@ -171,21 +180,17 @@ def test_Water():
 
     repr(water_multi)
 
-    water_mixed_phase = Water(
-        T=Q(np.linspace(25, 500, 10), "°C"), P=Q(np.linspace(0.5, 10, 10), "bar")
-    )
+    water_mixed_phase = Water(T=Q(np.linspace(25, 500, 10), "°C"), P=Q(np.linspace(0.5, 10, 10), "bar"))
 
     repr(water_mixed_phase)
 
-    with pytest.raises(Exception):
+    with pytest.raises(Exception):  # noqa: B017
         # mismatching sizes
         # must access an attribute before it's actually evaluated
-        Water(
-            T=Q(np.linspace(25, 500, 10), "°C"), P=Q(np.linspace(0.5, 10, 50), "bar")
-        ).P
+        Water(T=Q(np.linspace(25, 500, 10), "°C"), P=Q(np.linspace(0.5, 10, 50), "bar")).P
 
 
-def test_HumidAir():
+def test_HumidAir() -> None:
     T = Q(20, "°C")
     P = Q(20, "bar")
     R = Q(20, "%")
@@ -231,7 +236,7 @@ def test_HumidAir():
     assert np.isnan(val[1])
 
 
-def test_shapes():
+def test_shapes() -> None:
     N = 16
 
     T = Q(np.linspace(50, 60, N).reshape(4, 4), "°C")
@@ -253,7 +258,7 @@ def test_shapes():
     assert water.D.m.shape == T.m.shape
 
 
-def test_invalid_areas():
+def test_invalid_areas() -> None:
     N = 10
     T = Q(np.linspace(-100, -50, N), "K")
     P = Q(np.linspace(-1, -2, N), "bar")
@@ -288,7 +293,7 @@ def test_invalid_areas():
     assert water.D.m.size == N
 
 
-def test_properties_Fluid():
+def test_properties_Fluid() -> None:
     props = Fluid.ALL_PROPERTIES
 
     fluid_names = ["water", "methane", "R134a"]
@@ -322,7 +327,7 @@ def test_properties_Fluid():
     ]
 
     for fluid_name in fluid_names:
-        for T, P in zip(Ts, Ps):
+        for T, P in zip(Ts, Ps, strict=False):
             fluid = Fluid(fluid_name, T=Q(T, "°C"), P=Q(P, "bar"))
             repr(fluid)
 
@@ -330,7 +335,7 @@ def test_properties_Fluid():
                 getattr(fluid, p)
 
 
-def test_properties_HumidAir():
+def test_properties_HumidAir() -> None:
     props = HumidAir.ALL_PROPERTIES
 
     Ts = [
@@ -381,7 +386,7 @@ def test_properties_HumidAir():
         np.linspace(-0.5, 0.5, 10),
     ]
 
-    for T, P, R in zip(Ts, Ps, Rs):
+    for T, P, R in zip(Ts, Ps, Rs, strict=False):
         ha = HumidAir(T=Q(T, "°C"), P=Q(P, "bar"), R=Q(R))
         repr(ha)
 
@@ -389,22 +394,16 @@ def test_properties_HumidAir():
             getattr(ha, p)
 
 
-def test_magnitude_type():
+def test_magnitude_type() -> None:
     index = pd.DatetimeIndex(["2021-01-01", "2021-01-02", "2021-01-03"])
 
     s1 = pd.Series([1, 2, 3], name="s1", index=index)
 
-    assert Water(P=Q(s1, "kPa"), T=Q(25, "degC")).H.m.index[0] == pd.Timestamp(
-        "2021-01-01"
-    )
+    assert Water(P=Q(s1, "kPa"), T=Q(25, "degC")).H.m.index[0] == pd.Timestamp("2021-01-01")
 
-    assert Fluid("water", P=Q(s1, "kPa"), T=Q(25, "degC")).H.m.index[0] == pd.Timestamp(
-        "2021-01-01"
-    )
+    assert Fluid("water", P=Q(s1, "kPa"), T=Q(25, "degC")).H.m.index[0] == pd.Timestamp("2021-01-01")
 
-    assert HumidAir(P=Q(s1, "kPa"), T=Q(25, "degC"), R=Q(0.5)).H.m.index[
-        0
-    ] == pd.Timestamp("2021-01-01")
+    assert HumidAir(P=Q(s1, "kPa"), T=Q(25, "degC"), R=Q(0.5)).H.m.index[0] == pd.Timestamp("2021-01-01")
 
     # in case the input dtypes are mixed, np.ndarray will be used as a fallback
     assert isinstance(Water(T=Q(25, "degC"), P=Q(s1, "kPa")).H.m, np.ndarray)

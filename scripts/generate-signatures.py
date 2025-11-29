@@ -1,4 +1,5 @@
 import itertools
+from pathlib import Path
 from textwrap import dedent, indent
 
 import black
@@ -7,23 +8,19 @@ from encomp.utypes import (
     Dimensionality,
     Dimensionless,
     Energy,
-    Mass,
-    Temperature,
-    TemperatureDifference,
     EnergyPerMass,
     HeatingValue,
-    SpecificHeatCapacity,
-    LowerHeatingValue,
     HigherHeatingValue,
+    LowerHeatingValue,
+    Mass,
+    SpecificHeatCapacity,
+    Temperature,
+    TemperatureDifference,
 )
 
 
-def get_registry():
-    return {
-        a: b
-        for a, b in Dimensionality._registry_reversed.items()
-        if not b.__name__.startswith("Dimensionality[")
-    }
+def get_registry() -> dict:
+    return {a: b for a, b in Dimensionality._registry_reversed.items() if not b.__name__.startswith("Dimensionality[")}
 
 
 def get_dim(dim: type[Dimensionality]) -> type[Dimensionality]:
@@ -39,20 +36,11 @@ def get_signature(
     output: type[Dimensionality] | str,
     method: str,
 ) -> str:
-    if isinstance(self, str):
-        t_self = self
-    else:
-        t_self = f"Quantity[{get_dim(self).__name__}, MT]"
+    t_self = self if isinstance(self, str) else f"Quantity[{get_dim(self).__name__}, MT]"
 
-    if isinstance(other, str):
-        t_other = other
-    else:
-        t_other = f"Quantity[{get_dim(other).__name__}, Any]"
+    t_other = other if isinstance(other, str) else f"Quantity[{get_dim(other).__name__}, Any]"
 
-    if isinstance(output, str):
-        t_output = output
-    else:
-        t_output = f"Quantity[{get_dim(output).__name__}, MT]"
+    t_output = output if isinstance(output, str) else f"Quantity[{get_dim(output).__name__}, MT]"
 
     return dedent(
         f"""
@@ -67,18 +55,14 @@ def get_signature(
 def generate_overloaded_signatures(
     dimensionalities: list[type[Dimensionality]], verbose: bool = True
 ) -> tuple[str, str, str]:
-    _product_override: dict[
-        tuple[type[Dimensionality], type[Dimensionality]], type[Dimensionality]
-    ] = {
+    _product_override: dict[tuple[type[Dimensionality], type[Dimensionality]], type[Dimensionality]] = {
         (EnergyPerMass, Mass): Energy,
         (HeatingValue, Mass): Energy,
         (LowerHeatingValue, Mass): Energy,
         (HigherHeatingValue, Mass): Energy,
     }
 
-    _quotient_override: dict[
-        tuple[type[Dimensionality], type[Dimensionality]], type[Dimensionality]
-    ] = {
+    _quotient_override: dict[tuple[type[Dimensionality], type[Dimensionality]], type[Dimensionality]] = {
         (Energy, Mass): EnergyPerMass,
         (EnergyPerMass, Temperature): SpecificHeatCapacity,
     }
@@ -90,10 +74,7 @@ def generate_overloaded_signatures(
     rquotient_signatures: list[str] = []
 
     if verbose:
-        print(
-            "Generating signatures for combinations of "
-            f"{len(dimensionalities)} dimensionalities"
-        )
+        print(f"Generating signatures for combinations of {len(dimensionalities)} dimensionalities")
 
     # overrides must be added before the generated signatures
     for (self, other), output in _product_override.items():
@@ -115,9 +96,7 @@ def generate_overloaded_signatures(
         if inverted_dimensionality is None:
             continue
 
-        rquotient_signatures.append(
-            get_signature(self, "float", inverted_dimensionality, "__rtruediv__")
-        )
+        rquotient_signatures.append(get_signature(self, "float", inverted_dimensionality, "__rtruediv__"))
 
     # loop over all binary combinations
     # this includes both (i, j) and (j, i)
@@ -147,14 +126,10 @@ def generate_overloaded_signatures(
             quotient_dimensionality = None
 
         if product_dimensionality is not None:
-            product_signatures.append(
-                get_signature(self, other, product_dimensionality, "__mul__")
-            )
+            product_signatures.append(get_signature(self, other, product_dimensionality, "__mul__"))
 
         if quotient_dimensionality is not None:
-            quotient_signatures.append(
-                get_signature(self, other, quotient_dimensionality, "__truediv__")
-            )
+            quotient_signatures.append(get_signature(self, other, quotient_dimensionality, "__truediv__"))
 
     product_signatures_src = black.format_file_contents(
         "\n\n".join(product_signatures), fast=False, mode=black.FileMode()
@@ -188,13 +163,13 @@ def get_overload_signatures() -> tuple[str, str, str]:
 def write_overload_signatures() -> None:
     mul, div, rdiv = get_overload_signatures()
 
-    with open("generated/__mul__.py", "w") as f:
+    with Path("generated/__mul__.py").open("w", encoding="utf-8") as f:
         f.write(mul)
 
-    with open("generated/__truediv__.py", "w") as f:
+    with Path("generated/__truediv__.py").open("w", encoding="utf-8") as f:
         f.write(div)
 
-    with open("generated/__rdiv__.py", "w") as f:
+    with Path("generated/__rdiv__.py").open("w", encoding="utf-8") as f:
         f.write(rdiv)
 
 

@@ -10,7 +10,7 @@ from ..units import Quantity as Q
 from ..utypes import Density, Mass, Volume, VolumeFlow
 
 
-def test_convert_gas_volume():
+def test_convert_gas_volume() -> None:
     ret = convert_gas_volume(Q(1, "m3"), "N", (Q(2, "bar"), Q(25, "degC")))
 
     assert ret.check(Q(0, "liter"))
@@ -20,13 +20,11 @@ def test_convert_gas_volume():
     assert isinstance(ret, Q[VolumeFlow])
 
 
-def test_ideal_gas_density():
-    assert isinstance(
-        ideal_gas_density(Q(25, "degC"), Q(12, "bar"), Q(12, "g/mol")), Q[Density]
-    )
+def test_ideal_gas_density() -> None:
+    assert isinstance(ideal_gas_density(Q(25, "degC"), Q(12, "bar"), Q(12, "g/mol")), Q[Density])
 
 
-def test_gas_conversion():
+def test_gas_conversion() -> None:
     V = Q(1, "liter")
     m = Q(1, "kg")
 

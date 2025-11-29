@@ -1,10 +1,7 @@
-"""
-Various context managers.
-"""
-
 import os
 import sys
 import tempfile
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -12,7 +9,7 @@ from .units import set_quantity_format, ureg
 
 
 @contextmanager
-def working_dir(path: Path | str):
+def working_dir(path: Path | str) -> Iterator[None]:
     """
     Context manager that changes the working directory.
     The working directory is changed back after the context
@@ -24,7 +21,7 @@ def working_dir(path: Path | str):
         The new working directory
     """
 
-    cwd = os.getcwd()
+    cwd = Path.cwd()
 
     try:
         os.chdir(path)
@@ -35,14 +32,14 @@ def working_dir(path: Path | str):
 
 
 @contextmanager
-def temp_dir():
+def temp_dir() -> Iterator[None]:
     """
     Context manager that changes the current working directory
     to a temporary directory. The temporary directory is deleted
     after the context manager exits.
     """
 
-    cwd = os.getcwd()
+    cwd = Path.cwd()
 
     t_dir = tempfile.TemporaryDirectory()
 
@@ -56,7 +53,7 @@ def temp_dir():
 
 
 @contextmanager
-def silence_stdout():
+def silence_stdout() -> Iterator[None]:
     """
     Context manager that redirects ``stdout`` to ``os.devnull``.
     This is used suppress functions that print to ``stdout``.
@@ -65,7 +62,7 @@ def silence_stdout():
     old_target = sys.stdout
 
     try:
-        with open(os.devnull, "w") as new_target:
+        with Path(os.devnull).open("w") as new_target:
             sys.stdout = new_target
             yield
     finally:
@@ -73,7 +70,7 @@ def silence_stdout():
 
 
 @contextmanager
-def quantity_format(fmt: str = "compact"):
+def quantity_format(fmt: str = "compact") -> Iterator[None]:
     """
     Context manager version of :py:func:`encomp.units.set_quantity_format`
     that resets to the previous value afterwards.
@@ -85,7 +82,7 @@ def quantity_format(fmt: str = "compact"):
         Also accepts aliases: ``'compact': '~P'`` and ``'siunitx': '~Lx'``.
     """
 
-    default = getattr(ureg, "default_format", "~P") or "~P"
+    default = ureg.formatter.default_format or "~P"
 
     set_quantity_format(fmt)
 

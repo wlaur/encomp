@@ -20,8 +20,9 @@ class Settings(BaseSettings):
     Settings class.
 
     Use an ``.env``-file to override the defaults.
-    The ``.env``-file is located using ``dotenv.find_dotenv(filename='.env')``, this will find a
-    file in the directory of the running Python process or in a parent directory.
+    The ``.env``-file is located using ``dotenv.find_dotenv(filename='.env')``,
+    this will find a file in the directory of the running
+    Python process or in a parent directory.
 
     The variables in the ``.env``-file have the same names (not case-sensitive)
     as the attributes of this class, with the additional prefix ``ENCOMP_``.
@@ -38,11 +39,14 @@ class Settings(BaseSettings):
     * ``TYPESET_SYMBOL_SCRIPTS``: whether to typeset Sympy symbol sub- and superscripts
     * ``IGNORE_NDARRAY_UNIT_STRIPPED_WARNING``: whether to suppress the ``pint`` warning
       when converting Quantity to Numpy array.
-    * ``IGNORE_COOLPROP_WARNINGS``: whether to suppress warnings from the CoolProp backend
-    * ``AUTOCONVERT_OFFSET_TO_BASEUNIT``: whether to automatically convert offset units in calculations.
+    * ``IGNORE_COOLPROP_WARNINGS``: whether to suppress warnings
+      from the CoolProp backend
+    * ``AUTOCONVERT_OFFSET_TO_BASEUNIT``: whether to automatically convert
+      offset units in calculations.
       If this is False, °C must be converted to K before multiplication (for example)
     * ``DEFAULT_UNIT_FORMAT``: default unit format for ``Quantity`` objects:
-      one of ``~P`` (compact), ``~L`` (Latex), ``~H`` (HTML), ``~Lx`` (Latex with SIUNITX package)
+      one of ``~P`` (compact), ``~L`` (Latex), ``~H`` (HTML),
+      ``~Lx`` (Latex with SIUNITX package)
 
     .. note::
         All names are case-insensitive.
@@ -63,6 +67,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
 

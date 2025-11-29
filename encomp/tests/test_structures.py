@@ -5,7 +5,7 @@ from hypothesis.strategies import integers, lists
 from ..structures import divide_chunks, flatten
 
 
-def test_flatten():
+def test_flatten() -> None:
     nested = [(1, 2, 3), 3, [6, 7]]
 
     flat = list(flatten(nested))
@@ -29,10 +29,10 @@ def test_flatten():
     assert list(flatten(deep_nested)) == [1]
 
     deep_nested = [[[[[[[[1]]]]]]]]
-    list(flatten(deep_nested, max_depth=5)) == [[[[1]]]]
+    list(flatten(deep_nested, max_depth=5)) == [[[[1]]]]  # noqa: B015
 
     deep_nested = [[[[[[[[1]]], [2]]]]]]
-    list(flatten(deep_nested, max_depth=2)) == [[[[[[[1]]], [2]]]]]
+    list(flatten(deep_nested, max_depth=2)) == [[[[[[[1]]], [2]]]]]  # noqa: B015
 
     recursive = [None]
     recursive[0] = recursive
@@ -51,7 +51,7 @@ def test_flatten():
 @given(
     lst=lists(integers(), min_size=1, max_size=100),
 )
-def test_divide_chunks(lst):
+def test_divide_chunks(lst: list) -> None:
     m = len(lst)
 
     for N in range(1, m + 1):
@@ -65,7 +65,7 @@ def test_divide_chunks(lst):
             assert k == m // N + 1
 
 
-def test_divide_chunks_errors():
+def test_divide_chunks_errors() -> None:
     with pytest.raises(TypeError):
         divide_chunks([])
 

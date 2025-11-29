@@ -1,13 +1,20 @@
 """
 Miscellaneous functions that do not fit anywhere else.
 """
+
 import ast
 from types import UnionType
-from typing import Any, Type, TypeVar, _GenericAlias, _TypedDictMeta, overload  # type: ignore
+from typing import (  # type: ignore
+    Any,
+    TypeGuard,
+    TypeVar,
+    _GenericAlias,
+    _TypedDictMeta,
+    overload,
+)
 
 import asttokens
 from typeguard import check_type
-from typing_extensions import TypeGuard
 
 T = TypeVar("T")
 
@@ -17,13 +24,11 @@ T = TypeVar("T")
 
 
 @overload
-def isinstance_types(obj: Any, expected: type[T]) -> TypeGuard[T]:
-    ...
+def isinstance_types(obj: Any, expected: type[T]) -> TypeGuard[T]: ...  # noqa: ANN401
 
 
 @overload
-def isinstance_types(obj: Any, expected: T) -> bool:
-    ...
+def isinstance_types(obj: Any, expected: T) -> bool: ...  # noqa: ANN401
 
 
 def isinstance_types(obj: Any, expected: _GenericAlias | type) -> bool:
@@ -47,11 +52,12 @@ def isinstance_types(obj: Any, expected: _GenericAlias | type) -> bool:
         This does not work with complex types using ``mypy`` (https://github.com/python/mypy/issues/9003).
         However, it does work with Pylance.
         The current implementation is a workaround to avoid ``mypy`` errors when calling
-        this function. The type guard does not work with ``mypy`` (the type will not be narrowed at all).
+        this function. The type guard does not work with ``mypy``
+        (the type will not be narrowed at all).
 
         ``mypy`` and Pylance do not support type negation using ``TypeGuard``.
-        This means that the following does not work as expected (compare with behavior for
-        the builtin ``isinstance()``):
+        This means that the following does not work as expected
+        (compare with behavior for the builtin ``isinstance()``):
 
         .. code-block:: python
 
@@ -84,10 +90,8 @@ def isinstance_types(obj: Any, expected: _GenericAlias | type) -> bool:
 
     # normal types are checked with isinstance()
     # note: this check must use typing.Type, not the builtin type (lower case)
-    if isinstance(expected, Type):  # type: ignore
-        # typing.TypedDict is a special case
-        if not isinstance(expected, _TypedDictMeta):
-            return isinstance(obj, expected)
+    if isinstance(expected, type) and not isinstance(expected, _TypedDictMeta):
+        return isinstance(obj, expected)
 
     if type(expected) is UnionType:
         try:
@@ -136,16 +140,10 @@ def grid_dimensions(N: int, nrows: int, ncols: int) -> tuple[int, int]:
         return nrows, ncols
 
     if nrows == -1:
-        if N % ncols == 0:
-            nrows = N // ncols
-        else:
-            nrows = N // ncols + 1
+        nrows = N // ncols if N % ncols == 0 else N // ncols + 1
 
     elif ncols == -1:
-        if N % nrows == 0:
-            ncols = N // nrows
-        else:
-            ncols = N // nrows + 1
+        ncols = N // nrows if N % nrows == 0 else N // nrows + 1
 
     else:
         if nrows * ncols < N:
@@ -169,18 +167,19 @@ def name_assignments(src: str) -> list[tuple[str, str]]:
         List of names and the assignment statements
     """
 
-    assigned_names = []
+    assigned_names: list[tuple[str, str]] = []
 
     atok = asttokens.ASTTokens(src, parse=True)
 
-    for node in ast.walk(atok.tree):
-        if hasattr(node, "lineno"):
-            if isinstance(node, ast.Assign):
-                if isinstance(node.targets[0], ast.Name):
-                    start = node.first_token.startpos  # type: ignore
-                    end = node.last_token.endpos  # type: ignore
-                    assignment_src = atok.text[start:end]
+    if atok.tree is None:
+        return assigned_names
 
-                    assigned_names.append((node.targets[0].id, assignment_src))
+    for node in ast.walk(atok.tree):
+        if hasattr(node, "lineno") and isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name):
+            start = node.first_token.startpos  # type: ignore
+            end = node.last_token.endpos  # type: ignore
+            assignment_src = atok.text[start:end]
+
+            assigned_names.append((node.targets[0].id, assignment_src))
 
     return assigned_names

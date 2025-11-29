@@ -1,20 +1,20 @@
-import pytest
 import pandas as pd
+import pytest
 
 from ..units import Quantity as Q
 
 
-def test_pandas_series():
+def test_pandas_series() -> None:
     s = pd.Series([1, 2, 3])
     assert Q(s, "kg").to("g").m[0] == 1000
 
 
-def test_series_attributes():
+def test_series_attributes() -> None:
     s = pd.Series([1, 2, 3], index=["A", "B", "C"], name="asd")
 
     assert Q(s, "bar").to("kPa").m.name == "asd"
 
-    assert Q(s, "%").m.index.values[0] == "A"
+    assert Q(s, "%").m.index.to_numpy()[0] == "A"
 
     s1 = pd.Series([1, 2, 3], name="s1")
     s2 = pd.Series([1, 2, 3], name="s2")
@@ -33,7 +33,7 @@ def test_series_attributes():
     assert (2 * q1).m.name == "s1"
 
 
-def test_datetimeindex():
+def test_datetimeindex() -> None:
     s = pd.DatetimeIndex(["2021-01-01", "2021-01-02"], name="Time")
 
     assert Q(s).m.name == "Time"
@@ -51,7 +51,7 @@ def test_datetimeindex():
         2 * Q(s)
 
 
-def test_scalar_getitem():
+def test_scalar_getitem() -> None:
     index = Q(pd.DatetimeIndex(["2021-01-01", "2021-01-02"]))
 
     first = index[0].m

@@ -8,7 +8,7 @@ except ImportError:
     fire = None
 
 
-def build_docs():
+def build_docs() -> None:
     if platform.system() == "Windows":
         cmds = [
             # exclude the encomp.tests subpackage
@@ -29,14 +29,14 @@ def build_docs():
         os.system(n)
 
 
-def pypi_upload():
+def pypi_upload() -> None:
     cmds = ["twine upload dist/*"]
 
     for n in cmds:
         os.system(n)
 
 
-def main(task=None):
+def main(task: str | None = None) -> None:
     if task == "pypi":
         pypi_upload()
 

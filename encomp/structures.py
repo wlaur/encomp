@@ -2,7 +2,8 @@
 Data structures and related functions.
 """
 
-from typing import Any, Iterable, Iterator, Sequence, TypeVar, overload
+from collections.abc import Iterable, Iterator, Sequence
+from typing import Any, TypeVar, overload
 
 import numpy as np
 import pandas as pd
@@ -16,23 +17,19 @@ _BASE_TYPES = (str, Quantity, pd.Series, pd.DataFrame, np.ndarray)
 
 
 @overload
-def divide_chunks(container: list[T], N: int) -> Iterator[list[T]]:
-    ...
+def divide_chunks(container: list[T], N: int) -> Iterator[list[T]]: ...
 
 
 @overload
-def divide_chunks(container: tuple[T], N: int) -> Iterator[tuple[T]]:
-    ...
+def divide_chunks(container: tuple[T], N: int) -> Iterator[tuple[T]]: ...
 
 
 @overload
-def divide_chunks(container: Sequence[T], N: int) -> Iterator[Sequence[T]]:
-    ...
+def divide_chunks(container: Sequence[T], N: int) -> Iterator[Sequence[T]]: ...
 
 
 @overload
-def divide_chunks(container: np.ndarray, N: int) -> Iterator[np.ndarray]:
-    ...
+def divide_chunks(container: np.ndarray, N: int) -> Iterator[np.ndarray]: ...
 
 
 def divide_chunks(container, N):
@@ -69,9 +66,7 @@ def divide_chunks(container, N):
         yield container[i : i + N]
 
 
-def flatten(
-    container: Iterable[Any], max_depth: int | None = None, _depth: int = 0
-) -> Iterator[Any]:
+def flatten(container: Iterable[Any], max_depth: int | None = None, _depth: int = 0) -> Iterator[Any]:
     """
     Generator that flattens a nested container.
 
@@ -84,7 +79,8 @@ def flatten(
     This function will flatten arbitrarily deeply nested lists or tuples recursively.
     If ``max_depth`` is ``None``, recurse until no more nested structures remain,
     otherwise flatten until the specified max depth.
-    The base types ``str``, :py:class:`encomp.units.Quantity`, ``pd.Series``, ``pd.DataFrame``,
+    The base types ``str``, :py:class:`encomp.units.Quantity`,
+    ``pd.Series``, ``pd.DataFrame``,
     ``np.ndarray`` will not be flattened.
 
 
@@ -112,8 +108,7 @@ def flatten(
 
         # check if this object can be flattened further
         if isinstance(obj, Iterable):
-            for sub_obj in flatten(obj, max_depth=max_depth, _depth=_depth + 1):
-                yield sub_obj
+            yield from flatten(obj, max_depth=max_depth, _depth=_depth + 1)
 
             continue
 

@@ -2,6 +2,8 @@
 Functions relating to thermodynamics.
 """
 
+import numpy as np
+
 from .constants import CONSTANTS
 from .units import Quantity
 from .utypes import (
@@ -28,7 +30,7 @@ def heat_balance(
     | Quantity[Power]
     | Quantity[TemperatureDifference]
     | Quantity[Temperature],
-    cp: Quantity[SpecificHeatCapacity] = DEFAULT_CP,
+    cp: Quantity[SpecificHeatCapacity, float] = DEFAULT_CP,
 ) -> Quantity[Mass] | Quantity[MassFlow] | Quantity[Energy] | Quantity[Power] | Quantity[TemperatureDifference]:
     """
     Solves the heat balance equation
@@ -53,7 +55,8 @@ def heat_balance(
         The third unknown variable
     """
 
-    # this function might be too general to be expressed succinctly using type annotations
+    # this function might be too general to be
+    # expressed succinctly using type annotations
 
     if len(args) != 2:
         raise ValueError("Must pass exactly two parameters out of dT, Q_h and m")
@@ -86,10 +89,7 @@ def heat_balance(
     # whether the calculation is per unit time or amount of mass / energy
     per_time = any(isinstance(a, Quantity[MassFlow] | Quantity[Power]) for a in args)
 
-    if per_time:
-        unit_idx = 1
-    else:
-        unit_idx = 0
+    unit_idx = 1 if per_time else 0
 
     if "Q_h" not in vals:
         ret = cp * vals["m"] * vals["dT"]
@@ -111,7 +111,7 @@ def heat_balance(
     else:
         raise ValueError(f"Incorrect input to heat_balance: {vals}")
 
-    return ret.to(unit)  # type: ignore
+    return ret.to(unit)
 
 
 def intermediate_temperatures(
@@ -123,7 +123,7 @@ def intermediate_temperatures(
     h_out: Quantity[HeatTransferCoefficient],
     epsilon: float,
     tol: float = 1e-6,
-) -> tuple[Quantity[Temperature], Quantity[Temperature]]:
+) -> tuple[Quantity[Temperature, float], Quantity[Temperature, float]]:
     """
     Solves a nonlinear system of equations to find intermediate
     temperatures of a barrier with the following modes of heat transfer:
@@ -154,14 +154,15 @@ def intermediate_temperatures(
     h_out : Quantity[HeatTransferCoefficient]
         The convective heat transfer coefficient at the outer barrier wall
     epsilon : float
-        The emissivity of the outside surface, used to account for radiative heat transfer
+        The emissivity of the outside surface,
+        used to account for radiative heat transfer
     tol : float, optional
         Numerical accuracy for the conduction layer:
         ``d`` is set to this if 0 is passed, by default 1e-6
 
     Returns
     -------
-    tuple[Quantity[Temperature], Quantity[Temperature]]
+    tuple[Quantity[Temperature, float], Quantity[Temperature, float]]
         The intermediate temperatures :math:`T_1` and :math:`T_2`:
         the surface temperatures of the inside and outside of the barrier
     """
@@ -172,7 +173,7 @@ def intermediate_temperatures(
     T_s_val = T_s.to("K").m
     T_b_val = T_b.to("K").m
     k_val = k.to("W/m/K").m
-    d_val = d.to("m").m
+    d_val: float | np.ndarray = d.to("m").m
     h_in_val = h_in.to("W/m²/K").m
     h_out_val = h_out.to("W/m²/K").m
 
@@ -182,7 +183,7 @@ def intermediate_temperatures(
     # system of coupled equations: heat transfer rate through all layers is identical
     # inner convection == conduction == (outer convection + radiation)
 
-    def fun(x):
+    def fun(x):  # noqa: ANN202, ANN001
         T1, T2 = x
 
         eq1 = k_val / d_val * (T1 - T2) - h_out_val * (T2 - T_s_val) - epsilon * SIGMA.m * (T2**4 - T_s_val**4)

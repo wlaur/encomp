@@ -15,6 +15,7 @@ class Constants:
     Use a single instance of this class to refer to these constants.
     """
 
+    # TODO: set quantity utype for these
     R = Q(8.3144598, "kg*m²/K/mol/s²")
     SIGMA = Q(5.670374419e-8, "W/m**2/K**4")
 

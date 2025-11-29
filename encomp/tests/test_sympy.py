@@ -4,7 +4,7 @@ from ..sympy import get_args, get_function, sp, to_identifier
 from ..units import Quantity as Q
 
 
-def test_sympy():
+def test_sympy() -> None:
     x = sp.Symbol("x", positive=True)
 
     x._("n,text")
@@ -17,7 +17,7 @@ def test_sympy():
     x.__("A").append("text", where="sub")
 
 
-def test_to_identifier():
+def test_to_identifier() -> None:
     x = sp.Symbol("x", positive=True)
 
     s = to_identifier(x._("subscript").__("superscript"))
@@ -25,7 +25,7 @@ def test_to_identifier():
     assert s.isidentifier()
 
 
-def test_get_args():
+def test_get_args() -> None:
     x = sp.Symbol("x", positive=True)
     y = sp.Symbol("y", positive=True)
 
@@ -34,14 +34,14 @@ def test_get_args():
     assert set(get_args(e)) == {"x", "y"}
 
 
-def test_decorate():
+def test_decorate() -> None:
     n = sp.Symbol("n")
 
     n.decorate(prefix=r"\sum", prefix_sub="2", suffix_sup="i", suffix=r"\ldots")
     n._("H_2O").__("out")
 
 
-def test_sympy_to_Quantity_integration():
+def test_sympy_to_Quantity_integration() -> None:
     x, y, z = sp.symbols("x, y, z")
 
     expr = x * y / z
@@ -63,7 +63,7 @@ def test_sympy_to_Quantity_integration():
     assert Q.from_expr(result).check(Q(0))
 
 
-def test_Quantity_to_sympy_integration():
+def test_Quantity_to_sympy_integration() -> None:
     x = sp.Symbol("x")
 
     x * Q(25, "kg")
@@ -75,19 +75,17 @@ def test_Quantity_to_sympy_integration():
     x + Q(2, "m")
 
 
-def test_get_function():
+def test_get_function() -> None:
     x, y, z = sp.symbols("x, y, z")
 
     expr = 25 * x * y / z
 
     fcn = get_function(expr, units=True)
 
-    result_arr = fcn(
+    fcn(
         {
             x: Q(np.array([235, 335]), "yard"),
             y: Q(np.array([2, 5]), "m²"),
             z: Q(0.4, "m³/kg"),
         }
     )
-
-    result_arr

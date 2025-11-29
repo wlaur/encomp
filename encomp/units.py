@@ -7,15 +7,15 @@ Implements a type-aware system on top of ``pint`` that verifies
 that the dimensionality of the unit is correct.
 """
 
-
 from __future__ import annotations
 
 import copy
 import numbers
 import re
 import warnings
+from collections.abc import Iterable
 from types import UnionType
-from typing import Any, ClassVar, Generic, Iterable, Literal, TypeVar
+from typing import Any, ClassVar, Generic, Literal, Self, TypeVar, cast
 
 import numpy as np
 import pandas as pd
@@ -23,14 +23,14 @@ import pint
 import polars as pl
 import sympy as sp
 from pint.errors import DimensionalityError
-from pint.facets.formatting.objects import FormattingQuantity, FormattingUnit
 from pint.facets.measurement.objects import MeasurementQuantity
 from pint.facets.nonmultiplicative.objects import NonMultiplicativeQuantity
 from pint.facets.numpy.quantity import NumpyQuantity
 from pint.facets.numpy.unit import NumpyUnit
 from pint.registry import LazyRegistry, UnitRegistry
 from pint.util import UnitsContainer
-from pydantic import GetCoreSchemaHandler
+from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
+from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import core_schema
 
 from .misc import isinstance_types
@@ -42,13 +42,10 @@ from .utypes import (
     MT,
     MT_,
     Dimensionality,
+    Dimensionless,
     Temperature,
     TemperatureDifference,
-    Unknown,
-    Unset,
-    Variable,
 )
-
 
 if SETTINGS.ignore_ndarray_unit_stripped_warning:
     warnings.filterwarnings(
@@ -67,10 +64,24 @@ if SETTINGS.ignore_ndarray_unit_stripped_warning:
 # to catch all unit/dimensionality-related errors
 
 
+def _units_containers_equal(uc1: UnitsContainer, uc2: UnitsContainer, rtol: float = 1e-9, atol: float = 1e-12) -> bool:
+    if set(uc1._d.keys()) != set(uc2._d.keys()):
+        return False
+
+    for dim_name in uc1._d:
+        exp1 = float(uc1._d[dim_name])
+        exp2 = float(uc2._d[dim_name])
+
+        if not np.isclose(exp1, exp2, rtol=rtol, atol=atol):
+            return False
+
+    return True
+
+
 class _DimensionalityError(DimensionalityError):
     msg: str
 
-    def __init__(self, msg: str = ""):
+    def __init__(self, msg: str = "") -> None:
         self.msg = msg
         super().__init__(None, None, dim1="", dim2="", extra_msg=msg)
 
@@ -112,17 +123,16 @@ _REGISTRY_STATIC_OPTIONS = {
 
 
 class _UnitRegistry(UnitRegistry):
-    def __setattr__(self, key, value):
+    def __setattr__(self, key: str, value: Any) -> None:  # noqa: ANN401
         # ensure that static options cannot be overridden
-        if key in _REGISTRY_STATIC_OPTIONS:
-            if value != _REGISTRY_STATIC_OPTIONS[key]:
-                return
+        if key in _REGISTRY_STATIC_OPTIONS and value != _REGISTRY_STATIC_OPTIONS[key]:
+            return
 
         return super().__setattr__(key, value)
 
 
 class _LazyRegistry(LazyRegistry):
-    def __init(self):
+    def __init(self) -> None:
         args, kwargs = self.__dict__["params"]
         kwargs["on_redefinition"] = "raise"
 
@@ -168,8 +178,7 @@ def define_dimensionality(name: str, symbol: str | None = None) -> None:
 
     if name in CUSTOM_DIMENSIONS:
         raise DimensionalityRedefinitionError(
-            "Cannot define new dimensionality with "
-            f"name: {name}, a dimensionality with this name was already defined"
+            f"Cannot define new dimensionality with name: {name}, a dimensionality with this name was already defined"
         )
 
     definition_str = f"{name} = [{name}]"
@@ -183,7 +192,7 @@ def define_dimensionality(name: str, symbol: str | None = None) -> None:
 
 
 class QuantityMeta(type):
-    def __eq__(mcls, obj: object) -> bool:
+    def __eq__(cls, obj: object) -> bool:
         # override the == operator so that
         # type(val) == Quantity returns True for subclasses
         if obj is Quantity:
@@ -191,10 +200,10 @@ class QuantityMeta(type):
 
         return super().__eq__(obj)
 
-    def __hash__(mcls):
-        return id(mcls)
+    def __hash__(cls) -> int:
+        return id(cls)
 
-    def __call__(mcls, *args, **kwargs):
+    def __call__(cls, *args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
         # TODO: determine if this is called from the underlying pint
         # API or directly and validate the subclass and unit dimensionality
         # based on this
@@ -202,7 +211,7 @@ class QuantityMeta(type):
         return super().__call__(*args, **kwargs)
 
 
-class Unit(NumpyUnit, FormattingUnit, Generic[DT]):
+class Unit(NumpyUnit, Generic[DT]):
     pass
 
 
@@ -210,7 +219,6 @@ class Quantity(
     NonMultiplicativeQuantity,
     MeasurementQuantity,
     NumpyQuantity,
-    FormattingQuantity,
     Generic[DT, MT],
     metaclass=QuantityMeta,
 ):
@@ -239,16 +247,14 @@ class Quantity(
     # mapping from dimensionality subclass name to quantity subclass
     # this dict will be populated at runtime
     # use a custom class attribute (not cls.__subclasses__()) for more control
-    _subclasses: ClassVar[
-        dict[tuple[str, str | None], type[Quantity[Variable, Any]]]
-    ] = {}
+    _subclasses: ClassVar[dict[tuple[str, str | None], type[Quantity[Dimensionality, Any]]]] = {}
     _dimension_symbol_map: ClassVar[dict[sp.Basic, Unit]] = {}
 
     # used to validate dimensionality and magnitude type,
     # if None the dimensionality is not checked
     # subclasses of Quantity have this class attribute set, which
     # will restrict the dimensionality when creating the object
-    _dimensionality_type: ClassVar[type[Dimensionality]] = Unset
+    _dimensionality_type: ClassVar[type[Dimensionality]] = Dimensionality
 
     # instance attributes
     _magnitude: MT
@@ -260,7 +266,11 @@ class Quantity(
         return super().__hash__()
 
     def __str__(self) -> str:
-        return self.__format__(self._REGISTRY.default_format)
+        return self.__format__(self._REGISTRY.formatter.default_format)
+
+    # TODO: NumpyQuantity does not have copy and dtype as kwargs for __array__
+    def __array__(self, t: Any | None = None, copy: bool = False, dtype: str | None = None) -> np.ndarray:  # noqa: ANN401
+        return super().__array__(t)
 
     @classmethod
     def _construct_dimensional_magnitude_quantity(
@@ -281,18 +291,14 @@ class Quantity(
 
         # store the subclass for future lookups
         cls._subclasses[dim_name, mt_name] = subcls
-
         return subcls
 
     @classmethod
-    def _get_dimensional_subclass(
-        cls, dim: type[DT], mt: type[MT] | None
-    ) -> type[Quantity[DT, MT]]:
+    def _get_dimensional_subclass(cls, dim: type[DT], mt: type[MT] | None) -> type[Quantity[DT, MT]]:
         # there are two levels of subclasses to Quantity: DimensionalQuantity and
         # DimensionalMagnitudeQuantity, which is a subclass of DimensionalQuantity
         # this distinction only exists at runtime, the type checker will use the
         # default magnitude type (np.ndarray) in case the magnitude generic is omitted
-
         dim_name = dim.__name__
 
         # check if an existing DimensionalQuantity subclass already has been created
@@ -323,17 +329,14 @@ class Quantity(
 
         mt_name = mt.__name__
 
-        # check if an existing DimensionalMagnitudeQuantity subclass already has been created
+        # check if an existing DimensionalMagnitudeQuantity
+        # subclass already has been created
         if cached_dim_magnitude_qty := cls._subclasses.get((dim_name, mt_name)):
             return cached_dim_magnitude_qty
         else:
-            return cls._construct_dimensional_magnitude_quantity(
-                DimensionalQuantity, dim_name, mt, mt_name
-            )
+            return cls._construct_dimensional_magnitude_quantity(DimensionalQuantity, dim_name, mt, mt_name)
 
-    def __class_getitem__(
-        cls, types: type[DT] | tuple[type[DT], type[MT]]
-    ) -> type[Quantity[DT, MT]]:
+    def __class_getitem__(cls, types: type[DT] | tuple[type[DT], type[MT]]) -> type[Quantity[DT, MT]]:
         # default magnitude type is np.ndarray, this is hard-coded in several places
 
         try:
@@ -342,42 +345,33 @@ class Quantity(
             dim, mt = types, None
 
         # avoid runtime errors when evaluating type hints
-        if (
-            isinstance(dim, TypeVar)
-            or dim is Unknown
-            or dim is Variable
-            or dim is Unset
-        ):
-            return cls._get_dimensional_subclass(Variable, mt)
+        if isinstance(dim, TypeVar):
+            return cls._get_dimensional_subclass(Dimensionless, mt)
 
         if not isinstance(dim, type):
             raise TypeError(
-                "Generic type parameter to Quantity must be a type object, "
-                f"passed an instance of {type(dim)}: {dim}"
+                f"Generic type parameter to Quantity must be a type object, passed an instance of {type(dim)}: {dim}"
             )
 
         # check if the attribute dimensions exists instead of using issubclass()
         # issubclass does not work well with autoreloading in Jupyter for example
         if not hasattr(dim, "dimensions"):
-            raise TypeError(
-                'Generic type parameter to Quantity has no attribute "dimensions", '
-                f"passed: {dim}"
-            )
+            raise TypeError(f'Generic type parameter to Quantity has no attribute "dimensions", passed: {dim}')
 
         if not isinstance(dim.dimensions, UnitsContainer):
             raise TypeError(
                 "Type parameter to Quantity has incorrect type for "
                 "attribute dimensions: UnitsContainer, "
-                f"passed: {dim} with dimensions: {dim.dimensions} ({type(dim.dimensions)})"
+                f"passed: {dim} with dimensions: "
+                f"{dim.dimensions} ({type(dim.dimensions)})"
             )
 
         subcls = cls._get_dimensional_subclass(dim, mt)
-
         return subcls
 
     @staticmethod
     def _validate_unit(
-        unit: Unit[DT_] | UnitsContainer | str | dict[str, numbers.Number] | None
+        unit: Unit[DT_] | UnitsContainer | str | dict[str, numbers.Number] | None,
     ) -> Unit[DT_]:
         if isinstance(unit, Quantity):
             raise TypeError(
@@ -421,9 +415,11 @@ class Quantity(
         if isinstance_types(val, list[bool]):
             val = [float(n) for n in val]
 
-        # TODO: list of int is converted to np.ndarray, type hints cannot represent this properly
+        # TODO: list of int is converted to np.ndarray,
+        # type hints cannot represent this properly
         # do not input list[int] in code that should be type checked
-        # however, this input is still allowed for convenience, for example Q([1, 2, 3], 'kg')
+        # however, this input is still allowed for convenience,
+        # for example Q([1, 2, 3], 'kg')
         if isinstance_types(val, list[int]):
             val = np.array(val)
 
@@ -455,28 +451,20 @@ class Quantity(
 
     @property
     def subclass(self) -> type[Quantity[DT, MT]]:
-        return self._get_dimensional_subclass(
-            self._dimensionality_type, self._magnitude_type
-        )
+        return self._get_dimensional_subclass(self._dimensionality_type, self._magnitude_type)
 
-    def _set_original_magnitude_attributes(
-        self, mt_orig: MT, mt_orig_kwargs: dict[str, Any]
-    ) -> None:
+    def _set_original_magnitude_attributes(self, mt_orig: MT, mt_orig_kwargs: dict[str, Any]) -> None:
         self._original_magnitude_type = mt_orig
         self._original_magnitude_kwargs = mt_orig_kwargs
 
     def __len__(self) -> int:
         # __len__() must return an integer
         # the len() function ensures this at a lower level
-        if isinstance(self._magnitude, (float, int)):
-            raise TypeError(
-                f"Quantity with scalar magnitude ({self._magnitude}) has no length"
-            )
+        if isinstance(self._magnitude, float | int):
+            raise TypeError(f"Quantity with scalar magnitude ({self._magnitude}) has no length")
 
         elif isinstance(self._magnitude, pl.Expr):
-            raise TypeError(
-                f"Cannot determine length of Polars expression: {self._magnitude}"
-            )
+            raise TypeError(f"Cannot determine length of Polars expression: {self._magnitude}")
 
         return len(self._magnitude)
 
@@ -489,9 +477,7 @@ class Quantity(
         if memo is None:
             memo = {}
 
-        ret = self._call_subclass(
-            copy.deepcopy(self._magnitude, memo), copy.deepcopy(self._units, memo)
-        )
+        ret = self._call_subclass(copy.deepcopy(self._magnitude, memo), copy.deepcopy(self._units, memo))
 
         return ret
 
@@ -502,20 +488,14 @@ class Quantity(
         unit: Unit[DT] | UnitsContainer | str | None,
         valid_unit: Unit[DT],
     ) -> None:
-        _val_datetime = isinstance(
-            magnitude, (pd.DatetimeIndex, pl.Datetime, pd.Timestamp)
-        )
+        _val_datetime = isinstance(magnitude, pd.DatetimeIndex | pl.Datetime | pd.Timestamp)
 
-        if _val_datetime:
-            if (
-                not valid_unit.dimensionless
-                or Quantity(1, valid_unit).to_base_units().m != 1
-            ):
-                raise ValueError(
-                    f"Passing datetime magnitude(s) ({magnitude}) "
-                    "is only valid for dimensionless Quantities with no scaling factor, "
-                    f"passed unit {unit} ({valid_unit.dimensionality})"
-                )
+        if _val_datetime and (not valid_unit.dimensionless or Quantity(1, valid_unit).to_base_units().m != 1):
+            raise ValueError(
+                f"Passing datetime magnitude(s) ({magnitude}) "
+                "is only valid for dimensionless Quantities with no scaling factor, "
+                f"passed unit {unit} ({valid_unit.dimensionality})"
+            )
 
         _magnitude_type_datetime = cls._magnitude_type in (
             pd.Timestamp,
@@ -523,16 +503,14 @@ class Quantity(
             pl.Datetime,
         )
 
-        if _magnitude_type_datetime:
-            if (
-                not valid_unit.dimensionless
-                or Quantity(1, valid_unit).to_base_units().m != 1
-            ):
-                raise ValueError(
-                    f"Setting a datetime magnitude type ({cls._magnitude_type.__name__}) "
-                    "is only valid for dimensionless Quantities with no scaling factor, "
-                    f"passed unit {unit} ({valid_unit.dimensionality})"
-                )
+        if _magnitude_type_datetime and (
+            not valid_unit.dimensionless or Quantity(1, valid_unit).to_base_units().m != 1
+        ):
+            raise ValueError(
+                f"Setting a datetime magnitude type ({cls._magnitude_type.__name__}) "
+                "is only valid for dimensionless Quantities with no scaling factor, "
+                f"passed unit {unit} ({valid_unit.dimensionality})"
+            )
 
     @staticmethod
     def _cast_array_float(inp: np.ndarray) -> np.ndarray:
@@ -547,25 +525,13 @@ class Quantity(
         cls,
         val: MT | Quantity[DT, MT],
         unit: Unit[DT] | UnitsContainer | str | None = None,
-        # # this is a hack to force the type checker to default to Unknown
-        # # in case the generic type is not specified at all
-        # # do not pass the _dt parameter directly, always use square brackets to
-        # # specify the dimensionality type
-        # TODO: why is this required when the TypeVar has default=Unknown?
-        _dt: type[DT] = Unknown,  # type: ignore
         _mt_orig: type[MT] | None = None,
         _mt_orig_kwargs: dict[str, Any] | None = None,
     ) -> Quantity[DT]:
-        if _dt is not Unknown:
-            raise ValueError(
-                f'Cannot pass a value for private parameter "_dt", passed {_dt} ({type(_dt)})'
-            )
-
         if isinstance(val, Quantity):
             if unit is not None:
                 raise ValueError(
-                    f"Cannot pass unit: {unit} when "
-                    f"input val is a Quantity: {val}. "
+                    f"Cannot pass unit: {unit} when input val is a Quantity: {val}. "
                     "The unit must be None when passing a Quantity as input"
                 )
 
@@ -575,23 +541,19 @@ class Quantity(
         valid_magnitude = cls._validate_magnitude(val)
 
         # NOTE: "original" in this case does not necessarily refer to the type
-        # of the input magnitude, for example list[int] is converted to np.ndarray before
+        # of the input magnitude, for example list[int]
+        # is converted to np.ndarray before
         # this magnitude type is checked
-        _original_magnitude_type = (
-            _mt_orig
-            if _mt_orig is not None
-            else cls._get_magnitude_type(valid_magnitude)
-        )
+        _original_magnitude_type = _mt_orig if _mt_orig is not None else cls._get_magnitude_type(valid_magnitude)
 
-        _original_magnitude_kwargs = (
-            _mt_orig_kwargs if _mt_orig_kwargs is not None else {}
-        )
+        _original_magnitude_kwargs = _mt_orig_kwargs if _mt_orig_kwargs is not None else {}
 
         # special case for pd.Series, must convert to np.ndarray to avoid
         # TypeError: PlainQuantity cannot wrap upcast type
         # NOTE: pl.Series and pl.Expr don't require this type of workaround
         if isinstance(valid_magnitude, pd.Series):
-            # preserve pd.Series metadata (not dtype, this would cause issues with float/int)
+            # preserve pd.Series metadata
+            # (not dtype, this would cause issues with float/int)
             _original_magnitude_kwargs |= {
                 "index": valid_magnitude.index,
                 "name": valid_magnitude.name,
@@ -599,9 +561,11 @@ class Quantity(
 
             valid_magnitude = valid_magnitude.to_numpy()
 
-        is_incomplete_subclass = cls._dimensionality_type is Unset or str(
-            cls._dimensionality_type.dimensions
-        ) != str(valid_unit.dimensionality)
+        # Compare dimensionalities with tolerance for float precision
+        # (UnitsContainer.__eq__ doesn't handle float tolerance)
+        is_incomplete_subclass = cls._dimensionality_type is Dimensionality or not _units_containers_equal(
+            cls._dimensionality_type.dimensions, valid_unit.dimensionality
+        )
 
         if is_incomplete_subclass:
             # TODO: how to validate that the subclass has the same dimensionality
@@ -611,9 +575,7 @@ class Quantity(
 
             # special case for temperature difference
             if valid_unit._units in cls.TEMPERATURE_DIFFERENCE_UCS:
-                subcls = cls._get_dimensional_subclass(
-                    TemperatureDifference, type(valid_magnitude)
-                )
+                subcls = cls._get_dimensional_subclass(TemperatureDifference, type(valid_magnitude))
             else:
                 dim = Dimensionality.get_dimensionality(valid_unit.dimensionality)
                 subcls = cls._get_dimensional_subclass(dim, type(valid_magnitude))
@@ -636,9 +598,7 @@ class Quantity(
             qty._magnitude = cls._cast_array_float(qty._magnitude)
 
         # propagate the original magnitude type and constructor kwargs
-        qty._set_original_magnitude_attributes(
-            _original_magnitude_type, _original_magnitude_kwargs
-        )
+        qty._set_original_magnitude_attributes(_original_magnitude_type, _original_magnitude_kwargs)
 
         return qty
 
@@ -670,21 +630,19 @@ class Quantity(
         return Unit(super().units)
 
     @property
-    def _is_temperature_difference(self):
+    def _is_temperature_difference(self) -> bool:
         return self._dimensionality_type is TemperatureDifference
 
     def _check_temperature_compatibility(self, unit: Unit[DT]) -> None:
-        if self._is_temperature_difference:
-            if unit._units not in self.TEMPERATURE_DIFFERENCE_UCS:
-                current_name = self._dimensionality_type.__name__
-                new_name = Quantity(1, unit)._dimensionality_type.__name__
+        if self._is_temperature_difference and unit._units not in self.TEMPERATURE_DIFFERENCE_UCS:
+            current_name = self._dimensionality_type.__name__
+            new_name = Quantity(1, unit)._dimensionality_type.__name__
 
-                raise DimensionalityTypeError(
-                    f"Cannot convert {self.units} (dimensionality {current_name}) "
-                    f"to {unit} (dimensionality {new_name})"
-                )
+            raise DimensionalityTypeError(
+                f"Cannot convert {self.units} (dimensionality {current_name}) to {unit} (dimensionality {new_name})"
+            )
 
-    def _call_subclass(self, *args) -> Quantity[DT, MT]:
+    def _call_subclass(self, *args: Any) -> Quantity[DT, MT]:  # noqa: ANN401
         # handle the edge case where a 1-element pd.Series is
         # multiplied or divided by an N-element pd.Series
 
@@ -720,6 +678,17 @@ class Quantity(
         ret = super().to_base_units()
         return self._call_subclass(ret)
 
+    def _dimensionalities_match(self, unit: Unit[DT_]) -> bool:
+        src_dim = dict(self.dimensionality)
+        dst_dim = dict(unit.dimensionality)
+
+        if set(src_dim.keys()) != set(dst_dim.keys()):
+            return False
+
+        return all(
+            abs(src_dim.get(key, 0) - dst_dim.get(key, 0)) < 1e-10 for key in set(src_dim.keys()) | set(dst_dim.keys())
+        )
+
     def _to_unit(self, unit: Unit[DT_] | UnitsContainer | str | dict) -> Unit[DT_]:
         return self._validate_unit(unit)
 
@@ -727,7 +696,17 @@ class Quantity(
         unit = self._to_unit(unit)
 
         self._check_temperature_compatibility(unit)
-        m = self._convert_magnitude_not_inplace(unit)
+
+        try:
+            m = self._convert_magnitude_not_inplace(unit)
+        except DimensionalityError as e:
+            # If direct conversion fails due to complex fractional units (e.g., MW**0.3 * kJ**0.7 / s**0.7),
+            # try converting to base units first, then to the target unit
+            if self._dimensionalities_match(unit):
+                base_quantity = self.to_base_units()
+                m = base_quantity._convert_magnitude_not_inplace(unit)
+            else:
+                raise e
 
         if unit._units in self.TEMPERATURE_DIFFERENCE_UCS:
             return Quantity[TemperatureDifference](
@@ -754,21 +733,26 @@ class Quantity(
 
         # avoid numpy.core._exceptions.UFuncTypeError (not on all platforms?)
         # convert integer arrays to float(64) (creating a copy)
-        if isinstance(self._magnitude, np.ndarray) and issubclass(
-            self._magnitude.dtype.type, numbers.Integral
-        ):
+        if isinstance(self._magnitude, np.ndarray) and issubclass(self._magnitude.dtype.type, numbers.Integral):
             self._magnitude = self._magnitude.astype(np.float64)
 
-        super().ito(unit)
+        try:
+            super().ito(unit)
+        except DimensionalityError as e:
+            # If direct conversion fails due to complex fractional units (e.g., MW**0.3 * kJ**0.7 / s**0.7),
+            # try converting to base units first, then to the target unit
+            if self._dimensionalities_match(unit):
+                # Convert via base units: use to() to get converted quantity, then update self
+                base_quantity = self.to_base_units()
+                converted_magnitude = base_quantity._convert_magnitude_not_inplace(unit)
+                self._magnitude = converted_magnitude
+                self._units = unit._units
+            else:
+                raise e
 
     def check(
         self,
-        unit: Quantity
-        | UnitsContainer
-        | Unit
-        | str
-        | Dimensionality
-        | type[Dimensionality],
+        unit: (Quantity | UnitsContainer | Unit | str | Dimensionality | type[Dimensionality]),
     ) -> bool:
         # TODO: fix typing for this method, remove type: ignore
 
@@ -776,7 +760,8 @@ class Quantity(
             return self._dimensionality_type == unit._dimensionality_type
 
         if isinstance(unit, Unit):
-            # it's not possible to know if an instance of Unit is Temperature or TemperatureDifference
+            # it's not possible to know if an instance of
+            # Unit is Temperature or TemperatureDifference
             # until it is used to construct a Quantity
 
             unit_qty = Quantity(1, unit)
@@ -810,7 +795,7 @@ class Quantity(
         """
 
         if not format_type.endswith(Quantity.FORMATTING_SPECS):
-            format_type = f"{format_type}{self._REGISTRY.default_format}"
+            format_type = f"{format_type}{self._REGISTRY.formatter.default_format}"
 
         return super().__format__(format_type)
 
@@ -819,13 +804,16 @@ class Quantity(
         """
         Corrects the unit name to make it compatible with ``pint``.
 
-        * Adds ``**`` between the unit and the exponent if it's missing, for example ``kg/m3 → kg/m**3``.
-        * Parses "Nm³" (and variations of this) as "normal * m³" (use explicit "nanometer³" to get this unit)
+        * Adds ``**`` between the unit and the exponent if it's missing,
+          for example ``kg/m3 → kg/m**3``.
+        * Parses "Nm³" (and variations of this) as "normal * m³"
+          (use explicit "nanometer³" to get this unit)
         * Converts % and ‰ to percent and permille
         * Changes the ``Δ`` character to ``delta_``, for example ``Δ°C`` to ``delta_°C``
         * Interprets ``-`` as ``dimensionless``
         * Converts the single-character symbols ``℃`` and ``℉`` to ``degC`` and ``degF``
-        * Converts the compound units ``Δ°C`` and ``Δ°F`` to ``delta_degC`` and ``delta_degF``
+        * Converts the compound units ``Δ°C`` and ``Δ°F``
+          to ``delta_degC`` and ``delta_degF``
 
         Parameters
         ----------
@@ -874,7 +862,7 @@ class Quantity(
 
         return unit
 
-    def _sympy_(self):
+    def _sympy_(self) -> sp.Basic:
         """
         Compatibility with ``sympy``.
         Converts the unit dimensions to symbols and multiplies with the magnitude.
@@ -901,9 +889,7 @@ class Quantity(
 
         # use \text{symbol} to make sure that the unit symbols
         # do not clash with commonly used symbols like "m" or "s"
-        expr = sp.sympify(f"{base_qty.m} * {unit_repr}").subs(
-            {sp.Symbol(n): self.get_unit_symbol(n) for n in symbols}
-        )
+        expr = sp.sympify(f"{base_qty.m} * {unit_repr}").subs({sp.Symbol(n): self.get_unit_symbol(n) for n in symbols})
 
         return expr
 
@@ -913,14 +899,14 @@ class Quantity(
 
     @classmethod
     def _populate_dimension_symbol_map(cls) -> None:
-        # also consider custom dimensions defined with encomp.units.define_dimensionality
+        # also consider custom dimensions defined
+        # with encomp.units.define_dimensionality
         cls._dimension_symbol_map |= {
-            cls.get_unit_symbol(n): cls.get_unit(n)
-            for n in list(_BASE_SI_UNITS) + CUSTOM_DIMENSIONS
+            cls.get_unit_symbol(n): cls.get_unit(n) for n in list(_BASE_SI_UNITS) + CUSTOM_DIMENSIONS
         }
 
     @classmethod
-    def from_expr(cls, expr: sp.Basic) -> Quantity[Unknown, float]:
+    def from_expr(cls, expr: sp.Basic) -> Quantity[Dimensionality, float]:
         """
         Converts a Sympy expression with unit symbols
         into a Quantity. This only works in case expression
@@ -957,33 +943,134 @@ class Quantity(
 
     @classmethod
     def __get_pydantic_core_schema__(
-        cls, source_type: Any, handler: GetCoreSchemaHandler
+        cls: type[Quantity[DT, MT]],
+        source_type: Any,  # noqa: ANN401
+        handler: GetCoreSchemaHandler,
     ) -> core_schema.CoreSchema:
-        return core_schema.with_info_plain_validator_function(cls.validate)
+        python_schema = core_schema.with_info_plain_validator_function(cls.validate)
+
+        def _serialize(
+            qty: Quantity[DT, MT],
+            info: core_schema.SerializationInfo,  # noqa: ARG001
+        ) -> dict[str, Any]:
+            mag = qty.magnitude
+
+            if isinstance(mag, int | float):
+                val = mag
+                mtype = "int" if isinstance(mag, int) else "float"
+            elif isinstance(mag, np.ndarray):
+                val = mag.tolist()
+                mtype = f"np.ndarray:{mag.dtype.str}:{mag.shape}"
+            elif isinstance(mag, pl.Series):
+                val = mag.to_list()
+                mtype = f"pl.Series:{mag.dtype}"
+            elif isinstance(mag, list):
+                val = [float(x) for x in mag]
+                mtype = "list"
+            else:
+                raise ValueError(f"Unknown magnitude type {type(mag)}: {mag}")
+
+            return {
+                "unit": str(qty.u),
+                "value": val,
+                "magnitude_type": mtype,
+            }
+
+        ser_schema = core_schema.plain_serializer_function_ser_schema(_serialize, info_arg=True)
+
+        return core_schema.json_or_python_schema(
+            json_schema=python_schema,
+            python_schema=python_schema,
+            serialization=ser_schema,
+        )
 
     @classmethod
-    def validate(cls, qty, info) -> Quantity[DT, MT]:
-        # convert non-Quantity inputs to Quantity before checking subclass
-        ret = cls(qty)
+    def __get_pydantic_json_schema__(
+        cls,
+        core_schema: core_schema.CoreSchema,
+        handler: GetJsonSchemaHandler,
+    ) -> JsonSchemaValue:
+        return {
+            "title": cls.__name__,
+            "type": "object",
+            "properties": {
+                "unit": {"type": "string"},
+                "value": {
+                    "anyOf": [
+                        {"type": "number"},
+                        {"type": "array", "items": {"type": "number"}},
+                        {"type": "null"},
+                    ]
+                },
+                "magnitude_type": {
+                    "type": "string",
+                    "description": (
+                        "describes how to reconstruct the magnitude, "
+                        "e.g. 'int', 'float', 'list', "
+                        "'np.ndarray:<dtype>:<shape>', or 'pl.Series:<dtype>'"
+                    ),
+                },
+            },
+            "required": ["unit", "value", "magnitude_type"],
+        }
+
+    @classmethod
+    def validate(
+        cls: type[Quantity[DT, MT]],
+        qty: Any,  # noqa: ANN401
+        info: Any,  # noqa: ANN401, ARG003
+    ) -> Self:
+        if isinstance(qty, dict) and "value" in qty and "magnitude_type" in qty:
+            val = qty["value"]
+            mtype = qty["magnitude_type"]
+
+            if mtype.startswith("np.ndarray"):
+                _, dtype_str, _ = mtype.split(":", 2)
+                arr = np.array(val, dtype=np.dtype(dtype_str))
+                magnitude = arr
+            elif mtype.startswith("pl.Series"):
+                _, dtype_str = mtype.split(":", 1)
+
+                match dtype_str:
+                    case "Float32":
+                        dtype = pl.Float32
+                    case "Float64":
+                        dtype = pl.Float64
+                    case "Int64":
+                        dtype = pl.Int64
+                    case "Int32":
+                        dtype = pl.Int32
+                    case "Int16":
+                        dtype = pl.Int16
+                    case _:
+                        raise ValueError(f"Unknown Polars Series dtype: '{dtype_str}'")
+
+                magnitude = pl.Series(val, dtype=dtype)
+            elif mtype == "list":
+                magnitude = val  # type: ignore[assignment]
+            elif mtype == "int":
+                magnitude = int(val)  # type: ignore[arg-type]
+            elif mtype == "float":
+                magnitude = float(val)  # type: ignore[arg-type]
+            else:
+                raise ExpectedDimensionalityError(f"Unknown magnitude_type {mtype!r}")
+
+            ret = cls(magnitude, unit=qty.get("unit"))
+
+        else:
+            ret = qty if isinstance(qty, Quantity) else cast(Quantity, cls(qty))
 
         if isinstance(ret, cls):
             return ret
-
         raise ExpectedDimensionalityError(
-            f"Value {ret} ({type(ret).__name__}) does not "
-            f"match the expected dimensionality {cls.__name__}"
+            f"Value {ret} ({type(ret).__name__}) does not match expected dimensionality {cls.__name__}"
         )
 
     def check_compatibility(self, other: Quantity | float | int) -> None:
-        """
-        Checks compatibility for addition and subtraction.
-        """
-
         if not isinstance(other, Quantity):
             if not self.dimensionless:
                 raise DimensionalityTypeError(
-                    f"Cannot add or subtract {other} ({type(other)}) to "
-                    f"quantity {self} ({type(self)})"
+                    f"Cannot add or subtract {other} ({type(other)}) to quantity {self} ({type(self)})"
                 )
 
             return
@@ -1008,10 +1095,7 @@ class Quantity(
 
         # normal case, check that the types of Quantity is the same
         if type(self) is not type(other):
-            if (
-                self._dimensionality_type.dimensions
-                == other._dimensionality_type.dimensions
-            ):
+            if self._dimensionality_type.dimensions == other._dimensionality_type.dimensions:
                 raise DimensionalityTypeError(
                     f"Quantities with different dimensionalities are not compatible: "
                     f"{type(self)} and {type(other)}. The dimensions match, "
@@ -1019,29 +1103,31 @@ class Quantity(
                 )
 
             raise DimensionalityTypeError(
-                f"Quantities with different dimensionalities are not compatible: "
-                f"{type(self)} and {type(other)}. "
+                f"Quantities with different dimensionalities are not compatible: {type(self)} and {type(other)}. "
             )
 
     def is_compatible_with(
-        self, other: Quantity | float | int, *contexts, **ctx_kwargs
+        self,
+        other: Quantity | float | int,
+        *contexts: Any,  # noqa: ANN401
+        **ctx_kwargs: Any,  # noqa: ANN401
     ) -> bool:
         # add an additional check of the dimensionality types
         is_compatible = super().is_compatible_with(other, *contexts, **ctx_kwargs)
 
         if not is_compatible:
             return False
-
         try:
             self.check_compatibility(other)
             return True
         except DimensionalityTypeError:
             return False
 
-    def __eq__(self, other):
+    def __eq__(self, other):  # noqa: ANN204, ANN001
         # this returns an array of one or both inputs have array magnitudes
         is_equal = super().__eq__(other)
 
+        # TODO: should also check self.is_compatible_with(other) here
         if isinstance(is_equal, np.ndarray):
             if self.is_compatible_with(other):
                 return is_equal.astype(bool)
@@ -1050,23 +1136,23 @@ class Quantity(
 
         return is_equal and self.is_compatible_with(other)
 
-    def __mul__(self, other):
+    def __mul__(self, other):  # noqa: ANN204, ANN001
         ret = super().__mul__(other)
         if self.dimensionless and isinstance(other, Quantity):
             return other.subclass(ret)
 
         return self._call_subclass(ret)
 
-    def __rmul__(self, other):
+    def __rmul__(self, other):  # noqa: ANN204, ANN001
         ret = super().__rmul__(other)
 
         return self._call_subclass(ret)
 
-    def __truediv__(self, other):
+    def __truediv__(self, other):  # noqa: ANN204, ANN001
         ret = super().__truediv__(other)
         return self._call_subclass(ret)
 
-    def __rtruediv__(self, other):
+    def __rtruediv__(self, other):  # noqa: ANN204, ANN001
         ret = super().__rtruediv__(other)
         return self._call_subclass(ret)
 
@@ -1078,23 +1164,18 @@ class Quantity(
         v1 = self.to("degC").m
         v2 = other.to("delta_degC").m
 
-        if operator == "add":
-            val = v1 + v2
-        else:
-            val = v1 - v2
+        val = v1 + v2 if operator == "add" else v1 - v2
 
         result = Quantity(val, "degC")
 
         return result
 
-    def __add__(self, other):
+    def __add__(self, other):  # noqa: ANN204, ANN001
         try:
             self.check_compatibility(other)
 
         except DimensionalityTypeError as e:
-            if isinstance_types(
-                self, Quantity[Temperature] | Quantity[TemperatureDifference]
-            ) and isinstance_types(
+            if isinstance_types(self, Quantity[Temperature] | Quantity[TemperatureDifference]) and isinstance_types(
                 other, Quantity[Temperature] | Quantity[TemperatureDifference]
             ):
                 if self._dimensionality_type is TemperatureDifference:
@@ -1108,13 +1189,11 @@ class Quantity(
 
         return self._call_subclass(ret)
 
-    def __sub__(self, other):
+    def __sub__(self, other):  # noqa: ANN204, ANN001
         try:
             self.check_compatibility(other)
         except DimensionalityTypeError as e:
-            if isinstance_types(
-                self, Quantity[Temperature] | Quantity[TemperatureDifference]
-            ) and isinstance_types(
+            if isinstance_types(self, Quantity[Temperature] | Quantity[TemperatureDifference]) and isinstance_types(
                 other, Quantity[Temperature] | Quantity[TemperatureDifference]
             ):
                 if self._dimensionality_type is TemperatureDifference:
@@ -1126,33 +1205,30 @@ class Quantity(
 
         ret = super().__sub__(other)
 
-        if (
-            self._dimensionality_type is Temperature
-            and other._dimensionality_type is Temperature
-        ):
+        if self._dimensionality_type is Temperature and other._dimensionality_type is Temperature:
             return Quantity[TemperatureDifference, type(ret.m)](ret.m, ret.u)
 
         return self._call_subclass(ret)
 
-    def __gt__(self, other):
+    def __gt__(self, other):  # noqa: ANN204, ANN001
         try:
             return super().__gt__(other)
         except ValueError as e:
             raise DimensionalityComparisonError(str(e)) from e
 
-    def __ge__(self, other):
+    def __ge__(self, other):  # noqa: ANN204, ANN001
         try:
             return super().__ge__(other)
         except ValueError as e:
             raise DimensionalityComparisonError(str(e)) from e
 
-    def __lt__(self, other):
+    def __lt__(self, other):  # noqa: ANN204, ANN001
         try:
             return super().__lt__(other)
         except ValueError as e:
             raise DimensionalityComparisonError(str(e)) from e
 
-    def __le__(self, other):
+    def __le__(self, other):  # noqa: ANN204, ANN001
         try:
             return super().__le__(other)
         except ValueError as e:
@@ -1167,10 +1243,7 @@ class Quantity(
     def __getitem__(self, index: int) -> Quantity[DT]:
         ret = super().__getitem__(index)
 
-        if isinstance(ret._magnitude, pd.Timestamp):
-            scalar_type = pd.Timestamp
-        else:
-            scalar_type = float
+        scalar_type = pd.Timestamp if isinstance(ret._magnitude, pd.Timestamp) else float
 
         # NOTE: this is a special case, scalar magnitudes cannot have kwargs
 
@@ -1184,7 +1257,7 @@ class Quantity(
 
     @property
     def is_scalar(self) -> bool:
-        return isinstance(self.m, (float, int))
+        return isinstance(self.m, float | int)
 
     @property
     def ndim(self) -> int:
@@ -1194,7 +1267,7 @@ class Quantity(
         # this is similar to setting ureg.force_ndarray_like
         # except that it still allows for scalar magnitudes
 
-        if isinstance(self.m, (float, int)):
+        if isinstance(self.m, float | int):
             return 0
 
         return self.m.ndim
@@ -1209,14 +1282,19 @@ class Quantity(
         if str(self._dimensionality_type.dimensions) != str(dim.dimensions):
             raise TypeError(
                 f"Cannot convert {self} to dimensionality {dim}, "
-                f"the dimensions do not match: {self._dimensionality_type.dimensions} != "
+                f"the dimensions do not match: "
+                f"{self._dimensionality_type.dimensions} != "
                 f"{dim.dimensions}"
             )
 
         subcls = self._get_dimensional_subclass(dim, self._magnitude_type)
         return subcls(self)
 
-    def astype(self, magnitude_type: type[MT_], **kwargs: Any) -> Quantity[DT, MT_]:
+    def astype(
+        self,
+        magnitude_type: type[MT_],
+        **kwargs: Any,  # noqa: ANN401
+    ) -> Quantity[DT, MT_]:
         m, u = self.m, self.u
 
         _is_iterable = isinstance(m, Iterable)
@@ -1228,17 +1306,13 @@ class Quantity(
             return self.subclass(m.astype(magnitude_type), u)
 
         if magnitude_type in (pd.DatetimeIndex, pd.Timestamp):
-            raise ValueError(
-                f"Cannot convert to datetime magnitude type: {magnitude_type}"
-            )
+            raise ValueError(f"Cannot convert to datetime magnitude type: {magnitude_type}")
 
         if magnitude_type == pl.Expr:
             raise ValueError("Cannot convert magnitude to Polars expression")
 
         if magnitude_type == list[int]:
-            raise NotImplementedError(
-                "Cannot convert magnitude to list[int], use list[float] instead"
-            )
+            raise NotImplementedError("Cannot convert magnitude to list[int], use list[float] instead")
 
         if magnitude_type in (float, int):
             if _is_iterable:
@@ -1271,13 +1345,14 @@ class Quantity(
         return self.__copy__()
 
 
-# override the implementations for the Quantity and Unit classes for the current registry
+# override the implementations for the Quantity
+# and Unit classes for the current registry
 # this ensures that all Quantity objects created with this registry are the correct type
 ureg.Quantity = Quantity
 ureg.Unit = Unit
 
 # the default format must be set after Quantity and Unit are registered
-ureg.default_format = SETTINGS.default_unit_format
+ureg.formatter.default_format = SETTINGS.default_unit_format
 
 
 def set_quantity_format(fmt: str = "compact") -> None:
@@ -1309,4 +1384,4 @@ def set_quantity_format(fmt: str = "compact") -> None:
             "or alias siunitx: ~L, compact: ~P"
         )
 
-    ureg.default_format = fmt
+    ureg.formatter.default_format = fmt

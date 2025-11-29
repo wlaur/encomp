@@ -5,7 +5,7 @@ from ..units import Quantity as Q
 from ..utypes import Dimensionless, Mass, Power, Temperature
 
 
-def test_grid_dimensions():
+def test_grid_dimensions() -> None:
     assert [
         grid_dimensions(1, 2, 3),
         grid_dimensions(-1, -1, 3),
@@ -14,7 +14,7 @@ def test_grid_dimensions():
     ] == [(2, 3), (0, 3), (2, 3), (1, 3)]
 
 
-def test_name_assignments():
+def test_name_assignments() -> None:
     s = "a = 5; b = [1, 2, 3]"
 
     assignments = name_assignments(s)
@@ -35,7 +35,7 @@ def test_name_assignments():
     assert {n[0] for n in name_assignments(src)} == {"a", "b", "c"}
 
 
-def test_isinstance_types():
+def test_isinstance_types() -> None:
     assert isinstance_types((1, 4), tuple)
     assert isinstance_types((1, 4), tuple[int, int])
     assert isinstance_types((1, 4), tuple[int, ...])
@@ -57,7 +57,7 @@ def test_isinstance_types():
     assert isinstance_types(y, tuple[int, int, str] | str)
 
 
-def test_isinstance_types_quantity():
+def test_isinstance_types_quantity() -> None:
     q = Q(1)
     assert isinstance_types(q, Q)
     assert isinstance_types(q, Q[Dimensionless])

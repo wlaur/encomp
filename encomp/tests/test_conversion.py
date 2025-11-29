@@ -6,7 +6,7 @@ from ..units import Quantity as Q
 from ..utypes import Volume, VolumeFlow
 
 
-def test_convert_volume_mass():
+def test_convert_volume_mass() -> None:
     mf = Q(25, "kg/s")
 
     assert isinstance(convert_volume_mass(mf), Q[VolumeFlow])

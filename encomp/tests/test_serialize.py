@@ -11,7 +11,7 @@ from ..serialize import decode, is_serializable, serialize
 from ..units import Quantity as Q
 
 
-def test_serialize():
+def test_serialize() -> None:
     p = Path().absolute()
     d = serialize(p)
     assert decode(d) == p
@@ -85,17 +85,17 @@ def test_serialize():
     d_ = decode(json.loads(json_str))
 
 
-def test_custom_object():
+def test_custom_object() -> None:
     @dataclass
     class CustomOtherClass:
         s: pd.Series
         df: pd.DataFrame
 
         @classmethod
-        def from_dict(cls, d):
+        def from_dict(cls, d):  # noqa: ANN001, ANN206
             return cls(**d)
 
-        def to_json(self):
+        def to_json(self):  # noqa: ANN202
             # str repr of JSON
             return json.dumps(serialize(self.__dict__))
 
@@ -108,10 +108,10 @@ def test_custom_object():
         nested_list: list[CustomOtherClass]
 
         @classmethod
-        def from_dict(cls, d):
+        def from_dict(cls, d):  # noqa: ANN001, ANN206
             return cls(**d)
 
-        def to_json(self):
+        def to_json(self):  # noqa: ANN202
             # dict repr of JSON, does not have
             # to be serializable
             return self.__dict__
@@ -121,9 +121,7 @@ def test_custom_object():
 
     b = CustomOtherClass(s=s, df=df)
 
-    a = CustomClass(
-        arr=np.random.rand(19, 2), name="asd", nested=b, nested_list=[b, b, b]
-    )
+    a = CustomClass(arr=np.random.rand(19, 2), name="asd", nested=b, nested_list=[b, b, b])
 
     json_dict = serialize(a)
 

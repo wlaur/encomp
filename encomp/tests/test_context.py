@@ -4,7 +4,7 @@ from ..context import quantity_format, silence_stdout, temp_dir, working_dir
 from ..units import Quantity
 
 
-def test_context():
+def test_context() -> None:
     with silence_stdout():
         print("silenced")
 
@@ -19,7 +19,7 @@ def test_context():
     assert s == "1.0 kPa"
 
 
-def test_temp_dir():
+def test_temp_dir() -> None:
     orig_cwd = Path.cwd()
 
     with temp_dir():
@@ -30,7 +30,7 @@ def test_temp_dir():
     assert not temp.is_dir()
 
 
-def test_working_dir():
+def test_working_dir() -> None:
     with temp_dir():
         parent = Path.cwd()
         sub = parent / "sub"

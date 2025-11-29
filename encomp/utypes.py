@@ -11,11 +11,11 @@ be imported in this case.
 from __future__ import annotations
 
 from abc import ABC
-from typing import (
+from typing import (  # type: ignore[attr-defined]
     TYPE_CHECKING,
     Literal,
     TypeVar,
-    _LiteralGenericAlias,  # type: ignore
+    _LiteralGenericAlias,
 )
 
 import numpy as np
@@ -25,13 +25,12 @@ from pint.util import UnitsContainer
 
 _BASE_SI_UNITS = ("m", "kg", "s", "K", "mol", "A", "cd")
 
-# these string literals are used to infer the dimensionality of commonly created quantities
+# these string literals are used to infer the dimensionality
+# of commonly created quantities
 # they are only used by type checkers and ignored at runtime
 DimensionlessUnits = Literal["", "%", "-", "dimensionless", None]
 
-CurrencyUnits = Literal[
-    "SEK", "EUR", "USD", "kSEK", "kEUR", "kUSD", "MSEK", "MEUR", "MUSD"
-]
+CurrencyUnits = Literal["SEK", "EUR", "USD", "kSEK", "kEUR", "kUSD", "MSEK", "MEUR", "MUSD"]
 
 CurrencyPerEnergyUnits = Literal[
     "SEK/MWh",
@@ -128,9 +127,7 @@ TimeUnits = Literal[
 
 TemperatureUnits = Literal["degC", "°C", "K", "degF", "°F", "℃", "℉"]
 
-TemperatureDifferenceUnits = Literal[
-    "delta_°C", "delta_degC", "Δ°C", "Δ℃", "delta_°F", "delta_degF", "Δ°F", "Δ℉"
-]
+TemperatureDifferenceUnits = Literal["delta_°C", "delta_degC", "Δ°C", "Δ℃", "delta_°F", "delta_degF", "Δ°F", "Δ℉"]
 
 SubstanceUnits = Literal["mol", "kmol"]
 
@@ -162,9 +159,7 @@ VolumeUnits = Literal[
     "cm**3",
 ]
 
-NormalVolumeUnits = Literal[
-    "normal liter", "Nm3", "nm3", "Nm^3", "nm^3", "Nm³", "nm³", "Nm**3", "nm**3"
-]
+NormalVolumeUnits = Literal["normal liter", "Nm3", "nm3", "Nm^3", "nm^3", "Nm³", "nm³", "Nm**3", "nm**3"]
 
 PressureUnits = Literal["bar", "kPa", "Pa", "MPa", "mbar", "mmHg", "atm"]
 
@@ -242,9 +237,7 @@ NormalVolumeFlowUnits = Literal[
     "nm**3/hr",
 ]
 
-DensityUnits = Literal[
-    "kg/m3", "kg/m**3", "kg/m^3", "kg/m³", "kg/liter", "g/l", "g/L", "gram/liter"
-]
+DensityUnits = Literal["kg/m3", "kg/m**3", "kg/m^3", "kg/m³", "kg/liter", "g/l", "g/L", "gram/liter"]
 
 
 SpecificVolumeUnits = Literal["m3/kg", "m^3/kg", "m³/kg", "l/g", "L/g"]
@@ -260,9 +253,7 @@ NormalVolumePerMassUnits = Literal[
 ]
 
 
-EnergyUnits = Literal[
-    "J", "kJ", "MJ", "GJ", "TJ", "PJ", "kWh", "MWh", "Wh", "GWh", "TWh"
-]
+EnergyUnits = Literal["J", "kJ", "MJ", "GJ", "TJ", "PJ", "kWh", "MWh", "Wh", "GWh", "TWh"]
 
 PowerUnits = Literal[
     "W",
@@ -297,9 +288,7 @@ VelocityUnits = Literal["m/s", "km/s", "m/min", "cm/s", "cm/min", "km/h", "kmh",
 
 DynamicViscosityUnits = Literal["Pa*s", "Pa s", "cP"]
 
-KinematicViscosityUnits = Literal[
-    "m2/s", "m**2/s", "m^2/s", "m²/s", "cSt", "cm2/s", "cm**2/s", "cm^2/s", "cm²/s"
-]
+KinematicViscosityUnits = Literal["m2/s", "m**2/s", "m^2/s", "m²/s", "cSt", "cm2/s", "cm**2/s", "cm^2/s", "cm²/s"]
 
 EnergyPerMassUnits = Literal[
     "MJ/kg",
@@ -345,14 +334,13 @@ def get_registered_units() -> dict[str, tuple[str, ...]]:
     ret = {}
 
     for k, v in globals().items():
-        if isinstance(v, _LiteralGenericAlias):
-            if k.endswith("Units"):
-                ret[k.removesuffix("Units")] = v.__args__
+        if isinstance(v, _LiteralGenericAlias) and k.endswith("Units"):
+            ret[k.removesuffix("Units")] = v.__args__
 
     return ret
 
 
-class Dimensionality(ABC):
+class Dimensionality(ABC):  # noqa: B024
     r"""
     Represents the *dimensionality* of a unit, i.e.
     a combination (product) of the base dimensions (with optional rational exponents).
@@ -363,7 +351,8 @@ class Dimensionality(ABC):
 
         \Pi \, d^n_d, d \in \{T, L, M ,I, \Theta, N, J, \ldots\}, n_d \in \mathbb{Q}
 
-    where $\{T, L, M, ...\}$ are the base dimensions (time, length, mass, ...) and $n_d$ is a rational number.
+    where $\{T, L, M, ...\}$ are the base dimensions (time, length, mass, ...)
+    and $n_d$ is a rational number.
 
     Subclasses of this abstract base class are used
     as type parameters when creating instances of
@@ -403,8 +392,7 @@ class Dimensionality(ABC):
 
         if cls.dimensions is cls._UnsetUC:
             raise TypeError(
-                f"Cannot initialize {cls}, class attribute "
-                '"dimensionality" is not defined for this subclass'
+                f"Cannot initialize {cls}, class attribute 'dimensionality' is not defined for this subclass"
             )
 
         # ensure that the subclass names are unique
@@ -425,11 +413,6 @@ class Dimensionality(ABC):
             # don't create a new subclass with the same name
             return
 
-        # the Unknown dimensionality subclass has dimensions=None
-        # it will never be used at runtime, only during type checking
-        # a subclass that will be used to create more subclasses
-        # might also have dimensions=None
-        # it's necessary to use "type: ignore" when defining dimensions = None
         if cls.dimensions is None:
             return
 
@@ -444,19 +427,19 @@ class Dimensionality(ABC):
         # the first element in __mro__ is the class that is being created, the
         # second is the direct parent class
         # parent must be either Dimensionality or a subclass
-        parent: type[Dimensionality] = cls.__mro__[1]  # type: ignore
+        parent: type[Dimensionality] = cls.__mro__[1]
 
         # ignore this check if the parent is the base class Dimensionality
-        if parent.dimensions is not cls._UnsetUC:
-            if parent.dimensions != cls.dimensions:
-                raise TypeError(
-                    f"Cannot create subclass of {parent} where "
-                    "the dimensions do not match. Tried to "
-                    f"create subclass with dimensions {cls.dimensions}, but "
-                    f"the parent has dimensions {parent.dimensions}"
-                )
+        if parent.dimensions is not cls._UnsetUC and parent.dimensions != cls.dimensions:
+            raise TypeError(
+                f"Cannot create subclass of {parent} where "
+                "the dimensions do not match. Tried to "
+                f"create subclass with dimensions {cls.dimensions}, but "
+                f"the parent has dimensions {parent.dimensions}"
+            )
 
-        # this will never happen, since the class name was already checked for duplicates
+        # this will never happen,
+        # since the class name was already checked for duplicates
         if cls in cls._registry:
             return
 
@@ -515,14 +498,6 @@ _LuminosityUC = UnitsContainer({"[luminosity]": 1})
 # NOTE: each subclass definition will create an entry in Dimensionality._registry
 # reloading (re-importing) this module will clear and reset the registry
 
-# the Unknown and Unset dimensionalities override dimensions to None
-# NOTE: never initialize subclasses Q[Unknown] or Q[Unset] at runtime,
-# this is only meant for type checking
-
-
-class Unknown(Dimensionality):
-    dimensions = None  # type: ignore
-
 
 # pyright supports TypeVar default (PEP 696), but it raises an error at runtime
 # this will be implemented in Python 3.12
@@ -533,7 +508,6 @@ if TYPE_CHECKING:
     MT = TypeVar(
         "MT",
         float,
-        list[float],
         np.ndarray,
         pd.Series,
         pd.DatetimeIndex,
@@ -546,7 +520,6 @@ if TYPE_CHECKING:
     MT_ = TypeVar(
         "MT_",
         float,
-        list[float],
         np.ndarray,
         pd.Series,
         pd.DatetimeIndex,
@@ -556,22 +529,30 @@ if TYPE_CHECKING:
         default=np.ndarray,
     )
 
+    MTR = TypeVar(
+        "MTR",
+        float,
+        np.ndarray,
+        default=np.ndarray,
+    )
+
     # type variables that represent a certain dimensionality
-    # the DT_ type variable is used to signify a different (possible identical) dimensionality than DT
-    # these type variables are invariant, since
+    # the DT_ type variable is used to signify a different
+    # (possible identical) dimensionality than DT
+    # these type variables are marked as covariable to ensure that
+    # Q[Mass] is a subtype of Q[Dimensionality]
+    # however, this only holds for the relationship DimX -> Dimensionality (parent)
+    # for any other dimensionalities, e.g. DimA and DimB
     # Q[DimA] is not a subclass of Q[DimB] if DimA is a subclass of DimB
-    # all Q[DT] subclasses are direct subclasses of Q
-    # it might make sense to consider DT as covariant, but it won't have any practical advantages,
-    # and it does not match the actual implementation
-    DT = TypeVar("DT", bound=Dimensionality, default=Unknown)
-    DT_ = TypeVar("DT_", bound=Dimensionality, default=Unknown)
+    # all Q[DT] subclasses are direct subclasses of Q and Q[Dimensionality]
+    DT = TypeVar("DT", bound=Dimensionality, default=Dimensionality, covariant=True)
+    DT_ = TypeVar("DT_", bound=Dimensionality, default=Dimensionality, covariant=True)
 
 else:
     # this does nothing at runtime
     MT = TypeVar(
         "MT",
         float,
-        list[float],
         np.ndarray,
         pd.Series,
         pd.DatetimeIndex,
@@ -580,10 +561,16 @@ else:
         pl.Expr,
     )
 
+    # reduced subset of magnitude types
+    MTR = TypeVar(
+        "MTR",
+        float,
+        np.ndarray,
+    )
+
     MT_ = TypeVar(
         "MT_",
         float,
-        list[float],
         np.ndarray,
         pd.Series,
         pd.DatetimeIndex,
@@ -594,14 +581,6 @@ else:
 
     DT = TypeVar("DT", bound=Dimensionality)
     DT_ = TypeVar("DT_", bound=Dimensionality)
-
-
-class Unset(Dimensionality):
-    dimensions = None  # type: ignore
-
-
-class Variable(Dimensionality):
-    dimensions = None  # type: ignore
 
 
 class Dimensionless(Dimensionality):

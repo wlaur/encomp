@@ -45,7 +45,8 @@ The custom class must contain a method named ``to_json()`` or a property named
 
 
 To decode a serialized custom object, a method named ``from_dict()`` must be defined.
-Additionally, the (uninitialized) class implementation (or a list of classes) must be passed to the
+Additionally, the (uninitialized) class implementation (or a list of classes)
+must be passed to the
 :py:func:`encomp.serialize.decode` function with the parameter ``custom``.
 The class name is used as the ``type`` key when serializing.
 This same name must be used when passing the class implementation for decoding.
@@ -58,15 +59,17 @@ This same name must be used when passing the class implementation for decoding.
 
 import inspect
 import json
+from collections.abc import Callable
 from decimal import Decimal
+from io import StringIO
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 import pandas as pd
 import sympy as sp
-from uncertainties import ufloat
-from uncertainties.core import AffineScalarFunc
+from uncertainties import ufloat  # type: ignore[import-untyped]
+from uncertainties.core import AffineScalarFunc  # type: ignore[import-untyped]
 
 from .misc import isinstance_types
 from .units import Quantity, Unit
@@ -78,7 +81,7 @@ JSONBase = dict | list | float | int | str | bool | None
 JSON = JSONBase | list[JSONBase] | dict[str, JSONBase]
 
 
-def is_serializable(x: Any) -> bool:
+def is_serializable(x: Any) -> bool:  # noqa: ANN401
     """
     Checks if x is serializable to JSON,
     tries to execute ``json.dumps(x)``.
@@ -102,7 +105,7 @@ def is_serializable(x: Any) -> bool:
         return False
 
 
-def serialize(obj: Any) -> JSON:
+def serialize(obj: Any) -> JSON:  # noqa: ANN401
     """
     Converts the input to a serializable object that can be rendered as JSON.
     Assumes that all non-iterable objects are serializable,
@@ -148,10 +151,7 @@ def serialize(obj: Any) -> JSON:
 
         for key in obj:
             if isinstance(key, tuple):
-                raise TypeError(
-                    "Tuples cannot be used as dictionary keys when "
-                    f"serializing to JSON: {key}"
-                )
+                raise TypeError(f"Tuples cannot be used as dictionary keys when serializing to JSON: {key}")
 
             dct[key] = serialize(obj[key])
 
@@ -160,7 +160,7 @@ def serialize(obj: Any) -> JSON:
     return custom_serializer(obj)
 
 
-def custom_serializer(obj: Any) -> JSON:
+def custom_serializer(obj: Any) -> JSON:  # noqa: ANN401
     """
     Serializes objects that are not JSON-serializable by default.
     Fallback is ``obj.__dict__``, if this does not exist
@@ -200,7 +200,8 @@ def custom_serializer(obj: Any) -> JSON:
         return {
             "type": "Series",
             "data": obj.to_json(
-                orient="split", default_handler=custom_serializer  # type: ignore
+                orient="split",
+                default_handler=custom_serializer,  # type: ignore
             ),
         }
 
@@ -208,7 +209,8 @@ def custom_serializer(obj: Any) -> JSON:
         return {
             "type": "DataFrame",
             "data": obj.to_json(
-                orient="split", default_handler=custom_serializer  # type: ignore
+                orient="split",
+                default_handler=custom_serializer,  # type: ignore
             ),
         }
 
@@ -228,10 +230,7 @@ def custom_serializer(obj: Any) -> JSON:
     if hasattr(obj, "to_json") or hasattr(obj, "json"):
         # this method can return a dict or a string
         # JSON representation
-        if hasattr(obj, "json"):
-            json_repr = getattr(obj, "json")
-        else:
-            json_repr = obj.to_json()
+        json_repr = obj.json if hasattr(obj, "json") else obj.to_json()
 
         # make sure the object's dict representation is serializable
         # if this is a string this is not necessary
@@ -246,16 +245,16 @@ def custom_serializer(obj: Any) -> JSON:
         return {"type": obj_type, "data": json_repr}
 
     if hasattr(obj, "__dict__"):
-        return obj.__dict__
+        return obj.__dict__  # type: ignore
 
     if is_serializable(obj):
-        return obj
+        return obj  # type: ignore
 
     # fallback, this cannot be deserialized
     return str(obj)
 
 
-def decode(inp: JSON, custom: type | list[type] | None = None) -> Any:
+def decode(inp: JSON, custom: type | list[type] | None = None) -> Any:  # noqa: ANN401
     """
     Decodes objects that were serialized
     with :py:func:`encomp.serialize.custom_serializer`.
@@ -318,7 +317,10 @@ def decode(inp: JSON, custom: type | list[type] | None = None) -> Any:
             if inp["type"] == "Quantity":
                 # optional key with the name of the dimensionality class
                 dimensionality_name = inp.get("dimensionality")
-                val, unit = inp["data"]
+
+                _val = inp["data"]
+                assert isinstance(_val, list)
+                val, unit = _val
 
                 if unit is None:
                     unit = ""
@@ -344,10 +346,10 @@ def decode(inp: JSON, custom: type | list[type] | None = None) -> Any:
                 return Path(inp["data"])  # type: ignore
 
             if inp["type"] == "Series":
-                return pd.read_json(inp["data"], typ="series", orient="split")
+                return pd.read_json(StringIO(inp["data"]), typ="series", orient="split")  # type: ignore
 
             if inp["type"] == "DataFrame":
-                return pd.read_json(inp["data"], typ="frame", orient="split")
+                return pd.read_json(StringIO(inp["data"]), typ="frame", orient="split")  # type: ignore
 
             if inp["type"] == "ndarray":
                 # not necessary to pass on the custom kwarg
@@ -373,8 +375,7 @@ def decode(inp: JSON, custom: type | list[type] | None = None) -> Any:
                     # want to raise an error here
                     # implementation is incorrect if this method is missing
                     raise AttributeError(
-                        f"Custom class {custom_class} "
-                        'must contain a classmethod named "from_dict" '
+                        f"Custom class {custom_class} must contain a classmethod named 'from_dict' "
                         "that takes a dict as input and returns a class instance"
                     )
 
@@ -432,13 +433,10 @@ def save(names: dict[str, Any], path: str | Path = "variables.json") -> None:
     names = {
         a: b
         for a, b in names.items()
-        if not a.startswith("_")
-        and not inspect.ismodule(b)
-        and not isinstance(b, Callable)
-        and a not in skip  # type: ignore
+        if not a.startswith("_") and not inspect.ismodule(b) and not isinstance(b, Callable) and a not in skip  # type: ignore
     }
 
-    with open(path, "w", encoding="utf-8") as f:
+    with Path(path).open("w", encoding="utf-8") as f:
         f.write(json.dumps(names, default=serialize, indent=4))
 
 
@@ -457,7 +455,7 @@ def load(path: str | Path = "variables.json") -> dict[str, Any]:
         Dictionary with names and their corresponding objects
     """
 
-    with open(path, "r", encoding="utf-8") as f:
+    with Path(path).open(encoding="utf-8") as f:
         names = json.loads(f.read())
 
     names_decoded = {}
