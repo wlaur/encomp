@@ -644,7 +644,6 @@ Numpy1DArray = np.ndarray[tuple[int], np.dtype[np.float64]]
 if TYPE_CHECKING:
     MT = TypeVar(
         "MT",
-        int,
         float,
         Numpy1DArray,
         pd.Series,
@@ -655,7 +654,6 @@ if TYPE_CHECKING:
 
     MT_ = TypeVar(
         "MT_",
-        int,
         float,
         Numpy1DArray,
         pd.Series,

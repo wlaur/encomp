@@ -21,10 +21,8 @@ from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, TypeVar, cast
 import numpy as np
 import pint
 from pint.errors import DimensionalityError
-from pint.facets.measurement.objects import MeasurementQuantity
-from pint.facets.nonmultiplicative.objects import NonMultiplicativeQuantity
 from pint.facets.numpy.quantity import NumpyQuantity
-from pint.facets.numpy.unit import NumpyUnit
+from pint.facets.plain.unit import PlainUnit
 from pint.registry import LazyRegistry, UnitRegistry
 from pint.util import UnitsContainer
 from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
@@ -256,7 +254,7 @@ def define_dimensionality(name: str, symbol: str | None = None, if_exists: Liter
     CUSTOM_DIMENSIONS.append(name)
 
 
-class QuantityMeta(type):
+class _QuantityMeta(type):
     def __eq__(cls, obj: object) -> bool:
         # override the == operator so that type(val) == Quantity returns True for subclasses
         if obj is Quantity:
@@ -268,16 +266,14 @@ class QuantityMeta(type):
         return id(cls)
 
 
-class Unit(NumpyUnit, Generic[DT]):
+class Unit(PlainUnit, Generic[DT]):
     pass
 
 
 class Quantity(
-    NonMultiplicativeQuantity,
-    MeasurementQuantity,
     NumpyQuantity,
     Generic[DT, MT],
-    metaclass=QuantityMeta,
+    metaclass=_QuantityMeta,
 ):
     """
     Subclass of pint's ``Quantity`` with additional type hints,  functionality
@@ -457,7 +453,10 @@ class Quantity(
 
     @staticmethod
     def _validate_magnitude(val: MT | Sequence[int | float]) -> MT:
-        if isinstance(val, int | float):
+        if isinstance(val, int):
+            return float(val)  # type: ignore[return-value]
+
+        if isinstance(val, float):
             return val  # type: ignore[return-value]
 
         if isinstance(val, np.ndarray):
@@ -1233,7 +1232,7 @@ class Quantity(
 
     @property
     def is_scalar(self) -> bool:
-        return isinstance(self.m, float | int)
+        return isinstance(self.m, float)
 
     @property
     def ndim(self) -> int:
