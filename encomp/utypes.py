@@ -8,7 +8,7 @@ Some commonly used derived dimensionalities (like density) are defined for conve
 from __future__ import annotations
 
 from abc import ABC
-from typing import TYPE_CHECKING, Any, Literal, TypeVar, get_origin
+from typing import TYPE_CHECKING, Literal, TypeVar, get_origin
 
 import numpy as np
 from pint.util import UnitsContainer
@@ -640,17 +640,11 @@ _LuminosityUC = UnitsContainer({"[luminosity]": 1})
 
 Numpy1DArray = np.ndarray[tuple[int], np.dtype[np.float64]]
 
-if TYPE_CHECKING:
-    Magnitude = float | Numpy1DArray | pd.Series | pl.Series | pl.Expr
-else:
-    Magnitude = Any
-
 # TypeVar default (PEP 696) is supported for Python 3.13+
 if TYPE_CHECKING:
-    # NOTE: int and float are interchangeable as far as the type checker is concerned,
-    # but list[int] and list[float] are distinct
     MT = TypeVar(
         "MT",
+        int,
         float,
         Numpy1DArray,
         pd.Series,
@@ -661,19 +655,12 @@ if TYPE_CHECKING:
 
     MT_ = TypeVar(
         "MT_",
+        int,
         float,
         Numpy1DArray,
         pd.Series,
         pl.Series,
         pl.Expr,
-        default=Numpy1DArray,
-    )
-
-    # reduced subset of magnitude types (used by the Fluid class)
-    MTR = TypeVar(
-        "MTR",
-        float,
-        Numpy1DArray,
         default=Numpy1DArray,
     )
 
@@ -693,7 +680,6 @@ else:
     # needed for compatibility with Python < 3.13, this does nothing at runtime
     MT = TypeVar("MT")
     MT_ = TypeVar("MT_")
-    MTR = TypeVar("MTR")
     DT = TypeVar("DT", bound=Dimensionality)
     DT_ = TypeVar("DT_", bound=Dimensionality)
 

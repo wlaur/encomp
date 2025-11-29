@@ -14,7 +14,7 @@ import logging
 import numbers
 import re
 import warnings
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from types import UnionType
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, TypeVar, cast, get_args
 
@@ -41,7 +41,6 @@ from .utypes import (
     MT_,
     Dimensionality,
     Dimensionless,
-    Magnitude,
     Numpy1DArray,
     Temperature,
     TemperatureDifference,
@@ -50,7 +49,7 @@ from .utypes import (
 if TYPE_CHECKING:
     import pandas as pd
     import polars as pl
-    import sympy as sp
+    import sympy as sp  # type: ignore[import-untyped]
 else:
     pd = None
     pl = None
@@ -174,9 +173,10 @@ class _LazyRegistry(LazyRegistry):
         # override the filename
         kwargs["filename"] = str(SETTINGS.units.resolve().absolute())
 
-        self.__class__ = _UnitRegistry
-        self.__init__(*args, **kwargs)
-        self._after_init()  # type: ignore[callable]
+        self.__class__ = _UnitRegistry  # type: ignore[assignment]
+        self.__init__(*args, **kwargs)  # type: ignore[misc]
+        assert self._after_init != "raise"
+        self._after_init()
 
 
 UNIT_REGISTRY = cast(UnitRegistry, _LazyRegistry())
@@ -185,7 +185,7 @@ for k, v in _REGISTRY_STATIC_OPTIONS.items():
     setattr(UNIT_REGISTRY, k, v)
 
 # make sure that UNIT_REGISTRY is the only registry that can be used
-pint._DEFAULT_REGISTRY = UNIT_REGISTRY
+pint._DEFAULT_REGISTRY = UNIT_REGISTRY  # type: ignore[assignment]
 pint.application_registry.set(UNIT_REGISTRY)
 
 
@@ -348,7 +348,7 @@ class Quantity(
         return subcls
 
     @classmethod
-    def _get_dimensional_subclass(cls, dim: type[Dimensionality], mt: type[MT] | None) -> type[Quantity[DT, MT]]:
+    def _get_dimensional_subclass(cls, dim: type[Dimensionality], mt: type | None) -> type[Quantity[DT, MT]]:
         # there are two levels of subclasses to Quantity: DimensionalQuantity and
         # DimensionalMagnitudeQuantity, which is a subclass of DimensionalQuantity
         # this distinction only exists at runtime, the type checker will use the
@@ -384,12 +384,14 @@ class Quantity(
         if cached_dim_magnitude_qty := cls._subclasses.get((dim_name, mt_name)):
             return cast(type[Quantity[DT, MT]], cached_dim_magnitude_qty)
 
-        return cls._construct_dimensional_magnitude_quantity(
+        subcls = cls._construct_dimensional_magnitude_quantity(
             DimensionalQuantity,
             dim_name,
-            mt,  # type: ignore[arg-type]
+            mt,
             mt_name,
         )
+
+        return cast(type[Quantity[DT, MT]], subcls)
 
     def __class_getitem__(cls, types: type[DT] | tuple[type[DT], type[MT]]) -> type[Quantity[DT, MT]]:
         if isinstance(types, tuple):
@@ -453,30 +455,24 @@ class Quantity(
         )
 
     @staticmethod
-    def _validate_magnitude(val: Any) -> Magnitude:  # noqa: ANN401
-        # NOTE: container types (e.g. list[int]) are tested using only the first element
+    def _validate_magnitude(val: MT | Sequence[int | float]) -> MT:
+        if isinstance(val, int | float):
+            return val
 
-        if isinstance(val, str):
-            raise TypeError(f'Input magnitude has incorrect type str: "{val}"')
+        if isinstance(val, np.ndarray):
+            return val
 
-        # int is considered equivalent to float by type checkers
-        if isinstance(val, int):
-            return float(val)
+        if isinstance(val, pd.Series):
+            return val
 
-        # bool is always converted to float, the type hints don't consider bool at all
-        if isinstance(val, bool):
-            return float(val)
+        if isinstance(val, pl.Series | pl.Expr):
+            return val
 
-        if isinstance_types(val, list[bool]):
-            return np.array([float(n) for n in val])
+        if isinstance(val, Sequence):
+            arr = np.array(val).astype(np.float64)
+            return arr  # type: ignore[return-value]
 
-        if isinstance_types(val, list[int]):
-            return np.array(val)
-
-        if isinstance_types(val, list[float]):
-            return np.array(val)
-
-        raise TypeError(f"Unsupported magnitude type: {val} ({type(val)})")
+        raise TypeError(f"Input magnitude has incorrect type {type(val)}: {val}")
 
     @classmethod
     def get_unit(cls, unit_name: str) -> Unit:
@@ -491,18 +487,6 @@ class Quantity(
     def _set_original_magnitude_attributes(self, mt_orig: type[MT], mt_orig_kwargs: dict[str, Any]) -> None:
         self._original_magnitude_type = mt_orig
         self._original_magnitude_kwargs = mt_orig_kwargs
-
-    @staticmethod
-    def _get_magnitude_type(val: Magnitude) -> type[MT]:
-        if isinstance(val, list):
-            if not len(val):
-                return list  # type: ignore[return-value]
-
-            # NOTE: this does not work for heterogenous lists,
-            # don't use this type of input to avoid issues
-            return list[type(val[0])]  # type: ignore[return-value]
-
-        return type(val)  # type: ignore[return-value]
 
     def __len__(self) -> int:
         # __len__() must return an integer
@@ -538,30 +522,21 @@ class Quantity(
 
     def __new__(
         cls,
-        val: MT | Quantity[DT, MT],
+        val: MT | Sequence[int | float],
         unit: Unit[DT] | UnitsContainer | str | dict | None = None,
         _mt_orig: type[MT] | None = None,
         _mt_orig_kwargs: dict[str, Any] | None = None,
         _depth: int = 0,
     ) -> Quantity[DT, MT]:
         _ensure_pandas()
-        if isinstance(val, Quantity):
-            if unit is not None:
-                raise ValueError(
-                    f"Cannot pass unit: {unit} when input val is a Quantity: {val}. "
-                    "The unit must be None when passing a Quantity as input. "
-                    'Use Quantity(1, "unit").to("other_unit") to convert to a different unit.'
-                )
-
-            val, unit = val.m, val.u
 
         valid_unit = cls._validate_unit(unit)
         valid_magnitude = cls._validate_magnitude(val)
 
         # NOTE: "original" in this case does not necessarily refer to the type
         # that is actually passed to the constructor
-        # for example list[int] is converted to np.ndarray before this magnitude type is even checked
-        _original_magnitude_type = _mt_orig if _mt_orig is not None else cls._get_magnitude_type(valid_magnitude)
+        # for example list[int] is converted to np.ndarray before this (in _validate_magnitude)
+        _original_magnitude_type = _mt_orig if _mt_orig is not None else type(valid_magnitude)
         _original_magnitude_kwargs = _mt_orig_kwargs if _mt_orig_kwargs is not None else {}
 
         # special case for pd.Series, must convert to np.ndarray to avoid
@@ -575,7 +550,7 @@ class Quantity(
                 "name": valid_magnitude.name,
             }
 
-            valid_magnitude = cls._cast_array_float(valid_magnitude.to_numpy())
+            valid_magnitude = cast(MT, cls._cast_array_float(valid_magnitude.to_numpy()))
 
         # compare dimensionalities with tolerance for float precision
         is_incomplete_subclass = cls._dimensionality_type is Dimensionality or not _units_containers_equal(
@@ -594,20 +569,21 @@ class Quantity(
 
             # special case for temperature difference
             if valid_unit._units in cls.TEMPERATURE_DIFFERENCE_UCS:
-                subcls = cls._get_dimensional_subclass(TemperatureDifference, cls._get_magnitude_type(valid_magnitude))
+                subcls = cls._get_dimensional_subclass(TemperatureDifference, type(valid_magnitude))
             else:
                 dim = Dimensionality.get_dimensionality(valid_unit.dimensionality)
-                subcls = cls._get_dimensional_subclass(dim, cls._get_magnitude_type(valid_magnitude))
+                subcls = cls._get_dimensional_subclass(dim, type(valid_magnitude))
 
             return subcls(
-                cast(MT, valid_magnitude),
+                valid_magnitude,
                 valid_unit,
                 _mt_orig=_original_magnitude_type,
                 _mt_orig_kwargs=_original_magnitude_kwargs,
                 _depth=_depth + 1,
             )
 
-        qty = cast(Quantity[DT, MT], super().__new__(cls, valid_magnitude, units=valid_unit))
+        _qty = super().__new__(cls, valid_magnitude, units=valid_unit)
+        qty = cast(Quantity[DT, MT], _qty)
 
         # ensure that pint did not change the dtype of numpy arrays
         if isinstance(qty._magnitude, np.ndarray):
@@ -1281,7 +1257,7 @@ class Quantity(
             )
 
         subcls = self._get_dimensional_subclass(dim, self._magnitude_type)
-        return cast(Quantity[DT_, MT], subcls(self))
+        return cast(Quantity[DT_, MT], subcls(self.m, self.v))
 
     def astype(
         self,
@@ -1294,9 +1270,7 @@ class Quantity(
         _is_iterable = isinstance(m, Iterable)
 
         # astype for np.ndarray should be called directly except for some special cases
-        custom_conversion = [pd.Series, pl.Series, list[float]]
-
-        if isinstance(m, np.ndarray) and magnitude_type not in custom_conversion:
+        if isinstance(m, np.ndarray) and magnitude_type not in (pd.Series, pl.Series, list[float]):
             return self.subclass(m.astype(magnitude_type), u)  # type: ignore[return-value]
 
         if magnitude_type == pl.Expr:
@@ -1310,11 +1284,6 @@ class Quantity(
                 return self.subclass([float(n) for n in m], u)  # type: ignore[return-value]
             else:
                 return self.subclass(float(m), u)  # type: ignore[return-value]
-
-        if magnitude_type == list[float]:
-            if not _is_iterable:
-                m = [m]
-            return self.subclass([float(n) for n in m], u)  # type: ignore[return-value]
 
         if magnitude_type == np.ndarray:
             if not _is_iterable:
