@@ -11,14 +11,13 @@ from abc import ABC
 from typing import TYPE_CHECKING, Literal, TypeVar, get_origin
 
 import numpy as np
+import polars as pl
 from pint.util import UnitsContainer
 
 if TYPE_CHECKING:
     import pandas as pd
-    import polars as pl
 else:
     pd = None
-    pl = None
 
 BASE_SI_UNITS = (
     "m",

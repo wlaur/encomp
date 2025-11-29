@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, TypeVar, cast
 
 import numpy as np
 import pint
+import polars as pl
 from pint.errors import DimensionalityError
 from pint.facets.numpy.quantity import NumpyQuantity
 from pint.facets.plain.unit import PlainUnit
@@ -46,11 +47,9 @@ from .utypes import (
 
 if TYPE_CHECKING:
     import pandas as pd
-    import polars as pl
     import sympy as sp  # type: ignore[import-untyped]
 else:
     pd = None
-    pl = None
     sp = None
 
 
