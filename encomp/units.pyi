@@ -155,7 +155,7 @@ class Quantity(
     dimensionless: bool
     _dimensionality_type: type[Dimensionality]
 
-    def _ok_for_muldiv(self) -> bool: ...
+    def _ok_for_muldiv(self, no_offset_units: int | None = None) -> bool: ...
     def __hash__(self) -> int: ...
     def __class_getitem__(
         cls, types: type[DT] | tuple[type[DT], type[MT]]
@@ -237,9 +237,6 @@ class Quantity(
         self: Quantity[Dimensionality, pl.Expr], index: int
     ) -> Quantity[DT, pl.Expr]: ...
     @overload
-    def __getitem__(
-        self: Quantity[Dimensionality, pd.DatetimeIndex], index: int
-    ) -> Quantity[DT, pd.Timestamp]: ...
     @overload
     def __getitem__(
         self: Quantity[Dimensionality, np.ndarray], index: int
