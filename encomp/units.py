@@ -36,7 +36,7 @@ from pydantic_core import core_schema
 from .misc import isinstance_types
 from .settings import SETTINGS
 from .utypes import (
-    _BASE_SI_UNITS,
+    BASE_SI_UNITS,
     DT,
     DT_,
     MT,
@@ -902,7 +902,7 @@ class Quantity(
         # also consider custom dimensions defined
         # with encomp.units.define_dimensionality
         cls._dimension_symbol_map |= {
-            cls.get_unit_symbol(n): cls.get_unit(n) for n in list(_BASE_SI_UNITS) + CUSTOM_DIMENSIONS
+            cls.get_unit_symbol(n): cls.get_unit(n) for n in list(BASE_SI_UNITS) + CUSTOM_DIMENSIONS
         }
 
     @classmethod

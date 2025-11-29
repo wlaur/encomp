@@ -3,34 +3,51 @@ Contains type definitions for :py:class:`encomp.units.Quantity` objects.
 
 The dimensionalities defined in this module can be combined with ``*`` and ``/``.
 Some commonly used derived dimensionalities (like density) are defined for convenience.
-
-This module can be star-imported, variables prefixed with ``_`` will not
-be imported in this case.
 """
 
 from __future__ import annotations
 
 from abc import ABC
-from typing import (  # type: ignore[attr-defined]
-    TYPE_CHECKING,
-    Literal,
-    TypeVar,
-    _LiteralGenericAlias,
-)
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Literal, TypeVar, get_origin
 
 import numpy as np
 import pandas as pd
 import polars as pl
 from pint.util import UnitsContainer
 
-_BASE_SI_UNITS = ("m", "kg", "s", "K", "mol", "A", "cd")
+BASE_SI_UNITS = (
+    "m",
+    "kg",
+    "s",
+    "K",
+    "mol",
+    "A",
+    "cd",
+)
 
 # these string literals are used to infer the dimensionality
 # of commonly created quantities
 # they are only used by type checkers and ignored at runtime
-DimensionlessUnits = Literal["", "%", "-", "dimensionless", None]
+DimensionlessUnits = Literal[
+    "",
+    "%",
+    "-",
+    "dimensionless",
+    None,
+]
 
-CurrencyUnits = Literal["SEK", "EUR", "USD", "kSEK", "kEUR", "kUSD", "MSEK", "MEUR", "MUSD"]
+CurrencyUnits = Literal[
+    "SEK",
+    "EUR",
+    "USD",
+    "kSEK",
+    "kEUR",
+    "kUSD",
+    "MSEK",
+    "MEUR",
+    "MUSD",
+]
 
 CurrencyPerEnergyUnits = Literal[
     "SEK/MWh",
@@ -101,9 +118,24 @@ CurrencyPerTimeUnits = Literal[
 ]
 
 
-LengthUnits = Literal["m", "meter", "km", "cm", "mm", "um"]
+LengthUnits = Literal[
+    "m",
+    "meter",
+    "km",
+    "cm",
+    "mm",
+    "um",
+]
 
-MassUnits = Literal["kg", "g", "ton", "tonne", "t", "mg", "ug"]
+MassUnits = Literal[
+    "kg",
+    "g",
+    "ton",
+    "tonne",
+    "t",
+    "mg",
+    "ug",
+]
 
 TimeUnits = Literal[
     "s",
@@ -125,21 +157,59 @@ TimeUnits = Literal[
     "us",
 ]
 
-TemperatureUnits = Literal["degC", "°C", "K", "degF", "°F", "℃", "℉"]
+TemperatureUnits = Literal[
+    "degC",
+    "°C",
+    "K",
+    "degF",
+    "°F",
+    "℃",
+    "℉",
+]
 
-TemperatureDifferenceUnits = Literal["delta_°C", "delta_degC", "Δ°C", "Δ℃", "delta_°F", "delta_degF", "Δ°F", "Δ℉"]
+TemperatureDifferenceUnits = Literal[
+    "delta_°C",
+    "delta_degC",
+    "Δ°C",
+    "Δ℃",
+    "delta_°F",
+    "delta_degF",
+    "Δ°F",
+    "Δ℉",
+]
 
-SubstanceUnits = Literal["mol", "kmol"]
+SubstanceUnits = Literal[
+    "mol",
+    "kmol",
+]
 
-MolarMassUnits = Literal["g/mol", "kg/kmol"]
+MolarMassUnits = Literal[
+    "g/mol",
+    "kg/kmol",
+]
 
-SubstancePerMassUnits = Literal["mol/g", "kmol/kg"]
+SubstancePerMassUnits = Literal[
+    "mol/g",
+    "kmol/kg",
+]
 
-CurrentUnits = Literal["A", "mA"]
+CurrentUnits = Literal[
+    "A",
+    "mA",
+]
 
 LuminosityUnits = Literal["lm"]
 
-AreaUnits = Literal["m2", "m^2", "m**2", "m²", "cm2", "cm^2", "cm**2", "cm²"]
+AreaUnits = Literal[
+    "m2",
+    "m^2",
+    "m**2",
+    "m²",
+    "cm2",
+    "cm^2",
+    "cm**2",
+    "cm²",
+]
 
 VolumeUnits = Literal[
     "L",
@@ -159,9 +229,27 @@ VolumeUnits = Literal[
     "cm**3",
 ]
 
-NormalVolumeUnits = Literal["normal liter", "Nm3", "nm3", "Nm^3", "nm^3", "Nm³", "nm³", "Nm**3", "nm**3"]
+NormalVolumeUnits = Literal[
+    "normal liter",
+    "Nm3",
+    "nm3",
+    "Nm^3",
+    "nm^3",
+    "Nm³",
+    "nm³",
+    "Nm**3",
+    "nm**3",
+]
 
-PressureUnits = Literal["bar", "kPa", "Pa", "MPa", "mbar", "mmHg", "atm"]
+PressureUnits = Literal[
+    "bar",
+    "kPa",
+    "Pa",
+    "MPa",
+    "mbar",
+    "mmHg",
+    "atm",
+]
 
 MassFlowUnits = Literal[
     "kg/s",
@@ -237,11 +325,24 @@ NormalVolumeFlowUnits = Literal[
     "nm**3/hr",
 ]
 
-DensityUnits = Literal["kg/m3", "kg/m**3", "kg/m^3", "kg/m³", "kg/liter", "g/l", "g/L", "gram/liter"]
+DensityUnits = Literal[
+    "kg/m3",
+    "kg/m**3",
+    "kg/m^3",
+    "kg/m³",
+    "kg/liter",
+    "g/l",
+    "g/L",
+    "gram/liter",
+]
 
-
-SpecificVolumeUnits = Literal["m3/kg", "m^3/kg", "m³/kg", "l/g", "L/g"]
-
+SpecificVolumeUnits = Literal[
+    "m3/kg",
+    "m^3/kg",
+    "m³/kg",
+    "l/g",
+    "L/g",
+]
 
 NormalVolumePerMassUnits = Literal[
     "Nm3/kg",
@@ -252,8 +353,19 @@ NormalVolumePerMassUnits = Literal[
     "nm³/kg",
 ]
 
-
-EnergyUnits = Literal["J", "kJ", "MJ", "GJ", "TJ", "PJ", "kWh", "MWh", "Wh", "GWh", "TWh"]
+EnergyUnits = Literal[
+    "J",
+    "kJ",
+    "MJ",
+    "GJ",
+    "TJ",
+    "PJ",
+    "kWh",
+    "MWh",
+    "Wh",
+    "GWh",
+    "TWh",
+]
 
 PowerUnits = Literal[
     "W",
@@ -284,11 +396,34 @@ PowerUnits = Literal[
     "TWh/year",
 ]
 
-VelocityUnits = Literal["m/s", "km/s", "m/min", "cm/s", "cm/min", "km/h", "kmh", "kph"]
+VelocityUnits = Literal[
+    "m/s",
+    "km/s",
+    "m/min",
+    "cm/s",
+    "cm/min",
+    "km/h",
+    "kmh",
+    "kph",
+]
 
-DynamicViscosityUnits = Literal["Pa*s", "Pa s", "cP"]
+DynamicViscosityUnits = Literal[
+    "Pa*s",
+    "Pa s",
+    "cP",
+]
 
-KinematicViscosityUnits = Literal["m2/s", "m**2/s", "m^2/s", "m²/s", "cSt", "cm2/s", "cm**2/s", "cm^2/s", "cm²/s"]
+KinematicViscosityUnits = Literal[
+    "m2/s",
+    "m**2/s",
+    "m^2/s",
+    "m²/s",
+    "cSt",
+    "cm2/s",
+    "cm**2/s",
+    "cm^2/s",
+    "cm²/s",
+]
 
 EnergyPerMassUnits = Literal[
     "MJ/kg",
@@ -334,7 +469,7 @@ def get_registered_units() -> dict[str, tuple[str, ...]]:
     ret = {}
 
     for k, v in globals().items():
-        if isinstance(v, _LiteralGenericAlias) and k.endswith("Units"):
+        if get_origin(v) is Literal and k.endswith("Units"):
             ret[k.removesuffix("Units")] = v.__args__
 
     return ret
@@ -496,50 +631,51 @@ _LuminosityUC = UnitsContainer({"[luminosity]": 1})
 
 
 # NOTE: each subclass definition will create an entry in Dimensionality._registry
-# reloading (re-importing) this module will clear and reset the registry
+# reloading this module will clear and reset the registry
 
+Numpy1DArray = np.ndarray[tuple[int], np.dtype[np.floating]]
 
 # pyright supports TypeVar default (PEP 696), but it raises an error at runtime
-# this will be implemented in Python 3.12
-# TODO: this will likely not work with mypy
+# supported for Python 3.13+
 if TYPE_CHECKING:
     # NOTE: int and float are interchangeable as far as the type checker is concerned,
     # but list[int] and list[float] are distinct
     MT = TypeVar(
         "MT",
         float,
-        np.ndarray,
+        Sequence[float],
+        Numpy1DArray,
         pd.Series,
         pd.DatetimeIndex,
-        pd.Timestamp,
         pl.Series,
         pl.Expr,
-        default=np.ndarray,
+        default=Numpy1DArray,
     )
 
     MT_ = TypeVar(
         "MT_",
         float,
-        np.ndarray,
+        Sequence[float],
+        Numpy1DArray,
         pd.Series,
         pd.DatetimeIndex,
-        pd.Timestamp,
         pl.Series,
         pl.Expr,
-        default=np.ndarray,
+        default=Numpy1DArray,
     )
 
+    # reduced subset of magnitude types
     MTR = TypeVar(
         "MTR",
         float,
-        np.ndarray,
-        default=np.ndarray,
+        Numpy1DArray,
+        default=Numpy1DArray,
     )
 
     # type variables that represent a certain dimensionality
     # the DT_ type variable is used to signify a different
     # (possible identical) dimensionality than DT
-    # these type variables are marked as covariable to ensure that
+    # these type variables are marked as covariant to ensure that
     # Q[Mass] is a subtype of Q[Dimensionality]
     # however, this only holds for the relationship DimX -> Dimensionality (parent)
     # for any other dimensionalities, e.g. DimA and DimB
@@ -550,35 +686,10 @@ if TYPE_CHECKING:
 
 else:
     # this does nothing at runtime
-    MT = TypeVar(
-        "MT",
-        float,
-        np.ndarray,
-        pd.Series,
-        pd.DatetimeIndex,
-        pd.Timestamp,
-        pl.Series,
-        pl.Expr,
-    )
-
-    # reduced subset of magnitude types
-    MTR = TypeVar(
-        "MTR",
-        float,
-        np.ndarray,
-    )
-
-    MT_ = TypeVar(
-        "MT_",
-        float,
-        np.ndarray,
-        pd.Series,
-        pd.DatetimeIndex,
-        pd.Timestamp,
-        pl.Series,
-        pl.Expr,
-    )
-
+    # needed for compatibility with Python < 3.13
+    MT = TypeVar("MT", float)
+    MTR = TypeVar("MTR", float)
+    MT_ = TypeVar("MT_", float)
     DT = TypeVar("DT", bound=Dimensionality)
     DT_ = TypeVar("DT_", bound=Dimensionality)
 
