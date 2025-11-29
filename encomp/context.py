@@ -5,7 +5,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from .units import set_quantity_format, ureg
+from .units import UNIT_REGISTRY, set_quantity_format
 
 
 @contextmanager
@@ -82,7 +82,7 @@ def quantity_format(fmt: str = "compact") -> Iterator[None]:
         Also accepts aliases: ``'compact': '~P'`` and ``'siunitx': '~Lx'``.
     """
 
-    default = ureg.formatter.default_format or "~P"
+    default = UNIT_REGISTRY.formatter.default_format or "~P"
 
     set_quantity_format(fmt)
 

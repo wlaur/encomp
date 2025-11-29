@@ -14,7 +14,7 @@ import logging
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
-from typing import Annotated, Any, ClassVar, Generic, Literal, cast
+from typing import Annotated, Any, ClassVar, Generic, Literal, TypeVar, cast
 
 import numpy as np
 import pandas as pd
@@ -27,7 +27,6 @@ from .settings import SETTINGS
 from .structures import flatten
 from .units import DimensionalityError, ExpectedDimensionalityError, Quantity, Unit
 from .utypes import (
-    MTR,
     Density,
     Dimensionality,
     Dimensionless,
@@ -43,6 +42,7 @@ from .utypes import (
     MolarSpecificEnthalpy,
     MolarSpecificEntropy,
     MolarSpecificInternalEnergy,
+    Numpy1DArray,
     Pressure,
     SpecificEnthalpy,
     SpecificEntropy,
@@ -53,6 +53,14 @@ from .utypes import (
     Temperature,
     ThermalConductivity,
     Velocity,
+)
+
+MTR = TypeVar(
+    "MTR",
+    int,
+    float,
+    Numpy1DArray,
+    default=Numpy1DArray,
 )
 
 _LOGGER = logging.getLogger(__name__)

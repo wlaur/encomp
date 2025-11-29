@@ -20,6 +20,7 @@ from ..misc import isinstance_types
 from ..serialize import decode
 from ..units import (
     CUSTOM_DIMENSIONS,
+    UNIT_REGISTRY,
     DimensionalityError,
     DimensionalityRedefinitionError,
     DimensionalityTypeError,
@@ -27,7 +28,6 @@ from ..units import (
     Quantity,
     Unit,
     define_dimensionality,
-    ureg,
 )
 from ..units import Quantity as Q
 from ..utypes import (
@@ -59,18 +59,18 @@ from ..utypes import (
 def test_registry() -> None:
     from pint import _DEFAULT_REGISTRY, application_registry
 
-    us = [ureg, _DEFAULT_REGISTRY, application_registry.get()]
+    us = [UNIT_REGISTRY, _DEFAULT_REGISTRY, application_registry.get()]
 
     # check that all these objects are the same
     assert len(set(map(id, us))) == 1
 
     # check that units from all objects can be combined
-    q = 1 * ureg.kg / _DEFAULT_REGISTRY.s**2 / application_registry.get().m
+    q = 1 * UNIT_REGISTRY.kg / _DEFAULT_REGISTRY.s**2 / application_registry.get().m
     assert isinstance(q, Q[Pressure])
 
     # options cannot be overridden once set
-    ureg.force_ndarray_like = True
-    assert not ureg.force_ndarray_like
+    UNIT_REGISTRY.force_ndarray_like = True
+    assert not UNIT_REGISTRY.force_ndarray_like
 
 
 def test_define_dimensionality() -> None:
@@ -524,11 +524,11 @@ def test_custom_units() -> None:
 
 
 def test_wraps() -> None:
-    # @ureg.wraps(ret, args, strict=True|False) is a convenience
+    # @UNIT_REGISTRY.wraps(ret, args, strict=True|False) is a convenience
     # decorator for making the input/output of a function into Quantity
     # however, it does not enforce the return value
 
-    @ureg.wraps("kg", ("m", "kg"), strict=True)
+    @UNIT_REGISTRY.wraps("kg", ("m", "kg"), strict=True)
     def func(a, b):  # noqa: ANN001, ANN202
         # this is incorrect, cannot add 1 to a dimensional Quantity
         return a * b**2 + 1
@@ -577,14 +577,14 @@ def test_series_integration() -> None:
 def test_check() -> None:
     pass
 
-    # TODO: the ureg.check decorator does not work since
+    # TODO: the UNIT_REGISTRY.check decorator does not work since
     # it uses nested Quantity inputs
 
     # assert not Q(1, 'kg').check('[energy]')
     # assert Q(1, 'kg').check(Mass)
     # assert not Q(1, 'kg').check(Energy)
 
-    # @ureg.check('[length]', '[mass]')
+    # @UNIT_REGISTRY.check('[length]', '[mass]')
     # def func(a, b):
     #     return a * b
 
@@ -1107,20 +1107,20 @@ def test_pandas_integration() -> None:
 
 
 def test_unit_compatibility() -> None:
-    # the ureg registry object contains unit attributes
+    # the UNIT_REGISTRY registry object contains unit attributes
     # that can be multiplied and divided by a magnitude
     # to create Quantity instances
 
-    assert isinstance(ureg.m * 1, Q[Length])
-    assert isinstance(1 * ureg.m / ureg.s, Q[Velocity])
-    assert isinstance([1, 2, 3] * ureg.m / ureg.s, Q[Velocity])
-    assert isinstance((1, 2, 3) * ureg.m / ureg.s, Q[Velocity])
-    assert isinstance(np.array([1, 2, 3]) * ureg.m / ureg.s, Q[Velocity])
+    assert isinstance(UNIT_REGISTRY.m * 1, Q[Length])
+    assert isinstance(1 * UNIT_REGISTRY.m / UNIT_REGISTRY.s, Q[Velocity])
+    assert isinstance([1, 2, 3] * UNIT_REGISTRY.m / UNIT_REGISTRY.s, Q[Velocity])
+    assert isinstance((1, 2, 3) * UNIT_REGISTRY.m / UNIT_REGISTRY.s, Q[Velocity])
+    assert isinstance(np.array([1, 2, 3]) * UNIT_REGISTRY.m / UNIT_REGISTRY.s, Q[Velocity])
 
 
 def test_mul_rmul_initialization() -> None:
-    assert isinstance(ureg.m * np.array([1, 2]), Q[Length])
-    assert isinstance(np.array([1, 2]) * ureg.m, Q[Length])
+    assert isinstance(UNIT_REGISTRY.m * np.array([1, 2]), Q[Length])
+    assert isinstance(np.array([1, 2]) * UNIT_REGISTRY.m, Q[Length])
     assert isinstance([1, 2] * Q(1, "m"), Q[Length])
     assert isinstance(np.array([1, 2]) * Q(1, "m"), Q[Length])
 

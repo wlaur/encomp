@@ -345,6 +345,7 @@ class Quantity(
         )
 
         cls._subclasses[dim_name, mt_name] = subcls
+
         return subcls
 
     @classmethod
@@ -371,7 +372,7 @@ class Quantity(
             cls._subclasses[dim_name, None] = DimensionalQuantity
 
         if mt is None:
-            return cast(type[Quantity[DT, MT]], DimensionalQuantity)
+            return DimensionalQuantity  # type: ignore[return-value]
 
         if isinstance(mt, UnionType):
             mt = next(n for n in get_args(mt) if n is not None)
@@ -382,7 +383,7 @@ class Quantity(
 
         # check if an existing DimensionalMagnitudeQuantity subclass already has been created
         if cached_dim_magnitude_qty := cls._subclasses.get((dim_name, mt_name)):
-            return cast(type[Quantity[DT, MT]], cached_dim_magnitude_qty)
+            return cached_dim_magnitude_qty  # type: ignore[return-value]
 
         subcls = cls._construct_dimensional_magnitude_quantity(
             DimensionalQuantity,
@@ -391,7 +392,7 @@ class Quantity(
             mt_name,
         )
 
-        return cast(type[Quantity[DT, MT]], subcls)
+        return subcls  # type: ignore[return-value]
 
     def __class_getitem__(cls, types: type[DT] | tuple[type[DT], type[MT]]) -> type[Quantity[DT, MT]]:
         if isinstance(types, tuple):
@@ -481,8 +482,7 @@ class Quantity(
     @property
     def subclass(self) -> type[Quantity[DT, MT]]:
         subcls = self._get_dimensional_subclass(self._dimensionality_type, self._magnitude_type)
-
-        return cast(type[Quantity[DT, MT]], subcls)
+        return subcls
 
     def _set_original_magnitude_attributes(self, mt_orig: type[MT], mt_orig_kwargs: dict[str, Any]) -> None:
         self._original_magnitude_type = mt_orig
@@ -1043,7 +1043,7 @@ class Quantity(
             ret = cls(magnitude, unit=qty.get("unit"))  # type: ignore[arg-type]
 
         else:
-            ret = qty if isinstance(qty, Quantity) else cast(Quantity, cls(qty))  # type: ignore[assignment]
+            ret = qty if isinstance(qty, Quantity) else cls(qty)
 
         if isinstance(ret, cls):
             return ret
@@ -1264,7 +1264,7 @@ class Quantity(
             )
 
         subcls = self._get_dimensional_subclass(dim, self._magnitude_type)
-        return cast(Quantity[DT_, MT], subcls(self.m, self.v))
+        return subcls(self.m, self.u)  # type: ignore[return-value]
 
     def astype(
         self,
