@@ -8,7 +8,6 @@ Some commonly used derived dimensionalities (like density) are defined for conve
 from __future__ import annotations
 
 from abc import ABC
-from collections.abc import Sequence
 from typing import TYPE_CHECKING, Literal, TypeVar, get_origin
 
 import numpy as np
@@ -635,18 +634,15 @@ _LuminosityUC = UnitsContainer({"[luminosity]": 1})
 
 Numpy1DArray = np.ndarray[tuple[int], np.dtype[np.floating]]
 
-# pyright supports TypeVar default (PEP 696), but it raises an error at runtime
-# supported for Python 3.13+
+# TypeVar default (PEP 696) is supported for Python 3.13+
 if TYPE_CHECKING:
     # NOTE: int and float are interchangeable as far as the type checker is concerned,
     # but list[int] and list[float] are distinct
     MT = TypeVar(
         "MT",
         float,
-        Sequence[float],
         Numpy1DArray,
         pd.Series,
-        pd.DatetimeIndex,
         pl.Series,
         pl.Expr,
         default=Numpy1DArray,
@@ -655,16 +651,14 @@ if TYPE_CHECKING:
     MT_ = TypeVar(
         "MT_",
         float,
-        Sequence[float],
         Numpy1DArray,
         pd.Series,
-        pd.DatetimeIndex,
         pl.Series,
         pl.Expr,
         default=Numpy1DArray,
     )
 
-    # reduced subset of magnitude types
+    # reduced subset of magnitude types (used by the Fluid class)
     MTR = TypeVar(
         "MTR",
         float,
@@ -685,11 +679,10 @@ if TYPE_CHECKING:
     DT_ = TypeVar("DT_", bound=Dimensionality, default=Dimensionality, covariant=True)
 
 else:
-    # this does nothing at runtime
-    # needed for compatibility with Python < 3.13
+    # needed for compatibility with Python < 3.13, this does nothing at runtime
     MT = TypeVar("MT", float)
-    MTR = TypeVar("MTR", float)
     MT_ = TypeVar("MT_", float)
+    MTR = TypeVar("MTR", float)
     DT = TypeVar("DT", bound=Dimensionality)
     DT_ = TypeVar("DT_", bound=Dimensionality)
 
