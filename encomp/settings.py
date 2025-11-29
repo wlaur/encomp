@@ -5,24 +5,21 @@ Contains settings used elsewhere in the library.
 from pathlib import Path
 from typing import Literal
 
-from dotenv import find_dotenv, load_dotenv
 from pydantic import FilePath
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# find the first file named ".env" in the current directory or a parent directory
-load_dotenv(dotenv_path=find_dotenv(filename=".env"))
-
 ENCOMP_BASE = Path(__file__).parent.resolve()
+
+
+PintFormattingSpecifier = Literal["~P", "~L", "~H", "~Lx"]
+PINT_FORMATTING_SPECIFIERS = ("~P", "~L", "~H", "~Lx")
 
 
 class Settings(BaseSettings):
     """
     Settings class.
 
-    Use an ``.env``-file to override the defaults.
-    The ``.env``-file is located using ``dotenv.find_dotenv(filename='.env')``,
-    this will find a file in the directory of the running
-    Python process or in a parent directory.
+    Use an ``.env``-file to override the defaults, make sure to load it with the ``python-dotenv`` package.
 
     The variables in the ``.env``-file have the same names (not case-sensitive)
     as the attributes of this class, with the additional prefix ``ENCOMP_``.
@@ -60,7 +57,7 @@ class Settings(BaseSettings):
     ignore_coolprop_warnings: bool = True
 
     autoconvert_offset_to_baseunit: bool = False
-    default_unit_format: Literal["~P", "~L", "~H", "~Lx"] = "~P"
+    default_unit_format: PintFormattingSpecifier = "~P"
 
     model_config = SettingsConfigDict(
         env_prefix="ENCOMP_",

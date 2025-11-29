@@ -632,7 +632,8 @@ _LuminosityUC = UnitsContainer({"[luminosity]": 1})
 # NOTE: each subclass definition will create an entry in Dimensionality._registry
 # reloading this module will clear and reset the registry
 
-Numpy1DArray = np.ndarray[tuple[int], np.dtype[np.floating]]
+Numpy1DArray = np.ndarray[tuple[int], np.dtype[np.float64]]
+Magnitude = float | Numpy1DArray | pd.Series | pl.Series | pl.Expr
 
 # TypeVar default (PEP 696) is supported for Python 3.13+
 if TYPE_CHECKING:
