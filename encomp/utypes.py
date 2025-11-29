@@ -25,12 +25,13 @@ BASE_SI_UNITS = (
     "cd",
 )
 
-# these string literals are used to infer the dimensionality
-# of commonly created quantities
+# these string literals are used to infer the dimensionality of commonly created quantities
 # they are only used by type checkers and ignored at runtime
 DimensionlessUnits = Literal[
     "",
     "%",
+    "percent",
+    "pct",
     "-",
     "dimensionless",
     None,
@@ -681,9 +682,9 @@ if TYPE_CHECKING:
 
 else:
     # needed for compatibility with Python < 3.13, this does nothing at runtime
-    MT = TypeVar("MT", float)
-    MT_ = TypeVar("MT_", float)
-    MTR = TypeVar("MTR", float)
+    MT = TypeVar("MT")
+    MT_ = TypeVar("MT_")
+    MTR = TypeVar("MTR")
     DT = TypeVar("DT", bound=Dimensionality)
     DT_ = TypeVar("DT_", bound=Dimensionality)
 
