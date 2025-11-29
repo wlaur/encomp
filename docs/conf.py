@@ -11,19 +11,19 @@
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 
 
-import os
 import sys
+from pathlib import Path
 
 from sphinx.domains.python import PythonDomain
 
 # make sure the local source is loaded when importing
-sys.path.insert(0, os.path.abspath(".."))
-from encomp import __version__  # noqa: E402
+sys.path.insert(0, str(Path("..").absolute()))
+from encomp import __version__
 
 # -- Project information -----------------------------------------------------
 
 project = "encomp"
-copyright = "2023, William Laurén"
+copyright = "2023, IndMeas"
 author = "William Laurén"
 
 
@@ -127,10 +127,10 @@ class PatchedPythonDomain(PythonDomain):
     def resolve_xref(self, env, fromdocname, builder, typ, target, node, contnode):
         if "refspecific" in node:
             del node["refspecific"]
-        return super(PatchedPythonDomain, self).resolve_xref(
+        return super().resolve_xref(
             env, fromdocname, builder, typ, target, node, contnode
         )
 
 
-def setup(sphinx):
+def setup(sphinx) -> None:
     sphinx.add_domain(PatchedPythonDomain, override=True)

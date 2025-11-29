@@ -2,11 +2,6 @@
 Functions relating to thermodynamics.
 """
 
-try:
-    from scipy.optimize import fsolve
-except ImportError:
-    fsolve = None
-
 from .constants import CONSTANTS
 from .units import Quantity
 from .utypes import (
@@ -34,13 +29,7 @@ def heat_balance(
     | Quantity[TemperatureDifference]
     | Quantity[Temperature],
     cp: Quantity[SpecificHeatCapacity] = DEFAULT_CP,
-) -> (
-    Quantity[Mass]
-    | Quantity[MassFlow]
-    | Quantity[Energy]
-    | Quantity[Power]
-    | Quantity[TemperatureDifference]
-):
+) -> Quantity[Mass] | Quantity[MassFlow] | Quantity[Energy] | Quantity[Power] | Quantity[TemperatureDifference]:
     """
     Solves the heat balance equation
 
@@ -86,8 +75,7 @@ def heat_balance(
             if isinstance(a, tp[0]):
                 if param_name == "dT" and not a._ok_for_muldiv():
                     raise ValueError(
-                        f"Cannot pass temperature difference using "
-                        f"degree unit {a.u}, convert to delta_deg"
+                        f"Cannot pass temperature difference using degree unit {a.u}, convert to delta_deg"
                     )
 
                 vals[param_name] = a
@@ -116,9 +104,7 @@ def heat_balance(
         unit = units["dT"][0]
 
         if not ret.check(TemperatureDifference):
-            raise ValueError(
-                f"Both units must be per unit time in case one " f"of them is: {vals}"
-            )
+            raise ValueError(f"Both units must be per unit time in case one of them is: {vals}")
 
         ret.ito("delta_degC")
 
@@ -180,10 +166,7 @@ def intermediate_temperatures(
         the surface temperatures of the inside and outside of the barrier
     """
 
-    if fsolve is None:
-        raise ModuleNotFoundError(
-            "Module scipy.optimize was not found, " 'install with "pip install scipy"'
-        )
+    from scipy.optimize import fsolve
 
     # convert input to numerical values with correct unit
     T_s_val = T_s.to("K").m
@@ -202,11 +185,7 @@ def intermediate_temperatures(
     def fun(x):
         T1, T2 = x
 
-        eq1 = (
-            k_val / d_val * (T1 - T2)
-            - h_out_val * (T2 - T_s_val)
-            - epsilon * SIGMA.m * (T2**4 - T_s_val**4)
-        )
+        eq1 = k_val / d_val * (T1 - T2) - h_out_val * (T2 - T_s_val) - epsilon * SIGMA.m * (T2**4 - T_s_val**4)
 
         eq2 = k_val / d_val * (T1 - T2) - h_in_val * (T_b_val - T1)
 

@@ -1,151 +1,158 @@
-[tool.poetry]
+[project]
 name = "encomp"
-version = "0.9.14"
+version = "1.3.0"
 description = "General-purpose library for engineering calculations"
-authors = ["William Laurén <lauren.william.a@gmail.com>"]
+authors = [{ name = "William Laurén", email = "lauren.william.a@gmail.com" }]
+requires-python = "~=3.11"
 readme = "README.md"
 license = "MIT"
-packages = [{ include = "encomp" }]
-include = ["encomp/defs"]
+dependencies = [
+    "python-dotenv",
+    "fire",
+    "pydantic",
+    "pydantic-settings",
+    "typeguard",
+    "typing-extensions",
+    "asttokens",
+    "numpy",
+    "pandas",
+    "pyarrow",
+    "polars",
+    "sympy",
+    "pint>=0.25.2",
+    "coolprop",
+    "uncertainties",
+    "fluids",
+    "thermo",
+]
 
 
-[tool.poetry.dependencies]
-python = "^3.10"
-python-dateutil = "*"
-python-dotenv = "*"
-pydantic = "~2"
-pydantic-settings = "~2"
-typeguard = "*"
-typing-extensions = "*"
-asttokens = "*"
-numpy = "*"
-pandas = "*"
-pyarrow = "*"
-polars = "*"
-sympy = "*"
-symbolic-equation = "*"
-pint = "~0.22"
-coolprop = "*"
-uncertainties = "*"
-matplotlib = { version = "*", optional = true }
-seaborn = { version = "*", optional = true }
-scipy = { version = "*", optional = true }
-fire = { version = "*", optional = true }
-fluids = { version = "*", optional = true }
-thermo = { version = "*", optional = true }
-ht = { version = "*", optional = true }
+[project.optional-dependencies]
+extra = ["scipy"]
 
+[dependency-groups]
+dev = [
+    "pre-commit",
+    "mypy",
+    "ruff",
+    "pytest",
+    "hypothesis",
+    "pytest-asyncio",
+    "pandas-stubs",
+    "coverage",
+    "Sphinx",
+    "nbsphinx",
+    "furo",
+    "sphinx-inline-tabs",
+    "sphinx-copybutton",
+    "sphinx-gallery",
+    "sphinx-autodoc-typehints",
+    "sphinx-autobuild",
+    "pyinstrument",
+]
 
-[tool.poetry.extras]
-optional = ["matplotlib", "seaborn", "scipy", "fire", "fluids", "thermo", "ht"]
+[tool.hatch.build.targets.sdist]
+include = ["encomp", "encomp/defs"]
 
-[tool.poetry.group.dev.dependencies]
-fire = "*"
-jupyterlab = "*"
-jupyter_server = "*"
-jupyterlab_server = "*"
-pkginfo = "*"
-wheel = "*"
-setuptools = "*"
-black = { version = "*", extras = ["jupyter"] }
-mypy = "*"
-ruff = "*"
-pytest = "*"
-hypothesis = "*"
-pytest-asyncio = "*"
-pandas-stubs = "*"
-coverage = "*"
-Sphinx = "*"
-nbsphinx = "*"
-furo = "*"
-sphinx-inline-tabs = "*"
-sphinx-copybutton = "*"
-sphinx-gallery = "*"
-sphinx-autodoc-typehints = "*"
-sphinx-autobuild = "*"
-matplotlib = "*"
-seaborn = "*"
-types-requests = "*"
-types-PyYAML = "*"
-types-python-dateutil = "*"
-jupyterlab-code-formatter = "*"
-jupyterlab-spellchecker = "*"
-pyinstrument = "*"
-pre-commit = "*"
-numpydoc = "*"
-
+[tool.hatch.build.targets.wheel]
+include = ["encomp", "encomp/defs"]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
-
-[tool.black]
-line-length = 88
-target-version = ["py311"]
-include = '\.pyi?$'
-exclude = '''
-/(
-    \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | _build
-  | buck-out
-  | build
-  | dist
-  | generated
-)/
-'''
-
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.ruff]
-select = ["E", "F"]
-ignore = ["N817", "N806", "N803", "N802", "N811", "N814"]
+lint.select = [
+    "E",
+    "W",
+    "F",
+    "B",
+    "I",
+    "N",
+    "UP",
+    "ANN",
+    "C4",
+    "ISC",
+    "ICN",
+    "SIM",
+    "ARG",
+    "PTH",
+    "PD",
+    "INT",
+    "FLY",
+    "RUF",
+]
+lint.ignore = [
+    "N817",
+    "N806",
+    "N803",
+    "N802",
+    "N811",
+    "N814",
+    "N805",
+    "RUF007",
+    "RUF012",
+    "ISC001",
+]
+
+lint.dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 exclude = [
-  ".bzr",
-  ".direnv",
-  ".eggs",
-  ".git",
-  ".hg",
-  ".mypy_cache",
-  ".nox",
-  ".pants.d",
-  ".pytype",
-  ".ruff_cache",
-  ".svn",
-  ".tox",
-  ".venv",
-  "__pypackages__",
-  "__pycache__",
-  "_build",
-  "buck-out",
-  "build",
-  "dist",
-  "node_modules",
-  "venv",
-  "generated",
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "__pycache__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+    "generated",
+    "**/*.pyi",
+    "docs",
 ]
 
 line-length = 120
 
-# Allow unused variables when underscore-prefixed.
-dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
-
 target-version = "py311"
 
-[tool.ruff.mccabe]
+[tool.ruff.lint.mccabe]
 max-complexity = 10
 
 [tool.pytest.ini_options]
 filterwarnings = [
-  # ignore the mypy-testing marks when this plugin is disabled
-  "ignore::_pytest.warning_types.PytestUnknownMarkWarning",
+    # ignore the mypy-testing marks when this plugin is disabled
+    "ignore::_pytest.warning_types.PytestUnknownMarkWarning",
 
-  # ignore CoolProp warnings for NaN/out of bounds inputs
-  "ignore:CoolProp could not calculate*:UserWarning",
+    # ignore CoolProp warnings for NaN/out of bounds inputs
+    "ignore:CoolProp could not calculate*:UserWarning",
 
-  "ignore::pint.UnitStrippedWarning",
+    "ignore::pint.UnitStrippedWarning",
 ]
+
+[tool.mypy]
+ignore_missing_imports = false
+show_error_codes = true
+warn_unused_ignores = true
+warn_return_any = true
+warn_unused_configs = true
+explicit_package_bases = false
+namespace_packages = false
+check_untyped_defs = true
+plugins = ["pydantic.mypy"]
+
+[tool.pydantic-mypy]
+init_typed = true
+init_forbid_extra = true
+warn_required_dynamic_aliases = true

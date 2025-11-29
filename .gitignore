@@ -110,6 +110,11 @@ ENV/
 env.bak/
 venv.bak/
 
+# General
+.DS_Store
+.AppleDouble
+.LSOverride
+
 # Spyder project settings
 .spyderproject
 .spyproject
@@ -128,7 +133,9 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-
 .vscode
 **/.virtual_documents/
 generated
+
+.python-version
+.ruff-cache/

@@ -2,8 +2,6 @@
 
 > General-purpose library for *en*gineering *comp*utations, with focus on clean and consistent interfaces.
 
-Documentation at <https://encomp.readthedocs.io/en/latest/>
-
 `encomp` is tested on Windows and Linux, with Python 3.11.
 
 ## Features
@@ -33,21 +31,6 @@ Main functionality of the `encomp` library:
 
 The other modules implement calculations related to process engineering and thermodynamics.
 The module `encomp.serialize` implements custom JSON serialization and decoding for classes used elsewhere in the library.
-
-## Installation
-
-Install with `pip`:
-
-```bash
-pip install encomp
-```
-
-This will install `encomp` along with its dependencies into the currently active Python environment.
-To also install optional dependencies:
-
-```bash
-pip install encomp[optional]
-```
 
 ## Getting started
 
@@ -89,9 +72,8 @@ Each dimensionality (for example *pressure*, *length*, *time*, *dimensionless*) 
 Common dimensionalities can be statically determined based on overload variants of the `Quantity.__new__` method (see `encomp.utypes.get_registered_units` for a list of units that support this).
 Additionally, operations using `*`, `**` and `/` are also defined using overload variants for combinations of the default dimensionalities.
 
-In case the dimensionality cannot be inferred, the type checker will use the dimensionality `Unknown`.
+In case the dimensionality cannot be inferred, the type checker will use the dimensionality `Any`.
 At runtime, the dimensionality will be evaluated based on the unit that was specified.
-The `Unknown` dimensionality is also used for operations using `*`, `**` and `/` that are not explicitly defined as overload variants.
 
 If necessary, the dimensionality of a quantity can be explicitly specified by providing a subclass of `encomp.utypes.Dimensionality` as type parameter.
 
@@ -196,7 +178,6 @@ except DimensionalityError:
     pass
 
 # create a new subclass of Quantity with restricted input units
-
 CustomCoolingCapacity = Q[TemperaturePerMassFlow]
 
 # the pint library handles a wide range of input formats and unit names
@@ -281,7 +262,3 @@ The attribute names are prefixed with `ENCOMP_`.
 ## TODO
 
 - Document the `Quantity[Dimensionality]` type system
-- What is the license of this package?
-  - For example, `pint` uses *3-Clause BSD License*, this should be compatible with `MIT`
-  - Should this package include the `pint` license text somewhere?
-    - Extending the `pint` package counts as modification
