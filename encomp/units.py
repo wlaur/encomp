@@ -14,7 +14,7 @@ import logging
 import numbers
 import re
 import warnings
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Sequence, Sized
 from types import UnionType
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, TypeVar, cast, get_args
 
@@ -453,6 +453,8 @@ class Quantity(
 
     @staticmethod
     def _validate_magnitude(val: MT | Sequence[int | float]) -> MT:
+        _ensure_pandas()
+
         if isinstance(val, int):
             return float(val)  # type: ignore[return-value]
 
@@ -630,20 +632,31 @@ class Quantity(
         # handle the edge case where a 1-element pd.Series is
         # multiplied or divided by an N-element pd.Series
 
-        if "index" in self._original_magnitude_kwargs:
-            index = self._original_magnitude_kwargs["index"]
+        m: MT
+        u: Unit[DT]
 
-            try:
-                magnitude_length = len(args[0])
-            except Exception:
-                magnitude_length = None
+        if len(args) == 1:
+            qty = args[0]
+            if not isinstance(qty, Quantity):
+                raise TypeError(f"Invalid input: {args}")
+
+            m, u = qty.m, qty.u
+
+        elif len(args) == 2:
+            m, u = args
+        else:
+            raise ValueError(f"Invalid input: {args}")
+
+        if index := self._original_magnitude_kwargs.get("index"):
+            magnitude_length = len(m) if isinstance(m, Sized) else None
 
             # strip the index in case it's not compatible
             if magnitude_length is not None and magnitude_length != len(index):
                 del self._original_magnitude_kwargs["index"]
 
-        return self.subclass(  # type: ignore[misc]
-            *args,
+        return self.subclass(
+            m,
+            u,
             _mt_orig=self._original_magnitude_type,
             _mt_orig_kwargs=self._original_magnitude_kwargs,
         )
