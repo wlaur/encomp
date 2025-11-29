@@ -11,11 +11,10 @@ from typing import (
 import numpy as np
 import pandas as pd
 import polars as pl
-import sympy as sp
+import sympy as sp # type: ignore[import-untyped]
 
 # this is not consistent with units.py
 from pint.errors import DimensionalityError as _DimensionalityError
-from pint.facets.formatting.objects import FormattingQuantity, FormattingUnit
 from pint.facets.measurement.objects import MeasurementQuantity
 from pint.facets.nonmultiplicative.objects import NonMultiplicativeQuantity
 from pint.facets.numpy.quantity import NumpyQuantity
@@ -138,16 +137,14 @@ CUSTOM_DIMENSIONS: list[str]
 def define_dimensionality(name: str, symbol: str = ...) -> None: ...
 def set_quantity_format(fmt: str = ...) -> None: ...
 
-class Unit(PlainUnit, NumpyUnit, FormattingUnit, Generic[DT]):
+class Unit(NumpyUnit, Generic[DT]):
     dimensionality: UnitsContainer
     _units: UnitsContainer
 
 class Quantity(
     NonMultiplicativeQuantity,
-    PlainQuantity,
     MeasurementQuantity,
     NumpyQuantity,
-    FormattingQuantity,
     Generic[DT, MT],
     SupportsAbs,
     SupportsRound,
@@ -184,7 +181,7 @@ class Quantity(
     def ito(self, unit: Unit[DT] | UnitsContainer | str) -> None: ...
     def check(
         self,
-        unit: (
+        dimension: (
             Quantity[Dimensionality, Any]
             | UnitsContainer
             | Unit
@@ -501,10 +498,6 @@ class Quantity(
     ) -> Quantity[Volume, MT]: ...
     @overload
     def __pow__(
-        self: Quantity[Dimensionality, Any], other: float | int
-    ) -> Quantity[Dimensionality, Any]: ...
-    @overload
-    def __pow__(
         self: Quantity[Dimensionless, Any], other: float | int
     ) -> Quantity[Dimensionless, Any]: ...
     @overload
@@ -752,10 +745,6 @@ class Quantity(
     def __mul__(
         self: Quantity[Mass, MT], other: Quantity[NormalVolumePerMass, MT_]
     ) -> Quantity[NormalVolume, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[Mass, MT], other: Quantity[EnergyPerMass, MT_]
-    ) -> Quantity[Energy, MT]: ...
     @overload
     def __mul__(
         self: Quantity[Time, MT], other: Quantity[Pressure, MT_]
@@ -1879,10 +1868,6 @@ class Quantity(
     def __truediv__(
         self: Quantity[Density, MT], other: Quantity[MassPerEnergy, MT_]
     ) -> Quantity[Pressure, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[Energy, MT], other: Quantity[Mass, MT_]
-    ) -> Quantity[EnergyPerMass, MT]: ...
     @overload
     def __truediv__(
         self: Quantity[Energy, MT], other: Quantity[Time, MT_]
