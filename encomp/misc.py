@@ -20,7 +20,7 @@ T = TypeVar("T")
 
 
 @overload
-def isinstance_types(obj: Any, expected: type[T]) -> TypeGuard[T]: ...  # noqa: ANN401
+def isinstance_types[T](obj: Any, expected: type[T]) -> TypeGuard[T]: ...  # noqa: ANN401
 
 
 @overload

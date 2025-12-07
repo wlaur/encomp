@@ -3,7 +3,7 @@ name = "encomp"
 version = "1.3.0"
 description = "General-purpose library for engineering calculations"
 authors = [{ name = "William Laurén", email = "lauren.william.a@gmail.com" }]
-requires-python = "~=3.11"
+requires-python = ">=3.13"
 readme = "README.md"
 license = "MIT"
 dependencies = [
@@ -125,7 +125,7 @@ exclude = [
 
 line-length = 120
 
-target-version = "py311"
+target-version = "py313"
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10

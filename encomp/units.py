@@ -16,7 +16,7 @@ import re
 import warnings
 from collections.abc import Iterable, Sequence, Sized
 from types import UnionType
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, TypeVar, cast, get_args
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar, cast, get_args
 
 import numpy as np
 import pint
@@ -265,15 +265,11 @@ class _QuantityMeta(type):
         return id(cls)
 
 
-class Unit(PlainUnit, Generic[DT]):
+class Unit[DT](PlainUnit):
     pass
 
 
-class Quantity(
-    NumpyQuantity,
-    Generic[DT, MT],
-    metaclass=_QuantityMeta,
-):
+class Quantity[DT, MT](NumpyQuantity, metaclass=_QuantityMeta):
     """
     Subclass of pint's ``Quantity`` with additional type hints,  functionality
     and integration with other libraries.
