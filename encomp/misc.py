@@ -1,11 +1,12 @@
 import ast
-from types import UnionType
+from types import GenericAlias
 from typing import (
     Any,
     TypeGuard,
     TypeVar,
-    _GenericAlias,
-    _TypedDictMeta,
+    Union,
+    get_origin,
+    is_typeddict,
     overload,
 )
 
@@ -27,7 +28,7 @@ def isinstance_types[T](obj: Any, expected: type[T]) -> TypeGuard[T]: ...  # noq
 def isinstance_types(obj: Any, expected: Any) -> bool: ...  # noqa: ANN401
 
 
-def isinstance_types(obj: Any, expected: _GenericAlias | type) -> bool:
+def isinstance_types(obj: Any, expected: GenericAlias | type) -> bool:
     """
     Checks if the input object matches the expected type.
     This function also supports complex type annotations that cannot
@@ -86,12 +87,12 @@ def isinstance_types(obj: Any, expected: _GenericAlias | type) -> bool:
 
     # normal types are checked with isinstance()
     # note: this check must use typing.Type, not the builtin type (lower case)
-    if isinstance(expected, type) and not isinstance(expected, _TypedDictMeta):
+    if isinstance(expected, type) and not is_typeddict(expected):
         return isinstance(obj, expected)
 
-    if type(expected) is UnionType:
+    if get_origin(expected) is Union:
         try:
-            return isinstance(obj, expected)
+            return isinstance(obj, expected)  # type: ignore[arg-type]
         except TypeError:
             return any(isinstance_types(obj, n) for n in expected.__args__)
 
