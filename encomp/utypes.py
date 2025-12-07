@@ -639,46 +639,37 @@ _LuminosityUC = UnitsContainer({"[luminosity]": 1})
 
 Numpy1DArray = np.ndarray[tuple[int], np.dtype[np.float64]]
 
-# TypeVar default (PEP 696) is supported for Python 3.13+
-if TYPE_CHECKING:
-    MT = TypeVar(
-        "MT",
-        float,
-        Numpy1DArray,
-        pd.Series,
-        pl.Series,
-        pl.Expr,
-        default=Numpy1DArray,
-    )
+MT = TypeVar(
+    "MT",
+    float,
+    Numpy1DArray,
+    pd.Series,
+    pl.Series,
+    pl.Expr,
+    default=Numpy1DArray,
+)
 
-    MT_ = TypeVar(
-        "MT_",
-        float,
-        Numpy1DArray,
-        pd.Series,
-        pl.Series,
-        pl.Expr,
-        default=Numpy1DArray,
-    )
+MT_ = TypeVar(
+    "MT_",
+    float,
+    Numpy1DArray,
+    pd.Series,
+    pl.Series,
+    pl.Expr,
+    default=Numpy1DArray,
+)
 
-    # type variables that represent a certain dimensionality
-    # the DT_ type variable is used to signify a different
-    # (possible identical) dimensionality than DT
-    # these type variables are marked as covariant to ensure that
-    # Q[Mass] is a subtype of Q[Dimensionality]
-    # however, this only holds for the relationship DimX -> Dimensionality (parent)
-    # for any other dimensionalities, e.g. DimA and DimB
-    # Q[DimA] is not a subclass of Q[DimB] if DimA is a subclass of DimB
-    # all Q[DT] subclasses are direct subclasses of Q and Q[Dimensionality]
-    DT = TypeVar("DT", bound=Dimensionality, default=Dimensionality, covariant=True)
-    DT_ = TypeVar("DT_", bound=Dimensionality, default=Dimensionality, covariant=True)
-
-else:
-    # needed for compatibility with Python < 3.13, this does nothing at runtime
-    MT = TypeVar("MT")
-    MT_ = TypeVar("MT_")
-    DT = TypeVar("DT", bound=Dimensionality)
-    DT_ = TypeVar("DT_", bound=Dimensionality)
+# type variables that represent a certain dimensionality
+# the DT_ type variable is used to signify a different
+# (possible identical) dimensionality than DT
+# these type variables are marked as covariant to ensure that
+# Q[Mass] is a subtype of Q[Dimensionality]
+# however, this only holds for the relationship DimX -> Dimensionality (parent)
+# for any other dimensionalities, e.g. DimA and DimB
+# Q[DimA] is not a subclass of Q[DimB] if DimA is a subclass of DimB
+# all Q[DT] subclasses are direct subclasses of Q and Q[Dimensionality]
+DT = TypeVar("DT", bound=Dimensionality, default=Dimensionality, covariant=True)
+DT_ = TypeVar("DT_", bound=Dimensionality, default=Dimensionality, covariant=True)
 
 
 class Dimensionless(Dimensionality):

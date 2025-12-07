@@ -9,13 +9,13 @@ from functools import lru_cache
 from typing import Any, Literal, Self, cast, overload
 
 import numpy as np
-import sympy as sp
+import sympy as sp  # type: ignore[import-untyped]
 from sympy import default_sort_key
-from sympy.utilities.lambdify import lambdastr, lambdify
+from sympy.utilities.lambdify import lambdastr, lambdify  # type: ignore[import-untyped]
 
 from .settings import SETTINGS
 from .units import Quantity
-from .utypes import Dimensionality
+from .utypes import Dimensionality, Numpy1DArray
 
 
 @lru_cache
@@ -276,8 +276,8 @@ def get_lambda_kwargs(
         include = [to_identifier(n) for n in include]
 
     def _get_val(
-        x: Quantity[Dimensionality, np.ndarray] | np.ndarray,
-    ) -> Quantity | np.ndarray:
+        x: Quantity[Dimensionality, Numpy1DArray] | Numpy1DArray,
+    ) -> Quantity | Numpy1DArray:
         if not isinstance(x, Quantity):
             return x
 
