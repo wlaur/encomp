@@ -1185,9 +1185,15 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
         try:
             self.check_compatibility(other)
         except DimensionalityTypeError as e:
-            if isinstance_types(self, Quantity[Temperature] | Quantity[TemperatureDifference]) and isinstance_types(
-                other, Quantity[Temperature] | Quantity[TemperatureDifference]
-            ):
+            self_is_temp_or_diff_temp = isinstance_types(self, Quantity[Temperature, Any]) or isinstance_types(
+                self, Quantity[TemperatureDifference, Any]
+            )
+
+            other_is_temp_or_diff_temp = isinstance_types(other, Quantity[Temperature, Any]) or isinstance_types(
+                self, Quantity[TemperatureDifference, Any]
+            )
+
+            if self_is_temp_or_diff_temp and other_is_temp_or_diff_temp:
                 if self._dimensionality_type is TemperatureDifference:
                     raise e
 
@@ -1203,9 +1209,15 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
         try:
             self.check_compatibility(other)
         except DimensionalityTypeError as e:
-            if isinstance_types(self, Quantity[Temperature] | Quantity[TemperatureDifference]) and isinstance_types(
-                other, Quantity[Temperature] | Quantity[TemperatureDifference]
-            ):
+            self_is_temp_or_diff_temp = isinstance_types(self, Quantity[Temperature, Any]) or isinstance_types(
+                self, Quantity[TemperatureDifference, Any]
+            )
+
+            other_is_temp_or_diff_temp = isinstance_types(other, Quantity[Temperature, Any]) or isinstance_types(
+                self, Quantity[TemperatureDifference, Any]
+            )
+
+            if self_is_temp_or_diff_temp and other_is_temp_or_diff_temp:
                 if self._dimensionality_type is TemperatureDifference:
                     raise e
 

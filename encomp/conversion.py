@@ -1,4 +1,4 @@
-from typing import overload
+from typing import Any, assert_never, overload
 
 from .misc import isinstance_types
 from .units import Quantity
@@ -51,12 +51,12 @@ def convert_volume_mass(
     if rho is None:
         rho = Quantity(997, "kg/m³")
 
-    if not isinstance_types(rho, Quantity[Density]):
-        raise TypeError(f"Incorrect type for rho: {rho}")
+    if not isinstance_types(rho, Quantity[Density, Any]):
+        assert_never(rho)
 
-    if isinstance_types(inp, Quantity[Mass]) or isinstance_types(inp, Quantity[MassFlow]):
+    if isinstance_types(inp, Quantity[Mass, Any]) or isinstance_types(inp, Quantity[MassFlow, Any]):
         return (inp / rho).to_reduced_units()
-    elif isinstance_types(inp, Quantity[Volume]) or isinstance_types(inp, Quantity[VolumeFlow]):
+    elif isinstance_types(inp, Quantity[Volume, Any]) or isinstance_types(inp, Quantity[VolumeFlow, Any]):
         return (inp * rho).to_reduced_units()
     else:
-        raise TypeError(f"Incorrect input: {inp}")
+        assert_never(inp)

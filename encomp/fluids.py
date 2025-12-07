@@ -22,7 +22,6 @@ import polars as pl
 from CoolProp.CoolProp import PropsSI  # type: ignore[import-untyped]
 from CoolProp.HumidAirProp import HAPropsSI  # type: ignore[import-untyped]
 
-from .misc import isinstance_types
 from .settings import SETTINGS
 from .structures import flatten
 from .units import DimensionalityError, ExpectedDimensionalityError, Quantity, Unit
@@ -540,7 +539,7 @@ class CoolPropFluid(ABC, Generic[MTR]):
 
     def evaluate(self, output: CProperty, *points: tuple[CProperty, float | np.ndarray]) -> float | np.ndarray:
         # case 1: all inputs are scalar, output is scalar
-        if all(isinstance_types(pt[1], float) for pt in points):
+        if all(isinstance(pt[1], float) for pt in points):
             return self.evaluate_single(output, *points)  # type: ignore
 
         # at this point, the output will be a vector with length 1 or more

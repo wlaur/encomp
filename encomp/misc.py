@@ -11,9 +11,6 @@ from typing import (
 import asttokens
 from typeguard import check_type
 
-# NOTE: these overloads are a workaround to avoid issues with type[T] -> T
-# signatures with mypy
-
 
 def isinstance_types[T](obj: Any, expected: type[T]) -> TypeIs[T]:  # noqa: ANN401
     """
