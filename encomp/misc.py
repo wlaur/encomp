@@ -51,7 +51,7 @@ def isinstance_types[T](obj: Any, expected: type[T]) -> TypeIs[T]:  # noqa: ANN4
 
     if get_origin(expected) is UnionType:
         try:
-            return isinstance(obj, expected)  # type: ignore[arg-type]
+            return isinstance(obj, expected)
         except TypeError:
             return any(isinstance_types(obj, n) for n in get_args(expected))
 

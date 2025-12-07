@@ -23,8 +23,8 @@ def test_convert_volume_mass() -> None:
 
     assert isinstance(convert_volume_mass(m), Q[Volume])
 
-    with pytest.raises(TypeError):
+    with pytest.raises(AssertionError):
         convert_volume_mass(mf, rho=Q(25, "bar"))
 
-    with pytest.raises(TypeError):
+    with pytest.raises(AssertionError):
         convert_volume_mass(Q(25, "m/s"))

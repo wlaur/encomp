@@ -315,12 +315,6 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
 
     @staticmethod
     def validate_magnitude_type(mt: type) -> None:
-        if isinstance(mt, TypeVar):
-            return
-
-        if mt is Any:
-            return
-
         if mt == np.ndarray:
             return
 
@@ -369,7 +363,7 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
 
             cls._subclasses[dim_name, None] = DimensionalQuantity
 
-        if mt is None:
+        if mt is None or mt is Any or isinstance(mt, TypeVar):
             return DimensionalQuantity  # type: ignore[return-value]
 
         if isinstance(mt, UnionType):

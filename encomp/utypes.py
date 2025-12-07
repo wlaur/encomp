@@ -630,9 +630,6 @@ _CurrentUC = UnitsContainer({"[current]": 1})
 _LuminosityUC = UnitsContainer({"[luminosity]": 1})
 
 
-# NOTE: each subclass definition will create an entry in Dimensionality._registry
-# reloading this module will clear and reset the registry
-
 Numpy1DArray = np.ndarray[tuple[int], np.dtype[np.float64]]
 
 MT = TypeVar(
@@ -655,7 +652,13 @@ MT_ = TypeVar(
     default=Numpy1DArray,
 )
 
-MAGNITUDE_TYPES = (float, Numpy1DArray, pd.Series, pl.Series, pl.Expr)
+MAGNITUDE_TYPES = (
+    float,
+    Numpy1DArray,
+    pd.Series,
+    pl.Series,
+    pl.Expr,
+)
 
 
 # type variables that represent a certain dimensionality
