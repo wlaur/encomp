@@ -49,6 +49,7 @@ dev = [
     "sphinx-autodoc-typehints",
     "sphinx-autobuild",
     "pyinstrument",
+    "scipy-stubs>=1.16.3.2",
 ]
 
 [tool.hatch.build.targets.sdist]

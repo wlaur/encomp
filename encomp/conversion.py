@@ -49,6 +49,7 @@ def convert_volume_mass(
     """
 
     if rho is None:
+        # TODO: remove once unit literal overloads are defined
         rho = Quantity(997, "kg/m³")
 
     if not isinstance_types(rho, Quantity[Density, Any]):
