@@ -8,16 +8,12 @@ Some commonly used derived dimensionalities (like density) are defined for conve
 from __future__ import annotations
 
 from abc import ABC
-from typing import TYPE_CHECKING, Literal, TypeVar, get_origin
+from typing import Literal, TypeVar, get_origin
 
 import numpy as np
+import pandas as pd
 import polars as pl
 from pint.util import UnitsContainer
-
-if TYPE_CHECKING:
-    import pandas as pd
-else:
-    pd = None
 
 BASE_SI_UNITS = (
     "m",
@@ -658,6 +654,28 @@ MT_ = TypeVar(
     pl.Expr,
     default=Numpy1DArray,
 )
+
+_MAGNITUDE_TYPES = (float, Numpy1DArray, pd.Series, pl.Series, pl.Expr)
+
+
+def validate_magnitude_type(mt: type) -> None:
+    if isinstance(mt, TypeVar):
+        return
+
+    if mt == np.ndarray:
+        return
+
+    for n in _MAGNITUDE_TYPES:
+        if mt is n:
+            return
+        if isinstance(n, type) and isinstance(mt, type) and issubclass(mt, n):
+            return
+        if mt == n:
+            return
+
+    expected = [n.__qualname__ for n in _MAGNITUDE_TYPES]
+    raise TypeError(f"Invalid magnitude type: {mt}, expected one of {expected}")
+
 
 # type variables that represent a certain dimensionality
 # the DT_ type variable is used to signify a different

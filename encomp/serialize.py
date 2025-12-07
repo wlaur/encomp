@@ -71,7 +71,6 @@ import sympy as sp  # type: ignore[import-untyped]
 from uncertainties import ufloat  # type: ignore[import-untyped]
 from uncertainties.core import AffineScalarFunc  # type: ignore[import-untyped]
 
-from .misc import isinstance_types
 from .units import Quantity, Unit
 from .utypes import Dimensionality
 
@@ -335,7 +334,7 @@ def decode(inp: JSON, custom: type | list[type] | None = None) -> Any:  # noqa: 
                 val = decode(val)
 
                 # check if this list has types that matches a serialized Quantity
-                if isinstance_types(unit, Unit | str):
+                if isinstance(unit, Unit | str):
                     if dimensionality is None:
                         return Quantity(val, unit)
                     else:

@@ -6,6 +6,7 @@ from typing import (
     get_args,
     get_origin,
     is_typeddict,
+    overload,
 )
 
 import asttokens
@@ -15,12 +16,26 @@ from typeguard import check_type
 # signatures with mypy
 
 
-def isinstance_types[T](obj: Any, expected: type[T]) -> TypeIs[T]:  # noqa: ANN401
+@overload
+def isinstance_types[T](obj: Any, expected: type[T]) -> TypeIs[T]: ...  # noqa: ANN401
+
+
+@overload
+def isinstance_types(obj: Any, expected: object) -> bool: ...  # noqa: ANN401
+
+
+def isinstance_types(obj: Any, expected: object) -> bool:
     """
     Checks if the input object matches the expected type.
     This function also supports complex type annotations that cannot
     be checked with the builtin ``isinstance()``.
     Uses ``typeguard.check_type`` for runtime checks of complex types.
+
+    .. note::
+        Type narrowing only works for simple types (e.g., ``isinstance_types(x, str)``).
+        For union types (e.g., ``str | int``), the function works at runtime but
+        **does not narrow types** at type-check time. Use builtin ``isinstance()``
+        for union type narrowing when possible.
 
     .. note::
 

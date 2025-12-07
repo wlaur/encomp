@@ -20,6 +20,7 @@ from types import UnionType
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, TypeVar, cast, get_args
 
 import numpy as np
+import pandas as pd
 import pint
 import polars as pl
 from pint.errors import DimensionalityError
@@ -44,20 +45,13 @@ from .utypes import (
     Numpy1DArray,
     Temperature,
     TemperatureDifference,
+    validate_magnitude_type,
 )
 
 if TYPE_CHECKING:
-    import pandas as pd
     import sympy as sp  # type: ignore[import-untyped]
 else:
-    pd = None
     sp = None
-
-
-def _ensure_pandas() -> None:
-    global pd
-    if pd is None:
-        import pandas as pd
 
 
 def _ensure_sympy() -> None:
@@ -320,27 +314,6 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
         return super().__array__(t)
 
     @classmethod
-    def _construct_dimensional_magnitude_quantity(
-        cls,
-        dimensional_cls: type[Quantity[Dimensionality, Any]],
-        dim_name: str,
-        mt: type[MT],
-        mt_name: str,
-    ) -> type[Quantity[Dimensionality, MT]]:
-        subcls = type(
-            f"Quantity[{dim_name}, {mt_name}]",
-            (dimensional_cls,),
-            {
-                "_magnitude_type": mt,
-                "__class__": dimensional_cls,
-            },
-        )
-
-        cls._subclasses[dim_name, mt_name] = subcls
-
-        return subcls
-
-    @classmethod
     def _get_dimensional_subclass(cls, dim: type[Dimensionality], mt: type | None) -> type[Quantity[DT, MT]]:
         # there are two levels of subclasses to Quantity: DimensionalQuantity and
         # DimensionalMagnitudeQuantity, which is a subclass of DimensionalQuantity
@@ -371,23 +344,32 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
             if mt is None:
                 raise RuntimeError("No non-null magnitude types were detected")
 
+        validate_magnitude_type(mt)
+
         mt_name = mt.__name__
 
         # check if an existing DimensionalMagnitudeQuantity subclass already has been created
         if cached_dim_magnitude_qty := cls._subclasses.get((dim_name, mt_name)):
             return cached_dim_magnitude_qty  # type: ignore[return-value]
 
-        subcls = cls._construct_dimensional_magnitude_quantity(
-            DimensionalQuantity,
-            dim_name,
-            mt,
-            mt_name,
+        DimensionalMagnitudeQuantity = type(
+            f"Quantity[{dim_name}, {mt_name}]",
+            (DimensionalQuantity,),
+            {
+                "_magnitude_type": mt,
+                "__class__": DimensionalQuantity,
+            },
         )
 
-        return subcls  # type: ignore[return-value]
+        cls._subclasses[dim_name, mt_name] = DimensionalMagnitudeQuantity  # type: ignore[arg-type]
+
+        return DimensionalMagnitudeQuantity  # type: ignore[return-value]
 
     def __class_getitem__(cls, types: type[DT] | tuple[type[DT], type[MT]]) -> type[Quantity[DT, MT]]:
         if isinstance(types, tuple):
+            if len(types) != 2:
+                raise TypeError(f"Incorrect number of generic type parameters: {len(types)} (expected 1 or 2): {types}")
+
             dim, mt = types
         else:
             dim, mt = types, None
@@ -458,8 +440,6 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
 
     @staticmethod
     def _validate_magnitude(val: MT | Sequence[int | float]) -> MT:
-        _ensure_pandas()
-
         if isinstance(val, int):
             return float(val)  # type: ignore[return-value]
 
@@ -533,8 +513,6 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
         _mt_orig_kwargs: dict[str, Any] | None = None,
         _depth: int = 0,
     ) -> Quantity[DT, MT]:
-        _ensure_pandas()
-
         valid_unit = cls._validate_unit(unit)
         valid_magnitude = cls._validate_magnitude(val)
 
@@ -601,7 +579,6 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
 
     @property
     def m(self) -> MT:
-        _ensure_pandas()
         if self._original_magnitude_type == pd.Series:
             assert isinstance(self._magnitude, np.ndarray)
             return cast(MT, pd.Series(self._magnitude, **self._original_magnitude_kwargs))
@@ -1286,7 +1263,6 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
         magnitude_type: type[MT_],
         **kwargs: Any,  # noqa: ANN401
     ) -> Quantity[DT, MT_]:
-        _ensure_pandas()
         m, u = self.m, self.u
 
         # astype for np.ndarray should be called directly except for some special cases
