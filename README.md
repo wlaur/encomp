@@ -34,14 +34,6 @@ The module `encomp.serialize` implements custom JSON serialization and decoding 
 
 ## Getting started
 
-To use `encomp` in a Jupyter Notebook (or REPL), star-import the `encomp.session` module:
-
-```python
-from encomp.session import *
-```
-
-This will import commonly used functions and classes.
-
 ### The `Quantity` class
 
 The fundamental building block of `encomp` is the `encomp.units.Quantity` class (shorthand alias `Q`), which is an extension of `pint.Quantity`.
@@ -86,7 +78,7 @@ from encomp.utypes import Volume, MassFlow
 
 # the types are inferred by a static type checker like mypy
 
-# the unit "m" is registered as a Mass unit
+# the unit "kg" is registered as a Mass unit
 m = Q(12, 'kg')  # Quantity[Mass]
 
 V = Q(25, 'liter')  # Quantity[Volume]
