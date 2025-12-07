@@ -1,12 +1,11 @@
 import ast
+from types import UnionType
 from typing import (
     Any,
     TypeIs,
-    Union,
     get_args,
     get_origin,
     is_typeddict,
-    overload,
 )
 
 import asttokens
@@ -16,15 +15,7 @@ from typeguard import check_type
 # signatures with mypy
 
 
-@overload
-def isinstance_types[T](obj: Any, expected: type[T]) -> TypeIs[T]: ...  # noqa: ANN401
-
-
-@overload
-def isinstance_types(obj: Any, expected: object) -> bool: ...  # noqa: ANN401
-
-
-def isinstance_types(obj: Any, expected: object) -> bool:
+def isinstance_types[T](obj: Any, expected: type[T]) -> TypeIs[T]:  # noqa: ANN401
     """
     Checks if the input object matches the expected type.
     This function also supports complex type annotations that cannot
@@ -32,6 +23,7 @@ def isinstance_types(obj: Any, expected: object) -> bool:
     Uses ``typeguard.check_type`` for runtime checks of complex types.
 
     .. note::
+
         Type narrowing only works for simple types (e.g., ``isinstance_types(x, str)``).
         For union types (e.g., ``str | int``), the function works at runtime but
         **does not narrow types** at type-check time. Use builtin ``isinstance()``
@@ -43,42 +35,11 @@ def isinstance_types(obj: Any, expected: object) -> bool:
         first item is checked. Use custom validation logic to ensure
         that all elements are checked.
 
-    .. todo::
-
-        Return type hint should be a ``TypeGuard`` that helps static type checkers
-        to narrow down the type of the input object.
-
-        This does not work with complex types using ``mypy`` (https://github.com/python/mypy/issues/9003).
-        However, it does work with Pylance.
-        The current implementation is a workaround to avoid ``mypy`` errors when calling
-        this function. The type guard does not work with ``mypy``
-        (the type will not be narrowed at all).
-
-        ``mypy`` and Pylance do not support type negation using ``TypeGuard``.
-        This means that the following does not work as expected
-        (compare with behavior for the builtin ``isinstance()``):
-
-        .. code-block:: python
-
-            a: str | int = ...
-
-            if isinstance_types(a, int):
-                reveal_type(a)  # int
-            else:
-                reveal_type(a)  # str | int, should be str
-
-            # this works with builtin isinstance()
-            if isinstance(a, int):
-                reveal_type(a)  # int
-            else:
-                reveal_type(a)  # str
-
-
     Parameters
     ----------
     obj : Any
         Object to check
-    expected : _GenericAlias | type
+    expected : type
         Expected type or type alias
 
     Returns
@@ -88,22 +49,19 @@ def isinstance_types(obj: Any, expected: object) -> bool:
     """
 
     # normal types are checked with isinstance()
-    # note: this check must use typing.Type, not the builtin type (lower case)
     if isinstance(expected, type) and not is_typeddict(expected):
         return isinstance(obj, expected)
 
-    if get_origin(expected) is Union:
+    if get_origin(expected) is UnionType:
         try:
             return isinstance(obj, expected)  # type: ignore[arg-type]
         except TypeError:
             return any(isinstance_types(obj, n) for n in get_args(expected))
 
     try:
-        # this function raises an exception in case the object type
-        # does not match the expected type
+        # check_type raises if the object type does not match the expected type
         check_type(obj, expected)
         return True
-
     except Exception:
         return False
 
