@@ -8,7 +8,7 @@ Some commonly used derived dimensionalities (like density) are defined for conve
 from __future__ import annotations
 
 from abc import ABC
-from typing import Literal, TypeVar, get_origin
+from typing import Any, Literal, TypeVar, get_origin
 
 import numpy as np
 import pandas as pd
@@ -660,6 +660,9 @@ _MAGNITUDE_TYPES = (float, Numpy1DArray, pd.Series, pl.Series, pl.Expr)
 
 def validate_magnitude_type(mt: type) -> None:
     if isinstance(mt, TypeVar):
+        return
+
+    if mt is Any:
         return
 
     if mt == np.ndarray:
