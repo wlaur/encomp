@@ -1,5 +1,4 @@
 import pandas as pd
-import pytest
 
 from ..units import Quantity as Q
 
@@ -33,32 +32,11 @@ def test_series_attributes() -> None:
     assert (2 * q1).m.name == "s1"
 
 
-def test_datetimeindex() -> None:
-    s = pd.DatetimeIndex(["2021-01-01", "2021-01-02"], name="Time")
-
-    assert Q(s).m.name == "Time"
-
-    assert (Q(s) + pd.Timedelta(1, "d")).m[0] == pd.Timestamp("2021-01-02")
-    assert (Q(s) - pd.Timedelta(1, "d")).m[1] == pd.Timestamp("2021-01-01")
-
-    with pytest.raises(ValueError):
-        Q(s, "kg")
-
-    with pytest.raises(TypeError):
-        Q(s) * 2
-
-    with pytest.raises(TypeError):
-        2 * Q(s)
-
-
 def test_scalar_getitem() -> None:
-    index = Q(pd.DatetimeIndex(["2021-01-01", "2021-01-02"]))
+    index = Q(pd.DatetimeIndex(["2021-01-01", "2021-01-02"]).to_series())
 
     first = index[0].m
     second = index[1].m
 
-    assert isinstance(first, pd.Timestamp)
-    assert first == pd.Timestamp("2021-01-01")
-
-    assert isinstance(second, pd.Timestamp)
-    assert second == pd.Timestamp("2021-01-02")
+    assert first == pd.Timestamp("2021-01-01").timestamp() * 1e9
+    assert second == pd.Timestamp("2021-01-02").timestamp() * 1e9

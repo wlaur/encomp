@@ -24,6 +24,8 @@ import pandas as pd
 import pint
 import polars as pl
 from pint.errors import DimensionalityError
+from pint.facets.measurement.objects import MeasurementQuantity
+from pint.facets.nonmultiplicative.objects import NonMultiplicativeQuantity
 from pint.facets.numpy.quantity import NumpyQuantity
 from pint.facets.plain.unit import PlainUnit
 from pint.registry import LazyRegistry, UnitRegistry
@@ -264,7 +266,7 @@ class Unit(PlainUnit, Generic[DT]):
     pass
 
 
-class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
+class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
     """
     Subclass of pint's ``Quantity`` with additional type hints,  functionality
     and integration with other libraries.
@@ -309,6 +311,9 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
     def __str__(self) -> str:
         return self.__format__(self._REGISTRY.formatter.default_format)
 
+    def __hash__(self) -> int:
+        return hash(self.m) + hash(self.u)
+
     # NOTE: pint NumpyQuantity does not have copy and dtype as kwargs for __array__
     def __array__(self, t: Any | None = None, copy: bool = False, dtype: str | None = None) -> np.ndarray:  # noqa: ANN401
         return super().__array__(t)
@@ -317,6 +322,11 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
     def validate_magnitude_type(mt: type) -> None:
         if mt == np.ndarray:
             return
+
+        if mt == np.float64:
+            raise TypeError(
+                f"Invalid magnitude type: {mt}, expected one of float, np.ndarray, pd.Series, pl.Series, pl.Expression"
+            )
 
         for n in MAGNITUDE_TYPES:
             if mt is n:
@@ -389,7 +399,6 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
         )
 
         cls._subclasses[dim_name, mt_name] = DimensionalMagnitudeQuantity
-
         return DimensionalMagnitudeQuantity
 
     def __class_getitem__(cls, types: type[DT] | tuple[type[DT], type[MT]]) -> type[Quantity[DT, MT]]:
@@ -469,24 +478,19 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
     def _validate_magnitude(val: MT | Sequence[int | float]) -> MT:
         if isinstance(val, int):
             return float(val)  # type: ignore[return-value]
-
-        if isinstance(val, float):
-            return val  # type: ignore[return-value]
-
-        if isinstance(val, np.ndarray):
+        elif isinstance(val, float):
+            # also convert np.float64 to Python float
+            return float(val)  # type: ignore[return-value]
+        elif isinstance(val, (np.ndarray, pd.Series, pl.Series, pl.Expr)):
             return val
-
-        if isinstance(val, pd.Series):
-            return val
-
-        if isinstance(val, pl.Series | pl.Expr):
-            return val
-
-        if isinstance(val, Sequence):
+        elif isinstance(val, Sequence):
             arr = np.array(val).astype(np.float64)
             return arr  # type: ignore[return-value]
-
-        raise TypeError(f"Input magnitude has incorrect type {type(val)}: {val}")
+        # implicit way of checking if the value is a sympy symbol without having to import Sympy
+        elif hasattr(val, "is_Atom"):
+            return val
+        else:
+            raise TypeError(f"Input magnitude has incorrect type {type(val)}: {val}")
 
     @classmethod
     def get_unit(cls, unit_name: str) -> Unit:
@@ -525,7 +529,6 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
     @staticmethod
     def _cast_array_float(inp: np.ndarray) -> Numpy1DArray:
         # don't fail in case the array contains unsupported objects,
-        # for example uncertainties.ufloat
         # cast to float64, matches the Numpy1DArray type definition
         try:
             return inp.astype(np.float64, casting="unsafe", copy=True)
@@ -534,12 +537,18 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
 
     def __new__(
         cls,
-        val: MT | Sequence[int | float],
+        val: MT | Sequence[int | float] | Quantity[DT, MT],
         unit: Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | None = None,
         _mt_orig: type[MT] | None = None,
         _mt_orig_kwargs: dict[str, Any] | None = None,
         _depth: int = 0,
     ) -> Quantity[DT, MT]:
+        if isinstance(val, Quantity):
+            if unit is not None:
+                return val.to(unit)
+            else:
+                return copy.deepcopy(val)
+
         valid_unit = cls._validate_unit(unit)
         valid_magnitude = cls._validate_magnitude(val)
 
@@ -579,10 +588,10 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
 
             # special case for temperature difference
             if valid_unit._units in cls.TEMPERATURE_DIFFERENCE_UCS:
-                subcls = cls._get_dimensional_subclass(TemperatureDifference, type(valid_magnitude))
+                subcls = cls._get_dimensional_subclass(TemperatureDifference, _original_magnitude_type)
             else:
                 dim = Dimensionality.get_dimensionality(valid_unit.dimensionality)
-                subcls = cls._get_dimensional_subclass(dim, type(valid_magnitude))
+                subcls = cls._get_dimensional_subclass(dim, _original_magnitude_type)
 
             return subcls(
                 valid_magnitude,
@@ -601,7 +610,6 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
 
         # propagate the original magnitude type and constructor kwargs
         qty._set_original_magnitude_attributes(_original_magnitude_type, _original_magnitude_kwargs)
-
         return qty
 
     @property
@@ -651,7 +659,8 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
         else:
             raise ValueError(f"Invalid input: {args}")
 
-        if index := self._original_magnitude_kwargs.get("index"):
+        index = self._original_magnitude_kwargs.get("index")
+        if index is not None:
             magnitude_length = len(m) if isinstance(m, Sized) else None
 
             # strip the index in case it's not compatible
@@ -1184,7 +1193,7 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
             )
 
             other_is_temp_or_diff_temp = isinstance_types(other, Quantity[Temperature, Any]) or isinstance_types(
-                self, Quantity[TemperatureDifference, Any]
+                other, Quantity[TemperatureDifference, Any]
             )
 
             if self_is_temp_or_diff_temp and other_is_temp_or_diff_temp:
@@ -1208,7 +1217,7 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
             )
 
             other_is_temp_or_diff_temp = isinstance_types(other, Quantity[Temperature, Any]) or isinstance_types(
-                self, Quantity[TemperatureDifference, Any]
+                other, Quantity[TemperatureDifference, Any]
             )
 
             if self_is_temp_or_diff_temp and other_is_temp_or_diff_temp:
@@ -1259,7 +1268,9 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
 
     def __getitem__(self, index: int) -> Quantity[DT]:
         ret = super().__getitem__(index)
-        subcls = self._get_dimensional_subclass(self._dimensionality_type, type(ret))
+        subcls = self._get_dimensional_subclass(
+            self._dimensionality_type, type(ret.m) if isinstance(ret, Quantity) else type(ret)
+        )
         return subcls(ret.m, ret.u)  # type: ignore[return-value]
 
     @property
@@ -1319,15 +1330,15 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
 
         if magnitude_type == np.ndarray:
             _m = [m] if not isinstance(m, Iterable) else m
-            return self.subclass(np.array(m), u)  # type: ignore[return-value, arg-type]
+            return self.subclass(np.array(_m), u)  # type: ignore[return-value, arg-type]
 
         if magnitude_type == pd.Series:
             _m = [m] if not isinstance(m, Iterable) else m
-            return self.subclass(pd.Series(m, **kwargs), u)  # type: ignore[return-value, arg-type]
+            return self.subclass(pd.Series(_m, **kwargs), u)  # type: ignore[return-value, arg-type]
 
         if magnitude_type == pl.Series:
             _m = [m] if not isinstance(m, Iterable) else m
-            kwargs["values"] = m
+            kwargs["values"] = _m
             return self.subclass(pl.Series(**kwargs), u)  # type: ignore[return-value, arg-type]
 
         # ensure that this method returns a new instance

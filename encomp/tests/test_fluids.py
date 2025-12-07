@@ -398,7 +398,6 @@ def test_magnitude_type() -> None:
     index = pd.DatetimeIndex(["2021-01-01", "2021-01-02", "2021-01-03"])
 
     s1 = pd.Series([1, 2, 3], name="s1", index=index)
-
     assert Water(P=Q(s1, "kPa"), T=Q(25, "degC")).H.m.index[0] == pd.Timestamp("2021-01-01")
 
     assert Fluid("water", P=Q(s1, "kPa"), T=Q(25, "degC")).H.m.index[0] == pd.Timestamp("2021-01-01")

@@ -5,7 +5,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from uncertainties import ufloat
 
 from ..serialize import decode, is_serializable, serialize
 from ..units import Quantity as Q
@@ -45,7 +44,7 @@ def test_serialize() -> None:
     assert np.array_equal(d_.m, d.m)
     assert d_.dimensionality == d.dimensionality
 
-    qty = Q(Decimal("1.123"), "kg") * 100
+    qty = Q(float(Decimal("1.123")), "kg") * 100
     s = serialize(qty)
     json_str = json.dumps(s)
     d_ = decode(json.loads(json_str))
@@ -64,14 +63,6 @@ def test_serialize() -> None:
     s = serialize(qty)
     json_str = json.dumps(s)
     d_ = decode(json.loads(json_str))
-
-    if ufloat is not None:
-        x = ufloat(1, 0.1)
-
-        qty = Q([x * 2] * 5, "kg")
-        s = serialize(qty)
-        json_str = json.dumps(s)
-        d_ = decode(json.loads(json_str))
 
     qty = Q([1, 2], "kg")
     s = serialize(qty)

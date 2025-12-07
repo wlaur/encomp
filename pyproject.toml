@@ -20,8 +20,8 @@ dependencies = [
     "polars",
     "sympy",
     "pint>=0.25.2",
-    "coolprop",
     "uncertainties",
+    "coolprop",
     "fluids",
     "thermo",
 ]
@@ -50,6 +50,7 @@ dev = [
     "sphinx-autobuild",
     "pyinstrument",
     "scipy-stubs>=1.16.3.2",
+    "ipykernel>=7.1.0",
 ]
 
 [tool.hatch.build.targets.sdist]

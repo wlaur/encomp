@@ -11,12 +11,11 @@ def test_convert_volume_mass() -> None:
 
     assert isinstance(convert_volume_mass(mf), Q[VolumeFlow])
     assert isinstance(convert_volume_mass(mf), Q[VolumeFlow, float])
-    assert not isinstance(convert_volume_mass(mf), Q[VolumeFlow, list[float]])
+    assert not isinstance(convert_volume_mass(mf), Q[VolumeFlow, np.ndarray])
 
     mf_list = Q([25.5, 25.34], "kg/s")
     assert isinstance(convert_volume_mass(mf_list), Q[VolumeFlow])
 
-    # TODO: list[float] will be cast to array, this is not captured by type hints
     assert isinstance(convert_volume_mass(mf_list), Q[VolumeFlow, np.ndarray])
 
     m = Q(25, "ton")

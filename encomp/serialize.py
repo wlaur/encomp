@@ -68,8 +68,6 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import sympy as sp  # type: ignore[import-untyped]
-from uncertainties import ufloat  # type: ignore[import-untyped]
-from uncertainties.core import AffineScalarFunc  # type: ignore[import-untyped]
 
 from .units import Quantity, Unit
 from .utypes import Dimensionality
@@ -219,9 +217,6 @@ def custom_serializer(obj: Any) -> JSON:  # noqa: ANN401
     if isinstance(obj, Decimal):
         return {"type": "Decimal", "data": str(obj)}
 
-    if isinstance(obj, AffineScalarFunc):
-        return {"type": "AffineScalarFunc", "data": [obj.nominal_value, obj.std_dev]}
-
     if isinstance(obj, sp.Basic):
         return {"type": "Sympy", "data": sp.srepr(obj)}
 
@@ -356,9 +351,6 @@ def decode(inp: JSON, custom: type | list[type] | None = None) -> Any:  # noqa: 
 
             if inp["type"] == "Decimal":
                 return Decimal(inp["data"])  # type: ignore
-
-            if inp["type"] == "AffineScalarFunc":
-                return ufloat(*inp["data"])
 
             if inp["type"] == "Sympy":
                 return sp.sympify(inp["data"])
