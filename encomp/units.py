@@ -38,6 +38,7 @@ from .utypes import (
     BASE_SI_UNITS,
     DT,
     DT_,
+    MAGNITUDE_TYPES,
     MT,
     MT_,
     Dimensionality,
@@ -45,7 +46,6 @@ from .utypes import (
     Numpy1DArray,
     Temperature,
     TemperatureDifference,
-    validate_magnitude_type,
 )
 
 if TYPE_CHECKING:
@@ -313,6 +313,28 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
     def __array__(self, t: Any | None = None, copy: bool = False, dtype: str | None = None) -> np.ndarray:  # noqa: ANN401
         return super().__array__(t)
 
+    @staticmethod
+    def validate_magnitude_type(mt: type) -> None:
+        if isinstance(mt, TypeVar):
+            return
+
+        if mt is Any:
+            return
+
+        if mt == np.ndarray:
+            return
+
+        for n in MAGNITUDE_TYPES:
+            if mt is n:
+                return
+            if isinstance(n, type) and isinstance(mt, type) and issubclass(mt, n):
+                return
+            if mt == n:
+                return
+
+        expected = [n.__qualname__ for n in MAGNITUDE_TYPES]
+        raise TypeError(f"Invalid magnitude type: {mt}, expected one of {expected}")
+
     @classmethod
     def _get_dimensional_subclass(cls, dim: type[Dimensionality], mt: type | None) -> type[Quantity[DT, MT]]:
         # there are two levels of subclasses to Quantity: DimensionalQuantity and
@@ -344,7 +366,7 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
             if mt is None:
                 raise RuntimeError("No non-null magnitude types were detected")
 
-        validate_magnitude_type(mt)
+        cls.validate_magnitude_type(mt)
 
         mt_name = mt.__name__
 
