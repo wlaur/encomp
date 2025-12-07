@@ -94,7 +94,7 @@ def isinstance_types(obj: Any, expected: object) -> bool:
 
     if get_origin(expected) is Union:
         try:
-            return isinstance(obj, expected)
+            return isinstance(obj, expected)  # type: ignore[arg-type]
         except TypeError:
             return any(isinstance_types(obj, n) for n in get_args(expected))
 

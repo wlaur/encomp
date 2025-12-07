@@ -361,9 +361,9 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
             },
         )
 
-        cls._subclasses[dim_name, mt_name] = DimensionalMagnitudeQuantity  # type: ignore[arg-type]
+        cls._subclasses[dim_name, mt_name] = DimensionalMagnitudeQuantity
 
-        return DimensionalMagnitudeQuantity  # type: ignore[return-value]
+        return DimensionalMagnitudeQuantity
 
     def __class_getitem__(cls, types: type[DT] | tuple[type[DT], type[MT]]) -> type[Quantity[DT, MT]]:
         if isinstance(types, tuple):
