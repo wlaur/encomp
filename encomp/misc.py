@@ -5,6 +5,7 @@ from typing import (
     TypeGuard,
     TypeVar,
     Union,
+    get_args,
     get_origin,
     is_typeddict,
     overload,
@@ -94,7 +95,7 @@ def isinstance_types(obj: Any, expected: GenericAlias | type) -> bool:
         try:
             return isinstance(obj, expected)  # type: ignore[arg-type]
         except TypeError:
-            return any(isinstance_types(obj, n) for n in expected.__args__)
+            return any(isinstance_types(obj, n) for n in get_args(expected))
 
     try:
         # this function raises an exception in case the object type

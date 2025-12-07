@@ -1,3 +1,4 @@
+# ruff: noqa: UP046
 """
 Imports and extends the ``pint`` library for physical units.
 Always import this module when working with ``encomp`` (most other modules
@@ -16,7 +17,7 @@ import re
 import warnings
 from collections.abc import Iterable, Sequence, Sized
 from types import UnionType
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar, cast, get_args
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, TypeVar, cast, get_args
 
 import numpy as np
 import pint
@@ -265,11 +266,11 @@ class _QuantityMeta(type):
         return id(cls)
 
 
-class Unit[DT](PlainUnit):
+class Unit(PlainUnit, Generic[DT]):
     pass
 
 
-class Quantity[DT, MT](NumpyQuantity, metaclass=_QuantityMeta):
+class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
     """
     Subclass of pint's ``Quantity`` with additional type hints,  functionality
     and integration with other libraries.
@@ -403,21 +404,30 @@ class Quantity[DT, MT](NumpyQuantity, metaclass=_QuantityMeta):
         # check if the attribute dimensions exists instead of using issubclass()
         # issubclass does not work well with autoreloading in Jupyter
         if not hasattr(dim, "dimensions"):
-            raise TypeError(f'Generic type parameter to Quantity has no attribute "dimensions", passed: {dim}')
+            raise TypeError(f"Generic type parameter to Quantity has no attribute 'dimensions', passed: {dim}")
 
-        if not isinstance(dim.dimensions, UnitsContainer):
+        dimensions = getattr(dim, "dimensions", None)
+
+        if dimensions is None:
             raise TypeError(
-                "Type parameter to Quantity has incorrect type for attribute dimensions: UnitsContainer, "
-                f"passed: {dim} with dimensions: {dim.dimensions} ({type(dim.dimensions)})"
+                "Generic type parameter to Quantity is missing "
+                f"or has explicitly set attribute 'dimensions' to None: {dim}"
             )
 
-        subcls = cls._get_dimensional_subclass(dim, mt)
+        if not isinstance(dimensions, UnitsContainer):
+            raise TypeError(
+                "Type parameter to Quantity has incorrect type for attribute dimensions: UnitsContainer, "
+                f"passed: {dim} with dimensions: {dimensions} ({type(dimensions)})"
+            )
+
+        dim_ = cast(type[Dimensionality], dim)
+        subcls = cls._get_dimensional_subclass(dim_, mt)
         return subcls
 
     @staticmethod
     def _validate_unit(
-        unit: Unit[DT_] | UnitsContainer | str | dict[str, numbers.Number] | None,
-    ) -> Unit[DT_]:
+        unit: Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | None,
+    ) -> Unit[DT]:
         if isinstance(unit, Quantity):
             raise TypeError(
                 f"Input unit is a Quantity object: {unit}. "
@@ -491,11 +501,10 @@ class Quantity[DT, MT](NumpyQuantity, metaclass=_QuantityMeta):
             raise TypeError(
                 f"Quantity with scalar magnitude ({self._magnitude}, type {type(self._magnitude)}) has no length"
             )
-
         elif isinstance(self._magnitude, pl.Expr):
             raise TypeError(f"Cannot determine length of Polars expression: {self._magnitude}")
 
-        return len(self._magnitude)
+        return len(cast(Sized, self._magnitude))
 
     def __copy__(self) -> Quantity[DT, MT]:
         return self._call_subclass(copy.copy(self._magnitude), self._units)
@@ -519,7 +528,7 @@ class Quantity[DT, MT](NumpyQuantity, metaclass=_QuantityMeta):
     def __new__(
         cls,
         val: MT | Sequence[int | float],
-        unit: Unit[DT] | UnitsContainer | str | dict | None = None,
+        unit: Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | None = None,
         _mt_orig: type[MT] | None = None,
         _mt_orig_kwargs: dict[str, Any] | None = None,
         _depth: int = 0,
@@ -627,16 +636,12 @@ class Quantity[DT, MT](NumpyQuantity, metaclass=_QuantityMeta):
         # handle the edge case where a 1-element pd.Series is
         # multiplied or divided by an N-element pd.Series
 
-        m: MT
-        u: Unit[DT]
-
         if len(args) == 1:
             qty = args[0]
             if not isinstance(qty, Quantity):
-                raise TypeError(f"Invalid input: {args}")
+                raise TypeError(f"Invalid single input: {args}")
 
             m, u = qty.m, qty.u
-
         elif len(args) == 2:
             m, u = args
         else:
@@ -650,7 +655,7 @@ class Quantity[DT, MT](NumpyQuantity, metaclass=_QuantityMeta):
                 del self._original_magnitude_kwargs["index"]
 
         return self.subclass(
-            m,
+            m,  # type: ignore[arg-type]
             u,
             _mt_orig=self._original_magnitude_type,
             _mt_orig_kwargs=self._original_magnitude_kwargs,
@@ -682,10 +687,10 @@ class Quantity[DT, MT](NumpyQuantity, metaclass=_QuantityMeta):
             for key in set(src_dim.keys()) | set(dst_dim.keys())
         )
 
-    def _to_unit(self, unit: Unit[DT_] | UnitsContainer | str | dict) -> Unit[DT_]:
+    def _to_unit(self, unit: Unit[DT] | UnitsContainer | str | dict[str, numbers.Number]) -> Unit[DT]:
         return self._validate_unit(unit)
 
-    def to(self, unit: Unit[DT] | UnitsContainer | str | dict) -> Quantity[DT, MT]:  # type: ignore[override]
+    def to(self, unit: Unit[DT] | UnitsContainer | str | dict[str, numbers.Number]) -> Quantity[DT, MT]:  # type: ignore[override]
         valid_unit = self._to_unit(unit)
         self._check_temperature_compatibility(valid_unit)
 
@@ -715,7 +720,7 @@ class Quantity[DT, MT](NumpyQuantity, metaclass=_QuantityMeta):
 
         return converted
 
-    def ito(self, unit: Unit[DT] | UnitsContainer | str | dict) -> None:  # type: ignore[override]
+    def ito(self, unit: Unit[DT] | UnitsContainer | str | dict[str, numbers.Number]) -> None:  # type: ignore[override]
         # NOTE: this method cannot convert the dimensionality type
         valid_unit = self._to_unit(unit)
         self._check_temperature_compatibility(valid_unit)
