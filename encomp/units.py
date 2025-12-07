@@ -655,7 +655,7 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
                 del self._original_magnitude_kwargs["index"]
 
         return self.subclass(
-            m,  # type: ignore[arg-type]
+            m,
             u,
             _mt_orig=self._original_magnitude_type,
             _mt_orig_kwargs=self._original_magnitude_kwargs,
@@ -763,9 +763,12 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
             return self.check(unit_qty)
 
         if hasattr(dimension, "dimensions"):
-            dimension = cast(UnitsContainer, dimension.dimensions)
+            _dims = getattr(dimension, "dimensions", None)
+            if _dims is None:
+                raise TypeError(f"Attribute 'dimensions' is missing or None: {dimension}")
+            return super().check(cast(UnitsContainer, _dims))
 
-        return super().check(dimension)
+        return super().check(cast(UnitsContainer | Unit | str, dimension))
 
     def __format__(self, format_type: str) -> str:
         """
