@@ -547,11 +547,11 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
         _depth: int = 0,
     ) -> Quantity[DT, MT]:
         if isinstance(val, Quantity):
-            _qty = val
+            _input_qty = val
             if unit is not None:
-                _qty = val.to(unit)
+                _input_qty = _input_qty.to(unit)
 
-            val, unit = _qty.m, _qty.u
+            val, unit = _input_qty.m, _input_qty.u
 
         valid_magnitude = cls._validate_magnitude(val)
         valid_unit = cls._validate_unit(unit)
