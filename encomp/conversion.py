@@ -1,5 +1,6 @@
-from typing import cast, overload
+from typing import overload
 
+from .misc import isinstance_types
 from .units import Quantity
 from .utypes import MT, Density, Mass, MassFlow, Volume, VolumeFlow
 
@@ -29,7 +30,7 @@ def convert_volume_mass(
 
 def convert_volume_mass(
     inp: (Quantity[Mass, MT] | Quantity[MassFlow, MT] | Quantity[Volume, MT] | Quantity[VolumeFlow, MT]),
-    rho: Quantity[Density, MT] | None = None,
+    rho: Quantity[Density, MT] | Quantity[Density, float] | None = None,
 ) -> Quantity[Mass, MT] | Quantity[MassFlow, MT] | Quantity[Volume, MT] | Quantity[VolumeFlow, MT]:
     """
     Converts mass to volume or vice versa.
@@ -48,16 +49,14 @@ def convert_volume_mass(
     """
 
     if rho is None:
-        rho = cast(Quantity[Density, MT], Quantity(997, "kg/m³"))
+        rho = Quantity(997, "kg/m³")
 
-    if not isinstance(rho, Quantity[Density]):  # type: ignore[misc]
+    if not isinstance_types(rho, Quantity[Density]):
         raise TypeError(f"Incorrect type for rho: {rho}")
 
-    if isinstance(inp, Quantity[Mass] | Quantity[MassFlow]):
+    if isinstance_types(inp, Quantity[Mass]) or isinstance_types(inp, Quantity[MassFlow]):
         return (inp / rho).to_reduced_units()
-
-    elif isinstance(inp, Quantity[Volume] | Quantity[VolumeFlow]):
+    elif isinstance_types(inp, Quantity[Volume]) or isinstance_types(inp, Quantity[VolumeFlow]):
         return (inp * rho).to_reduced_units()
-
     else:
         raise TypeError(f"Incorrect input: {inp}")

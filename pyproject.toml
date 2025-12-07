@@ -151,6 +151,7 @@ explicit_package_bases = false
 namespace_packages = false
 check_untyped_defs = true
 plugins = ["pydantic.mypy"]
+exclude = "encomp/tests"
 
 [tool.pydantic-mypy]
 init_typed = true

@@ -1,35 +1,21 @@
 import ast
-from types import GenericAlias
 from typing import (
     Any,
-    TypeGuard,
-    TypeVar,
+    TypeIs,
     Union,
     get_args,
     get_origin,
     is_typeddict,
-    overload,
 )
 
 import asttokens
 from typeguard import check_type
 
-T = TypeVar("T")
-
-
 # NOTE: these overloads are a workaround to avoid issues with type[T] -> T
 # signatures with mypy
 
 
-@overload
-def isinstance_types[T](obj: Any, expected: type[T]) -> TypeGuard[T]: ...  # noqa: ANN401
-
-
-@overload
-def isinstance_types(obj: Any, expected: Any) -> bool: ...  # noqa: ANN401
-
-
-def isinstance_types(obj: Any, expected: GenericAlias | type) -> bool:
+def isinstance_types[T](obj: Any, expected: type[T]) -> TypeIs[T]:  # noqa: ANN401
     """
     Checks if the input object matches the expected type.
     This function also supports complex type annotations that cannot
@@ -93,7 +79,7 @@ def isinstance_types(obj: Any, expected: GenericAlias | type) -> bool:
 
     if get_origin(expected) is Union:
         try:
-            return isinstance(obj, expected)  # type: ignore[arg-type]
+            return isinstance(obj, expected)
         except TypeError:
             return any(isinstance_types(obj, n) for n in get_args(expected))
 

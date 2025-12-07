@@ -67,7 +67,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-import sympy as sp
+import sympy as sp  # type: ignore[import-untyped]
 from uncertainties import ufloat  # type: ignore[import-untyped]
 from uncertainties.core import AffineScalarFunc  # type: ignore[import-untyped]
 

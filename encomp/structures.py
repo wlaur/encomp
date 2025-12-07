@@ -3,15 +3,12 @@ Data structures and related functions.
 """
 
 from collections.abc import Iterable, Iterator, Sequence
-from typing import Any, TypeVar, overload
+from typing import Any, overload
 
 import numpy as np
 import pandas as pd
 
 from .units import Quantity
-
-T = TypeVar("T")
-
 
 _BASE_TYPES = (str, Quantity, pd.Series, pd.DataFrame, np.ndarray)
 
@@ -32,7 +29,7 @@ def divide_chunks[T](container: Sequence[T], N: int) -> Iterator[Sequence[T]]: .
 def divide_chunks(container: np.ndarray, N: int) -> Iterator[np.ndarray]: ...
 
 
-def divide_chunks(container, N):
+def divide_chunks(container: Any, N: int) -> Any:
     """
     Generator that divides a container into chunks with length ``N``.
     The last chunk might not have ``N`` elements.
