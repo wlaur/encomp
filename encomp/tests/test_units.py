@@ -215,14 +215,14 @@ def test_function_annotations() -> None:
 
     a = return_input(Q(25, "m"))
 
-    assert isinstance(a, Q[Length])
+    assert isinstance_types(a, Q[Length])
 
     # not possible to determine output dimensionality for this
     def divide_by_time(q: Q[DT]) -> Q:
         return q / Q(1, "h")
 
     # this will be resolved to MassFlow at runtime
-    assert isinstance(divide_by_time(Q(25, "kg")), Q[MassFlow])
+    assert isinstance_types(divide_by_time(Q(25, "kg")), Q[MassFlow])
 
 
 def test_dimensionality_type_hierarchy() -> None:
@@ -248,16 +248,15 @@ def test_dimensionality_type_hierarchy() -> None:
         # the Estimation subtype cannot be used directly
         # it's possible to create the subclass, but not create an instance
         EstimatedQuantity = Q[Estimation]
-        EstimatedQuantity  # noqa: B018
 
         # TODO: this does not currently work
         # with pytest.raises(TypeError):
-        #     EstimatedQuantity(25, 'm')
+        EstimatedQuantity(25, "m")
 
         # these quantities are not compatible with normal Length/Mass
         # (override the str literal unit overloads for mypy)
-        s = Q[EstimatedLength](25, "m")
-        m = Q[EstimatedMass](25, "kg")
+        s = Q[EstimatedLength, float](25, "m")
+        m = Q[EstimatedMass, float](25, "kg")
 
         assert issubclass(s._dimensionality_type, Estimation)
         assert issubclass(m._dimensionality_type, Estimation)
@@ -265,25 +264,27 @@ def test_dimensionality_type_hierarchy() -> None:
         # the dimensionality type is preserved for add, sub and
         # mul, div with scalars (not with Q[Dimensionless])
 
-        assert isinstance(s, Q[EstimatedLength])
-        assert isinstance(s * 2, Q[EstimatedLength])
-        assert isinstance(2 * s, Q[EstimatedLength])
+        assert isinstance_types(s, Q[EstimatedLength])
+        assert isinstance_types(s * 2, Q[EstimatedLength])
+        assert isinstance_types(2 * s, Q[EstimatedLength])
 
-        assert isinstance(s / 2, Q[EstimatedLength])
+        assert isinstance_types(s / 2, Q[EstimatedLength])
 
         # inverted dimensionality 1/Length
-        assert not isinstance(2 / s, Q[EstimatedLength])
+        assert not isinstance_types(2 / s, Q[EstimatedLength])
 
-        assert isinstance(s + s, Q[EstimatedLength])
-        assert isinstance(s - s, Q[EstimatedLength])
-        assert isinstance(s - s * 2, Q[EstimatedLength])
-        assert isinstance(s + s / 2, Q[EstimatedLength])
+        assert isinstance_types(s + s, Q[EstimatedLength])
+        assert isinstance_types(s - s, Q[EstimatedLength])
+        assert isinstance_types(s - s * 2, Q[EstimatedLength])
+        assert isinstance_types(s + s / 2, Q[EstimatedLength])
 
-        assert isinstance(2 * s + s, Q[EstimatedLength])
-        assert isinstance(2 * s - s / 2, Q[EstimatedLength])
+        assert isinstance_types(2 * s + s, Q[EstimatedLength])
+        assert isinstance_types(2 * s - s / 2, Q[EstimatedLength])
 
-        assert isinstance(Q(1) * s, Q[EstimatedLength])
-        assert isinstance(s * Q(1), Q[EstimatedLength])
+        assert isinstance_types(1 * s, Q[EstimatedLength])
+
+        assert isinstance_types(Q(1) * s, Q[EstimatedLength])
+        assert isinstance_types(s * Q(1), Q[EstimatedLength])
 
         # these quantities are not compatible with normal Length/Mass
         # TODO: use a more specific exception here
@@ -300,9 +301,9 @@ def test_dimensionality_type_hierarchy() -> None:
         assert Q[EstimatedDistance](s.m, s.u) == s
 
         # however, the type will be determined by the first object
-        assert isinstance(Q[EstimatedDistance](2, "m") + s, Q[EstimatedDistance])
+        assert isinstance_types(Q[EstimatedDistance](2, "m") + s, Q[EstimatedDistance])
 
-        assert isinstance(s - Q[EstimatedDistance](2, "m"), Q[EstimatedLength])
+        assert isinstance_types(s - Q[EstimatedDistance](2, "m"), Q[EstimatedLength])
 
 
 def test_type_eq() -> None:

@@ -312,7 +312,10 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
         return self.__format__(self._REGISTRY.formatter.default_format)
 
     def __hash__(self) -> int:
-        return hash(self.m) + hash(self.u)
+        if not isinstance(self.m, float):
+            raise TypeError(f"unhashable type: 'Quantity' (magnitude type: {type(self.m).__name__})")
+
+        return hash((self.m, self.u))
 
     # NOTE: pint NumpyQuantity does not have copy and dtype as kwargs for __array__
     def __array__(self, t: Any | None = None, copy: bool = False, dtype: str | None = None) -> np.ndarray:  # noqa: ANN401
@@ -544,13 +547,14 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
         _depth: int = 0,
     ) -> Quantity[DT, MT]:
         if isinstance(val, Quantity):
+            _qty = val
             if unit is not None:
-                return val.to(unit)
-            else:
-                return copy.deepcopy(val)
+                _qty = val.to(unit)
 
-        valid_unit = cls._validate_unit(unit)
+            val, unit = _qty.m, _qty.u
+
         valid_magnitude = cls._validate_magnitude(val)
+        valid_unit = cls._validate_unit(unit)
 
         # NOTE: "original" in this case does not necessarily refer to the type
         # that is actually passed to the constructor
