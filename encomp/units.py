@@ -332,8 +332,19 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
             if mt == n:
                 return
 
-        expected = [n.__qualname__ for n in MAGNITUDE_TYPES]
-        raise TypeError(f"Invalid magnitude type: {mt}, expected one of {expected}")
+        raise TypeError(
+            f"Invalid magnitude type: {mt}, expected one of float, np.ndarray, pd.Series, pl.Series, pl.Expression"
+        )
+
+    @staticmethod
+    def _get_magnitude_type_name(mt: type) -> str:
+        if mt is pd.Series:
+            return "pd.Series"
+
+        if mt is pl.Series:
+            return "pl.Series"
+
+        return mt.__name__
 
     @classmethod
     def _get_dimensional_subclass(cls, dim: type[Dimensionality], mt: type | None) -> type[Quantity[DT, MT]]:
@@ -368,7 +379,7 @@ class Quantity(NumpyQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
 
         cls.validate_magnitude_type(mt)
 
-        mt_name = mt.__name__
+        mt_name = cls._get_magnitude_type_name(mt)
 
         # check if an existing DimensionalMagnitudeQuantity subclass already has been created
         if cached_dim_magnitude_qty := cls._subclasses.get((dim_name, mt_name)):
