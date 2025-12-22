@@ -8,7 +8,7 @@ Some commonly used derived dimensionalities (like density) are defined for conve
 from __future__ import annotations
 
 from abc import ABC
-from typing import Literal, TypeVar, get_origin
+from typing import Literal, TypeVar, cast, get_origin
 
 import numpy as np
 import pandas as pd
@@ -562,7 +562,7 @@ class Dimensionality(ABC):  # noqa: B024
         # the first element in __mro__ is the class that is being created, the
         # second is the direct parent class
         # parent must be either Dimensionality or a subclass
-        parent: type[Dimensionality] = cls.__mro__[1]
+        parent = cast(type[Dimensionality], cls.__mro__[1])
 
         # ignore this check if the parent is the base class Dimensionality
         if parent.dimensions is not cls._UnsetUC and parent.dimensions != cls.dimensions:
@@ -594,10 +594,13 @@ class Dimensionality(ABC):  # noqa: B024
         # not possible to generate a proper name for this,
         # so it will just contain the literal dimensions
         # this will call __init_subclass__ to register the type
-        _Dimensionality = type(
-            f"Dimensionality[{dimensions}]",
-            (Dimensionality,),
-            {"dimensions": dimensions},
+        _Dimensionality = cast(
+            type[Dimensionality],
+            type(
+                f"Dimensionality[{dimensions}]",
+                (Dimensionality,),
+                {"dimensions": dimensions},
+            ),
         )
 
         return _Dimensionality
