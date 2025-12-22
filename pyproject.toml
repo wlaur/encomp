@@ -51,6 +51,7 @@ dev = [
     "pyinstrument",
     "scipy-stubs>=1.16.3.2",
     "ipykernel>=7.1.0",
+    "ty>=0.0.5",
 ]
 
 [tool.hatch.build.targets.sdist]
