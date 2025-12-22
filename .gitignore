@@ -139,3 +139,4 @@ generated
 
 .python-version
 .ruff-cache/
+.claude
