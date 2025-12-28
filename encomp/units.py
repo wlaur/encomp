@@ -566,7 +566,7 @@ class Quantity(
             return float(val)
         elif isinstance(val, (np.ndarray, pd.Series, pl.Series, pl.Expr)):
             return val
-        elif isinstance(val, list):
+        elif isinstance(val, (list, tuple)):
             arr = cast(MT, np.array(val).astype(np.float64))
             return arr
         # implicit way of checking if the value is a sympy symbol without having to import Sympy
