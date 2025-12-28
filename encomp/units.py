@@ -345,19 +345,13 @@ class Unit(PlainUnit, Generic[DT]):
     pass
 
 
-class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Generic[DT, MT], metaclass=_QuantityMeta):
-    """
-    Subclass of pint's ``Quantity`` with additional type hints,  functionality
-    and integration with other libraries.
-
-    Encodes the output dimensionalities of some common operations,
-    for example ``Length**2 -> Area``. This is implemented by overloading the
-    ``__mul__, __truediv__, __rtruediv__, __pow__`` methods.
-
-    .. note::
-        The overload signatures are defined in a separate file (``units.pyi``)
-    """
-
+class Quantity(
+    NumpyQuantity,
+    NonMultiplicativeQuantity,
+    MeasurementQuantity,
+    Generic[DT, MT],
+    metaclass=_QuantityMeta,
+):
     # constants
     NORMAL_M3_VARIANTS = ("nm³", "Nm³", "nm3", "Nm3", "nm**3", "Nm**3", "nm^3", "Nm^3")
     TEMPERATURE_DIFFERENCE_UCS = (Unit("delta_degC")._units, Unit("delta_degF")._units)
@@ -370,7 +364,7 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
     # mapping from dimensionality subclass name to quantity subclass
     # this dict will be populated at runtime
     # use a custom class attribute (not cls.__subclasses__()) for more control
-    _subclasses: ClassVar[dict[tuple[str, str | None], type[Quantity[Dimensionality, Any]]]] = {}
+    _subclasses: ClassVar[dict[tuple[str, str | None], type[Quantity[Any, Any]]]] = {}
     _dimension_symbol_map: ClassVar[dict[sp.Basic, Unit]] = {}
 
     # used to validate dimensionality and magnitude type,
@@ -441,22 +435,25 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
         dim_name = dim.__name__
 
         if cached_dim_qty := cls._subclasses.get((dim_name, None)):
-            DimensionalQuantity = cached_dim_qty
+            DimensionalQuantity = cast("type[Quantity[DT, Any]]", cached_dim_qty)
         else:
-            DimensionalQuantity = type(
-                f"Quantity[{dim_name}]",
-                (Quantity,),
-                {
-                    "_dimensionality_type": dim,
-                    "_magnitude_type": None,
-                    "__class__": Quantity,
-                },
+            DimensionalQuantity = cast(
+                "type[Quantity[DT, Any]]",
+                type(
+                    f"Quantity[{dim_name}]",
+                    (Quantity,),
+                    {
+                        "_dimensionality_type": dim,
+                        "_magnitude_type": None,
+                        "__class__": Quantity,
+                    },
+                ),
             )
 
             cls._subclasses[dim_name, None] = DimensionalQuantity
 
         if mt is None or mt is Any or isinstance(mt, TypeVar):
-            return DimensionalQuantity  # type: ignore[return-value]
+            return DimensionalQuantity
 
         if isinstance(mt, UnionType):
             mt = next(n for n in get_args(mt) if n is not None)
@@ -464,20 +461,22 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
                 raise RuntimeError("No non-null magnitude types were detected")
 
         cls.validate_magnitude_type(mt)
-
         mt_name = cls._get_magnitude_type_name(mt)
 
         # check if an existing DimensionalMagnitudeQuantity subclass already has been created
         if cached_dim_magnitude_qty := cls._subclasses.get((dim_name, mt_name)):
-            return cached_dim_magnitude_qty  # type: ignore[return-value]
+            return cast("type[Quantity[DT, MT]]", cached_dim_magnitude_qty)
 
-        DimensionalMagnitudeQuantity = type(
-            f"Quantity[{dim_name}, {mt_name}]",
-            (DimensionalQuantity,),
-            {
-                "_magnitude_type": mt,
-                "__class__": DimensionalQuantity,
-            },
+        DimensionalMagnitudeQuantity = cast(
+            "type[Quantity[DT, MT]]",
+            type(
+                f"Quantity[{dim_name}, {mt_name}]",
+                (DimensionalQuantity,),
+                {
+                    "_magnitude_type": mt,
+                    "__class__": DimensionalQuantity,
+                },
+            ),
         )
 
         cls._subclasses[dim_name, mt_name] = DimensionalMagnitudeQuantity
@@ -686,7 +685,7 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
     @overload
     def __new__(cls, val: MT, unit: SpecificHeatCapacityUnits) -> Quantity[SpecificHeatCapacity, MT]: ...
     @overload
-    def __new__(cls, val: MT, unit: str | UnitsContainer) -> Quantity[Dimensionality, MT]: ...
+    def __new__(cls, val: MT, unit: str | UnitsContainer) -> Quantity[Any, MT]: ...
     @overload
     def __new__(cls, val: Quantity[DT, MT]) -> Quantity[DT, MT]: ...
     @overload
@@ -758,7 +757,9 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
     @overload
     def __new__(cls, val: list, unit: Unit[DT]) -> Quantity[DT, Numpy1DArray]: ...
     @overload
-    def __new__(cls, val: list, unit: str | UnitsContainer) -> Quantity[Dimensionality, Numpy1DArray]: ...
+    def __new__(cls, val: list, unit: str | UnitsContainer) -> Quantity[Any, Numpy1DArray]: ...
+    @overload
+    def __new__(cls, val: MT, unit: Unit[DT]) -> Quantity[DT, MT]: ...
 
     # endregion
 
@@ -769,7 +770,7 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
         _mt_orig: type[MT] | None = None,
         _mt_orig_kwargs: dict[str, Any] | None = None,
         _depth: int = 0,
-    ) -> Quantity[DT, MT]:
+    ) -> Quantity[Any, Any]:
         if isinstance(val, Quantity):
             _input_qty = val
             if unit is not None:
@@ -830,7 +831,7 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
             )
 
         _qty = super().__new__(cls, valid_magnitude, units=valid_unit)
-        qty = cast(Quantity[DT, MT], _qty)
+        qty = cast("Quantity[DT, MT]", _qty)
 
         # ensure that pint did not change the dtype of numpy arrays
         if isinstance(qty._magnitude, np.ndarray):
@@ -955,7 +956,7 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
                 _mt_orig_kwargs=self._original_magnitude_kwargs,
             )
 
-            return cast(Quantity[DT, MT], temperature_diff_qty)
+            return cast("Quantity[DT, MT]", temperature_diff_qty)
 
         converted = self._call_subclass(m, unit)
 
@@ -988,7 +989,7 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
 
     def check(  # type: ignore[override]
         self,
-        dimension: Quantity[Dimensionality, Any] | UnitsContainer | Unit | str | Dimensionality | type[Dimensionality],
+        dimension: Quantity[Any, Any] | UnitsContainer | Unit | str | Dimensionality | type[Dimensionality],
     ) -> bool:
         if isinstance(dimension, Quantity):
             return self._dimensionality_type == dimension._dimensionality_type
@@ -1175,7 +1176,7 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
 
         qty = cls(magnitude, unit).to_base_units()  # type: ignore[arg-type]
 
-        return cast(Quantity[DT, float], qty)
+        return cast("Quantity[DT, float]", qty)
 
     @classmethod
     def __get_pydantic_core_schema__(
@@ -1308,7 +1309,7 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
             f"Value {ret} ({type(ret).__name__}) does not match expected dimensionality {cls.__name__}"
         )
 
-    def check_compatibility(self, other: Quantity | float | int) -> None:
+    def check_compatibility(self, other: Quantity[Any, Any] | float | int) -> None:
         if not isinstance(other, Quantity):
             if not self.dimensionless:
                 raise DimensionalityTypeError(
@@ -1393,9 +1394,9 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
     @overload
     def __pow__(self: Quantity[Dimensionless, Any], other: float | int) -> Quantity[Dimensionless, Any]: ...
     @overload
-    def __pow__(self, other: Quantity[Dimensionless, Any]) -> Quantity[Dimensionality, Any]: ...
+    def __pow__(self, other: Quantity[Dimensionless, Any]) -> Quantity[Any, Any]: ...
     @overload
-    def __pow__(self, other: float | int) -> Quantity[Dimensionality, Any]: ...
+    def __pow__(self, other: float | int) -> Quantity[Any, Any]: ...
     def __pow__(self, other):  # type: ignore[misc]
         # Implementation inherited from parent classes
         return super().__pow__(other)  # type: ignore[no-any-return]
@@ -1419,9 +1420,7 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
     @overload
     def __add__(self, other: Quantity[DT, Any]) -> Quantity[DT, Any]: ...
     @overload
-    def __add__(
-        self: Quantity[Dimensionality, Any], other: Quantity[Dimensionality, Any]
-    ) -> Quantity[Dimensionality, Any]: ...
+    def __add__(self: Quantity[Any, Any], other: Quantity[Any, Any]) -> Quantity[Any, Any]: ...
     @overload
     def __sub__(self: Quantity[Dimensionless, MT], other: float | int) -> Quantity[Dimensionless, MT]: ...
     @overload
@@ -1441,9 +1440,7 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
     @overload
     def __sub__(self, other: Quantity[DT, Any]) -> Quantity[DT, Any]: ...
     @overload
-    def __sub__(
-        self: Quantity[Dimensionality, Any], other: Quantity[Dimensionality, Any]
-    ) -> Quantity[Dimensionality, Any]: ...
+    def __sub__(self: Quantity[Any, Any], other: Quantity[Any, Any]) -> Quantity[Any, Any]: ...
     @overload
     def __gt__(self: Quantity[Dimensionless, float], other: float | int) -> bool: ...
     @overload
@@ -2073,11 +2070,11 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
     @overload
     def __mul__(self, other: float | int) -> Quantity[DT, MT]: ...
     @overload
-    def __mul__(self, other: Quantity[DT_, MT_]) -> Quantity[Dimensionality, MT_]: ...
+    def __mul__(self, other: Quantity[DT_, MT_]) -> Quantity[Any, MT_]: ...
     @overload
-    def __mul__(self, other: Quantity[Dimensionality, MT_]) -> Quantity[Dimensionality, MT_]: ...
+    def __mul__(self, other: Quantity[Any, MT_]) -> Quantity[Any, MT_]: ...
     @overload
-    def __mul__(self, other: Quantity[Dimensionality, MT]) -> Quantity[Dimensionality, MT]: ...
+    def __mul__(self, other: Quantity[Any, MT]) -> Quantity[Any, MT]: ...
 
     # endregion
 
@@ -2095,8 +2092,6 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
 
     # region: overloads __truediv__
 
-    # TODO: this results in Q[Dimensionality] / Q[Dimensionality] becoming Q[Dimensionless]
-    # would need to create a separate typevar for any dimensionality except the base "Dimensionality"
     @overload
     def __truediv__(self, other: Quantity[DT, MT_]) -> Quantity[Dimensionless, MT]: ...
 
@@ -2732,15 +2727,13 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
     @overload
     def __truediv__(self, other: float | int) -> Quantity[DT, MT]: ...
     @overload
-    def __truediv__(self, other: Quantity[DT_, MT_]) -> Quantity[Dimensionality, MT]: ...
+    def __truediv__(self, other: Quantity[DT_, MT_]) -> Quantity[Any, MT]: ...
     @overload
-    def __truediv__(self, other: Quantity[Dimensionality, MT_]) -> Quantity[Dimensionality, MT]: ...
+    def __truediv__(self, other: Quantity[Any, MT_]) -> Quantity[Any, MT]: ...
     @overload
-    def __truediv__(
-        self: Quantity[Dimensionality, MT], other: Quantity[Dimensionality, MT_]
-    ) -> Quantity[Dimensionality, MT]: ...
+    def __truediv__(self: Quantity[Any, MT], other: Quantity[Any, MT_]) -> Quantity[Any, MT]: ...
 
-    def __truediv__(self, other):
+    def __truediv__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, MT]:
         ret = super().__truediv__(other)
         return self._call_subclass(ret)
 
@@ -2776,7 +2769,7 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
     # endregion
 
     @overload
-    def __rtruediv__(self, other: float | int) -> Quantity[Dimensionality, MT]: ...
+    def __rtruediv__(self, other: float | int) -> Quantity[Any, MT]: ...
 
     # endregion
 
@@ -2786,7 +2779,7 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
 
     def _temperature_difference_add_sub(
         self,
-        other: Quantity[TemperatureDifference, MT],
+        other: Quantity[TemperatureDifference, Any],
         operator: Literal["add", "sub"],
     ) -> Quantity[Temperature, MT]:
         v1 = self.to("degC").m
@@ -2798,10 +2791,13 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
 
         return result  # type: ignore[return-value]
 
-    def __add__(self, other):  # noqa: ANN204, ANN001
+    def __add__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
         try:
             self.check_compatibility(other)
         except DimensionalityTypeError as e:
+            if not isinstance(other, Quantity):
+                raise e
+
             self_is_temp_or_diff_temp = isinstance_types(self, Quantity[Temperature, Any]) or isinstance_types(
                 self, Quantity[TemperatureDifference, Any]
             )
@@ -2822,10 +2818,13 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
 
         return self._call_subclass(ret)
 
-    def __sub__(self, other):  # noqa: ANN204, ANN001
+    def __sub__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
         try:
             self.check_compatibility(other)
         except DimensionalityTypeError as e:
+            if not isinstance(other, Quantity):
+                raise e
+
             self_is_temp_or_diff_temp = isinstance_types(self, Quantity[Temperature, Any]) or isinstance_types(
                 self, Quantity[TemperatureDifference, Any]
             )
@@ -2844,9 +2843,13 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
 
         ret = super().__sub__(other)
 
-        if self._dimensionality_type is Temperature and other._dimensionality_type is Temperature:
+        if (
+            isinstance(other, Quantity)
+            and self._dimensionality_type is Temperature
+            and other._dimensionality_type is Temperature
+        ):
             _mt = type(ret.m)
-            return Quantity[TemperatureDifference, _mt](ret.m, ret.u)  # type: ignore[valid-type]
+            return Quantity[TemperatureDifference, _mt](ret.m, ret.u)
 
         return self._call_subclass(ret)
 
@@ -2883,17 +2886,17 @@ class Quantity(NumpyQuantity, NonMultiplicativeQuantity, MeasurementQuantity, Ge
     # region: overload __getitem__
 
     @overload
-    def __getitem__(self: Quantity[Dimensionality, pd.Series], index: int) -> Quantity[DT, float]: ...
+    def __getitem__(self: Quantity[DT, pd.Series], index: int) -> Quantity[DT, float]: ...
     @overload
-    def __getitem__(self: Quantity[Dimensionality, pl.Series], index: int) -> Quantity[DT, float]: ...
+    def __getitem__(self: Quantity[DT, pl.Series], index: int) -> Quantity[DT, float]: ...
     @overload
-    def __getitem__(self: Quantity[Dimensionality, pl.Expr], index: int) -> Quantity[DT, pl.Expr]: ...
+    def __getitem__(self: Quantity[DT, pl.Expr], index: int) -> Quantity[DT, pl.Expr]: ...
     @overload
-    def __getitem__(self: Quantity[Dimensionality, Numpy1DArray], index: int) -> Quantity[DT, float]: ...
+    def __getitem__(self: Quantity[DT, Numpy1DArray], index: int) -> Quantity[DT, float]: ...
 
     # endregion
 
-    def __getitem__(self, index: int) -> Quantity[DT]:
+    def __getitem__(self, index: int) -> Quantity[DT, Any]:
         ret = super().__getitem__(index)
         subcls = self._get_dimensional_subclass(
             self._dimensionality_type, type(ret.m) if isinstance(ret, Quantity) else type(ret)
