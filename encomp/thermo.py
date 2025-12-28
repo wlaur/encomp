@@ -5,6 +5,7 @@ Functions relating to thermodynamics.
 import numpy as np
 
 from .constants import CONSTANTS
+from .misc import isinstance_types
 from .units import Quantity
 from .utypes import (
     Energy,
@@ -87,7 +88,7 @@ def heat_balance(
         vals["dT"] = vals["dT"].to("delta_degC")
 
     # whether the calculation is per unit time or amount of mass / energy
-    per_time = any(isinstance(a, Quantity[MassFlow] | Quantity[Power]) for a in args)
+    per_time = any(isinstance_types(a, Quantity[MassFlow]) or isinstance_types(a, Quantity[Power]) for a in args)
 
     unit_idx = 1 if per_time else 0
 
@@ -106,12 +107,12 @@ def heat_balance(
         if not ret.check(TemperatureDifference):
             raise ValueError(f"Both units must be per unit time in case one of them is: {vals}")
 
-        ret.ito("delta_degC")
-
     else:
         raise ValueError(f"Incorrect input to heat_balance: {vals}")
 
-    return ret.to(unit)
+    ret = ret.to(unit)
+
+    return ret
 
 
 def intermediate_temperatures(

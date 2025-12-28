@@ -20,6 +20,7 @@ from ..serialize import decode
 from ..units import (
     CUSTOM_DIMENSIONS,
     UNIT_REGISTRY,
+    DimensionalityComparisonError,
     DimensionalityError,
     DimensionalityRedefinitionError,
     DimensionalityTypeError,
@@ -139,7 +140,7 @@ def test_asdim() -> None:
         q2 = Q(15, "kJ/kg").asdim(LowerHeatingValue)
 
         assert type(q1) is not type(q2)
-        assert q1 != q2
+        assert not q1.is_compatible_with(q2)
 
         assert type(q1) is type(q2.asdim(EnergyPerMass))
         assert type(q2) is type(q1.asdim(LowerHeatingValue))
@@ -467,7 +468,9 @@ def test_Q() -> None:
     assert (Q(s, "bar") == Q(vals, "bar").to("kPa")).all()
     assert (Q([1, 2, 3], "kg") == Q([1000, 2000, 3000], "g")).all()
     assert not (Q([1, 2, 3], "kg") == Q([1000, 2000, 3001], "g")).all()
-    assert not (Q([1, 2, 3], "kg") == Q([1000, 2000, 300], "g * meter")).any()
+
+    with pytest.raises(DimensionalityComparisonError):
+        (Q([1, 2, 3], "kg") == Q([1000, 2000, 300], "g * meter")).any()
 
     # compare scalar and vector will return a vector
     assert (Q(2, "bar") == Q(vals, "bar").to("kPa")).any()
@@ -1162,6 +1165,9 @@ def test_float_cast() -> None:
 
 
 def test_temperature_difference() -> None:
+    T0 = Q(25, "K").to("delta_degC")
+    assert isinstance_types(T0, Q[TemperatureDifference])
+
     T1 = Q(25, "degC")
     T2 = Q(35, "degC")
 

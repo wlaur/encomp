@@ -17,7 +17,7 @@ import re
 import warnings
 from collections.abc import Iterable, Sized
 from types import UnionType
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, TypeVar, cast, get_args, overload
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, TypeVar, assert_never, cast, get_args, overload
 
 import numpy as np
 import pandas as pd
@@ -100,6 +100,7 @@ from .utypes import (
     NormalVolumePerMass,
     NormalVolumeUnits,
     Numpy1DArray,
+    Numpy1DBoolArray,
     Power,
     PowerPerArea,
     PowerPerLength,
@@ -132,7 +133,7 @@ from .utypes import (
 )
 
 if TYPE_CHECKING:
-    import sympy as sp
+    import sympy as sp  # type: ignore[import-untyped]
 else:
     sp = None
 
@@ -260,9 +261,8 @@ for k, v in _REGISTRY_STATIC_OPTIONS.items():
     setattr(UNIT_REGISTRY, k, v)
 
 # make sure that UNIT_REGISTRY is the only registry that can be used
-pint._DEFAULT_REGISTRY = UNIT_REGISTRY
+setattr(pint, "_DEFAULT_REGISTRY", UNIT_REGISTRY)  # noqa: B010
 pint.application_registry.set(UNIT_REGISTRY)
-
 
 # the default format must be set after Quantity and Unit are registered
 UNIT_REGISTRY.formatter.default_format = SETTINGS.default_unit_format
@@ -357,6 +357,10 @@ class Quantity(
     # constants
     NORMAL_M3_VARIANTS = ("nm³", "Nm³", "nm3", "Nm3", "nm**3", "Nm**3", "nm^3", "Nm^3")
     TEMPERATURE_DIFFERENCE_UCS = (Unit("delta_degC")._units, Unit("delta_degF")._units)
+
+    # used for float and numpy array comparison
+    rtol: float = 1e-9
+    atol: float = 1e-12
 
     # compact, Latex, HTML, Latex/siunitx formatting
     FORMATTING_SPECS = PINT_FORMATTING_SPECIFIERS
@@ -527,14 +531,8 @@ class Quantity(
 
     @staticmethod
     def _validate_unit(
-        unit: Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | None,
+        unit: Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | QuantityOrUnitLike | None,
     ) -> Unit[DT]:
-        if isinstance(unit, Quantity):
-            raise TypeError(
-                f"Input unit is a Quantity object: {unit}. "
-                "Do not create nested Quantity objects, convert to separate magnitude and unit objects first."
-            )
-
         if unit is None:
             return Unit("dimensionless")
 
@@ -552,10 +550,13 @@ class Quantity(
         if isinstance(unit, str):
             return Unit(Quantity._REGISTRY.parse_units(Quantity.correct_unit(unit)))
 
-        raise ValueError(
-            f"Incorrect input for unit: {unit} ({type(unit)}), "
-            "expected Unit, UnitsContainer, str, dict[str, Number], Quantity or None"
-        )
+        if isinstance(unit, PlainUnit):
+            return Unit(unit)
+
+        if isinstance(unit, PlainQuantity):
+            return Unit(unit.u)
+
+        assert_never(unit)
 
     @staticmethod
     def _validate_magnitude(val: MT | list[float]) -> MT:
@@ -948,10 +949,14 @@ class Quantity(
             for key in set(src_dim.keys()) | set(dst_dim.keys())
         )
 
-    def _to_unit(self, unit: Unit[DT] | UnitsContainer | str | dict[str, numbers.Number]) -> Unit[DT]:
+    def _to_unit(
+        self, unit: Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | QuantityOrUnitLike
+    ) -> Unit[DT]:
         return self._validate_unit(unit)
 
-    def to(self, unit: Unit[DT] | UnitsContainer | str | dict[str, numbers.Number]) -> Quantity[DT, MT]:
+    def to(
+        self, unit: Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | QuantityOrUnitLike
+    ) -> Quantity[DT, MT]:
         valid_unit = self._to_unit(unit)
         self._check_temperature_compatibility(valid_unit)
 
@@ -968,21 +973,27 @@ class Quantity(
                 raise e
 
         if self._is_temperature_difference_unit(valid_unit):
-            return self.__class__(
+            ret = Quantity(
                 m,
                 valid_unit,
                 _mt_orig=self._original_magnitude_type,
                 _mt_orig_kwargs=self._original_magnitude_kwargs,
             )
+            return ret
 
         converted = self._call_subclass(m, unit)
 
         return converted
 
-    def ito(self, unit: Unit[DT] | UnitsContainer | str | dict[str, numbers.Number]) -> None:
+    def ito(self, unit: Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | QuantityOrUnitLike) -> None:
         # NOTE: this method cannot convert the dimensionality type
         valid_unit = self._to_unit(unit)
         self._check_temperature_compatibility(valid_unit)
+
+        if self._is_temperature_difference_unit(valid_unit) and not self._is_temperature_difference:
+            raise ValueError(
+                f"Cannot convert {self} ({type(self)}) to {valid_unit} inplace, use qty_converted = qty.to(...) instead"
+            )
 
         # it's not safe to convert units as int, the
         # user will have to convert back to int if necessary
@@ -1345,7 +1356,7 @@ class Quantity(
         if not isinstance(other, Quantity):
             if not self.dimensionless:
                 raise DimensionalityTypeError(
-                    f"Cannot add or subtract {other} ({type(other)}) to quantity {self} ({type(self)})"
+                    f"Value {other} ({type(other)}) is not compatible with dimensional quantity {self} ({type(self)})"
                 )
 
             return
@@ -1383,7 +1394,7 @@ class Quantity(
 
     def is_compatible_with(
         self,
-        other: Quantity | float | int,
+        other: Quantity[Any, Any] | float | int,
         *contexts: Any,  # noqa: ANN401
         **ctx_kwargs: Any,  # noqa: ANN401
     ) -> bool:
@@ -1398,21 +1409,59 @@ class Quantity(
         except DimensionalityTypeError:
             return False
 
-    def __eq__(self, other: object) -> bool:
-        # this returns an array of one or both inputs have array magnitudes
-        # we want to return scalar bool from this
-        # use qty.to("unit").m == qty_other.to("unit").m to compare np.ndarray if necessary
-        is_equal = super().__eq__(other)
+    @overload
+    def __eq__(self: Quantity[Any, float], other: Quantity[Any, float] | float | int) -> bool: ...
 
-        if isinstance(is_equal, np.ndarray):
-            is_equal = bool(is_equal.all())
+    @overload
+    def __eq__(
+        self: Quantity[Any, pl.Expr], other: Quantity[Any, pl.Expr] | Quantity[Any, float] | float | int
+    ) -> pl.Expr: ...
 
-        is_equal = bool(is_equal)
+    @overload
+    def __eq__(
+        self: Quantity[Any, Numpy1DArray], other: Quantity[Any, Numpy1DArray] | Quantity[Any, float] | float | int
+    ) -> Numpy1DBoolArray: ...
 
-        if not isinstance(other, Quantity):
-            return is_equal
+    @overload
+    def __eq__(self: Quantity[Any, Any], other: Quantity[Any, Numpy1DArray]) -> Numpy1DBoolArray: ...
 
-        return is_equal and self.is_compatible_with(other)
+    @overload
+    def __eq__(self: Quantity[Any, pd.Series], other: Quantity[Any, pd.Series] | float | int) -> pd.Series[bool]: ...
+
+    @overload
+    def __eq__(self: Quantity[Any, pl.Series], other: Quantity[Any, pl.Series] | float | int) -> pl.Series: ...
+
+    @overload
+    def __eq__(
+        self: Quantity[Any, Any], other: object
+    ) -> bool | Numpy1DBoolArray | pd.Series | pl.Series | pl.Expr: ...
+
+    def __eq__(self, other: object) -> bool | Numpy1DBoolArray | pd.Series | pl.Series | pl.Expr:  # pyright: ignore[reportIncompatibleMethodOverride]
+        if not isinstance(other, (Quantity, float, int)):
+            return bool(super().__eq__(other))
+
+        try:
+            self.check_compatibility(other)
+        except DimensionalityTypeError as e:
+            raise DimensionalityComparisonError(f"Cannot compare {self} with {other}") from e
+
+        if isinstance(other, (float, int)):
+            other = Quantity(other, "dimensionless")
+
+        m = self.m
+        other_m = cast(float | Numpy1DArray | pd.Series | pl.Series | pl.Expr, other.to(self.u).m)
+
+        if isinstance(m, (float, int, np.ndarray)) and isinstance(other_m, (float, int, np.ndarray)):
+            ret = np.isclose(m, other_m, self.rtol, self.atol)
+
+            if isinstance(ret, np.bool):
+                return bool(ret)
+            else:
+                return ret
+
+        ret = m == other_m
+
+        return ret
 
     # region: overload __floordiv__, __pow__, __add__, __sub__, __gt__, __ge__, __lt__, __le__
 
@@ -1420,6 +1469,9 @@ class Quantity(
     def __floordiv__(self: Quantity[Dimensionless, MT], other: float | int) -> Quantity[Dimensionless, MT]: ...
     @overload
     def __floordiv__(self, other: Quantity[DT, Any]) -> Quantity[Dimensionless, Any]: ...
+    def __floordiv__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
+        return super().__floordiv__(other)
+
     @overload
     def __pow__(self, other: Literal[1]) -> Quantity[DT, MT]: ...
     @overload
@@ -1432,11 +1484,8 @@ class Quantity(
     def __pow__(self, other: Quantity[Dimensionless, Any]) -> Quantity[Any, Any]: ...
     @overload
     def __pow__(self, other: float | int) -> Quantity[Any, Any]: ...
-    def __pow__(self, other):
-        return super().__pow__(other)
-
-    def __floordiv__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
-        return super().__floordiv__(other)
+    def __pow__(self, other: Quantity[Dimensionless, Any] | float | int) -> Quantity[Any, Any]:
+        return cast("Quantity[Any, Any]", super().__pow__(other))
 
     @overload
     def __add__(self: Quantity[Dimensionless, Any], other: float | int) -> Quantity[Dimensionless, Any]: ...
@@ -1532,7 +1581,8 @@ class Quantity(
             and other._dimensionality_type is Temperature
         ):
             _mt = type(ret.m)
-            return Quantity[TemperatureDifference, _mt](ret.m, ret.u)
+            subcls = self._get_dimensional_subclass(TemperatureDifference, _mt)
+            return subcls(ret.m, ret.u)
 
         return self._call_subclass(ret)
 
@@ -2187,8 +2237,6 @@ class Quantity(
     def __mul__(self, other: Quantity[Dimensionless, MT]) -> Quantity[DT, MT]: ...
     @overload
     def __mul__(self, other: float | int) -> Quantity[DT, MT]: ...
-    @overload
-    def __mul__(self, other: Quantity[DT_, MT_]) -> Quantity[Any, MT_]: ...
     @overload
     def __mul__(self, other: Quantity[Any, MT_]) -> Quantity[Any, MT_]: ...
     @overload
