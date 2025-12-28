@@ -1454,6 +1454,33 @@ class Quantity(
     def __add__(self, other: Quantity[DT, Any]) -> Quantity[DT, Any]: ...
     @overload
     def __add__(self: Quantity[Any, Any], other: Quantity[Any, Any]) -> Quantity[Any, Any]: ...
+    def __add__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
+        try:
+            self.check_compatibility(other)
+        except DimensionalityTypeError as e:
+            if not isinstance(other, Quantity):
+                raise e
+
+            self_is_temp_or_diff_temp = isinstance_types(self, Quantity[Temperature, Any]) or isinstance_types(
+                self, Quantity[TemperatureDifference, Any]
+            )
+
+            other_is_temp_or_diff_temp = isinstance_types(other, Quantity[Temperature, Any]) or isinstance_types(
+                other, Quantity[TemperatureDifference, Any]
+            )
+
+            if self_is_temp_or_diff_temp and other_is_temp_or_diff_temp:
+                if self._dimensionality_type is TemperatureDifference:
+                    raise e
+
+                return self._temperature_difference_add_sub(other, "add")
+
+            raise e
+
+        ret = super().__add__(other)
+
+        return self._call_subclass(ret)
+
     @overload
     def __sub__(self: Quantity[Dimensionless, MT], other: float | int) -> Quantity[Dimensionless, MT]: ...
     @overload
@@ -1474,22 +1501,80 @@ class Quantity(
     def __sub__(self, other: Quantity[DT, Any]) -> Quantity[DT, Any]: ...
     @overload
     def __sub__(self: Quantity[Any, Any], other: Quantity[Any, Any]) -> Quantity[Any, Any]: ...
+    def __sub__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
+        try:
+            self.check_compatibility(other)
+        except DimensionalityTypeError as e:
+            if not isinstance(other, Quantity):
+                raise e
+
+            self_is_temp_or_diff_temp = isinstance_types(self, Quantity[Temperature, Any]) or isinstance_types(
+                self, Quantity[TemperatureDifference, Any]
+            )
+
+            other_is_temp_or_diff_temp = isinstance_types(other, Quantity[Temperature, Any]) or isinstance_types(
+                other, Quantity[TemperatureDifference, Any]
+            )
+
+            if self_is_temp_or_diff_temp and other_is_temp_or_diff_temp:
+                if self._dimensionality_type is TemperatureDifference:
+                    raise e
+
+                return self._temperature_difference_add_sub(other, "sub")
+
+            raise e
+
+        ret = super().__sub__(other)
+
+        if (
+            isinstance(other, Quantity)
+            and self._dimensionality_type is Temperature
+            and other._dimensionality_type is Temperature
+        ):
+            _mt = type(ret.m)
+            return Quantity[TemperatureDifference, _mt](ret.m, ret.u)
+
+        return self._call_subclass(ret)
+
     @overload
     def __gt__(self: Quantity[Dimensionless, float], other: float | int) -> bool: ...
     @overload
     def __gt__(self: Quantity[DT, float], other: Quantity[DT, float]) -> bool: ...
+    def __gt__(self, other: Quantity[DT, Any] | float | int) -> bool:
+        try:
+            return super().__gt__(other)
+        except ValueError as e:
+            raise DimensionalityComparisonError(str(e)) from e
+
     @overload
     def __ge__(self: Quantity[Dimensionless, float], other: float | int) -> bool: ...
     @overload
     def __ge__(self: Quantity[DT, float], other: Quantity[DT, float]) -> bool: ...
+    def __ge__(self, other: Quantity[DT, Any] | float | int) -> bool:
+        try:
+            return super().__ge__(other)
+        except ValueError as e:
+            raise DimensionalityComparisonError(str(e)) from e
+
     @overload
     def __lt__(self: Quantity[Dimensionless, float], other: float | int) -> bool: ...
     @overload
     def __lt__(self: Quantity[DT, float], other: Quantity[DT, float]) -> bool: ...
+    def __lt__(self, other: Quantity[DT, Any] | float | int) -> bool:
+        try:
+            return super().__lt__(other)
+        except ValueError as e:
+            raise DimensionalityComparisonError(str(e)) from e
+
     @overload
     def __le__(self: Quantity[Dimensionless, float], other: float | int) -> bool: ...
     @overload
     def __le__(self: Quantity[DT, float], other: Quantity[DT, float]) -> bool: ...
+    def __le__(self, other: Quantity[DT, Any] | float | int) -> bool:
+        try:
+            return super().__le__(other)
+        except ValueError as e:
+            raise DimensionalityComparisonError(str(e)) from e
 
     # endregion
 
@@ -2821,92 +2906,6 @@ class Quantity(
         val = v1 + v2 if operator == "add" else v1 - v2
 
         return Quantity[Temperature, MT](val, "degC")
-
-    def __add__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
-        try:
-            self.check_compatibility(other)
-        except DimensionalityTypeError as e:
-            if not isinstance(other, Quantity):
-                raise e
-
-            self_is_temp_or_diff_temp = isinstance_types(self, Quantity[Temperature, Any]) or isinstance_types(
-                self, Quantity[TemperatureDifference, Any]
-            )
-
-            other_is_temp_or_diff_temp = isinstance_types(other, Quantity[Temperature, Any]) or isinstance_types(
-                other, Quantity[TemperatureDifference, Any]
-            )
-
-            if self_is_temp_or_diff_temp and other_is_temp_or_diff_temp:
-                if self._dimensionality_type is TemperatureDifference:
-                    raise e
-
-                return self._temperature_difference_add_sub(other, "add")
-
-            raise e
-
-        ret = super().__add__(other)
-
-        return self._call_subclass(ret)
-
-    def __sub__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
-        try:
-            self.check_compatibility(other)
-        except DimensionalityTypeError as e:
-            if not isinstance(other, Quantity):
-                raise e
-
-            self_is_temp_or_diff_temp = isinstance_types(self, Quantity[Temperature, Any]) or isinstance_types(
-                self, Quantity[TemperatureDifference, Any]
-            )
-
-            other_is_temp_or_diff_temp = isinstance_types(other, Quantity[Temperature, Any]) or isinstance_types(
-                other, Quantity[TemperatureDifference, Any]
-            )
-
-            if self_is_temp_or_diff_temp and other_is_temp_or_diff_temp:
-                if self._dimensionality_type is TemperatureDifference:
-                    raise e
-
-                return self._temperature_difference_add_sub(other, "sub")
-
-            raise e
-
-        ret = super().__sub__(other)
-
-        if (
-            isinstance(other, Quantity)
-            and self._dimensionality_type is Temperature
-            and other._dimensionality_type is Temperature
-        ):
-            _mt = type(ret.m)
-            return Quantity[TemperatureDifference, _mt](ret.m, ret.u)
-
-        return self._call_subclass(ret)
-
-    def __gt__(self, other):  # noqa: ANN204, ANN001
-        try:
-            return super().__gt__(other)
-        except ValueError as e:
-            raise DimensionalityComparisonError(str(e)) from e
-
-    def __ge__(self, other):  # noqa: ANN204, ANN001
-        try:
-            return super().__ge__(other)
-        except ValueError as e:
-            raise DimensionalityComparisonError(str(e)) from e
-
-    def __lt__(self, other):  # noqa: ANN204, ANN001
-        try:
-            return super().__lt__(other)
-        except ValueError as e:
-            raise DimensionalityComparisonError(str(e)) from e
-
-    def __le__(self, other):  # noqa: ANN204, ANN001
-        try:
-            return super().__le__(other)
-        except ValueError as e:
-            raise DimensionalityComparisonError(str(e)) from e
 
     def __round__(self, ndigits: int | None = None) -> Quantity[DT, MT]:
         if isinstance(self.m, float):
