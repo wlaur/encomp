@@ -770,6 +770,15 @@ class Quantity(
     def __new__(cls, val: MT, unit: str | UnitsContainer | Unit) -> Quantity[Any, MT]: ...
     @overload
     def __new__(cls, val: Quantity[DT, MT]) -> Quantity[DT, MT]: ...
+    @overload
+    def __new__(
+        cls,
+        val: MT | list[float] | Quantity[DT, MT],
+        unit: Unit[DT] | Unit | UnitsContainer | str | dict[str, numbers.Number] | None = None,
+        _mt_orig: type[MT] | None = None,
+        _mt_orig_kwargs: dict[str, Any] | None = None,
+        _depth: int = 0,
+    ) -> Quantity[Any, Any]: ...
 
     # endregion
 
@@ -907,8 +916,8 @@ class Quantity(
                 del self._original_magnitude_kwargs["index"]
 
         return self.subclass(
-            m,
-            u,
+            cast(MT, m),
+            cast(Unit[DT], u),
             _mt_orig=self._original_magnitude_type,
             _mt_orig_kwargs=self._original_magnitude_kwargs,
         )
