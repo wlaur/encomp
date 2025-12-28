@@ -1158,7 +1158,7 @@ class Quantity(
             return cls(float(expr), "dimensionless")  # type: ignore[return-value, arg-type]
 
         try:
-            magnitude = float(args[0])
+            magnitude = float(cast(Any, args[0]))
         except TypeError as e:
             raise ValueError(f"Expression {expr} contains inconsistent units") from e
 
@@ -1169,7 +1169,13 @@ class Quantity(
         for d in dimensions:
             unit_i = cls.get_unit("")
 
-            for symbol, power in d.as_powers_dict().items():
+            _as_powers_dict = getattr(d, "as_powers_dict", None)
+            if _as_powers_dict is None:
+                raise TypeError(f"Invalid type: {d=}")
+
+            powers_dict = cast(dict[sp.Basic, float], _as_powers_dict()).items()
+
+            for symbol, power in powers_dict:
                 unit_i *= cls._dimension_symbol_map[symbol] ** power
 
             unit *= unit_i
@@ -1255,14 +1261,14 @@ class Quantity(
 
     @classmethod
     def validate(
-        cls: type[Quantity[DT, MT]],
+        cls,
         qty: Any,  # noqa: ANN401
         info: Any,  # noqa: ANN401, ARG003
     ) -> Quantity[DT, MT]:
         if isinstance(qty, dict) and "value" in qty and "magnitude_type" in qty:
             val = qty["value"]
             magnitude_type = qty["magnitude_type"]
-            magnitude: int | float | pl.Series | list | Numpy1DArray
+            magnitude: int | float | pl.Series | list[float] | Numpy1DArray
 
             if magnitude_type.startswith("np.ndarray"):
                 _, dtype_str, _ = magnitude_type.split(":", 2)
@@ -1297,10 +1303,9 @@ class Quantity(
             else:
                 raise ExpectedDimensionalityError(f"Unknown magnitude_type {magnitude_type!r}")
 
-            ret = cls(magnitude, unit=qty.get("unit"))  # type: ignore[arg-type]
-
+            ret = cls(magnitude, unit=qty.get("unit"))
         else:
-            ret = qty if isinstance(qty, Quantity) else cls(qty)
+            ret = qty if isinstance(qty, Quantity) else cls(cast(Any, qty))
 
         if isinstance(ret, cls):
             return ret
@@ -1366,16 +1371,19 @@ class Quantity(
         except DimensionalityTypeError:
             return False
 
-    def __eq__(self, other: Any) -> bool | np.ndarray[tuple[int], np.dtype[np.bool]]:  # type: ignore[override] # noqa: ANN401
+    def __eq__(self, other: object) -> bool:
         # this returns an array of one or both inputs have array magnitudes
+        # we want to return scalar bool from this
+        # use qty.to("unit").m == qty_other.to("unit").m to compare np.ndarray if necessary
         is_equal = super().__eq__(other)
 
-        # TODO: should also check self.is_compatible_with(other) here
         if isinstance(is_equal, np.ndarray):
-            if self.is_compatible_with(other):
-                return is_equal.astype(bool)
+            is_equal = bool(is_equal.all())
 
-            return np.zeros_like(is_equal).astype(bool)
+        is_equal = bool(is_equal)
+
+        if not isinstance(other, Quantity):
+            return is_equal
 
         return is_equal and self.is_compatible_with(other)
 
@@ -2773,7 +2781,7 @@ class Quantity(
 
     # endregion
 
-    def __rtruediv__(self, other):
+    def __rtruediv__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
         ret = super().__rtruediv__(other)
         return self._call_subclass(ret)
 
