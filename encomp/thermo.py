@@ -194,7 +194,7 @@ def intermediate_temperatures(
         return [eq1, eq2]
 
     # use the boundary temperatures as initial guesses
-    _ret = fsolve(fun, [T_b_val, T_s_val])
+    _ret = fsolve(fun, [T_b_val, T_s_val])  # pyright: ignore[reportArgumentType]
 
     T1_val: float = _ret[0]
     T2_val: float = _ret[1]

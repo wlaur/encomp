@@ -404,5 +404,6 @@ def test_magnitude_type() -> None:
 
     assert HumidAir(P=Q(s1, "kPa"), T=Q(25, "degC"), R=Q(0.5)).H.m.index[0] == pd.Timestamp("2021-01-01")
 
-    # in case the input dtypes are mixed, np.ndarray will be used as a fallback
-    assert isinstance(Water(T=Q(25, "degC"), P=Q(s1, "kPa")).H.m, np.ndarray)
+    assert isinstance(Water(P=Q(s1, "kPa"), T=Q(25, "degC")).H.m, pd.Series)
+
+    assert isinstance(Water(T=Q(25, "degC"), P=Q(25, "kPa")).H.m, float)

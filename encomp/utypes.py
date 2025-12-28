@@ -657,6 +657,15 @@ MT_ = TypeVar(
     default=DEFAULT_MAGNITUDE_TYPE,
 )
 
+FMT = TypeVar(
+    "FMT",
+    float,
+    Numpy1DArray,
+    pd.Series,
+    pl.Series,
+    default=DEFAULT_MAGNITUDE_TYPE,
+)
+
 MAGNITUDE_TYPES = (
     float,
     Numpy1DArray,
