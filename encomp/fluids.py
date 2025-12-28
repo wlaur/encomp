@@ -28,7 +28,6 @@ from .units import DimensionalityError, ExpectedDimensionalityError, Quantity, U
 from .utypes import (
     MT,
     Density,
-    Dimensionality,
     Dimensionless,
     DynamicViscosity,
     MixtureEnthalpyPerDryAir,
@@ -42,6 +41,7 @@ from .utypes import (
     MolarSpecificEnthalpy,
     MolarSpecificEntropy,
     MolarSpecificInternalEnergy,
+    Numpy1DArray,
     Pressure,
     SpecificEnthalpy,
     SpecificEntropy,
@@ -70,7 +70,7 @@ UnitString = Annotated[str, "Unit string"]
 
 class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     name: CName
-    points: list[tuple[CProperty, Quantity[Dimensionality, MT]]]
+    points: list[tuple[CProperty, Quantity[Any, MT]]]
 
     BACKEND: ClassVar[dict[Literal["backend"], Callable]] = {"backend": PropsSI}
 
@@ -291,7 +291,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         return kwargs
 
     @abstractmethod
-    def __init__(self, name: CName, **kwargs: Quantity[Dimensionality, MT]) -> None:
+    def __init__(self, name: CName, **kwargs: Quantity[Any, MT]) -> None:
         """
         Base class that represents a fluid (pure or mixture, gas or liquid).
         Uses *CoolProp* as backend to determine fluid properties.
@@ -454,7 +454,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             return False
 
     @classmethod
-    def check_inputs(cls, kwargs: dict[CProperty, Quantity[Dimensionality, Any]]) -> None:
+    def check_inputs(cls, kwargs: dict[CProperty, Quantity[Any, Any]]) -> None:
         invalid = [key for key in kwargs if not cls.is_valid_prop(key)]
 
         if len(invalid):
@@ -671,13 +671,13 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         return validate_output(val)
 
     def construct_quantity(
-        self, val: float | np.ndarray, output: CProperty, convert_magnitude: bool = True
-    ) -> Quantity[Dimensionality, MT]:
-        qty: Quantity[Dimensionality, MT]
+        self, val: float | Numpy1DArray, output: CProperty, convert_magnitude: bool = True
+    ) -> Quantity[Any, MT]:
+        qty: Quantity[Any, MT]
         unit_output = self.get_coolprop_unit(output)
 
         # the dimensionality is not known until runtime
-        qty = Quantity(val, unit_output)
+        qty = Quantity(cast(MT, val), unit_output)
 
         # value with dimensions present in CoolProp (pressure, temperature, etc...)
         # cannot be zero
@@ -695,7 +695,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
             elif isinstance(qty.m, float | int):
                 if qty.m < self._EPS:
-                    qty = Quantity(np.nan, unit_output)
+                    qty = cast("Quantity[Any, MT]", Quantity(np.nan, unit_output))
             else:
                 raise TypeError(f"Unexpected magnitude type: {qty.m} ({type(qty.m)})")
 
@@ -708,9 +708,9 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         if convert_magnitude:
             qty = qty.astype(self._mt, **self._mt_kwargs)
 
-        return cast(Quantity[Dimensionality, MT], qty)
+        return cast("Quantity[Any, MT]", qty)
 
-    def to_numeric(self, prop: CProperty, qty: Quantity[Dimensionality, MT]) -> float | np.ndarray:
+    def to_numeric(self, prop: CProperty, qty: Quantity[Any, MT]) -> float | np.ndarray:
         unit = self.get_coolprop_unit(prop)
 
         try:
@@ -739,9 +739,9 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     def get(
         self,
         output: CProperty,
-        points: list[tuple[CProperty, Quantity[Dimensionality, MT]]] | None = None,
+        points: list[tuple[CProperty, Quantity[Any, MT]]] | None = None,
         convert_magnitude: bool = True,
-    ) -> Quantity[Dimensionality, MT]:
+    ) -> Quantity[Any, MT]:
         """
         Wraps the function ``CoolProp.CoolProp.PropsSI``, handles input
         and output with :py:class:`encomp.units.Quantity` objects.
@@ -750,7 +750,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         ----------
         output : CProperty
             Name of the output property
-        points : list[tuple[CProperty, Quantity[Dimensionality, MT]]] | None
+        points : list[tuple[CProperty, Quantity[Any, MT]]] | None
             Fixed state variables: name and value of the property.
             The number of points must match the number expected
             by the CoolProp backend function.
@@ -761,7 +761,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         Returns
         -------
-        Quantity[Dimensionality, MT]
+        Quantity[Any, MT]
             Quantity representing the output property
         """
 
@@ -774,7 +774,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         return self.construct_quantity(val, output, convert_magnitude=convert_magnitude)
 
-    def __getattr__(self, attr: CProperty) -> Quantity[Dimensionality, MT]:
+    def __getattr__(self, attr: CProperty) -> Quantity[Any, MT]:
         if attr not in self.ALL_PROPERTIES:
             raise AttributeError(attr)
 
@@ -784,11 +784,18 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         if self.is_scalar:
             return f"{self.get(prop).astype(float):{fmt}}"
 
-        vector_inputs = [n for n in self.points if isinstance(n[1].m, Iterable)]
+        vector_inputs = [
+            (n[0], cast(Quantity[Any, Numpy1DArray] | Quantity[Any, pd.Series] | Quantity[Any, pl.Series], n[1]))
+            for n in self.points
+            if isinstance(n[1].m, (np.ndarray, pd.Series, pl.Series))
+        ]
 
         is_cutoff = max(len(n[1].m) for n in vector_inputs) > self._repr_cutoff  # type: ignore[arg-type]
 
-        vector_inputs_cutoff = [(n[0], Quantity(n[1].m[: self._repr_cutoff], n[1].u)) for n in vector_inputs]
+        def _get_cutoff_qty(q: Quantity[Any, Any]) -> Quantity[Any, Any]:
+            return Quantity(q.m[: self._repr_cutoff], q.u)
+
+        vector_inputs_cutoff = [(n[0], _get_cutoff_qty(n[1])) for n in vector_inputs]
 
         # add optional scalar points also
         vector_inputs_cutoff += [n for n in self.points if n[0] not in (n[0] for n in vector_inputs_cutoff)]
@@ -805,7 +812,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
 
 class Fluid(CoolPropFluid[MT]):
-    def __init__(self, name: CName, **kwargs: Quantity[Dimensionality, MT]) -> None:
+    def __init__(self, name: CName, **kwargs: Quantity[Any, MT]) -> None:
         """
         Represents a fluid at a fixed state, for example at a
         specific temperature and pressure.
@@ -814,7 +821,7 @@ class Fluid(CoolPropFluid[MT]):
         ----------
         name : CName
             Name of the fluid
-        kwargs: Quantity[Dimensionality, MT]
+        kwargs: Quantity[Any, MT]
             Values for the two fixed points. The name of the keyword argument is the
             CoolProp property name.
         """
@@ -828,8 +835,8 @@ class Fluid(CoolPropFluid[MT]):
 
         kwargs_list = list(kwargs.items())
 
-        self.point_1: tuple[CProperty, Quantity[Dimensionality, MT]] = kwargs_list[0]
-        self.point_2: tuple[CProperty, Quantity[Dimensionality, MT]] = kwargs_list[1]
+        self.point_1: tuple[CProperty, Quantity[Any, MT]] = kwargs_list[0]
+        self.point_2: tuple[CProperty, Quantity[Any, MT]] = kwargs_list[1]
 
         self.points = [self.point_1, self.point_2]
 
@@ -1008,13 +1015,13 @@ class Water(Fluid[MT]):
         ("V", ".1f"),
     )
 
-    def __init__(self, **kwargs: Quantity[Dimensionality, MT]) -> None:
+    def __init__(self, **kwargs: Quantity[Any, MT]) -> None:
         """
         Convenience class to access water and steam properties via CoolProp.
 
         Parameters
         ----------
-        kwargs: Quantity[Dimensionality, MT]
+        kwargs: Quantity[Any, MT]
             Values for the two fixed points. The name of the keyword argument is the
             CoolProp property name.
         """
@@ -1110,7 +1117,7 @@ class HumidAir(CoolPropFluid[MT]):
         ("M", ".2g"),
     )
 
-    def __init__(self, **kwargs: Quantity[Dimensionality, MT]) -> None:
+    def __init__(self, **kwargs: Quantity[Any, MT]) -> None:
         """
         Interface to the CoolProp function for humid air,
         ``CoolProp.CoolProp.HAPropsSI``.
@@ -1118,7 +1125,7 @@ class HumidAir(CoolPropFluid[MT]):
 
         Parameters
         ----------
-        kwargs: Quantity[Dimensionality, MT]
+        kwargs: Quantity[Any, MT]
             Values for the three fixed points. The name of the keyword argument is the
             CoolProp property name.
         """
@@ -1132,9 +1139,9 @@ class HumidAir(CoolPropFluid[MT]):
 
         kwargs_list = list(kwargs.items())
 
-        self.point_1: tuple[CProperty, Quantity[Dimensionality, MT]] = kwargs_list[0]
-        self.point_2: tuple[CProperty, Quantity[Dimensionality, MT]] = kwargs_list[1]
-        self.point_3: tuple[CProperty, Quantity[Dimensionality, MT]] = kwargs_list[2]
+        self.point_1: tuple[CProperty, Quantity[Any, MT]] = kwargs_list[0]
+        self.point_2: tuple[CProperty, Quantity[Any, MT]] = kwargs_list[1]
+        self.point_3: tuple[CProperty, Quantity[Any, MT]] = kwargs_list[2]
 
         self.points = [self.point_1, self.point_2, self.point_3]
 

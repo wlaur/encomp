@@ -495,11 +495,11 @@ class Quantity(
 
             dim, mt = types
         else:
-            dim, mt = types, None
+            dim = types
+            mt = None
 
-        # avoid runtime errors when evaluating type hints
-        if isinstance(dim, TypeVar):
-            return cls._get_dimensional_subclass(Dimensionless, mt)
+        if isinstance(dim, TypeVar) or dim is Any:
+            return cls._get_dimensional_subclass(Dimensionality, mt)
 
         if not isinstance(dim, type):
             raise TypeError(

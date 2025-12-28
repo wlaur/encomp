@@ -15,7 +15,7 @@ from sympy.utilities.lambdify import lambdastr, lambdify  # type: ignore[import-
 
 from .settings import SETTINGS
 from .units import Quantity
-from .utypes import Dimensionality, Numpy1DArray
+from .utypes import Numpy1DArray
 
 
 @lru_cache
@@ -276,7 +276,7 @@ def get_lambda_kwargs(
         include = [to_identifier(n) for n in include]
 
     def _get_val(
-        x: Quantity[Dimensionality, Numpy1DArray] | Numpy1DArray,
+        x: Quantity[Any, Numpy1DArray] | Numpy1DArray,
     ) -> Quantity | Numpy1DArray:
         if not isinstance(x, Quantity):
             return x

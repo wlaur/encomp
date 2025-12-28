@@ -1,7 +1,7 @@
 import copy
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import TypedDict
+from typing import Any, TypedDict, assert_never, assert_type
 
 import numpy as np
 import pandas as pd
@@ -44,6 +44,7 @@ from ..utypes import (
     Normal,
     NormalVolume,
     NormalVolumeFlow,
+    Numpy1DArray,
     Pressure,
     SpecificEnthalpy,
     Temperature,
@@ -65,8 +66,8 @@ def test_registry() -> None:
     assert len(set(map(id, us))) == 1
 
     # check that units from all objects can be combined
-    q = 1 * UNIT_REGISTRY.kg / _DEFAULT_REGISTRY.s**2 / application_registry.get().m
-    assert isinstance(q, Q[Pressure])
+    q = 1 * UNIT_REGISTRY.kg / _DEFAULT_REGISTRY.s**2 / application_registry.get().m  # pyright: ignore[reportOperatorIssue]
+    assert isinstance_types(q, Q[Pressure, Any])
 
     # options cannot be overridden once set
     UNIT_REGISTRY.force_ndarray_like = True
@@ -248,7 +249,7 @@ def test_dimensionality_type_hierarchy() -> None:
 
         # the Estimation subtype cannot be used directly
         # it's possible to create the subclass, but not create an instance
-        EstimatedQuantity = Q[Estimation]
+        EstimatedQuantity = Q[Estimation, float]
 
         # TODO: this does not currently work
         # with pytest.raises(TypeError):
@@ -290,28 +291,51 @@ def test_dimensionality_type_hierarchy() -> None:
         # these quantities are not compatible with normal Length/Mass
         # TODO: use a more specific exception here
         with pytest.raises(Exception):  # noqa: B017
-            s + Q(25, "m")
+            _ = s + Q(25, "m")
 
         with pytest.raises(Exception):  # noqa: B017
-            m + Q(25, "kg")
+            _ = m + Q(25, "kg")
 
         # EstimatedDistance is a direct subclass of EstimatedLength, so this works
-        Q[EstimatedDistance](2, "m") + s
-        s - Q[EstimatedDistance](2, "m")
+        _ = Q[EstimatedDistance, float](2, "m") + s
+        _ = s - Q[EstimatedDistance, float](2, "m")
 
         assert Q[EstimatedDistance](s.m, s.u) == s
 
-        # however, the type will be determined by the first object
-        assert isinstance_types(Q[EstimatedDistance](2, "m") + s, Q[EstimatedDistance])
-
-        assert isinstance_types(s - Q[EstimatedDistance](2, "m"), Q[EstimatedLength])
+        assert isinstance_types(Q[EstimatedDistance, float](2, "m") + s, Q[EstimatedDistance])
+        assert isinstance_types(s - Q[EstimatedDistance, float](2, "m"), Q[EstimatedLength])
 
 
 def test_type_eq() -> None:
     q = Q(25, "m")
+    q_arr = Q([25], "m")
 
-    # this is the recommended way of checking type
     assert isinstance(q, Q)
+    assert isinstance_types(q, Q[Length, float])
+    assert isinstance_types(q, Q[Length, Any])
+
+    if isinstance(q, Q):
+        assert_type(q, Q[Length, float])
+    else:
+        assert_never(q)
+
+    if isinstance_types(q, Q[Length, Any]):
+        assert_type(q, Q[Length, float])
+    else:
+        assert_never(q)
+
+    if isinstance_types(q, Q[Length, Numpy1DArray]):
+        assert_never(q)
+
+    if isinstance_types(q_arr, Q[Length]):
+        assert_type(q_arr, Q[Length])
+    else:
+        assert_never(q_arr)
+
+    if isinstance_types(q, Q[Length, float]):
+        assert_type(q, Q[Length, float])
+    else:
+        assert_never(q)
 
     # this is overloaded to work for the Quantity base class
     # for compatibility with other libraries
