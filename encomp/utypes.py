@@ -8,7 +8,7 @@ Some commonly used derived dimensionalities (like density) are defined for conve
 from __future__ import annotations
 
 from abc import ABC
-from typing import Literal, TypeVar, cast, get_origin
+from typing import Any, Literal, TypeVar, cast, get_origin
 
 import numpy as np
 import pandas as pd
@@ -665,16 +665,9 @@ MAGNITUDE_TYPES = (
 
 
 # type variables that represent a certain dimensionality
-# the DT_ type variable is used to signify a different
-# (possible identical) dimensionality than DT
-# these type variables are marked as covariant to ensure that
-# Q[Mass] is a subtype of Q[Dimensionality]
-# however, this only holds for the relationship DimX -> Dimensionality (parent)
-# for any other dimensionalities, e.g. DimA and DimB
-# Q[DimA] is not a subclass of Q[DimB] if DimA is a subclass of DimB
-# all Q[DT] subclasses are direct subclasses of Q and Q[Dimensionality]
-DT = TypeVar("DT", bound=Dimensionality, default=Dimensionality, covariant=True)
-DT_ = TypeVar("DT_", bound=Dimensionality, default=Dimensionality, covariant=True)
+# the DT_ type variable is used to signify a different (possible identical) dimensionality than DT
+DT = TypeVar("DT", bound=Dimensionality, default=Any)
+DT_ = TypeVar("DT_", bound=Dimensionality, default=Any)
 
 
 class Dimensionless(Dimensionality):
