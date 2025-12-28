@@ -52,7 +52,7 @@ dev = [
     "scipy-stubs>=1.16.3.2",
     "ipykernel>=7.1.0",
     "ty>=0.0.5",
-    "basedpyright>=1.36.1",
+    "pyright>=1.1.407",
 ]
 
 [tool.hatch.build.targets.sdist]
