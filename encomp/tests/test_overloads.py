@@ -15,3 +15,6 @@ def test_overloads() -> None:
 
     reveal_type(Q(pl.col.asd, "kg"))
     reveal_type(Q(pl.DataFrame({"test": []})["test"], "kg"))
+
+    reveal_type(Q(pl.col.asd, "kg") / Q(25, "min"))
+    reveal_type(Q(pl.col.asd, "kg") / Q([1, 3, 4], "day"))
