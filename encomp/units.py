@@ -15,7 +15,7 @@ import logging
 import numbers
 import re
 import warnings
-from collections.abc import Iterable, Sequence, Sized
+from collections.abc import Iterable, Sized
 from types import UnionType
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, TypeVar, cast, get_args, overload
 
@@ -23,10 +23,12 @@ import numpy as np
 import pandas as pd
 import pint
 import polars as pl
+from pint._typing import QuantityOrUnitLike
 from pint.errors import DimensionalityError
 from pint.facets.measurement.objects import MeasurementQuantity
 from pint.facets.nonmultiplicative.objects import NonMultiplicativeQuantity
 from pint.facets.numpy.quantity import NumpyQuantity
+from pint.facets.plain.quantity import PlainQuantity
 from pint.facets.plain.unit import PlainUnit
 from pint.registry import LazyRegistry, UnitRegistry
 from pint.util import UnitsContainer
@@ -246,7 +248,7 @@ class _LazyRegistry(LazyRegistry):
         # override the filename
         kwargs["filename"] = str(SETTINGS.units.resolve().absolute())
 
-        self.__class__ = _UnitRegistry
+        setattr(self, "__class__", _UnitRegistry)  # noqa: B010
         self.__init__(*args, **kwargs)
         assert self._after_init != "raise"
         self._after_init()
@@ -556,7 +558,7 @@ class Quantity(
         )
 
     @staticmethod
-    def _validate_magnitude(val: MT | Sequence[int | float]) -> MT:
+    def _validate_magnitude(val: MT | list[float]) -> MT:
         if isinstance(val, int):
             return float(val)
         elif isinstance(val, float):
@@ -564,8 +566,8 @@ class Quantity(
             return float(val)
         elif isinstance(val, (np.ndarray, pd.Series, pl.Series, pl.Expr)):
             return val
-        elif isinstance(val, Sequence):
-            arr = cast(Numpy1DArray, np.array(val).astype(np.float64))
+        elif isinstance(val, list):
+            arr = cast(MT, np.array(val).astype(np.float64))
             return arr
         # implicit way of checking if the value is a sympy symbol without having to import Sympy
         elif hasattr(val, "is_Atom"):
@@ -617,81 +619,6 @@ class Quantity(
             return inp
 
     # region: overload __new__
-
-    @overload
-    def __new__(cls, val: MT) -> Quantity[Dimensionless, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: None) -> Quantity[Dimensionless, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: DimensionlessUnits) -> Quantity[Dimensionless, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: CurrencyUnits) -> Quantity[Currency, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: CurrencyPerEnergyUnits) -> Quantity[CurrencyPerEnergy, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: CurrencyPerVolumeUnits) -> Quantity[CurrencyPerVolume, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: CurrencyPerMassUnits) -> Quantity[CurrencyPerMass, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: CurrencyPerTimeUnits) -> Quantity[CurrencyPerTime, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: LengthUnits) -> Quantity[Length, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: MassUnits) -> Quantity[Mass, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: TimeUnits) -> Quantity[Time, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: TemperatureUnits) -> Quantity[Temperature, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: TemperatureDifferenceUnits) -> Quantity[TemperatureDifference, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: SubstanceUnits) -> Quantity[Substance, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: MolarMassUnits) -> Quantity[MolarMass, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: SubstancePerMassUnits) -> Quantity[SubstancePerMass, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: CurrentUnits) -> Quantity[Current, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: LuminosityUnits) -> Quantity[Luminosity, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: AreaUnits) -> Quantity[Area, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: VolumeUnits) -> Quantity[Volume, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: NormalVolumeUnits) -> Quantity[NormalVolume, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: PressureUnits) -> Quantity[Pressure, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: MassFlowUnits) -> Quantity[MassFlow, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: VolumeFlowUnits) -> Quantity[VolumeFlow, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: NormalVolumeFlowUnits) -> Quantity[NormalVolumeFlow, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: DensityUnits) -> Quantity[Density, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: SpecificVolumeUnits) -> Quantity[SpecificVolume, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: EnergyUnits) -> Quantity[Energy, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: PowerUnits) -> Quantity[Power, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: VelocityUnits) -> Quantity[Velocity, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: DynamicViscosityUnits) -> Quantity[DynamicViscosity, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: KinematicViscosityUnits) -> Quantity[KinematicViscosity, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: EnergyPerMassUnits) -> Quantity[EnergyPerMass, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: SpecificHeatCapacityUnits) -> Quantity[SpecificHeatCapacity, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: Unit[DT]) -> Quantity[DT, MT]: ...
-    @overload
-    def __new__(cls, val: MT, unit: str | UnitsContainer | Unit) -> Quantity[Any, MT]: ...
-    @overload
-    def __new__(cls, val: Quantity[DT, MT]) -> Quantity[DT, MT]: ...
     @overload
     def __new__(cls, val: list[float]) -> Quantity[Dimensionless, Numpy1DArray]: ...
     @overload
@@ -769,11 +696,86 @@ class Quantity(
     @overload
     def __new__(cls, val: list[float], unit: str | UnitsContainer | Unit) -> Quantity[Any, Numpy1DArray]: ...
 
+    @overload
+    def __new__(cls, val: MT) -> Quantity[Dimensionless, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: None) -> Quantity[Dimensionless, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: DimensionlessUnits) -> Quantity[Dimensionless, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: CurrencyUnits) -> Quantity[Currency, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: CurrencyPerEnergyUnits) -> Quantity[CurrencyPerEnergy, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: CurrencyPerVolumeUnits) -> Quantity[CurrencyPerVolume, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: CurrencyPerMassUnits) -> Quantity[CurrencyPerMass, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: CurrencyPerTimeUnits) -> Quantity[CurrencyPerTime, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: LengthUnits) -> Quantity[Length, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: MassUnits) -> Quantity[Mass, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: TimeUnits) -> Quantity[Time, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: TemperatureUnits) -> Quantity[Temperature, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: TemperatureDifferenceUnits) -> Quantity[TemperatureDifference, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: SubstanceUnits) -> Quantity[Substance, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: MolarMassUnits) -> Quantity[MolarMass, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: SubstancePerMassUnits) -> Quantity[SubstancePerMass, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: CurrentUnits) -> Quantity[Current, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: LuminosityUnits) -> Quantity[Luminosity, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: AreaUnits) -> Quantity[Area, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: VolumeUnits) -> Quantity[Volume, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: NormalVolumeUnits) -> Quantity[NormalVolume, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: PressureUnits) -> Quantity[Pressure, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: MassFlowUnits) -> Quantity[MassFlow, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: VolumeFlowUnits) -> Quantity[VolumeFlow, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: NormalVolumeFlowUnits) -> Quantity[NormalVolumeFlow, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: DensityUnits) -> Quantity[Density, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: SpecificVolumeUnits) -> Quantity[SpecificVolume, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: EnergyUnits) -> Quantity[Energy, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: PowerUnits) -> Quantity[Power, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: VelocityUnits) -> Quantity[Velocity, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: DynamicViscosityUnits) -> Quantity[DynamicViscosity, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: KinematicViscosityUnits) -> Quantity[KinematicViscosity, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: EnergyPerMassUnits) -> Quantity[EnergyPerMass, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: SpecificHeatCapacityUnits) -> Quantity[SpecificHeatCapacity, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: Unit[DT]) -> Quantity[DT, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: str | UnitsContainer | Unit) -> Quantity[Any, MT]: ...
+    @overload
+    def __new__(cls, val: Quantity[DT, MT]) -> Quantity[DT, MT]: ...
+
     # endregion
 
     def __new__(
         cls,
-        val: MT | Sequence[int | float] | Quantity[DT, MT],
+        val: MT | list[float] | Quantity[DT, MT],
         unit: Unit[DT] | Unit | UnitsContainer | str | dict[str, numbers.Number] | None = None,
         _mt_orig: type[MT] | None = None,
         _mt_orig_kwargs: dict[str, Any] | None = None,
@@ -926,14 +928,15 @@ class Quantity(
         return self._call_subclass(ret)
 
     def _dimensionalities_match(self, unit: Unit[DT_]) -> bool:
-        src_dim = dict(self.dimensionality)
-        dst_dim = dict(unit.dimensionality)
+        src_dim = cast(dict[str, float], dict(self.dimensionality))
+        dst_dim = cast(dict[str, float], dict(unit.dimensionality))
 
         if set(src_dim.keys()) != set(dst_dim.keys()):
             return False
 
         return all(
-            abs(src_dim.get(key, 0) - dst_dim.get(key, 0)) < 1e-10 for key in set(src_dim.keys()) | set(dst_dim.keys())
+            abs(float(src_dim.get(key, 0)) - float(dst_dim.get(key, 0))) < 1e-10
+            for key in set(src_dim.keys()) | set(dst_dim.keys())
         )
 
     def _to_unit(self, unit: Unit[DT] | UnitsContainer | str | dict[str, numbers.Number]) -> Unit[DT]:
@@ -956,14 +959,12 @@ class Quantity(
                 raise e
 
         if self._is_temperature_difference_unit(valid_unit):
-            temperature_diff_qty = Quantity[TemperatureDifference, MT](
+            return self.__class__(
                 m,
                 valid_unit,
                 _mt_orig=self._original_magnitude_type,
                 _mt_orig_kwargs=self._original_magnitude_kwargs,
             )
-
-            return cast("Quantity[DT, MT]", temperature_diff_qty)
 
         converted = self._call_subclass(m, unit)
 
@@ -996,7 +997,13 @@ class Quantity(
 
     def check(
         self,
-        dimension: Quantity[Any, Any] | UnitsContainer | Unit | str | Dimensionality | type[Dimensionality],
+        dimension: Quantity[Any, Any]
+        | UnitsContainer
+        | Unit
+        | str
+        | Dimensionality
+        | type[Dimensionality]
+        | QuantityOrUnitLike,
     ) -> bool:
         if isinstance(dimension, Quantity):
             return self._dimensionality_type == dimension._dimensionality_type
@@ -1006,7 +1013,7 @@ class Quantity(
             # until it is used to construct a Quantity
             unit_qty = Quantity(1.0, dimension)
 
-            if isinstance(unit_qty, Quantity[TemperatureDifference]):
+            if isinstance_types(unit_qty, Quantity[TemperatureDifference]):
                 unit_qty = Quantity[TemperatureDifference, float](1.0, dimension)
 
             return self.check(unit_qty)
@@ -1017,7 +1024,10 @@ class Quantity(
                 raise TypeError(f"Attribute 'dimensions' is missing or None: {dimension}")
             return super().check(cast(UnitsContainer, _dims))
 
-        return super().check(cast(UnitsContainer | Unit | str, dimension))
+        if isinstance(dimension, (Dimensionality, type, PlainQuantity)):
+            raise TypeError(f"Invalid type for dimension: {dimension} ({type(dimension)})")
+
+        return super().check(dimension)
 
     def __format__(self, format_type: str) -> str:
         """
@@ -1162,7 +1172,10 @@ class Quantity(
         args = expr.args
 
         if not args:
-            return cls(float(expr), "dimensionless")
+            val = float(cast(Any, expr))
+            ret = cls(cast(MT, val), "dimensionless")
+
+            return cast("Quantity[DT, float]", ret)
 
         try:
             magnitude = float(cast(Any, args[0]))
@@ -1187,7 +1200,8 @@ class Quantity(
 
             unit *= unit_i
 
-        return cls(magnitude, cast(Unit, unit)).to_base_units()
+        ret = cls(cast(MT, magnitude), cast(Unit, unit))
+        return cast("Quantity[DT, float]", ret.to_base_units())
 
     @classmethod
     def __get_pydantic_core_schema__(
@@ -2797,9 +2811,7 @@ class Quantity(
 
         val = v1 + v2 if operator == "add" else v1 - v2
 
-        result = Quantity(val, "degC")
-
-        return result
+        return Quantity[Temperature, MT](val, "degC")
 
     def __add__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
         try:
