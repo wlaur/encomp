@@ -34,7 +34,6 @@ DimensionlessUnits = Literal[
     "pct",
     "-",
     "dimensionless",
-    None,
 ]
 
 CurrencyUnits = Literal[
