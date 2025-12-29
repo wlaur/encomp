@@ -127,11 +127,12 @@ def _reset_dimensionality_registry() -> Generator[None]:
 def test_dimensionality_subtype_protocol() -> None:
     with _reset_dimensionality_registry():
         # the subclass is not checked, only the "dimensions" attribute
+        # however, doing this causes a lot of type errors, so make sure to inherit from Dimensionality instead
         class Test:
             dimensions = Dimensionless.dimensions
 
-        Q[Test]
-        Q[Test](1)
+        Q[Test]  # pyright: ignore[reportInvalidTypeArguments]
+        Q[Test](1)  # pyright: ignore[reportArgumentType, reportCallIssue, reportInvalidTypeArguments]
 
 
 def test_asdim() -> None:
@@ -172,34 +173,26 @@ def test_asdim() -> None:
 def test_custom_dimensionality() -> None:
     with _reset_dimensionality_registry():
 
-        class Custom(Dimensionality):
+        class Custom1(Dimensionality):
             dimensions = Temperature.dimensions**2 / Length.dimensions
 
-        _custom = Custom
+        _custom = Custom1
 
-        q1 = Q[Custom](1, "degC**2/m")
+        q1 = Q[Custom1](1, "degC**2/m")  # pyright: ignore[reportArgumentType, reportCallIssue]
 
-        class Custom(Dimensionality):
+        class Custom2(Dimensionality):
             dimensions = Temperature.dimensions**2 / Length.dimensions
 
         # the classes are not identical
-        assert Custom is not _custom
+        assert Custom2 is not _custom
+        assert Q[Custom2] is not Q[_custom]
 
-        # the Q[DT] type only considers the class name,
-        # which is identical
-        assert Q[Custom] is Q[_custom]
-
-        q2 = Q[Custom](1, "degC**2/m")
+        q2 = Q[Custom2](1, "degC**2/m")  # pyright: ignore[reportArgumentType, reportCallIssue]
 
         # the values and units are equivalent
         # but the dimensionality types don't match
-        assert q1 == q2
-
-        assert type(q1) == type(q2) == Q[Custom]  # noqa: E721
-        assert isinstance(q1, type(q2))
-        assert isinstance(q2, type(q1))
-        assert isinstance(q1 + q2, type(q1))
-        assert isinstance(q2 - q1, type(q1))
+        with pytest.raises(DimensionalityComparisonError):
+            assert q1 == q2
 
         assert isinstance(q1.to("degC**2/km"), type(q1))
         assert isinstance(q1.to_base_units(), type(q1))
@@ -207,7 +200,7 @@ def test_custom_dimensionality() -> None:
 
         with pytest.raises(TypeError):
 
-            class Custom(Dimensionality):
+            class Custom2(Dimensionality):
                 # cannot create a duplicate (based on classname) dimensionality
                 # with different dimensions
                 dimensions = Temperature.dimensions**3 / Length.dimensions
@@ -215,9 +208,9 @@ def test_custom_dimensionality() -> None:
 
 def test_function_annotations() -> None:
     # this results in Quantity[Any]
-    a = Q[DT]
+    a = Q[DT]  # pyright: ignore[reportGeneralTypeIssues]
 
-    def return_input(q: Q[DT]) -> Q[DT]:
+    def return_input(q: Q[DT, MT]) -> Q[DT, MT]:
         return q
 
     a = return_input(Q(25, "m"))
@@ -225,7 +218,7 @@ def test_function_annotations() -> None:
     assert isinstance_types(a, Q[Length])
 
     # not possible to determine output dimensionality for this
-    def divide_by_time(q: Q[DT]) -> Q:
+    def divide_by_time(q: Q[DT, MT]) -> Q[Any, MT]:
         return q / Q(1, "h")
 
     # this will be resolved to MassFlow at runtime
@@ -400,8 +393,10 @@ def test_Q() -> None:
     # no unit input defaults to dimensionless
     assert Q(12).check("")
     assert Q(1) == Q(100, "%")
-    Q[Dimensionless](21)
-    assert isinstance(Q(21), Q[Dimensionless])
+    Q[Dimensionless, float](21)
+    assert isinstance_types(Q(21), Q[Dimensionless])
+    assert isinstance_types(Q(21), Q[Dimensionless, float])
+    assert isinstance_types(Q(21), Q[Dimensionless, Any])
 
     assert Q(1) == Q(1.0)
 
@@ -410,33 +405,34 @@ def test_Q() -> None:
     assert isinstance(Q(1, "meter").m, float)
     assert isinstance(Q(2.3, "meter").m, float)
     assert isinstance(Q([2, 3.4], "meter").m, np.ndarray)
-    assert isinstance(Q((2, 3.4), "meter").m, np.ndarray)
+
+    # convert tuple to np.ndarray, not valid based on typing
+    assert isinstance(Q((2, 3.4), "meter").m, np.ndarray)  # pyright: ignore[reportArgumentType, reportCallIssue]
     assert isinstance(Q(np.array([2, 3.4]), "meter").m, np.ndarray)
 
     Q(1, Q(2, "bar").u)
     Q(Q(2, "bar").to("kPa").m, "kPa")
 
-    # TODO: these do not currently work
-    # # check that the dimensionality constraints work
-    # Q[Length](1, 'm')
-    # Q[Pressure](1, 'kPa')
-    # Q[Temperature](1, '°C')
+    # check that the dimensionality constraints work
+    Q[Length, float](1, "m")
+    Q[Pressure, float](1, "kPa")
+    Q[Temperature, float](1, "°C")
+    Q[Temperature, Any](1, "°C")
 
-    # # the dimensionalities can also be specified as strings
-    # Q[Temperature](1, '°C')
+    P = Q(1, "bar")
+    # this Quantity must have the same dimensionality as P
+    Q(2, "kPa").check(P)
 
-    # P = Q(1, 'bar')
-    # # this Quantity must have the same dimensionality as P
-    # Q(2, 'kPa').check(P)
+    # TODO: not possible to raise on constructing inconsistent Quantity
+    # if the complete subclass is pre-defined
 
-    # with pytest.raises(ExpectedDimensionalityError):
-    #     Q[Temperature](1, 'kg')
+    Q[Temperature, float](1, "kg")
 
-    # with pytest.raises(ExpectedDimensionalityError):
-    #     Q[Pressure](1, 'meter')
+    Q[Pressure, float](1, "meter")
 
-    # with pytest.raises(ExpectedDimensionalityError):
-    #     Q[Mass](1, P)
+    Q[Mass, float](1, P.u)
+
+    Q[Mass, float](P)  # pyright: ignore[reportArgumentType, reportCallIssue]
 
     # in-place conversion
     # NOTE: don't use this for objects that are passed in by the user
@@ -469,11 +465,11 @@ def test_Q() -> None:
 
     # floating point math might make this off at the N:th decimal
     assert P2.m == approx(2, rel=1e-12)
-    assert isinstance(P2, Q[Pressure])
+    assert isinstance_types(P2, Q[Pressure])
 
     with pytest.raises(Exception):  # noqa: B017
         # incorrect dimensionalities should raise Exception
-        Q(Q(2, "feet_water"), Q(321321, "kg")).to(Q(123123, "feet_water"))
+        Q(Q(2, "feet_water"), Q(321321, "kg").u).to(Q(123123, "feet_water"))
 
     # the UnitsContainer objects can be used to construct new dimensionalities
     # NOTE: custom dimensionalities must have unique names
@@ -481,10 +477,10 @@ def test_Q() -> None:
     class Custom(Dimensionality):
         dimensions = Length.dimensions * Length.dimensions * Length.dimensions / Temperature.dimensions
 
-    Q[Custom](1, "m³/K")
+    Q[Custom, float](1, "m³/K")
 
     with pytest.raises(Exception):  # noqa: B017
-        Q[Pressure / Area](1, "bar/m")
+        Q[Pressure / Area, float](1, "bar/m")  # pyright: ignore[reportOperatorIssue]
 
     # percent or %
     Q(1.124124e-3, "").to("%").to("percent")
@@ -495,6 +491,8 @@ def test_Q() -> None:
     arr = Q(s, "bar").to("kPa").m
     assert isinstance(arr, pd.Series)
     assert arr[0] == 200
+
+    _ = Q(vals)
 
     # np.ndarray magnitudes equality check
     assert (Q(s, "bar") == Q(vals, "bar").to("kPa")).all()
@@ -538,17 +536,17 @@ def test_custom_units() -> None:
     factor = Q(12, "Nm3 water/ (normal liter air)")
     (Q(1, "kg water") / factor).to("pound air")
 
-    Q[NormalVolume](2, "nm**3")
+    Q[NormalVolume, Any](2, "nm**3")
 
     # with pytest.raises(ExpectedDimensionalityError):
     #     Q[NormalVolumeFlow](2, 'm**3/hour')
 
-    Q[NormalVolumeFlow](2, "Nm**3/hour").to("normal liter/sec")
+    Q[NormalVolumeFlow, Any](2, "Nm**3/hour").to("normal liter/sec")
 
     class _NormalVolumeFlow(NormalVolumeFlow):
         dimensions = Normal.dimensions * VolumeFlow.dimensions
 
-    Q[_NormalVolumeFlow](2, "Nm**3/hour").to("normal liter/sec")
+    Q[_NormalVolumeFlow, Any](2, "Nm**3/hour").to("normal liter/sec")
 
     Q(2, "normal liter air / day")
     Q(2, "1/Nm3").to("1 / (liter normal)")
@@ -564,21 +562,23 @@ def test_wraps() -> None:
         # this is incorrect, cannot add 1 to a dimensional Quantity
         return a * b**2 + 1
 
-    assert isinstance(func(Q(1, "yd"), Q(20, "lbs")), Q[Mass])
+    assert isinstance_types(func(Q(1, "yd"), Q(20, "lbs")), Q[Mass])
     assert Q(1, "bar").check(Pressure)
 
 
 def test_numpy_integration() -> None:
-    assert isinstance(Q(np.linspace(0, 1), "kg"), Q[Mass])
-    assert isinstance(np.linspace(Q(0, "kg"), Q(1, "kg")), Q[Mass])
+    assert isinstance_types(Q(np.linspace(0, 1), "kg"), Q[Mass])
+    assert isinstance_types(np.linspace(Q(0, "kg"), Q(1, "kg")), Q[Mass])
 
-    assert isinstance(np.linspace(Q(2), Q(25, "%")), Q[Dimensionless])
-    assert isinstance(np.linspace(Q(2, "cm"), Q(25, "km")), Q[Length])
+    assert isinstance_types(np.linspace(Q(2), Q(25, "%")), Q[Dimensionless])
+    assert isinstance_types(np.linspace(Q(2, "cm"), Q(25, "km")), Q[Length])
 
     with pytest.raises(DimensionalityError):
         np.linspace(Q(2, "kg"), Q(25, "m"))
-
-    assert (Q(np.linspace(0, 1), "kg") == np.linspace(Q(0, "kg"), Q(1, "kg"))).all()
+    q1 = Q(np.linspace(0, 1), "kg")
+    q2 = np.linspace(Q(0, "kg"), Q(1, "kg"))
+    comp = q1 == q2
+    assert comp.all()
 
     assert isinstance_types(list(Q(np.linspace(0, 1), "degC")), list[Q[Temperature]])
 
