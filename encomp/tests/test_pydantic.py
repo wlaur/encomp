@@ -1,3 +1,5 @@
+from typing import Any
+
 import numpy as np
 import polars as pl
 from pydantic import BaseModel
@@ -7,7 +9,7 @@ from ..units import Quantity
 
 def test_model_serialize() -> None:
     class M(BaseModel):
-        qty: Quantity
+        qty: Quantity[Any]
 
     for m in [
         2,

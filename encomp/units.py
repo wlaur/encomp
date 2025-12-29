@@ -953,7 +953,7 @@ class Quantity(
         return self._dimensionality_type is TemperatureDifference
 
     @classmethod
-    def _is_temperature_difference_unit(cls, unit: Unit) -> bool:
+    def _is_temperature_difference_unit(cls, unit: Unit[DT]) -> bool:
         return unit._units in cls.TEMPERATURE_DIFFERENCE_UCS
 
     def _check_temperature_compatibility(self, unit: Unit[DT]) -> None:
@@ -1579,8 +1579,7 @@ class Quantity(
     def __add__(self: Quantity[DT, float], other: Quantity[DT, MT_]) -> Quantity[DT, MT_]: ...
     @overload
     def __add__(self, other: Quantity[DT, Any]) -> Quantity[DT, Any]: ...
-    @overload
-    def __add__(self: Quantity[Any, Any], other: Quantity[Any, Any]) -> Quantity[Any, Any]: ...
+
     def __add__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
         try:
             self.check_compatibility(other)
@@ -1626,8 +1625,6 @@ class Quantity(
     def __sub__(self: Quantity[DT, float], other: Quantity[DT, MT_]) -> Quantity[DT, MT_]: ...
     @overload
     def __sub__(self, other: Quantity[DT, Any]) -> Quantity[DT, Any]: ...
-    @overload
-    def __sub__(self: Quantity[Any, Any], other: Quantity[Any, Any]) -> Quantity[Any, Any]: ...
     def __sub__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
         try:
             self.check_compatibility(other)
@@ -2312,9 +2309,9 @@ class Quantity(
     @overload
     def __mul__(self, other: float | int) -> Quantity[DT, MT]: ...
     @overload
-    def __mul__(self, other: Quantity[Dimensionality, MT]) -> Quantity[Dimensionality, MT]: ...
+    def __mul__(self, other: Quantity[Any, MT]) -> Quantity[Any, MT]: ...
     @overload
-    def __mul__(self, other: Quantity[Dimensionality, Any]) -> Quantity[Dimensionality, Any]: ...
+    def __mul__(self, other: Quantity[Any, Any]) -> Quantity[Any, Any]: ...
 
     # endregion
 

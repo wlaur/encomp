@@ -8,7 +8,7 @@ Some commonly used derived dimensionalities (like density) are defined for conve
 from __future__ import annotations
 
 from abc import ABC
-from typing import Any, Literal, TypeVar, cast, get_origin
+from typing import Literal, TypeVar, cast, get_origin
 
 import numpy as np
 import pandas as pd
@@ -712,10 +712,14 @@ MAGNITUDE_TYPES = (
 )
 
 
+class UnknownDimensionality(Dimensionality):
+    _intermediate = True
+
+
 # type variables that represent a certain dimensionality
 # the DT_ type variable is used to signify a different (possible identical) dimensionality than DT
-DT = TypeVar("DT", bound=Dimensionality, default=Any)
-DT_ = TypeVar("DT_", bound=Dimensionality, default=Any)
+DT = TypeVar("DT", bound=Dimensionality, default=UnknownDimensionality)
+DT_ = TypeVar("DT_", bound=Dimensionality, default=UnknownDimensionality)
 
 
 class Dimensionless(Dimensionality):

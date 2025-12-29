@@ -430,7 +430,7 @@ def test_Q() -> None:
 
     Q[Pressure, float](1, "meter")
 
-    Q[Mass, float](1, P.u)
+    Q[Mass, float](1, str(P.u))
 
     Q[Mass, float](P)  # pyright: ignore[reportArgumentType, reportCallIssue]
 
