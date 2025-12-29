@@ -673,7 +673,6 @@ _LuminosityUC = UnitsContainer({"[luminosity]": 1})
 Numpy1DArray = np.ndarray[tuple[int], np.dtype[np.float64]]
 Numpy1DBoolArray = np.ndarray[tuple[int], np.dtype[np.bool]]
 
-DEFAULT_MAGNITUDE_TYPE = Numpy1DArray
 
 MT = TypeVar(
     "MT",
@@ -682,7 +681,7 @@ MT = TypeVar(
     pd.Series,
     pl.Series,
     pl.Expr,
-    default=DEFAULT_MAGNITUDE_TYPE,
+    default=Numpy1DArray,
 )
 
 MT_ = TypeVar(
@@ -692,7 +691,7 @@ MT_ = TypeVar(
     pd.Series,
     pl.Series,
     pl.Expr,
-    default=DEFAULT_MAGNITUDE_TYPE,
+    default=Numpy1DArray,
 )
 
 FMT = TypeVar(
@@ -701,7 +700,7 @@ FMT = TypeVar(
     Numpy1DArray,
     pd.Series,
     pl.Series,
-    default=DEFAULT_MAGNITUDE_TYPE,
+    default=Numpy1DArray,
 )
 
 MAGNITUDE_TYPES = (
