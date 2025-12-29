@@ -17,7 +17,20 @@ import re
 import warnings
 from collections.abc import Iterable, Sized
 from types import UnionType
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, TypeVar, assert_never, cast, get_args, overload
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    ClassVar,
+    Generic,
+    Literal,
+    TypeVar,
+    assert_never,
+    cast,
+    get_args,
+    get_origin,
+    overload,
+)
 
 import numpy as np
 import pandas as pd
@@ -45,6 +58,7 @@ from .utypes import (
     MAGNITUDE_TYPES,
     MT,
     MT_,
+    UNSET_DIMENSIONALITY,
     Area,
     AreaUnits,
     Currency,
@@ -145,6 +159,15 @@ def _ensure_sympy() -> None:
 
 
 _LOGGER = logging.getLogger(__name__)
+
+DimensionalityTypeName = Annotated[str, "Dimensionality name"]
+MagnitudeTypeName = Literal[
+    "float",
+    "ndarray",
+    "pd.Series",
+    "pl.Series",
+    "pl.Expr",
+]
 
 if SETTINGS.ignore_ndarray_unit_stripped_warning:
     warnings.filterwarnings(
@@ -370,14 +393,14 @@ class Quantity(
     # mapping from dimensionality subclass name to quantity subclass
     # this dict will be populated at runtime
     # use a custom class attribute (not cls.__subclasses__()) for more control
-    _subclasses: ClassVar[dict[tuple[str, str | None], type[Quantity[Any, Any]]]] = {}
+    _subclasses: ClassVar[dict[tuple[DimensionalityTypeName, MagnitudeTypeName | None], type[Quantity[Any, Any]]]] = {}
     _dimension_symbol_map: ClassVar[dict[sp.Basic, Unit]] = {}
 
     # used to validate dimensionality and magnitude type,
     # if None the dimensionality is not checked
     # subclasses of Quantity have this class attribute set, which
     # will restrict the dimensionality when creating the object
-    _dimensionality_type: ClassVar[type[Dimensionality]] = Dimensionality
+    _dimensionality_type: ClassVar[type[Dimensionality]] = UNSET_DIMENSIONALITY
 
     # instance attributes
     _magnitude: MT
@@ -423,14 +446,21 @@ class Quantity(
         )
 
     @staticmethod
-    def _get_magnitude_type_name(mt: type) -> str:
-        if mt is pd.Series:
-            return "pd.Series"
+    def _get_magnitude_type_name(mt: type) -> MagnitudeTypeName:
+        origin = get_origin(mt)
 
-        if mt is pl.Series:
+        if mt is np.ndarray or origin is np.ndarray:
+            return "ndarray"
+        elif mt is float:
+            return "float"
+        elif mt is pl.Series or origin is pl.Series:
             return "pl.Series"
-
-        return mt.__name__
+        elif mt is pl.Expr:
+            return "pl.Expr"
+        if mt is pd.Series or origin is pd.Series:
+            return "pd.Series"
+        else:
+            raise TypeError(f"Invalid magnitude type: {mt} (origin {origin})")
 
     @classmethod
     def _get_dimensional_subclass(cls, dim: type[Dimensionality], mt: type | None) -> type[Quantity[DT, MT]]:
@@ -438,7 +468,7 @@ class Quantity(
         # DimensionalMagnitudeQuantity, which is a subclass of DimensionalQuantity
         # this distinction only exists at runtime, the type checker will use the
         # default magnitude type (the default for the MT typevar) in case the magnitude generic is omitted
-        dim_name = dim.__name__
+        dim_name: DimensionalityTypeName = dim.__name__
 
         if cached_dim_qty := cls._subclasses.get((dim_name, None)):
             DimensionalQuantity = cast("type[Quantity[DT, Any]]", cached_dim_qty)
@@ -488,6 +518,10 @@ class Quantity(
         cls._subclasses[dim_name, mt_name] = DimensionalMagnitudeQuantity
         return DimensionalMagnitudeQuantity
 
+    @staticmethod
+    def _is_incomplete_dimensionality(dim: type[Dimensionality]) -> bool:
+        return dim is UNSET_DIMENSIONALITY or dim is Any or isinstance(dim, TypeVar)
+
     def __class_getitem__(cls, types: type[DT] | tuple[type[DT], type[MT]]) -> type[Quantity[DT, MT]]:
         if isinstance(types, tuple):
             if len(types) != 2:
@@ -498,8 +532,8 @@ class Quantity(
             dim = types
             mt = None
 
-        if isinstance(dim, TypeVar) or dim is Any:
-            return cls._get_dimensional_subclass(Dimensionality, mt)
+        if cls._is_incomplete_dimensionality(dim):
+            return cls._get_dimensional_subclass(UNSET_DIMENSIONALITY, mt)
 
         if not isinstance(dim, type):
             raise TypeError(
@@ -582,8 +616,7 @@ class Quantity(
 
     @property
     def subclass(self) -> type[Quantity[DT, MT]]:
-        subcls = self._get_dimensional_subclass(self._dimensionality_type, self._magnitude_type)
-        return subcls
+        return self._get_dimensional_subclass(self._dimensionality_type, self._magnitude_type)
 
     def _set_original_magnitude_attributes(self, mt_orig: type[MT], mt_orig_kwargs: dict[str, Any]) -> None:
         self._original_magnitude_type = mt_orig
@@ -821,9 +854,9 @@ class Quantity(
             valid_magnitude = cast(MT, cls._cast_array_float(valid_magnitude.to_numpy()))
 
         # compare dimensionalities with tolerance for float precision
-        is_incomplete_subclass = cls._dimensionality_type is Dimensionality or not _units_containers_equal(
-            cls._dimensionality_type.dimensions, valid_unit.dimensionality
-        )
+        is_incomplete_subclass = cls._is_incomplete_dimensionality(
+            cls._dimensionality_type
+        ) or not _units_containers_equal(cls._dimensionality_type.dimensions, valid_unit.dimensionality)
 
         if is_incomplete_subclass:
             # TODO: how to validate that the subclass has the same dimensionality as the input unit?

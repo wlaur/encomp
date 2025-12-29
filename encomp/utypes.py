@@ -620,6 +620,8 @@ class Dimensionality(ABC):  # noqa: B024
         return cls._distinct
 
 
+UNSET_DIMENSIONALITY = Dimensionality
+
 _DimensionlessUC = UnitsContainer({})
 _CurrencyUC = UnitsContainer({"[currency]": 1})
 _NormalUC = UnitsContainer({"[normal]": 1})
