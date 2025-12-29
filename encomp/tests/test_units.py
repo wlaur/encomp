@@ -135,6 +135,11 @@ def test_dimensionality_subtype_protocol() -> None:
 
 
 def test_asdim() -> None:
+    with pytest.raises(TypeError):
+        Q(2).asdim(Dimensionality)
+
+    Q(1).asdim(Dimensionless)
+
     with _reset_dimensionality_registry():
         # default dimensionality for kJ/kg is EnergyPerMass
         q1 = Q(15, "kJ/kg")
@@ -1316,6 +1321,12 @@ def test_astype() -> None:
 
     assert Q([1, 2, 3]).astype(pd.Series, name="s1").m.name == "s1"
     assert Q([1, 2, 3]).astype(pl.Series, name="s1").m.name == "s1"
+
+    qe = Q(2).astype(pl.Expr)
+    assert isinstance(qe.m, pl.Expr)
+
+    with pytest.raises(TypeError):
+        Q([1, 2, 3]).astype(pl.Expr)
 
 
 def test_single_element_array_magnitude() -> None:

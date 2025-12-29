@@ -463,6 +463,42 @@ SpecificHeatCapacityUnits = Literal[
     "J/g/degC",
 ]
 
+AllUnits = (
+    DimensionlessUnits
+    | CurrencyUnits
+    | CurrencyPerEnergyUnits
+    | CurrencyPerMassUnits
+    | CurrencyPerVolumeUnits
+    | CurrencyPerTimeUnits
+    | LengthUnits
+    | MassUnits
+    | TimeUnits
+    | TemperatureUnits
+    | TemperatureDifferenceUnits
+    | SubstanceUnits
+    | MolarMassUnits
+    | SubstancePerMassUnits
+    | CurrentUnits
+    | LuminosityUnits
+    | AreaUnits
+    | VolumeUnits
+    | NormalVolumeUnits
+    | PressureUnits
+    | MassFlowUnits
+    | VolumeFlowUnits
+    | NormalVolumeFlowUnits
+    | DensityUnits
+    | SpecificVolumeUnits
+    | NormalVolumePerMassUnits
+    | EnergyUnits
+    | PowerUnits
+    | VelocityUnits
+    | DynamicViscosityUnits
+    | KinematicViscosityUnits
+    | EnergyPerMassUnits
+    | SpecificHeatCapacityUnits
+)
+
 
 def get_registered_units() -> dict[str, tuple[str, ...]]:
     ret = {}

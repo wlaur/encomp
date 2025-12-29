@@ -59,6 +59,7 @@ from .utypes import (
     MT,
     MT_,
     UNSET_DIMENSIONALITY,
+    AllUnits,
     Area,
     AreaUnits,
     Currency,
@@ -565,7 +566,7 @@ class Quantity(
 
     @staticmethod
     def _validate_unit(
-        unit: Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | QuantityOrUnitLike | None,
+        unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | QuantityOrUnitLike | None,
     ) -> Unit[DT]:
         if unit is None:
             return Unit("dimensionless")
@@ -611,7 +612,7 @@ class Quantity(
             raise TypeError(f"Input magnitude has incorrect type {type(val)}: {val}")
 
     @classmethod
-    def get_unit(cls, unit_name: str) -> Unit:
+    def get_unit(cls, unit_name: AllUnits | str) -> Unit:
         return Unit(cls._REGISTRY.parse_units(unit_name))
 
     @property
@@ -983,12 +984,12 @@ class Quantity(
         )
 
     def _to_unit(
-        self, unit: Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | QuantityOrUnitLike
+        self, unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | QuantityOrUnitLike
     ) -> Unit[DT]:
         return self._validate_unit(unit)
 
     def to(
-        self, unit: Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | QuantityOrUnitLike
+        self, unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | QuantityOrUnitLike
     ) -> Quantity[DT, MT]:
         valid_unit = self._to_unit(unit)
         self._check_temperature_compatibility(valid_unit)
@@ -1018,7 +1019,9 @@ class Quantity(
 
         return converted
 
-    def ito(self, unit: Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | QuantityOrUnitLike) -> None:
+    def ito(
+        self, unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | QuantityOrUnitLike
+    ) -> None:
         # NOTE: this method cannot convert the dimensionality type
         valid_unit = self._to_unit(unit)
         self._check_temperature_compatibility(valid_unit)
@@ -3041,6 +3044,9 @@ class Quantity(
         else:
             dim = other
 
+        if dim is UNSET_DIMENSIONALITY:
+            raise TypeError(f"Cannot convert {self} to unset dimensionality {dim}")
+
         if str(self._dimensionality_type.dimensions) != str(dim.dimensions):
             raise TypeError(
                 f"Cannot convert {self} to dimensionality {dim}, "
@@ -3059,28 +3065,34 @@ class Quantity(
     ) -> Quantity[DT, MT_]:
         m, u = self.m, self.u
 
+        if magnitude_type is pl.Expr:
+            if isinstance(m, float):
+                return cast("Quantity[DT, MT_]", self.subclass(cast(MT, pl.lit(m)), u))
+
+            raise TypeError(
+                f"Cannot convert magnitude with type {type(m)} to Polars expression, "
+                "only scalar (float) quantities can be converted to pl.Expr"
+            )
+
         # astype for np.ndarray should be called directly except for some special cases
-        if isinstance(m, np.ndarray) and magnitude_type not in (pd.Series, pl.Series, list[float]):
+        if isinstance(m, np.ndarray) and magnitude_type not in (pd.Series, pl.Series, list):
             return cast("Quantity[DT, MT_]", self.subclass(m.astype(magnitude_type), u))
 
-        if magnitude_type == pl.Expr:
-            raise ValueError("Cannot convert magnitude to Polars expression")
-
-        if magnitude_type in (float, int):
+        if magnitude_type is float:
             if isinstance(m, Iterable):
                 return cast("Quantity[DT, MT_]", self.subclass([float(n) for n in m], u))
             else:
                 return cast("Quantity[DT, MT_]", self.subclass(cast(MT, float(cast(Any, m))), u))
 
-        if magnitude_type == np.ndarray:
+        if magnitude_type is np.ndarray or get_origin(magnitude_type) is np.ndarray:
             _m = [m] if not isinstance(m, Iterable) else m
             return cast("Quantity[DT, MT_]", self.subclass(cast(MT, np.array(_m)), u))
 
-        if magnitude_type == pd.Series:
+        if magnitude_type is pd.Series or get_origin(magnitude_type) is pd.Series:
             _m = [m] if not isinstance(m, Iterable) else m
             return cast("Quantity[DT, MT_]", self.subclass(cast(MT, pd.Series(cast(Any, _m), **kwargs)), u))
 
-        if magnitude_type == pl.Series:
+        if magnitude_type is pl.Series or get_origin(magnitude_type) is pl.Series:
             _m = [m] if not isinstance(m, Iterable) else m
             kwargs["values"] = _m
             return cast("Quantity[DT, MT_]", self.subclass(cast(MT, pl.Series(**kwargs)), u))
