@@ -50,11 +50,11 @@ def test_isinstance_types() -> None:
     assert not isinstance_types(d, dict[str, list[float]])
 
     x = (2, 2, 3)
-    assert not isinstance_types(x, tuple[int, int] | tuple[str, str])
-    assert isinstance_types(x, tuple[int, int, int] | tuple[str, str])
+    assert not (isinstance_types(x, tuple[int, int]) or isinstance_types(x, tuple[str, str]))
+    assert isinstance_types(x, tuple[int, int, int]) or isinstance_types(x, tuple[str, str])
 
     y = (2, 2, "3")
-    assert isinstance_types(y, tuple[int, int, str] | str)
+    assert isinstance_types(y, tuple[int, int, str]) or isinstance_types(y, str)
 
 
 def test_isinstance_types_quantity() -> None:
@@ -64,12 +64,12 @@ def test_isinstance_types_quantity() -> None:
     assert isinstance_types(q, Q[Dimensionless, float])
 
     assert not isinstance_types(q, int)
-    assert not isinstance_types(q, int | float)
+    assert not (isinstance_types(q, int) or isinstance_types(q, float))
 
     q2 = Q(2, "kg")
     assert isinstance_types(q2, Q)
     assert isinstance_types(q2, Q[Mass])
     assert isinstance_types(q2, Q[Mass, float])
 
-    assert isinstance_types(q2, Q[Mass] | Q[Temperature])
-    assert not isinstance_types(q2, Q[Power] | Q[Temperature])
+    assert isinstance_types(q2, Q[Mass]) or isinstance_types(q2, Q[Temperature])
+    assert not (isinstance_types(q2, Q[Power]) or isinstance_types(q2, Q[Temperature]))

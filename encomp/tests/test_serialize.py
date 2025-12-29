@@ -49,7 +49,7 @@ def test_serialize() -> None:
     json_str = json.dumps(s)
     d_ = decode(json.loads(json_str))
 
-    qty = Q([Decimal("1.123"), Decimal("1.125")], "kg") * 100
+    qty = Q([float(Decimal("1.123")), float(Decimal("1.125"))], "kg") * 100
     s = serialize(qty)
     json_str = json.dumps(s)
     d_ = decode(json.loads(json_str))

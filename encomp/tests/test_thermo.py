@@ -1,16 +1,17 @@
+from ..misc import isinstance_types
 from ..thermo import heat_balance, intermediate_temperatures
 from ..units import Quantity as Q
 from ..utypes import Energy, MassFlow, Power, Temperature, TemperatureDifference
 
 
 def test_heat_balance() -> None:
-    assert isinstance(heat_balance(Q(2, "kg/s"), Q(2, "kJ/s")), Q[TemperatureDifference])
+    assert isinstance_types(heat_balance(Q(2, "kg/s"), Q(2, "kJ/s")), Q[TemperatureDifference])
 
-    assert isinstance(heat_balance(Q(2, "K"), Q(2, "kJ/s")), Q[MassFlow])
+    assert isinstance_types(heat_balance(Q(2, "K"), Q(2, "kJ/s")), Q[MassFlow])
 
-    assert isinstance(heat_balance(Q(2, "kg"), Q(2, "delta_degF")), Q[Energy])
+    assert isinstance_types(heat_balance(Q(2, "kg"), Q(2, "delta_degF")), Q[Energy])
 
-    assert isinstance(heat_balance(Q(2, "kg/s"), Q(2, "delta_degF")), Q[Power])
+    assert isinstance_types(heat_balance(Q(2, "kg/s"), Q(2, "delta_degF")), Q[Power])
 
 
 def test_intermediate_temperatures() -> None:
@@ -24,8 +25,8 @@ def test_intermediate_temperatures() -> None:
         0.7,
     )
 
-    assert isinstance(T1, Q[Temperature])
-    assert isinstance(T2, Q[Temperature])
+    assert isinstance_types(T1, Q[Temperature])
+    assert isinstance_types(T2, Q[Temperature])
 
     assert T2.check(Temperature)
     assert T2.check("K")

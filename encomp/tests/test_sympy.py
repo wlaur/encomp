@@ -7,20 +7,20 @@ from ..units import Quantity as Q
 def test_sympy() -> None:
     x = sp.Symbol("x", positive=True)
 
-    x._("n,text")
-    x._("n,text,j")
-    x.__("n,text")
-    x.__("n,text,j")
+    x._("n,text")  # pyright: ignore[reportAttributeAccessIssue]
+    x._("n,text,j")  # pyright: ignore[reportAttributeAccessIssue]
+    x.__("n,text")  # pyright: ignore[reportAttributeAccessIssue]
+    x.__("n,text,j")  # pyright: ignore[reportAttributeAccessIssue]
 
-    x._("n").append("text")
-    x.__("n").append("text", where="sup")
-    x.__("A").append("text", where="sub")
+    x._("n").append("text")  # pyright: ignore[reportAttributeAccessIssue]
+    x.__("n").append("text", where="sup")  # pyright: ignore[reportAttributeAccessIssue]
+    x.__("A").append("text", where="sub")  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def test_to_identifier() -> None:
     x = sp.Symbol("x", positive=True)
 
-    s = to_identifier(x._("subscript").__("superscript"))
+    s = to_identifier(x._("subscript").__("superscript"))  # pyright: ignore[reportAttributeAccessIssue]
 
     assert s.isidentifier()
 
@@ -29,7 +29,7 @@ def test_get_args() -> None:
     x = sp.Symbol("x", positive=True)
     y = sp.Symbol("y", positive=True)
 
-    e = x**2 + sp.sin(sp.sqrt(y))
+    e = x**2 + sp.sin(sp.sqrt(y))  # pyright: ignore[reportOperatorIssue]
 
     assert set(get_args(e)) == {"x", "y"}
 
@@ -37,8 +37,8 @@ def test_get_args() -> None:
 def test_decorate() -> None:
     n = sp.Symbol("n")
 
-    n.decorate(prefix=r"\sum", prefix_sub="2", suffix_sup="i", suffix=r"\ldots")
-    n._("H_2O").__("out")
+    n.decorate(prefix=r"\sum", prefix_sub="2", suffix_sup="i", suffix=r"\ldots")  # pyright: ignore[reportAttributeAccessIssue]
+    n._("H_2O").__("out")  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def test_sympy_to_Quantity_integration() -> None:
@@ -66,13 +66,13 @@ def test_sympy_to_Quantity_integration() -> None:
 def test_Quantity_to_sympy_integration() -> None:
     x = sp.Symbol("x")
 
-    x * Q(25, "kg")
-    x * Q(25, "kg")
+    x * Q(25, "kg")  # pyright: ignore[reportUnusedExpression, reportOperatorIssue]
+    x * Q(25, "kg")  # pyright: ignore[reportUnusedExpression, reportOperatorIssue]
 
-    Q(25, "kg") * x
+    Q(25, "kg") * x  # pyright: ignore[reportUnusedExpression, reportOperatorIssue]
 
-    x + Q(2)
-    x + Q(2, "m")
+    _ = x + Q(2)
+    _ = x + Q(2, "m")
 
 
 def test_get_function() -> None:

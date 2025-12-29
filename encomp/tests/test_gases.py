@@ -16,9 +16,10 @@ def test_convert_gas_volume() -> None:
 
     assert ret.check(Q(0, "liter"))
 
-    ret = convert_gas_volume(Q(1, "m3/s"), "S", (Q(2, "bar"), Q(25, "degC")))
+    ret2 = convert_gas_volume(Q(1, "m3/s"), "S", (Q(2, "bar"), Q(25, "degC")))
 
-    assert isinstance_types(ret, Q[VolumeFlow])
+    # TODO: inferred types are not correct
+    assert isinstance_types(ret2, Q[VolumeFlow])
 
 
 def test_ideal_gas_density() -> None:

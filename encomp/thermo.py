@@ -2,6 +2,8 @@
 Functions relating to thermodynamics.
 """
 
+from typing import Any
+
 import numpy as np
 
 from .constants import CONSTANTS
@@ -25,14 +27,20 @@ DEFAULT_CP = Quantity(4.18, "kJ/kg/K").asdim(SpecificHeatCapacity)
 
 
 def heat_balance(
-    *args: Quantity[Mass]
-    | Quantity[MassFlow]
-    | Quantity[Energy]
-    | Quantity[Power]
-    | Quantity[TemperatureDifference]
-    | Quantity[Temperature],
+    *args: Quantity[Mass, Any]
+    | Quantity[MassFlow, Any]
+    | Quantity[Energy, Any]
+    | Quantity[Power, Any]
+    | Quantity[TemperatureDifference, Any]
+    | Quantity[Temperature, Any],
     cp: Quantity[SpecificHeatCapacity, float] = DEFAULT_CP,
-) -> Quantity[Mass] | Quantity[MassFlow] | Quantity[Energy] | Quantity[Power] | Quantity[TemperatureDifference]:
+) -> (
+    Quantity[Mass, Any]
+    | Quantity[MassFlow, Any]
+    | Quantity[Energy, Any]
+    | Quantity[Power, Any]
+    | Quantity[TemperatureDifference, Any]
+):
     """
     Solves the heat balance equation
 
@@ -116,12 +124,12 @@ def heat_balance(
 
 
 def intermediate_temperatures(
-    T_b: Quantity[Temperature],
-    T_s: Quantity[Temperature],
-    k: Quantity[ThermalConductivity],
-    d: Quantity[Length],
-    h_in: Quantity[HeatTransferCoefficient],
-    h_out: Quantity[HeatTransferCoefficient],
+    T_b: Quantity[Temperature, Any],
+    T_s: Quantity[Temperature, Any],
+    k: Quantity[ThermalConductivity, Any],
+    d: Quantity[Length, Any],
+    h_in: Quantity[HeatTransferCoefficient, Any],
+    h_out: Quantity[HeatTransferCoefficient, Any],
     epsilon: float,
     tol: float = 1e-6,
 ) -> tuple[Quantity[Temperature, float], Quantity[Temperature, float]]:

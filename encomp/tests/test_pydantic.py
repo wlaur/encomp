@@ -25,22 +25,22 @@ def test_model_serialize() -> None:
         qty = Quantity(m, "kg")
         serialized = M(qty=qty).model_dump_json()
 
-        deseralized = M.model_validate_json(serialized)
+        deserialized = M.model_validate_json(serialized)
 
-        deseralized.qty.to_base_units().to(qty.u)
+        deserialized.qty.to_base_units().to(qty.u)
 
-        if isinstance(qty.m, np.ndarray) or isinstance(deseralized.qty.m, np.ndarray):
-            assert np.array_equal(qty.to_base_units().m, deseralized.qty.to_base_units().m)
-        elif isinstance(qty.m, pl.Series) or isinstance(deseralized.qty.m, pl.Series):
-            assert (qty.to_base_units().m == deseralized.qty.to_base_units().m).all()
+        if isinstance(qty.m, np.ndarray) or isinstance(deserialized.qty.m, np.ndarray):
+            assert np.array_equal(qty.to_base_units().m, deserialized.qty.to_base_units().m)
+        elif isinstance(qty.m, pl.Series) or isinstance(deserialized.qty.m, pl.Series):
+            assert (qty.to_base_units().m == deserialized.qty.to_base_units().m).all()
         else:
-            assert qty == deseralized.qty
+            assert qty == deserialized.qty
 
         if isinstance(m, float | int):
-            assert deseralized.qty.m == m
+            assert deserialized.qty.m == m
         elif isinstance(m, list):
             m = np.array(m)
         else:
-            assert type(deseralized.qty.m) is type(m)
+            assert type(deserialized.qty.m) is type(m)
 
     assert isinstance(M.model_json_schema(), dict)

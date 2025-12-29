@@ -29,12 +29,12 @@ def test_flatten() -> None:
     assert list(flatten(deep_nested)) == [1]
 
     deep_nested = [[[[[[[[1]]]]]]]]
-    list(flatten(deep_nested, max_depth=5)) == [[[[1]]]]  # noqa: B015
+    _ = list(flatten(deep_nested, max_depth=5)) == [[[[1]]]]
 
     deep_nested = [[[[[[[[1]]], [2]]]]]]
-    list(flatten(deep_nested, max_depth=2)) == [[[[[[[1]]], [2]]]]]  # noqa: B015
+    _ = list(flatten(deep_nested, max_depth=2)) == [[[[[[[1]]], [2]]]]]
 
-    recursive = [None]
+    recursive: list = [None]
     recursive[0] = recursive
 
     with pytest.raises(RecursionError):
