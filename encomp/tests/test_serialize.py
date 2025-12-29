@@ -59,7 +59,7 @@ def test_serialize() -> None:
     json_str = json.dumps(s)
     d_ = decode(json.loads(json_str))
 
-    qty = Q(np.zeros((5, 5)), "kg")
+    qty = Q(np.zeros((5, 5)).ravel(), "kg")
     s = serialize(qty)
     json_str = json.dumps(s)
     d_ = decode(json.loads(json_str))

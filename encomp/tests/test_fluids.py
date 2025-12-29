@@ -55,7 +55,7 @@ def test_Fluid() -> None:
 
     with pytest.raises(ValueError):
         # cannot fix all of P, T, Q
-        Water(P=Q(1, "bar"), T=Q(150, "degC"), Q=(0.4, ""))
+        Water(P=Q(1, "bar"), T=Q(150, "degC"), Q=Q(0.4, ""))
 
     with pytest.raises(ValueError):
         # incorrect argument name
@@ -65,8 +65,8 @@ def test_Fluid() -> None:
     Fluid("water", T=Q([25, np.nan], "°C"), P=Q([1, 2], "bar")).H
     Fluid("water", T=Q([np.nan, np.nan], "°C"), P=Q([1, 2], "bar")).H
     Fluid("water", T=Q([np.nan, np.nan], "°C"), P=Q([np.nan, np.nan], "bar")).H
-    Fluid("water", T=Q(23, "°C"), P=Q([1, 2], "bar")).H
-    Fluid("water", T=Q(23, "°C"), P=Q([1], "bar")).H
+    Fluid("water", P=Q([1, 2], "bar"), T=Q(23, "°C")).H
+    Fluid("water", P=Q([1], "bar"), T=Q(23, "°C")).H
     Fluid("water", T=Q([23, 25], "°C"), P=Q([1], "bar")).H
     Fluid("water", T=Q([23, 25], "°C"), P=Q(np.nan, "bar")).H
     Fluid("water", T=Q([23, 25], "°C"), P=Q([1, np.nan], "bar")).H
@@ -78,7 +78,7 @@ def test_Fluid() -> None:
     # returns empty array (not nan)
     ret = Fluid("water", T=Q([], "°C"), P=Q([], "bar")).H.m
     assert isinstance(ret, np.ndarray) and ret.size == 0
-    ret = Fluid("water", T=Q([], "°C"), P=Q((), "bar")).H.m
+    ret = Fluid("water", T=Q([], "°C"), P=Q([], "bar")).H.m
     assert isinstance(ret, np.ndarray) and ret.size == 0
     ret = Fluid("water", T=Q([], "°C"), P=Q(np.array([]), "bar")).H.m
     assert isinstance(ret, np.ndarray) and ret.size == 0
@@ -101,7 +101,7 @@ def test_Fluid() -> None:
 
     assert isinstance(ret, np.ndarray) and ret.size == 1
 
-    ret = Water(P=Q(2, "bar"), Q=Q([0.5])).D.m
+    ret = Water(Q=Q([0.5]), P=Q(2, "bar")).D.m
 
     assert isinstance(ret, np.ndarray) and ret.size == 1
 
@@ -124,7 +124,7 @@ def test_Fluid() -> None:
     # returns 1-element list
     assert isinstance(Fluid("water", T=Q([23], "°C"), P=Q([1], "bar")).H.m, np.ndarray)
 
-    assert isinstance(Fluid("water", T=Q(23, "°C"), P=Q([1], "bar")).H.m, np.ndarray)
+    assert isinstance(Fluid("water", P=Q([1], "bar"), T=Q(23, "°C")).H.m, np.ndarray)
 
     assert isinstance(Fluid("water", T=Q([23], "°C"), P=Q(1, "bar")).H.m, np.ndarray)
 
@@ -150,22 +150,22 @@ def test_incorrect_inputs() -> None:
     t = np.zeros(5)
 
     with pytest.raises(ValueError):
-        Fluid("water", P=Q(p, "bar"), T=Q(t, "degC")).D
+        Fluid("water", P=Q(p, "bar"), T=Q(t, "degC")).D  # pyright: ignore[reportArgumentType, reportCallIssue]
 
     p = np.zeros((5, 5))
     t = np.zeros(5 * 5)
 
     with pytest.raises(ValueError):
-        Fluid("water", P=Q(p, "bar"), T=Q(t, "degC")).D
+        Fluid("water", P=Q(p, "bar"), T=Q(t, "degC")).D  # pyright: ignore[reportArgumentType, reportCallIssue]
 
     with pytest.raises(ValueError):
-        Fluid("water", P=Q(p, "bar"), T=Q(t, "degC"), H=Q(25, "kJ/kg"))
+        Fluid("water", P=Q(p, "bar"), T=Q(t, "degC"), H=Q(25, "kJ/kg"))  # pyright: ignore[reportArgumentType, reportCallIssue]
 
     with pytest.raises(ValueError):
-        Water(P=Q(p, "bar"), T=Q(t, "degC"), H=Q(25, "kJ/kg"))
+        Water(P=Q(p, "bar"), T=Q(t, "degC"), H=Q(25, "kJ/kg"))  # pyright: ignore[reportArgumentType, reportCallIssue]
 
     with pytest.raises(ValueError):
-        Water(P=Q(p, "bar"))
+        Water(P=Q(p, "bar"))  # pyright: ignore[reportArgumentType, reportCallIssue]
 
     with pytest.raises(AttributeError):
         Fluid("water", P=Q(2, "bar"), T=Q(25, "°C")).THIS_ATTRIBUTE_DOES_NOT_EXIST
@@ -237,10 +237,11 @@ def test_HumidAir() -> None:
 
 
 def test_shapes() -> None:
+    # NOTE: Quantity magnitudes must be 1D, these tests are not relevant
     N = 16
 
-    T = Q(np.linspace(50, 60, N).reshape(4, 4), "°C")
-    P = Q(np.linspace(2, 4, N).reshape(4, 4), "bar")
+    T = Q(np.linspace(50, 60, N), "°C")
+    P = Q(np.linspace(2, 4, N), "bar")
 
     water = Fluid("water", T=T, P=P)
 
@@ -249,8 +250,8 @@ def test_shapes() -> None:
 
     N = 27
 
-    T = Q(np.linspace(50, 60, N).reshape(3, 3, 3), "°C")
-    P = Q(np.linspace(2, 4, N).reshape(3, 3, 3), "bar")
+    T = Q(np.linspace(50, 60, N), "°C")
+    P = Q(np.linspace(2, 4, N), "bar")
 
     water = Fluid("water", T=T, P=P)
 

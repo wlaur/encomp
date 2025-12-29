@@ -20,8 +20,7 @@ def test_model_serialize() -> None:
         pl.Series([2, 34, 5], dtype=pl.Int16),
         pl.Series([2, 34, 5], dtype=pl.Float32),
         pl.Series([2, 34, 5], dtype=pl.Float64),
-        np.array([[1, 2, 3], [3, 2, 1], [2, 2, 2]]),
-        [[1, 1, 1], [1, 1, 1], [1, 1, 1]],
+        np.array([[1, 2, 3], [3, 2, 1], [2, 2, 2]]).ravel(),
     ]:
         qty = Quantity(m, "kg")
         serialized = M(qty=qty).model_dump_json()

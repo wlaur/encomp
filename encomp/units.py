@@ -600,7 +600,11 @@ class Quantity(
         elif isinstance(val, float):
             # also convert np.float64 to Python float
             return float(val)
-        elif isinstance(val, (np.ndarray, pd.Series, pl.Series, pl.Expr)):
+        elif isinstance(val, np.ndarray):
+            if len(val.shape) != 1:
+                raise ValueError(f"Only 1-dimensional Numpy arrays can be used as magnitude, got shape {val.shape}")
+            return val
+        elif isinstance(val, (pd.Series, pl.Series, pl.Expr)):
             return val
         elif isinstance(val, (list, tuple)):
             arr = cast(MT, np.array(val).astype(np.float64))

@@ -369,11 +369,14 @@ def test_type_eq() -> None:
 def test_Q() -> None:
     # test that Quantity objects can be constructed
     Q(1, "dimensionless")
+    Q(1)
+    Q(1, None)
     Q(1, "kg")
     Q(1, "bar")
     Q(1, "h")
     Q(1, "newton")
     Q(1, "cSt")
+    Q([])
 
     assert Q(1, "meter/kilometer").to_reduced_units().m == 0.001
     assert Q(1, "km").to_base_units().m == 1000
