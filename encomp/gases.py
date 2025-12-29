@@ -12,7 +12,7 @@ from .conversion import convert_volume_mass
 from .fluids import Fluid
 from .units import Quantity
 from .utypes import (
-    MT,
+    FMT,
     Density,
     Mass,
     MassFlow,
@@ -161,29 +161,29 @@ def convert_gas_volume(
 
 
 @overload
-def mass_to_normal_volume(mass: Quantity[Mass, MT], fluid_name: str = "Air") -> Quantity[Volume, MT]: ...
+def mass_to_normal_volume(mass: Quantity[Mass, FMT], fluid_name: str = "Air") -> Quantity[Volume, FMT]: ...
 
 
 @overload
-def mass_to_normal_volume(mass: Quantity[MassFlow, MT], fluid_name: str = "Air") -> Quantity[VolumeFlow, MT]: ...
+def mass_to_normal_volume(mass: Quantity[MassFlow, FMT], fluid_name: str = "Air") -> Quantity[VolumeFlow, FMT]: ...
 
 
 def mass_to_normal_volume(
-    mass: Quantity[Mass, MT] | Quantity[MassFlow, MT], fluid_name: str = "Air"
-) -> Quantity[Volume, MT] | Quantity[VolumeFlow, MT]:
+    mass: Quantity[Mass, FMT] | Quantity[MassFlow, FMT], fluid_name: str = "Air"
+) -> Quantity[Volume, FMT] | Quantity[VolumeFlow, FMT]:
     """
     Convert mass to normal volume.
 
     Parameters
     ----------
-    mass : Quantity[Mass, MT] | Quantity[MassFlow, MT]
+    mass : Quantity[Mass, FMT] | Quantity[MassFlow, FMT]
         Input mass or mass flow
     fluid_name : str, optional
         Name of the fluid, by default 'Air'
 
     Returns
     -------
-    Quantity[Volume, MT] | Quantity[VolumeFlow, MT]
+    Quantity[Volume, FMT] | Quantity[VolumeFlow, FMT]
         Corresponding normal volume or normal volume flow
     """
 
@@ -195,45 +195,45 @@ def mass_to_normal_volume(
 
     ret = convert_volume_mass(mass, rho=rho)
 
-    return cast("Quantity[Volume, MT] | Quantity[VolumeFlow, MT]", ret)
+    return cast("Quantity[Volume, FMT] | Quantity[VolumeFlow, FMT]", ret)
 
 
 @overload
 def mass_to_actual_volume(
-    mass: Quantity[Mass, MT],
-    condition: tuple[Quantity[Pressure, MT], Quantity[Temperature, MT]],
+    mass: Quantity[Mass, FMT],
+    condition: tuple[Quantity[Pressure, FMT], Quantity[Temperature, FMT]],
     fluid_name: str = "Air",
-) -> Quantity[Volume, MT]: ...
+) -> Quantity[Volume, FMT]: ...
 
 
 @overload
 def mass_to_actual_volume(
-    mass: Quantity[MassFlow, MT],
-    condition: tuple[Quantity[Pressure, MT], Quantity[Temperature, MT]],
+    mass: Quantity[MassFlow, FMT],
+    condition: tuple[Quantity[Pressure, FMT], Quantity[Temperature, FMT]],
     fluid_name: str = "Air",
-) -> Quantity[VolumeFlow, MT]: ...
+) -> Quantity[VolumeFlow, FMT]: ...
 
 
 def mass_to_actual_volume(
-    mass: Quantity[Mass, MT] | Quantity[MassFlow, MT],
-    condition: tuple[Quantity[Pressure, MT], Quantity[Temperature, MT]],
+    mass: Quantity[Mass, FMT] | Quantity[MassFlow, FMT],
+    condition: tuple[Quantity[Pressure, FMT], Quantity[Temperature, FMT]],
     fluid_name: str = "Air",
-) -> Quantity[Volume, MT] | Quantity[VolumeFlow, MT]:
+) -> Quantity[Volume, FMT] | Quantity[VolumeFlow, FMT]:
     """
     Convert mass to actual volume.
 
     Parameters
     ----------
-    mass : Quantity[Mass, MT] | Quantity[MassFlow, MT]
+    mass : Quantity[Mass, FMT] | Quantity[MassFlow, FMT]
         Input mass or mass flow
-    condition : tuple[Quantity[Pressure, MT], Quantity[Temperature, MT]]
+    condition : tuple[Quantity[Pressure, FMT], Quantity[Temperature, FMT]]
         Condition at which to calculate the actual volume
     fluid_name : str, optional
         Name of the fluid, by default 'Air'
 
     Returns
     -------
-    Quantity[Volume, MT] | Quantity[VolumeFlow, MT]
+    Quantity[Volume, FMT] | Quantity[VolumeFlow, FMT]
         Corresponding actual volume or actual volume flow
     """
 
@@ -241,33 +241,33 @@ def mass_to_actual_volume(
 
     ret = convert_volume_mass(mass, rho=rho)
 
-    return cast("Quantity[Volume, MT] | Quantity[VolumeFlow, MT]", ret)
+    return cast("Quantity[Volume, FMT] | Quantity[VolumeFlow, FMT]", ret)
 
 
 @overload
-def mass_from_normal_volume(volume: Quantity[Volume, MT], fluid_name: str = "Air") -> Quantity[Mass, MT]: ...
+def mass_from_normal_volume(volume: Quantity[Volume, FMT], fluid_name: str = "Air") -> Quantity[Mass, FMT]: ...
 
 
 @overload
-def mass_from_normal_volume(volume: Quantity[VolumeFlow, MT], fluid_name: str = "Air") -> Quantity[MassFlow, MT]: ...
+def mass_from_normal_volume(volume: Quantity[VolumeFlow, FMT], fluid_name: str = "Air") -> Quantity[MassFlow, FMT]: ...
 
 
 def mass_from_normal_volume(
-    volume: Quantity[Volume, MT] | Quantity[VolumeFlow, MT], fluid_name: str = "Air"
-) -> Quantity[Mass, MT] | Quantity[MassFlow, MT]:
+    volume: Quantity[Volume, FMT] | Quantity[VolumeFlow, FMT], fluid_name: str = "Air"
+) -> Quantity[Mass, FMT] | Quantity[MassFlow, FMT]:
     """
      Convert normal volume to mass.
 
      Parameters
      ----------
-     volume : Quantity[Volume, MT] | Quantity[VolumeFlow, MT]
+     volume : Quantity[Volume, FMT] | Quantity[VolumeFlow, FMT]
          Input normal volume or normal volume flow
      fluid_name : str, optional
          Name of the fluid, by default 'Air'
 
      Returns
      -------
-    Quantity[Mass, MT] | Quantity[MassFlow, MT]
+    Quantity[Mass, FMT] | Quantity[MassFlow, FMT]
          Corresponding mass or mass flow
     """
 
@@ -279,45 +279,45 @@ def mass_from_normal_volume(
 
     ret = convert_volume_mass(volume, rho=rho)
 
-    return cast("Quantity[Mass, MT] | Quantity[MassFlow, MT]", ret)
+    return cast("Quantity[Mass, FMT] | Quantity[MassFlow, FMT]", ret)
 
 
 @overload
 def mass_from_actual_volume(
-    volume: Quantity[Volume, MT],
-    condition: tuple[Quantity[Pressure, MT], Quantity[Temperature, MT]],
+    volume: Quantity[Volume, FMT],
+    condition: tuple[Quantity[Pressure, FMT], Quantity[Temperature, FMT]],
     fluid_name: str = "Air",
-) -> Quantity[Mass, MT]: ...
+) -> Quantity[Mass, FMT]: ...
 
 
 @overload
 def mass_from_actual_volume(
-    volume: Quantity[VolumeFlow, MT],
-    condition: tuple[Quantity[Pressure, MT], Quantity[Temperature, MT]],
+    volume: Quantity[VolumeFlow, FMT],
+    condition: tuple[Quantity[Pressure, FMT], Quantity[Temperature, FMT]],
     fluid_name: str = "Air",
-) -> Quantity[MassFlow, MT]: ...
+) -> Quantity[MassFlow, FMT]: ...
 
 
 def mass_from_actual_volume(
-    volume: Quantity[Volume, MT] | Quantity[VolumeFlow, MT],
-    condition: tuple[Quantity[Pressure, MT], Quantity[Temperature, MT]],
+    volume: Quantity[Volume, FMT] | Quantity[VolumeFlow, FMT],
+    condition: tuple[Quantity[Pressure, FMT], Quantity[Temperature, FMT]],
     fluid_name: str = "Air",
-) -> Quantity[Mass, MT] | Quantity[MassFlow, MT]:
+) -> Quantity[Mass, FMT] | Quantity[MassFlow, FMT]:
     """
     Convert actual volume to mass.
 
     Parameters
     ----------
-    volume : Quantity[Volume, MT] | Quantity[VolumeFlow, MT]
+    volume : Quantity[Volume, FMT] | Quantity[VolumeFlow, FMT]
         Input actual volume or actual volume flow
-    condition : tuple[Quantity[Pressure, MT], Quantity[Temperature, MT]]
+    condition : tuple[Quantity[Pressure, FMT], Quantity[Temperature, FMT]]
         Condition at which to calculate the mass
     fluid_name : str, optional
         Name of the fluid, by default 'Air'
 
     Returns
     -------
-    Quantity[Mass, MT] | Quantity[MassFlow, MT]
+    Quantity[Mass, FMT] | Quantity[MassFlow, FMT]
         Corresponding mass or mass flow
     """
 
@@ -325,7 +325,7 @@ def mass_from_actual_volume(
 
     ret = convert_volume_mass(volume, rho=rho)
 
-    return cast("Quantity[Mass, MT] | Quantity[MassFlow, MT]", ret)
+    return cast("Quantity[Mass, FMT] | Quantity[MassFlow, FMT]", ret)
 
 
 @overload

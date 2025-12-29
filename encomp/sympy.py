@@ -113,6 +113,8 @@ def recursive_subs(e: sp.Basic, replacements: list[tuple[sp.Symbol, sp.Basic]]) 
         Substituted expression
     """
 
+    new_e = None
+
     for _ in range(0, len(replacements) + 1):
         new_e = e.subs(replacements)
 
@@ -146,9 +148,9 @@ def simplify_exponents(e: sp.Basic) -> sp.Basic:
     def rewrite(expr: sp.Basic, new_args: tuple[sp.Basic, ...]) -> sp.Basic:
         new_args_list = list(new_args)
         pow_val = new_args_list[1]
-        pow_val_int = int(new_args_list[1])
+        pow_val_int = int(new_args_list[1])  # pyright: ignore[reportArgumentType]
 
-        if pow_val.epsilon_eq(pow_val_int):
+        if pow_val.epsilon_eq(pow_val_int):  # pyright: ignore[reportAttributeAccessIssue]
             new_args_list[1] = sp.Integer(pow_val_int)
 
         return type(expr)(*new_args_list)
@@ -363,7 +365,7 @@ def get_lambda_matrix(M: sp.MutableDenseMatrix) -> tuple[str, list[str]]:
 
     for i in range(nrows):
         for j in range(ncols):
-            fcn_str, n_args = get_lambda(M[i, j], to_str=True)
+            fcn_str, n_args = get_lambda(M[i, j], to_str=True)  # pyright: ignore[reportArgumentType, reportCallIssue]
             args |= set(n_args)
 
             if isinstance(fcn_str, str):

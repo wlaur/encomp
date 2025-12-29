@@ -67,7 +67,7 @@ def test_divide_chunks(lst: list) -> None:
 
 def test_divide_chunks_errors() -> None:
     with pytest.raises(TypeError):
-        divide_chunks([])
+        divide_chunks([])  # pyright: ignore[reportCallIssue]
 
     with pytest.raises(ValueError):
         next(divide_chunks([1, 2, 3], 0))

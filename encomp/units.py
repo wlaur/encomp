@@ -1407,13 +1407,16 @@ class Quantity(
             elif magnitude_type == "float":
                 magnitude = float(val)
             else:
-                raise ExpectedDimensionalityError(f"Unknown magnitude_type {magnitude_type!r}")
+                raise TypeError(f"Unknown magnitude_type {magnitude_type!r}")
             unit = qty.get("unit")
             ret = cls(cast(MT, magnitude), unit=unit)
         else:
             ret = qty if isinstance(qty, Quantity) else cls(cast(Any, qty))
 
         if isinstance(ret, cls):
+            return ret
+
+        if cls._is_incomplete_dimensionality(cls._dimensionality_type):
             return ret
 
         raise ExpectedDimensionalityError(
