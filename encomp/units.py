@@ -2317,13 +2317,19 @@ class Quantity(
 
     def __mul__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
         ret = super().__mul__(other)
+
         if self.dimensionless and isinstance(other, Quantity):
-            return other.subclass(ret)
+            subcls = self._get_dimensional_subclass(other._dimensionality_type, type(ret.m))
+            return subcls(ret)
 
         return self._call_subclass(ret)
 
     def __rmul__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
         ret = super().__rmul__(other)
+
+        if self.dimensionless and isinstance(other, Quantity):
+            subcls = self._get_dimensional_subclass(other._dimensionality_type, type(ret.m))
+            return subcls(ret)
 
         return self._call_subclass(ret)
 
@@ -2967,8 +2973,13 @@ class Quantity(
     @overload
     def __truediv__(self: Quantity[Any, MT], other: Quantity[Any, Any]) -> Quantity[Any, MT]: ...
 
-    def __truediv__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, MT]:
+    def __truediv__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
         ret = super().__truediv__(other)
+
+        if self.dimensionless and isinstance(other, Quantity):
+            subcls = self._get_dimensional_subclass(other._dimensionality_type, type(ret.m))
+            return subcls(ret)
+
         return self._call_subclass(ret)
 
     # region: overload  __rtruediv__
@@ -3002,8 +3013,13 @@ class Quantity(
 
     # endregion
 
-    def __rtruediv__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
+    def __rtruediv__(self, other: Quantity[Any, MT] | float | int) -> Quantity[Any, Any]:
         ret = super().__rtruediv__(other)
+
+        if self.dimensionless and isinstance(other, Quantity):
+            subcls = self._get_dimensional_subclass(other._dimensionality_type, type(ret.m))
+            return subcls(ret)
+
         return self._call_subclass(ret)
 
     def _temperature_difference_add_sub(
