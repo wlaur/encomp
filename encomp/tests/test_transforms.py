@@ -11,5 +11,6 @@ def _q2(inp: Q[Any, Any]) -> Q[Any, Any]:
     return inp * 2
 
 
+# TODO: test with typeguard.typechecked
 def test_transforms() -> None:
     _ = _q2(_q1())
