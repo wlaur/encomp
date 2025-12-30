@@ -88,6 +88,7 @@ from .utypes import (
     Frequency,
     HeatingValue,
     HeatTransferCoefficient,
+    HeatTransferCoefficientUnits,
     HigherHeatingValue,
     KinematicViscosity,
     KinematicViscosityUnits,
@@ -137,6 +138,7 @@ from .utypes import (
     TemperatureDifferenceUnits,
     TemperatureUnits,
     ThermalConductivity,
+    ThermalConductivityUnits,
     Time,
     TimeUnits,
     Velocity,
@@ -755,6 +757,14 @@ class Quantity(
         cls, val: list[float] | list[int], unit: SpecificHeatCapacityUnits
     ) -> Quantity[SpecificHeatCapacity, Numpy1DArray]: ...
     @overload
+    def __new__(
+        cls, val: list[float] | list[int], unit: ThermalConductivityUnits
+    ) -> Quantity[ThermalConductivity, Numpy1DArray]: ...
+    @overload
+    def __new__(
+        cls, val: list[float] | list[int], unit: HeatTransferCoefficientUnits
+    ) -> Quantity[HeatTransferCoefficient, Numpy1DArray]: ...
+    @overload
     def __new__(cls, val: list[float] | list[int], unit: Unit[DT]) -> Quantity[DT, Numpy1DArray]: ...
     @overload
     def __new__(
@@ -829,6 +839,10 @@ class Quantity(
     def __new__(cls, val: MT, unit: EnergyPerMassUnits) -> Quantity[EnergyPerMass, MT]: ...
     @overload
     def __new__(cls, val: MT, unit: SpecificHeatCapacityUnits) -> Quantity[SpecificHeatCapacity, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: ThermalConductivityUnits) -> Quantity[ThermalConductivity, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: HeatTransferCoefficientUnits) -> Quantity[HeatTransferCoefficient, MT]: ...
     @overload
     def __new__(cls, val: MT, unit: Unit[DT]) -> Quantity[DT, MT]: ...
     @overload

@@ -1,25 +1,10 @@
-from typing import assert_type, reveal_type
+from typing import assert_type
 
 import numpy as np
 import polars as pl
 
 from encomp.units import Quantity as Q
 from encomp.utypes import Numpy1DBoolArray
-
-
-def test_reveal_type() -> None:
-    reveal_type(Q(1.0, "m"))
-    reveal_type(Q(1, "m"))
-
-    reveal_type(Q(1, str("m")))  # noqa: UP018
-
-    reveal_type(Q([1, 2, 3], "kg"))
-
-    reveal_type(Q(pl.col.asd, "kg"))
-    reveal_type(Q(pl.DataFrame({"test": []})["test"], "kg"))
-
-    reveal_type(Q(pl.col.asd, "kg") / Q(25, "min"))
-    reveal_type(Q(pl.col.asd, "kg") / Q([1, 3, 4], "day"))
 
 
 def test_eq() -> None:

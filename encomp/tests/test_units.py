@@ -643,6 +643,17 @@ def test_typechecked() -> None:
     with pytest.raises(Exception):  # noqa: B017
         func_a(Q(2, "meter"))  # pyright: ignore[reportArgumentType]
 
+    @typechecked
+    def func_c(a: Quantity[Temperature]) -> Quantity[Pressure]:  # noqa: ARG001
+        return Q([2], "bar")
+
+    assert func_c(Q([2], "degC")) == Q([2], "bar")
+
+    func_c(Q(2, "degC"))  # pyright: ignore[reportArgumentType]
+
+    with pytest.raises(Exception):  # noqa: B017
+        func_c(Q([2], "meter"))  # pyright: ignore[reportArgumentType]
+
 
 def test_dataframe_assign() -> None:
     df_multiple_rows = pd.DataFrame(

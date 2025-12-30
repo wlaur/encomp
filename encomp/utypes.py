@@ -248,6 +248,10 @@ PressureUnits = Literal[
     "mbar",
     "mmHg",
     "atm",
+    "N/m2",
+    "N/m^2",
+    "N/m**2",
+    "N/m²",
 ]
 
 MassFlowUnits = Literal[
@@ -463,6 +467,34 @@ SpecificHeatCapacityUnits = Literal[
     "J/g/degC",
 ]
 
+ThermalConductivityUnits = Literal[
+    "W/m/K",
+    "W/m/delta_degC",
+    "W/m/Δ°C",
+    "W/m/Δ℃",
+    "kW/m/K",
+    "mW/m/K",
+]
+
+HeatTransferCoefficientUnits = Literal[
+    "W/m2/K",
+    "W/m^2/K",
+    "W/m**2/K",
+    "W/m²/K",
+    "W/m2/delta_degC",
+    "W/m^2/delta_degC",
+    "W/m**2/delta_degC",
+    "W/m²/delta_degC",
+    "W/m2/Δ°C",
+    "W/m^2/Δ°C",
+    "W/m**2/Δ°C",
+    "W/m²/Δ°C",
+    "kW/m2/K",
+    "kW/m^2/K",
+    "kW/m**2/K",
+    "kW/m²/K",
+]
+
 AllUnits = (
     DimensionlessUnits
     | CurrencyUnits
@@ -497,6 +529,8 @@ AllUnits = (
     | KinematicViscosityUnits
     | EnergyPerMassUnits
     | SpecificHeatCapacityUnits
+    | ThermalConductivityUnits
+    | HeatTransferCoefficientUnits
 )
 
 
