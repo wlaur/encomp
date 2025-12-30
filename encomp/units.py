@@ -1427,6 +1427,107 @@ class Quantity(
         except DimensionalityTypeError:
             return False
 
+    def _temperature_difference_add_sub(
+        self,
+        other: Quantity[TemperatureDifference, Any],
+        operator: Literal["add", "sub"],
+    ) -> Quantity[Temperature, MT]:
+        v1 = self.to("degC").m
+        v2 = other.to("delta_degC").m
+
+        val = v1 + v2 if operator == "add" else v1 - v2
+
+        return Quantity[Temperature, MT](val, "degC")
+
+    def __round__(self, ndigits: int | None = None) -> Quantity[DT, MT]:
+        if isinstance(self.m, float):
+            return cast("Quantity[DT, MT]", super().__round__(ndigits))
+
+        if not isinstance(self.m, np.ndarray):
+            raise NotImplementedError(f"__round__ is not implemented for magnitude type {type(self.m)}")
+
+        return self.__class__(np.round(self.m, ndigits or 0), self.u)
+
+    @property
+    def is_scalar(self) -> bool:
+        return isinstance(self.m, float)
+
+    @property
+    def ndim(self) -> int:
+        # compatibility with pandas broadcasting
+        # if ndim == 0, pandas considers the object
+        # a scalar and will fill array when assigning columns
+        # this is similar to setting UNIT_REGISTRY.force_ndarray_like
+        # except that it still allows for scalar magnitudes
+
+        if isinstance(self.m, float | int):
+            return 0
+
+        return getattr(self.m, "ndim", 0)
+
+    def asdim(self, other: type[DT_] | Quantity[DT_, MT]) -> Quantity[DT_, MT]:
+        if isinstance(other, Quantity):
+            dim = other._dimensionality_type
+            assert dim is not None
+        else:
+            dim = other
+
+        if dim is UNSET_DIMENSIONALITY:
+            raise TypeError(f"Cannot convert {self} to unset dimensionality {dim}")
+
+        if str(self._dimensionality_type.dimensions) != str(dim.dimensions):
+            raise TypeError(
+                f"Cannot convert {self} to dimensionality {dim}, "
+                f"the dimensions do not match: "
+                f"{self._dimensionality_type.dimensions} != "
+                f"{dim.dimensions}"
+            )
+
+        subcls = self._get_dimensional_subclass(dim, self._magnitude_type)
+        return cast("Quantity[DT_, MT]", subcls(self.m, self.u))
+
+    def astype(
+        self,
+        magnitude_type: type[MT_],
+        **kwargs: Any,  # noqa: ANN401
+    ) -> Quantity[DT, MT_]:
+        m, u = self.m, self.u
+
+        if magnitude_type is pl.Expr:
+            if isinstance(m, float):
+                return cast("Quantity[DT, MT_]", self.subclass(cast(MT, pl.lit(m)), u))
+
+            raise TypeError(
+                f"Cannot convert magnitude with type {type(m)} to Polars expression, "
+                "only scalar (float) quantities can be converted to pl.Expr"
+            )
+
+        # astype for np.ndarray should be called directly except for some special cases
+        if isinstance(m, np.ndarray) and magnitude_type not in (pd.Series, pl.Series, list):
+            return cast("Quantity[DT, MT_]", self.subclass(m.astype(magnitude_type), u))
+
+        if magnitude_type is float:
+            if isinstance(m, Iterable):
+                return cast("Quantity[DT, MT_]", self.subclass([float(n) for n in m], u))
+            else:
+                return cast("Quantity[DT, MT_]", self.subclass(cast(MT, float(cast(Any, m))), u))
+
+        if magnitude_type is np.ndarray or get_origin(magnitude_type) is np.ndarray:
+            _m = [m] if not isinstance(m, Iterable) else m
+            return cast("Quantity[DT, MT_]", self.subclass(cast(MT, np.array(_m)), u))
+
+        if magnitude_type is pd.Series or get_origin(magnitude_type) is pd.Series:
+            _m = [m] if not isinstance(m, Iterable) else m
+            return cast("Quantity[DT, MT_]", self.subclass(cast(MT, pd.Series(cast(Any, _m), **kwargs)), u))
+
+        if magnitude_type is pl.Series or get_origin(magnitude_type) is pl.Series:
+            _m = [m] if not isinstance(m, Iterable) else m
+            kwargs["values"] = _m
+            return cast("Quantity[DT, MT_]", self.subclass(cast(MT, pl.Series(**kwargs)), u))
+
+        # ensure that this method returns a new instance
+        return cast("Quantity[DT, MT_]", self.__copy__())
+
     @overload
     def __eq__(self: Quantity[DT, float], other: Quantity[DT, Any]) -> bool: ...
     @overload
@@ -1508,8 +1609,8 @@ class Quantity(
     def __add__(self: Quantity[Dimensionless, MT], other: float | int) -> Quantity[Dimensionless, MT]: ...
     @overload
     def __add__(
-        self: Quantity[Temperature, MT], other: Quantity[TemperatureDifference, Any]
-    ) -> Quantity[Temperature, Any]: ...
+        self: Quantity[Temperature, MT], other: Quantity[TemperatureDifference, MT]
+    ) -> Quantity[Temperature, MT]: ...
     @overload
     def __add__(self, other: Quantity[DT, MT]) -> Quantity[DT, MT]: ...
     @overload
@@ -1549,12 +1650,12 @@ class Quantity(
     def __sub__(self: Quantity[Dimensionless, MT], other: float | int) -> Quantity[Dimensionless, MT]: ...
     @overload
     def __sub__(
-        self: Quantity[Temperature, MT], other: Quantity[TemperatureDifference, Any]
-    ) -> Quantity[Temperature, Any]: ...
+        self: Quantity[Temperature, MT], other: Quantity[TemperatureDifference, MT]
+    ) -> Quantity[Temperature, MT]: ...
     @overload
     def __sub__(
-        self: Quantity[Temperature, MT], other: Quantity[Temperature, Any]
-    ) -> Quantity[TemperatureDifference, Any]: ...
+        self: Quantity[Temperature, MT], other: Quantity[Temperature, MT]
+    ) -> Quantity[TemperatureDifference, MT]: ...
     @overload
     def __sub__(self, other: Quantity[DT, MT]) -> Quantity[DT, MT]: ...
     @overload
@@ -1697,27 +1798,6 @@ class Quantity(
 
         return self._call_subclass(ret)
 
-    def _temperature_difference_add_sub(
-        self,
-        other: Quantity[TemperatureDifference, Any],
-        operator: Literal["add", "sub"],
-    ) -> Quantity[Temperature, MT]:
-        v1 = self.to("degC").m
-        v2 = other.to("delta_degC").m
-
-        val = v1 + v2 if operator == "add" else v1 - v2
-
-        return Quantity[Temperature, MT](val, "degC")
-
-    def __round__(self, ndigits: int | None = None) -> Quantity[DT, MT]:
-        if isinstance(self.m, float):
-            return cast("Quantity[DT, MT]", super().__round__(ndigits))
-
-        if not isinstance(self.m, np.ndarray):
-            raise NotImplementedError(f"__round__ is not implemented for magnitude type {type(self.m)}")
-
-        return self.__class__(np.round(self.m, ndigits or 0), self.u)
-
     @overload
     def __getitem__(self: Quantity[DT, pd.Series], index: int) -> Quantity[DT, float]: ...
     @overload
@@ -1732,86 +1812,6 @@ class Quantity(
             self._dimensionality_type, type(ret.m) if isinstance(ret, Quantity) else type(ret)
         )
         return subcls(ret.m, ret.u)
-
-    @property
-    def is_scalar(self) -> bool:
-        return isinstance(self.m, float)
-
-    @property
-    def ndim(self) -> int:
-        # compatibility with pandas broadcasting
-        # if ndim == 0, pandas considers the object
-        # a scalar and will fill array when assigning columns
-        # this is similar to setting UNIT_REGISTRY.force_ndarray_like
-        # except that it still allows for scalar magnitudes
-
-        if isinstance(self.m, float | int):
-            return 0
-
-        return getattr(self.m, "ndim", 0)
-
-    def asdim(self, other: type[DT_] | Quantity[DT_, MT]) -> Quantity[DT_, MT]:
-        if isinstance(other, Quantity):
-            dim = other._dimensionality_type
-            assert dim is not None
-        else:
-            dim = other
-
-        if dim is UNSET_DIMENSIONALITY:
-            raise TypeError(f"Cannot convert {self} to unset dimensionality {dim}")
-
-        if str(self._dimensionality_type.dimensions) != str(dim.dimensions):
-            raise TypeError(
-                f"Cannot convert {self} to dimensionality {dim}, "
-                f"the dimensions do not match: "
-                f"{self._dimensionality_type.dimensions} != "
-                f"{dim.dimensions}"
-            )
-
-        subcls = self._get_dimensional_subclass(dim, self._magnitude_type)
-        return cast("Quantity[DT_, MT]", subcls(self.m, self.u))
-
-    def astype(
-        self,
-        magnitude_type: type[MT_],
-        **kwargs: Any,  # noqa: ANN401
-    ) -> Quantity[DT, MT_]:
-        m, u = self.m, self.u
-
-        if magnitude_type is pl.Expr:
-            if isinstance(m, float):
-                return cast("Quantity[DT, MT_]", self.subclass(cast(MT, pl.lit(m)), u))
-
-            raise TypeError(
-                f"Cannot convert magnitude with type {type(m)} to Polars expression, "
-                "only scalar (float) quantities can be converted to pl.Expr"
-            )
-
-        # astype for np.ndarray should be called directly except for some special cases
-        if isinstance(m, np.ndarray) and magnitude_type not in (pd.Series, pl.Series, list):
-            return cast("Quantity[DT, MT_]", self.subclass(m.astype(magnitude_type), u))
-
-        if magnitude_type is float:
-            if isinstance(m, Iterable):
-                return cast("Quantity[DT, MT_]", self.subclass([float(n) for n in m], u))
-            else:
-                return cast("Quantity[DT, MT_]", self.subclass(cast(MT, float(cast(Any, m))), u))
-
-        if magnitude_type is np.ndarray or get_origin(magnitude_type) is np.ndarray:
-            _m = [m] if not isinstance(m, Iterable) else m
-            return cast("Quantity[DT, MT_]", self.subclass(cast(MT, np.array(_m)), u))
-
-        if magnitude_type is pd.Series or get_origin(magnitude_type) is pd.Series:
-            _m = [m] if not isinstance(m, Iterable) else m
-            return cast("Quantity[DT, MT_]", self.subclass(cast(MT, pd.Series(cast(Any, _m), **kwargs)), u))
-
-        if magnitude_type is pl.Series or get_origin(magnitude_type) is pl.Series:
-            _m = [m] if not isinstance(m, Iterable) else m
-            kwargs["values"] = _m
-            return cast("Quantity[DT, MT_]", self.subclass(cast(MT, pl.Series(**kwargs)), u))
-
-        # ensure that this method returns a new instance
-        return cast("Quantity[DT, MT_]", self.__copy__())
 
 
 # override the implementations for the Quantity
