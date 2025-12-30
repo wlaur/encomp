@@ -85,43 +85,27 @@ from .utypes import (
     EnergyPerMass,
     EnergyPerMassUnits,
     EnergyUnits,
-    Frequency,
-    HeatingValue,
     HeatTransferCoefficient,
     HeatTransferCoefficientUnits,
-    HigherHeatingValue,
     KinematicViscosity,
     KinematicViscosityUnits,
     Length,
     LengthUnits,
-    LowerHeatingValue,
     Luminosity,
     LuminosityUnits,
     Mass,
     MassFlow,
     MassFlowUnits,
-    MassPerEnergy,
-    MassPerNormalVolume,
     MassUnits,
-    MolarDensity,
     MolarMass,
     MolarMassUnits,
-    MolarSpecificEnthalpy,
-    MolarSpecificEntropy,
-    Normal,
-    NormalTemperature,
     NormalVolume,
     NormalVolumeFlow,
     NormalVolumeFlowUnits,
-    NormalVolumePerMass,
     NormalVolumeUnits,
     Numpy1DArray,
     Numpy1DBoolArray,
     Power,
-    PowerPerArea,
-    PowerPerLength,
-    PowerPerTemperature,
-    PowerPerVolume,
     PowerUnits,
     Pressure,
     PressureUnits,
@@ -661,7 +645,6 @@ class Quantity(
         except TypeError:
             return inp
 
-    # region: overload __new__
     @overload
     def __new__(cls, val: list[float] | list[int]) -> Quantity[Dimensionless, Numpy1DArray]: ...
     @overload
@@ -770,7 +753,6 @@ class Quantity(
     def __new__(
         cls, val: list[float] | list[int], unit: str | UnitsContainer | Unit
     ) -> Quantity[Any, Numpy1DArray]: ...
-
     @overload
     def __new__(cls, val: MT) -> Quantity[Dimensionless, MT]: ...
     @overload
@@ -858,9 +840,6 @@ class Quantity(
         _mt_orig_kwargs: dict[str, Any] | None = None,
         _depth: int = 0,
     ) -> Quantity[Any, Any]: ...
-
-    # endregion
-
     def __new__(
         cls,
         val: MT | list[float] | list[int] | Quantity[DT, MT],
@@ -1138,23 +1117,6 @@ class Quantity(
         return super().check(dimension)
 
     def __format__(self, format_type: str) -> str:
-        """
-        Overrides the ``__format__`` method for Quantity:
-        Ensure that the default formatting spec is used for fixed
-        precision formatting (":.2f", ":.2g") when no explicit
-        format is specified.
-
-        Parameters
-        ----------
-        format_type : str
-            Value format specifier
-
-        Returns
-        -------
-        str
-            Formatted output
-        """
-
         if not format_type.endswith(Quantity.FORMATTING_SPECS):
             format_type = f"{format_type}{self._REGISTRY.formatter.default_format}"
 
@@ -1162,31 +1124,6 @@ class Quantity(
 
     @staticmethod
     def correct_unit(unit: str) -> str:
-        """
-        Corrects the unit name to make it compatible with ``pint``.
-
-        * Adds ``**`` between the unit and the exponent if it's missing,
-          for example ``kg/m3 → kg/m**3``.
-        * Parses "Nm³" (and variations of this) as "normal * m³"
-          (use explicit "nanometer³" to get this unit)
-        * Converts % and ‰ to percent and permille
-        * Changes the ``Δ`` character to ``delta_``, for example ``Δ°C`` to ``delta_°C``
-        * Interprets ``-`` as ``dimensionless``
-        * Converts the single-character symbols ``℃`` and ``℉`` to ``degC`` and ``degF``
-        * Converts the compound units ``Δ°C`` and ``Δ°F``
-          to ``delta_degC`` and ``delta_degF``
-
-        Parameters
-        ----------
-        unit : str
-            A (potentially inconsistently specified) unit name
-
-        Returns
-        -------
-        str
-            The corrected unit name
-        """
-
         unit = str(unit).strip()
 
         if unit == "-":
@@ -1222,11 +1159,6 @@ class Quantity(
         return unit
 
     def _sympy_(self) -> sp.Basic:
-        """
-        Compatibility with ``sympy``.
-        Converts the unit dimensions to symbols and multiplies with the magnitude.
-        Need to use base units, compound units will not cancel out otherwise.
-        """
         _ensure_sympy()
 
         if self.dimensionless:
@@ -1268,11 +1200,6 @@ class Quantity(
 
     @classmethod
     def from_expr(cls, expr: sp.Basic) -> Quantity[DT, float]:
-        """
-        Converts a Sympy expression with unit symbols
-        into a Quantity. This only works in case expression *only* contains base SI unit symbols.
-        """
-
         # this needs to be populated here to account for custom dimensions
         cls._populate_dimension_symbol_map()
 
@@ -1502,32 +1429,25 @@ class Quantity(
 
     @overload
     def __eq__(self: Quantity[Any, float], other: Quantity[Any, float] | float | int) -> bool: ...
-
     @overload
     def __eq__(
         self: Quantity[Any, pl.Expr], other: Quantity[Any, pl.Expr] | Quantity[Any, float] | float | int
     ) -> pl.Expr: ...
-
     @overload
     def __eq__(
         self: Quantity[Any, Numpy1DArray],
         other: Quantity[Any, Numpy1DArray] | Quantity[Any, float] | Numpy1DArray | float | int,
     ) -> Numpy1DBoolArray: ...
-
     @overload
     def __eq__(self: Quantity[Any, Any], other: Quantity[Any, Numpy1DArray]) -> Numpy1DBoolArray: ...
-
     @overload
     def __eq__(self: Quantity[Any, pd.Series], other: Quantity[Any, pd.Series] | float | int) -> pd.Series[bool]: ...
-
     @overload
     def __eq__(self: Quantity[Any, pl.Series], other: Quantity[Any, pl.Series] | float | int) -> pl.Series: ...
-
     @overload
     def __eq__(
         self: Quantity[Any, Any], other: object
     ) -> bool | Numpy1DBoolArray | pd.Series | pl.Series | pl.Expr: ...
-
     def __eq__(self, other: object) -> bool | Numpy1DBoolArray | pd.Series | pl.Series | pl.Expr:  # pyright: ignore[reportIncompatibleMethodOverride]
         if not isinstance(other, (Quantity, float, int)):
             return bool(super().__eq__(other))
@@ -1554,8 +1474,6 @@ class Quantity(
         ret = m == other_m
 
         return ret
-
-    # region: overload __floordiv__, __pow__, __add__, __sub__, __gt__, __ge__, __lt__, __le__
 
     @overload
     def __floordiv__(self: Quantity[Dimensionless, MT], other: float | int) -> Quantity[Dimensionless, MT]: ...
@@ -1593,7 +1511,6 @@ class Quantity(
     def __add__(self: Quantity[DT, float], other: Quantity[DT, MT_]) -> Quantity[DT, MT_]: ...
     @overload
     def __add__(self, other: Quantity[DT, Any]) -> Quantity[DT, Any]: ...
-
     def __add__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
         try:
             self.check_compatibility(other)
@@ -1715,607 +1632,6 @@ class Quantity(
         except ValueError as e:
             raise DimensionalityComparisonError(str(e)) from e
 
-    # endregion
-
-    # region: overload __mul__
-
-    @overload
-    def __mul__(self: Quantity[Mass, MT], other: Quantity[EnergyPerMass, Any]) -> Quantity[Energy, MT]: ...
-    @overload
-    def __mul__(self: Quantity[EnergyPerMass, MT], other: Quantity[Mass, Any]) -> Quantity[Energy, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Mass, MT], other: Quantity[HeatingValue, Any]) -> Quantity[Energy, MT]: ...
-    @overload
-    def __mul__(self: Quantity[HeatingValue, MT], other: Quantity[Mass, Any]) -> Quantity[Energy, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Mass, MT], other: Quantity[LowerHeatingValue, Any]) -> Quantity[Energy, MT]: ...
-    @overload
-    def __mul__(self: Quantity[LowerHeatingValue, MT], other: Quantity[Mass, Any]) -> Quantity[Energy, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Mass, MT], other: Quantity[HigherHeatingValue, Any]) -> Quantity[Energy, MT]: ...
-    @overload
-    def __mul__(self: Quantity[HigherHeatingValue, MT], other: Quantity[Mass, Any]) -> Quantity[Energy, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[Normal, MT], other: Quantity[TemperatureDifference, Any]
-    ) -> Quantity[NormalTemperature, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Normal, MT], other: Quantity[Volume, Any]) -> Quantity[NormalVolume, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Normal, MT], other: Quantity[VolumeFlow, Any]) -> Quantity[NormalVolumeFlow, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[Normal, MT], other: Quantity[SpecificVolume, Any]
-    ) -> Quantity[NormalVolumePerMass, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Normal, MT], other: Quantity[MassPerNormalVolume, Any]) -> Quantity[Density, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Length, MT], other: Quantity[Length, Any]) -> Quantity[Area, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Length, MT], other: Quantity[Area, Any]) -> Quantity[Volume, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Length, MT], other: Quantity[Velocity, Any]) -> Quantity[KinematicViscosity, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Length, MT], other: Quantity[DynamicViscosity, Any]) -> Quantity[MassFlow, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Length, MT], other: Quantity[KinematicViscosity, Any]) -> Quantity[VolumeFlow, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Length, MT], other: Quantity[Frequency, Any]) -> Quantity[Velocity, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Length, MT], other: Quantity[PowerPerLength, Any]) -> Quantity[Power, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Length, MT], other: Quantity[PowerPerArea, Any]) -> Quantity[PowerPerLength, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Length, MT], other: Quantity[PowerPerVolume, Any]) -> Quantity[PowerPerArea, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[Length, MT], other: Quantity[ThermalConductivity, Any]
-    ) -> Quantity[PowerPerTemperature, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[Length, MT], other: Quantity[HeatTransferCoefficient, Any]
-    ) -> Quantity[ThermalConductivity, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Mass, MT], other: Quantity[SpecificVolume, Any]) -> Quantity[Volume, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Mass, MT], other: Quantity[Frequency, Any]) -> Quantity[MassFlow, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Mass, MT], other: Quantity[SubstancePerMass, Any]) -> Quantity[Substance, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Mass, MT], other: Quantity[CurrencyPerMass, Any]) -> Quantity[Currency, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Mass, MT], other: Quantity[NormalVolumePerMass, Any]) -> Quantity[NormalVolume, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Time, MT], other: Quantity[Pressure, Any]) -> Quantity[DynamicViscosity, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Time, MT], other: Quantity[MassFlow, Any]) -> Quantity[Mass, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Time, MT], other: Quantity[VolumeFlow, Any]) -> Quantity[Volume, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Time, MT], other: Quantity[NormalVolumeFlow, Any]) -> Quantity[NormalVolume, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Time, MT], other: Quantity[Power, Any]) -> Quantity[Energy, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Time, MT], other: Quantity[Velocity, Any]) -> Quantity[Length, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Time, MT], other: Quantity[KinematicViscosity, Any]) -> Quantity[Area, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Time, MT], other: Quantity[Frequency, Any]) -> Quantity[Dimensionless, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Time, MT], other: Quantity[CurrencyPerTime, Any]) -> Quantity[Currency, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Time, MT], other: Quantity[PowerPerVolume, Any]) -> Quantity[Pressure, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Time, MT], other: Quantity[EnergyPerMass, Any]) -> Quantity[KinematicViscosity, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[TemperatureDifference, MT], other: Quantity[Normal, Any]
-    ) -> Quantity[NormalTemperature, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[TemperatureDifference, MT],
-        other: Quantity[PowerPerTemperature, Any],
-    ) -> Quantity[Power, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[TemperatureDifference, MT],
-        other: Quantity[ThermalConductivity, Any],
-    ) -> Quantity[PowerPerLength, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[TemperatureDifference, MT],
-        other: Quantity[HeatTransferCoefficient, Any],
-    ) -> Quantity[PowerPerArea, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[TemperatureDifference, MT],
-        other: Quantity[MolarSpecificEntropy, Any],
-    ) -> Quantity[MolarSpecificEnthalpy, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[TemperatureDifference, MT],
-        other: Quantity[SpecificHeatCapacity, Any],
-    ) -> Quantity[EnergyPerMass, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Substance, MT], other: Quantity[MolarMass, Any]) -> Quantity[Mass, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Substance, MT], other: Quantity[MolarSpecificEnthalpy, Any]) -> Quantity[Energy, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Area, MT], other: Quantity[Length, Any]) -> Quantity[Volume, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Area, MT], other: Quantity[Velocity, Any]) -> Quantity[VolumeFlow, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Area, MT], other: Quantity[Frequency, Any]) -> Quantity[KinematicViscosity, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Area, MT], other: Quantity[PowerPerArea, Any]) -> Quantity[Power, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Area, MT], other: Quantity[PowerPerVolume, Any]) -> Quantity[PowerPerLength, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[Area, MT], other: Quantity[HeatTransferCoefficient, Any]
-    ) -> Quantity[PowerPerTemperature, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Volume, MT], other: Quantity[Normal, Any]) -> Quantity[NormalVolume, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Volume, MT], other: Quantity[Pressure, Any]) -> Quantity[Energy, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Volume, MT], other: Quantity[Density, Any]) -> Quantity[Mass, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Volume, MT], other: Quantity[Frequency, Any]) -> Quantity[VolumeFlow, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Volume, MT], other: Quantity[MolarDensity, Any]) -> Quantity[Substance, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Volume, MT], other: Quantity[CurrencyPerVolume, Any]) -> Quantity[Currency, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Volume, MT], other: Quantity[PowerPerVolume, Any]) -> Quantity[Power, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[NormalVolume, MT], other: Quantity[Frequency, Any]
-    ) -> Quantity[NormalVolumeFlow, MT]: ...
-    @overload
-    def __mul__(self: Quantity[NormalVolume, MT], other: Quantity[MassPerNormalVolume, Any]) -> Quantity[Mass, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Pressure, MT], other: Quantity[Time, Any]) -> Quantity[DynamicViscosity, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Pressure, MT], other: Quantity[Volume, Any]) -> Quantity[Energy, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Pressure, MT], other: Quantity[VolumeFlow, Any]) -> Quantity[Power, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Pressure, MT], other: Quantity[SpecificVolume, Any]) -> Quantity[EnergyPerMass, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Pressure, MT], other: Quantity[Velocity, Any]) -> Quantity[PowerPerArea, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[Pressure, MT], other: Quantity[KinematicViscosity, Any]
-    ) -> Quantity[PowerPerLength, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Pressure, MT], other: Quantity[Frequency, Any]) -> Quantity[PowerPerVolume, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[Pressure, MT], other: Quantity[CurrencyPerEnergy, Any]
-    ) -> Quantity[CurrencyPerVolume, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Pressure, MT], other: Quantity[MassPerEnergy, Any]) -> Quantity[Density, MT]: ...
-    @overload
-    def __mul__(self: Quantity[MassFlow, MT], other: Quantity[Time, Any]) -> Quantity[Mass, MT]: ...
-    @overload
-    def __mul__(self: Quantity[MassFlow, MT], other: Quantity[SpecificVolume, Any]) -> Quantity[VolumeFlow, MT]: ...
-    @overload
-    def __mul__(self: Quantity[MassFlow, MT], other: Quantity[KinematicViscosity, Any]) -> Quantity[Energy, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[MassFlow, MT], other: Quantity[CurrencyPerMass, Any]
-    ) -> Quantity[CurrencyPerTime, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[MassFlow, MT], other: Quantity[NormalVolumePerMass, Any]
-    ) -> Quantity[NormalVolumeFlow, MT]: ...
-    @overload
-    def __mul__(self: Quantity[MassFlow, MT], other: Quantity[EnergyPerMass, Any]) -> Quantity[Power, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[MassFlow, MT], other: Quantity[SpecificHeatCapacity, Any]
-    ) -> Quantity[PowerPerTemperature, MT]: ...
-    @overload
-    def __mul__(self: Quantity[VolumeFlow, MT], other: Quantity[Normal, Any]) -> Quantity[NormalVolumeFlow, MT]: ...
-    @overload
-    def __mul__(self: Quantity[VolumeFlow, MT], other: Quantity[Time, Any]) -> Quantity[Volume, MT]: ...
-    @overload
-    def __mul__(self: Quantity[VolumeFlow, MT], other: Quantity[Pressure, Any]) -> Quantity[Power, MT]: ...
-    @overload
-    def __mul__(self: Quantity[VolumeFlow, MT], other: Quantity[Density, Any]) -> Quantity[MassFlow, MT]: ...
-    @overload
-    def __mul__(self: Quantity[VolumeFlow, MT], other: Quantity[DynamicViscosity, Any]) -> Quantity[Energy, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[VolumeFlow, MT], other: Quantity[CurrencyPerVolume, Any]
-    ) -> Quantity[CurrencyPerTime, MT]: ...
-    @overload
-    def __mul__(self: Quantity[NormalVolumeFlow, MT], other: Quantity[Time, Any]) -> Quantity[NormalVolume, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[NormalVolumeFlow, MT], other: Quantity[MassPerNormalVolume, Any]
-    ) -> Quantity[MassFlow, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Density, MT], other: Quantity[Volume, Any]) -> Quantity[Mass, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Density, MT], other: Quantity[VolumeFlow, Any]) -> Quantity[MassFlow, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Density, MT], other: Quantity[SpecificVolume, Any]) -> Quantity[Dimensionless, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[Density, MT], other: Quantity[KinematicViscosity, Any]
-    ) -> Quantity[DynamicViscosity, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Density, MT], other: Quantity[SubstancePerMass, Any]) -> Quantity[MolarDensity, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[Density, MT], other: Quantity[CurrencyPerMass, Any]
-    ) -> Quantity[CurrencyPerVolume, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Density, MT], other: Quantity[NormalVolumePerMass, Any]) -> Quantity[Normal, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Density, MT], other: Quantity[EnergyPerMass, Any]) -> Quantity[Pressure, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[SpecificVolume, MT], other: Quantity[Normal, Any]
-    ) -> Quantity[NormalVolumePerMass, MT]: ...
-    @overload
-    def __mul__(self: Quantity[SpecificVolume, MT], other: Quantity[Mass, Any]) -> Quantity[Volume, MT]: ...
-    @overload
-    def __mul__(self: Quantity[SpecificVolume, MT], other: Quantity[Pressure, Any]) -> Quantity[EnergyPerMass, MT]: ...
-    @overload
-    def __mul__(self: Quantity[SpecificVolume, MT], other: Quantity[MassFlow, Any]) -> Quantity[VolumeFlow, MT]: ...
-    @overload
-    def __mul__(self: Quantity[SpecificVolume, MT], other: Quantity[Density, Any]) -> Quantity[Dimensionless, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[SpecificVolume, MT], other: Quantity[DynamicViscosity, Any]
-    ) -> Quantity[KinematicViscosity, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[SpecificVolume, MT], other: Quantity[MolarDensity, Any]
-    ) -> Quantity[SubstancePerMass, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[SpecificVolume, MT], other: Quantity[CurrencyPerVolume, Any]
-    ) -> Quantity[CurrencyPerMass, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Energy, MT], other: Quantity[Frequency, Any]) -> Quantity[Power, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Energy, MT], other: Quantity[CurrencyPerEnergy, Any]) -> Quantity[Currency, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Energy, MT], other: Quantity[MassPerEnergy, Any]) -> Quantity[Mass, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Power, MT], other: Quantity[Time, Any]) -> Quantity[Energy, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[Power, MT], other: Quantity[CurrencyPerEnergy, Any]
-    ) -> Quantity[CurrencyPerTime, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Power, MT], other: Quantity[MassPerEnergy, Any]) -> Quantity[MassFlow, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Velocity, MT], other: Quantity[Length, Any]) -> Quantity[KinematicViscosity, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Velocity, MT], other: Quantity[Time, Any]) -> Quantity[Length, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Velocity, MT], other: Quantity[Area, Any]) -> Quantity[VolumeFlow, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Velocity, MT], other: Quantity[Pressure, Any]) -> Quantity[PowerPerArea, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Velocity, MT], other: Quantity[Velocity, Any]) -> Quantity[EnergyPerMass, MT]: ...
-    @overload
-    def __mul__(self: Quantity[DynamicViscosity, MT], other: Quantity[Length, Any]) -> Quantity[MassFlow, MT]: ...
-    @overload
-    def __mul__(self: Quantity[DynamicViscosity, MT], other: Quantity[VolumeFlow, Any]) -> Quantity[Energy, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[DynamicViscosity, MT], other: Quantity[SpecificVolume, Any]
-    ) -> Quantity[KinematicViscosity, MT]: ...
-    @overload
-    def __mul__(self: Quantity[DynamicViscosity, MT], other: Quantity[Frequency, Any]) -> Quantity[Pressure, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[DynamicViscosity, MT], other: Quantity[EnergyPerMass, Any]
-    ) -> Quantity[PowerPerLength, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[DynamicViscosity, MT], other: Quantity[SpecificHeatCapacity, Any]
-    ) -> Quantity[ThermalConductivity, MT]: ...
-    @overload
-    def __mul__(self: Quantity[KinematicViscosity, MT], other: Quantity[Length, Any]) -> Quantity[VolumeFlow, MT]: ...
-    @overload
-    def __mul__(self: Quantity[KinematicViscosity, MT], other: Quantity[Time, Any]) -> Quantity[Area, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[KinematicViscosity, MT], other: Quantity[Pressure, Any]
-    ) -> Quantity[PowerPerLength, MT]: ...
-    @overload
-    def __mul__(self: Quantity[KinematicViscosity, MT], other: Quantity[MassFlow, Any]) -> Quantity[Energy, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[KinematicViscosity, MT], other: Quantity[Density, Any]
-    ) -> Quantity[DynamicViscosity, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[KinematicViscosity, MT], other: Quantity[Frequency, Any]
-    ) -> Quantity[EnergyPerMass, MT]: ...
-    @overload
-    def __mul__(self: Quantity[KinematicViscosity, MT], other: Quantity[MassPerEnergy, Any]) -> Quantity[Time, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Frequency, MT], other: Quantity[Length, Any]) -> Quantity[Velocity, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Frequency, MT], other: Quantity[Mass, Any]) -> Quantity[MassFlow, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Frequency, MT], other: Quantity[Time, Any]) -> Quantity[Dimensionless, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Frequency, MT], other: Quantity[Area, Any]) -> Quantity[KinematicViscosity, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Frequency, MT], other: Quantity[Volume, Any]) -> Quantity[VolumeFlow, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[Frequency, MT], other: Quantity[NormalVolume, Any]
-    ) -> Quantity[NormalVolumeFlow, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Frequency, MT], other: Quantity[Pressure, Any]) -> Quantity[PowerPerVolume, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Frequency, MT], other: Quantity[Energy, Any]) -> Quantity[Power, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Frequency, MT], other: Quantity[DynamicViscosity, Any]) -> Quantity[Pressure, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[Frequency, MT], other: Quantity[KinematicViscosity, Any]
-    ) -> Quantity[EnergyPerMass, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Frequency, MT], other: Quantity[Currency, Any]) -> Quantity[CurrencyPerTime, MT]: ...
-    @overload
-    def __mul__(self: Quantity[MolarMass, MT], other: Quantity[Substance, Any]) -> Quantity[Mass, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[MolarMass, MT], other: Quantity[SubstancePerMass, Any]
-    ) -> Quantity[Dimensionless, MT]: ...
-    @overload
-    def __mul__(self: Quantity[MolarMass, MT], other: Quantity[MolarDensity, Any]) -> Quantity[Density, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[MolarMass, MT], other: Quantity[EnergyPerMass, Any]
-    ) -> Quantity[MolarSpecificEnthalpy, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[MolarMass, MT], other: Quantity[SpecificHeatCapacity, Any]
-    ) -> Quantity[MolarSpecificEntropy, MT]: ...
-    @overload
-    def __mul__(self: Quantity[SubstancePerMass, MT], other: Quantity[Mass, Any]) -> Quantity[Substance, MT]: ...
-    @overload
-    def __mul__(self: Quantity[SubstancePerMass, MT], other: Quantity[Density, Any]) -> Quantity[MolarDensity, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[SubstancePerMass, MT], other: Quantity[MolarMass, Any]
-    ) -> Quantity[Dimensionless, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[SubstancePerMass, MT], other: Quantity[MolarSpecificEntropy, Any]
-    ) -> Quantity[SpecificHeatCapacity, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[SubstancePerMass, MT],
-        other: Quantity[MolarSpecificEnthalpy, Any],
-    ) -> Quantity[EnergyPerMass, MT]: ...
-    @overload
-    def __mul__(self: Quantity[MolarDensity, MT], other: Quantity[Volume, Any]) -> Quantity[Substance, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[MolarDensity, MT], other: Quantity[SpecificVolume, Any]
-    ) -> Quantity[SubstancePerMass, MT]: ...
-    @overload
-    def __mul__(self: Quantity[MolarDensity, MT], other: Quantity[MolarMass, Any]) -> Quantity[Density, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[MolarDensity, MT], other: Quantity[MolarSpecificEnthalpy, Any]
-    ) -> Quantity[Pressure, MT]: ...
-    @overload
-    def __mul__(self: Quantity[Currency, MT], other: Quantity[Frequency, Any]) -> Quantity[CurrencyPerTime, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[CurrencyPerEnergy, MT], other: Quantity[Pressure, Any]
-    ) -> Quantity[CurrencyPerVolume, MT]: ...
-    @overload
-    def __mul__(self: Quantity[CurrencyPerEnergy, MT], other: Quantity[Energy, Any]) -> Quantity[Currency, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[CurrencyPerEnergy, MT], other: Quantity[Power, Any]
-    ) -> Quantity[CurrencyPerTime, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[CurrencyPerEnergy, MT], other: Quantity[EnergyPerMass, Any]
-    ) -> Quantity[CurrencyPerMass, MT]: ...
-    @overload
-    def __mul__(self: Quantity[CurrencyPerMass, MT], other: Quantity[Mass, Any]) -> Quantity[Currency, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[CurrencyPerMass, MT], other: Quantity[MassFlow, Any]
-    ) -> Quantity[CurrencyPerTime, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[CurrencyPerMass, MT], other: Quantity[Density, Any]
-    ) -> Quantity[CurrencyPerVolume, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[CurrencyPerMass, MT], other: Quantity[MassPerEnergy, Any]
-    ) -> Quantity[CurrencyPerEnergy, MT]: ...
-    @overload
-    def __mul__(self: Quantity[CurrencyPerVolume, MT], other: Quantity[Volume, Any]) -> Quantity[Currency, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[CurrencyPerVolume, MT], other: Quantity[VolumeFlow, Any]
-    ) -> Quantity[CurrencyPerTime, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[CurrencyPerVolume, MT], other: Quantity[SpecificVolume, Any]
-    ) -> Quantity[CurrencyPerMass, MT]: ...
-    @overload
-    def __mul__(self: Quantity[CurrencyPerTime, MT], other: Quantity[Time, Any]) -> Quantity[Currency, MT]: ...
-    @overload
-    def __mul__(self: Quantity[PowerPerLength, MT], other: Quantity[Length, Any]) -> Quantity[Power, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[PowerPerLength, MT], other: Quantity[MassPerEnergy, Any]
-    ) -> Quantity[DynamicViscosity, MT]: ...
-    @overload
-    def __mul__(self: Quantity[PowerPerArea, MT], other: Quantity[Length, Any]) -> Quantity[PowerPerLength, MT]: ...
-    @overload
-    def __mul__(self: Quantity[PowerPerArea, MT], other: Quantity[Area, Any]) -> Quantity[Power, MT]: ...
-    @overload
-    def __mul__(self: Quantity[PowerPerVolume, MT], other: Quantity[Length, Any]) -> Quantity[PowerPerArea, MT]: ...
-    @overload
-    def __mul__(self: Quantity[PowerPerVolume, MT], other: Quantity[Time, Any]) -> Quantity[Pressure, MT]: ...
-    @overload
-    def __mul__(self: Quantity[PowerPerVolume, MT], other: Quantity[Area, Any]) -> Quantity[PowerPerLength, MT]: ...
-    @overload
-    def __mul__(self: Quantity[PowerPerVolume, MT], other: Quantity[Volume, Any]) -> Quantity[Power, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[PowerPerTemperature, MT],
-        other: Quantity[TemperatureDifference, Any],
-    ) -> Quantity[Power, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[ThermalConductivity, MT], other: Quantity[Length, Any]
-    ) -> Quantity[PowerPerTemperature, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[ThermalConductivity, MT],
-        other: Quantity[TemperatureDifference, Any],
-    ) -> Quantity[PowerPerLength, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[HeatTransferCoefficient, MT], other: Quantity[Length, Any]
-    ) -> Quantity[ThermalConductivity, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[HeatTransferCoefficient, MT],
-        other: Quantity[TemperatureDifference, Any],
-    ) -> Quantity[PowerPerArea, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[HeatTransferCoefficient, MT], other: Quantity[Area, Any]
-    ) -> Quantity[PowerPerTemperature, MT]: ...
-    @overload
-    def __mul__(self: Quantity[MassPerNormalVolume, MT], other: Quantity[Normal, Any]) -> Quantity[Density, MT]: ...
-    @overload
-    def __mul__(self: Quantity[MassPerNormalVolume, MT], other: Quantity[NormalVolume, Any]) -> Quantity[Mass, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[MassPerNormalVolume, MT], other: Quantity[NormalVolumeFlow, Any]
-    ) -> Quantity[MassFlow, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[MassPerNormalVolume, MT],
-        other: Quantity[NormalVolumePerMass, Any],
-    ) -> Quantity[Dimensionless, MT]: ...
-    @overload
-    def __mul__(self: Quantity[MassPerEnergy, MT], other: Quantity[Pressure, Any]) -> Quantity[Density, MT]: ...
-    @overload
-    def __mul__(self: Quantity[MassPerEnergy, MT], other: Quantity[Energy, Any]) -> Quantity[Mass, MT]: ...
-    @overload
-    def __mul__(self: Quantity[MassPerEnergy, MT], other: Quantity[Power, Any]) -> Quantity[MassFlow, MT]: ...
-    @overload
-    def __mul__(self: Quantity[MassPerEnergy, MT], other: Quantity[KinematicViscosity, Any]) -> Quantity[Time, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[MassPerEnergy, MT], other: Quantity[CurrencyPerMass, Any]
-    ) -> Quantity[CurrencyPerEnergy, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[MassPerEnergy, MT], other: Quantity[PowerPerLength, Any]
-    ) -> Quantity[DynamicViscosity, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[MassPerEnergy, MT], other: Quantity[EnergyPerMass, Any]
-    ) -> Quantity[Dimensionless, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[MassPerEnergy, MT], other: Quantity[MolarSpecificEnthalpy, Any]
-    ) -> Quantity[MolarMass, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[MolarSpecificEntropy, MT],
-        other: Quantity[TemperatureDifference, Any],
-    ) -> Quantity[MolarSpecificEnthalpy, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[MolarSpecificEntropy, MT], other: Quantity[SubstancePerMass, Any]
-    ) -> Quantity[SpecificHeatCapacity, MT]: ...
-    @overload
-    def __mul__(self: Quantity[NormalVolumePerMass, MT], other: Quantity[Mass, Any]) -> Quantity[NormalVolume, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[NormalVolumePerMass, MT], other: Quantity[MassFlow, Any]
-    ) -> Quantity[NormalVolumeFlow, MT]: ...
-    @overload
-    def __mul__(self: Quantity[NormalVolumePerMass, MT], other: Quantity[Density, Any]) -> Quantity[Normal, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[NormalVolumePerMass, MT],
-        other: Quantity[MassPerNormalVolume, Any],
-    ) -> Quantity[Dimensionless, MT]: ...
-    @overload
-    def __mul__(self: Quantity[EnergyPerMass, MT], other: Quantity[Mass, Any]) -> Quantity[Energy, MT]: ...
-    @overload
-    def __mul__(self: Quantity[EnergyPerMass, MT], other: Quantity[Time, Any]) -> Quantity[KinematicViscosity, MT]: ...
-    @overload
-    def __mul__(self: Quantity[EnergyPerMass, MT], other: Quantity[MassFlow, Any]) -> Quantity[Power, MT]: ...
-    @overload
-    def __mul__(self: Quantity[EnergyPerMass, MT], other: Quantity[Density, Any]) -> Quantity[Pressure, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[EnergyPerMass, MT], other: Quantity[DynamicViscosity, Any]
-    ) -> Quantity[PowerPerLength, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[EnergyPerMass, MT], other: Quantity[MolarMass, Any]
-    ) -> Quantity[MolarSpecificEnthalpy, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[EnergyPerMass, MT], other: Quantity[CurrencyPerEnergy, Any]
-    ) -> Quantity[CurrencyPerMass, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[EnergyPerMass, MT], other: Quantity[MassPerEnergy, Any]
-    ) -> Quantity[Dimensionless, MT]: ...
-    @overload
-    def __mul__(self: Quantity[MolarSpecificEnthalpy, MT], other: Quantity[Substance, Any]) -> Quantity[Energy, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[MolarSpecificEnthalpy, MT],
-        other: Quantity[SubstancePerMass, Any],
-    ) -> Quantity[EnergyPerMass, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[MolarSpecificEnthalpy, MT], other: Quantity[MolarDensity, Any]
-    ) -> Quantity[Pressure, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[MolarSpecificEnthalpy, MT], other: Quantity[MassPerEnergy, Any]
-    ) -> Quantity[MolarMass, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[SpecificHeatCapacity, MT],
-        other: Quantity[TemperatureDifference, Any],
-    ) -> Quantity[EnergyPerMass, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[SpecificHeatCapacity, MT], other: Quantity[MassFlow, Any]
-    ) -> Quantity[PowerPerTemperature, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[SpecificHeatCapacity, MT], other: Quantity[DynamicViscosity, Any]
-    ) -> Quantity[ThermalConductivity, MT]: ...
-    @overload
-    def __mul__(
-        self: Quantity[SpecificHeatCapacity, MT], other: Quantity[MolarMass, Any]
-    ) -> Quantity[MolarSpecificEntropy, MT]: ...
-
     @overload
     def __mul__(self: Quantity[Dimensionless, MT], other: Quantity[DT_, Any]) -> Quantity[DT_, MT]: ...
     @overload
@@ -2326,9 +1642,6 @@ class Quantity(
     def __mul__(self, other: Quantity[Any, MT]) -> Quantity[Any, MT]: ...
     @overload
     def __mul__(self, other: Quantity[Any, Any]) -> Quantity[Any, Any]: ...
-
-    # endregion
-
     def __mul__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
         ret = super().__mul__(other)
 
@@ -2338,6 +1651,7 @@ class Quantity(
 
         return self._call_subclass(ret)
 
+    # TODO: add overloads
     def __rmul__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
         ret = super().__rmul__(other)
 
@@ -2347,635 +1661,8 @@ class Quantity(
 
         return self._call_subclass(ret)
 
-    # region: overloads __truediv__
-
     @overload
     def __truediv__(self, other: Quantity[DT, Any]) -> Quantity[Dimensionless, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Energy, MT], other: Quantity[Mass, Any]) -> Quantity[EnergyPerMass, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[EnergyPerMass, MT], other: Quantity[TemperatureDifference, Any]
-    ) -> Quantity[SpecificHeatCapacity, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Dimensionless, MT], other: Quantity[Time, Any]) -> Quantity[Frequency, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[Dimensionless, MT], other: Quantity[Density, Any]
-    ) -> Quantity[SpecificVolume, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[Dimensionless, MT], other: Quantity[SpecificVolume, Any]
-    ) -> Quantity[Density, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Dimensionless, MT], other: Quantity[Frequency, Any]) -> Quantity[Time, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[Dimensionless, MT], other: Quantity[MolarMass, Any]
-    ) -> Quantity[SubstancePerMass, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[Dimensionless, MT], other: Quantity[SubstancePerMass, Any]
-    ) -> Quantity[MolarMass, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[Dimensionless, MT], other: Quantity[MassPerNormalVolume, Any]
-    ) -> Quantity[NormalVolumePerMass, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[Dimensionless, MT], other: Quantity[MassPerEnergy, Any]
-    ) -> Quantity[EnergyPerMass, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[Dimensionless, MT], other: Quantity[NormalVolumePerMass, Any]
-    ) -> Quantity[MassPerNormalVolume, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[Dimensionless, MT], other: Quantity[EnergyPerMass, Any]
-    ) -> Quantity[MassPerEnergy, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Normal, MT], other: Quantity[Density, Any]) -> Quantity[NormalVolumePerMass, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Normal, MT], other: Quantity[NormalVolumePerMass, Any]) -> Quantity[Density, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Length, MT], other: Quantity[Time, Any]) -> Quantity[Velocity, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Length, MT], other: Quantity[Velocity, Any]) -> Quantity[Time, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Mass, MT], other: Quantity[Time, Any]) -> Quantity[MassFlow, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Mass, MT], other: Quantity[Substance, Any]) -> Quantity[MolarMass, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Mass, MT], other: Quantity[Volume, Any]) -> Quantity[Density, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[Mass, MT], other: Quantity[NormalVolume, Any]
-    ) -> Quantity[MassPerNormalVolume, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Mass, MT], other: Quantity[MassFlow, Any]) -> Quantity[Time, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Mass, MT], other: Quantity[Density, Any]) -> Quantity[Volume, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Mass, MT], other: Quantity[Energy, Any]) -> Quantity[MassPerEnergy, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Mass, MT], other: Quantity[MolarMass, Any]) -> Quantity[Substance, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[Mass, MT], other: Quantity[MassPerNormalVolume, Any]
-    ) -> Quantity[NormalVolume, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Mass, MT], other: Quantity[MassPerEnergy, Any]) -> Quantity[Energy, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[Time, MT], other: Quantity[KinematicViscosity, Any]
-    ) -> Quantity[MassPerEnergy, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[Time, MT], other: Quantity[MassPerEnergy, Any]
-    ) -> Quantity[KinematicViscosity, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Substance, MT], other: Quantity[Mass, Any]) -> Quantity[SubstancePerMass, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Substance, MT], other: Quantity[Volume, Any]) -> Quantity[MolarDensity, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Substance, MT], other: Quantity[SubstancePerMass, Any]) -> Quantity[Mass, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Substance, MT], other: Quantity[MolarDensity, Any]) -> Quantity[Volume, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Area, MT], other: Quantity[Length, Any]) -> Quantity[Length, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Area, MT], other: Quantity[Time, Any]) -> Quantity[KinematicViscosity, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Area, MT], other: Quantity[KinematicViscosity, Any]) -> Quantity[Time, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Volume, MT], other: Quantity[Length, Any]) -> Quantity[Area, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Volume, MT], other: Quantity[Mass, Any]) -> Quantity[SpecificVolume, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Volume, MT], other: Quantity[Time, Any]) -> Quantity[VolumeFlow, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Volume, MT], other: Quantity[Area, Any]) -> Quantity[Length, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Volume, MT], other: Quantity[VolumeFlow, Any]) -> Quantity[Time, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Volume, MT], other: Quantity[SpecificVolume, Any]) -> Quantity[Mass, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[NormalVolume, MT], other: Quantity[Normal, Any]) -> Quantity[Volume, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[NormalVolume, MT], other: Quantity[Mass, Any]
-    ) -> Quantity[NormalVolumePerMass, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[NormalVolume, MT], other: Quantity[Time, Any]) -> Quantity[NormalVolumeFlow, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[NormalVolume, MT], other: Quantity[Volume, Any]) -> Quantity[Normal, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[NormalVolume, MT], other: Quantity[NormalVolumeFlow, Any]) -> Quantity[Time, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[NormalVolume, MT], other: Quantity[NormalVolumePerMass, Any]
-    ) -> Quantity[Mass, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Pressure, MT], other: Quantity[Time, Any]) -> Quantity[PowerPerVolume, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Pressure, MT], other: Quantity[Density, Any]) -> Quantity[EnergyPerMass, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[Pressure, MT], other: Quantity[DynamicViscosity, Any]
-    ) -> Quantity[Frequency, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[Pressure, MT], other: Quantity[Frequency, Any]
-    ) -> Quantity[DynamicViscosity, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[Pressure, MT], other: Quantity[MolarDensity, Any]
-    ) -> Quantity[MolarSpecificEnthalpy, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Pressure, MT], other: Quantity[PowerPerVolume, Any]) -> Quantity[Time, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Pressure, MT], other: Quantity[EnergyPerMass, Any]) -> Quantity[Density, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[Pressure, MT], other: Quantity[MolarSpecificEnthalpy, Any]
-    ) -> Quantity[MolarDensity, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[MassFlow, MT], other: Quantity[Length, Any]) -> Quantity[DynamicViscosity, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[MassFlow, MT], other: Quantity[Mass, Any]) -> Quantity[Frequency, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[MassFlow, MT], other: Quantity[VolumeFlow, Any]) -> Quantity[Density, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[MassFlow, MT], other: Quantity[NormalVolumeFlow, Any]
-    ) -> Quantity[MassPerNormalVolume, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[MassFlow, MT], other: Quantity[Density, Any]) -> Quantity[VolumeFlow, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[MassFlow, MT], other: Quantity[Power, Any]) -> Quantity[MassPerEnergy, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[MassFlow, MT], other: Quantity[DynamicViscosity, Any]) -> Quantity[Length, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[MassFlow, MT], other: Quantity[Frequency, Any]) -> Quantity[Mass, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[MassFlow, MT], other: Quantity[MassPerNormalVolume, Any]
-    ) -> Quantity[NormalVolumeFlow, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[MassFlow, MT], other: Quantity[MassPerEnergy, Any]) -> Quantity[Power, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[VolumeFlow, MT], other: Quantity[Length, Any]
-    ) -> Quantity[KinematicViscosity, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[VolumeFlow, MT], other: Quantity[Area, Any]) -> Quantity[Velocity, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[VolumeFlow, MT], other: Quantity[Volume, Any]) -> Quantity[Frequency, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[VolumeFlow, MT], other: Quantity[MassFlow, Any]) -> Quantity[SpecificVolume, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[VolumeFlow, MT], other: Quantity[SpecificVolume, Any]) -> Quantity[MassFlow, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[VolumeFlow, MT], other: Quantity[Velocity, Any]) -> Quantity[Area, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[VolumeFlow, MT], other: Quantity[KinematicViscosity, Any]
-    ) -> Quantity[Length, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[VolumeFlow, MT], other: Quantity[Frequency, Any]) -> Quantity[Volume, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[NormalVolumeFlow, MT], other: Quantity[Normal, Any]) -> Quantity[VolumeFlow, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[NormalVolumeFlow, MT], other: Quantity[NormalVolume, Any]
-    ) -> Quantity[Frequency, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[NormalVolumeFlow, MT], other: Quantity[MassFlow, Any]
-    ) -> Quantity[NormalVolumePerMass, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[NormalVolumeFlow, MT], other: Quantity[VolumeFlow, Any]) -> Quantity[Normal, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[NormalVolumeFlow, MT], other: Quantity[Frequency, Any]
-    ) -> Quantity[NormalVolume, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[NormalVolumeFlow, MT], other: Quantity[NormalVolumePerMass, Any]
-    ) -> Quantity[MassFlow, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Density, MT], other: Quantity[Normal, Any]) -> Quantity[MassPerNormalVolume, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Density, MT], other: Quantity[Pressure, Any]) -> Quantity[MassPerEnergy, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Density, MT], other: Quantity[MolarMass, Any]) -> Quantity[MolarDensity, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Density, MT], other: Quantity[MolarDensity, Any]) -> Quantity[MolarMass, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Density, MT], other: Quantity[MassPerNormalVolume, Any]) -> Quantity[Normal, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Density, MT], other: Quantity[MassPerEnergy, Any]) -> Quantity[Pressure, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Energy, MT], other: Quantity[Time, Any]) -> Quantity[Power, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[Energy, MT], other: Quantity[Substance, Any]
-    ) -> Quantity[MolarSpecificEnthalpy, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Energy, MT], other: Quantity[Volume, Any]) -> Quantity[Pressure, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Energy, MT], other: Quantity[Pressure, Any]) -> Quantity[Volume, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Energy, MT], other: Quantity[MassFlow, Any]) -> Quantity[KinematicViscosity, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Energy, MT], other: Quantity[VolumeFlow, Any]) -> Quantity[DynamicViscosity, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Energy, MT], other: Quantity[Power, Any]) -> Quantity[Time, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Energy, MT], other: Quantity[DynamicViscosity, Any]) -> Quantity[VolumeFlow, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Energy, MT], other: Quantity[KinematicViscosity, Any]) -> Quantity[MassFlow, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Energy, MT], other: Quantity[EnergyPerMass, Any]) -> Quantity[Mass, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[Energy, MT], other: Quantity[MolarSpecificEnthalpy, Any]
-    ) -> Quantity[Substance, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Power, MT], other: Quantity[Length, Any]) -> Quantity[PowerPerLength, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[Power, MT], other: Quantity[TemperatureDifference, Any]
-    ) -> Quantity[PowerPerTemperature, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Power, MT], other: Quantity[Area, Any]) -> Quantity[PowerPerArea, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Power, MT], other: Quantity[Volume, Any]) -> Quantity[PowerPerVolume, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Power, MT], other: Quantity[Pressure, Any]) -> Quantity[VolumeFlow, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Power, MT], other: Quantity[MassFlow, Any]) -> Quantity[EnergyPerMass, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Power, MT], other: Quantity[VolumeFlow, Any]) -> Quantity[Pressure, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Power, MT], other: Quantity[Energy, Any]) -> Quantity[Frequency, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Power, MT], other: Quantity[Frequency, Any]) -> Quantity[Energy, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Power, MT], other: Quantity[PowerPerLength, Any]) -> Quantity[Length, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Power, MT], other: Quantity[PowerPerArea, Any]) -> Quantity[Area, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Power, MT], other: Quantity[PowerPerVolume, Any]) -> Quantity[Volume, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[Power, MT], other: Quantity[PowerPerTemperature, Any]
-    ) -> Quantity[TemperatureDifference, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Power, MT], other: Quantity[EnergyPerMass, Any]) -> Quantity[MassFlow, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Velocity, MT], other: Quantity[Length, Any]) -> Quantity[Frequency, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Velocity, MT], other: Quantity[Frequency, Any]) -> Quantity[Length, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[DynamicViscosity, MT], other: Quantity[Time, Any]) -> Quantity[Pressure, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[DynamicViscosity, MT], other: Quantity[Pressure, Any]) -> Quantity[Time, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[DynamicViscosity, MT], other: Quantity[Density, Any]
-    ) -> Quantity[KinematicViscosity, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[DynamicViscosity, MT], other: Quantity[KinematicViscosity, Any]
-    ) -> Quantity[Density, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[DynamicViscosity, MT], other: Quantity[PowerPerLength, Any]
-    ) -> Quantity[MassPerEnergy, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[DynamicViscosity, MT], other: Quantity[MassPerEnergy, Any]
-    ) -> Quantity[PowerPerLength, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[KinematicViscosity, MT], other: Quantity[Length, Any]) -> Quantity[Velocity, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[KinematicViscosity, MT], other: Quantity[Time, Any]
-    ) -> Quantity[EnergyPerMass, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[KinematicViscosity, MT], other: Quantity[Area, Any]) -> Quantity[Frequency, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[KinematicViscosity, MT], other: Quantity[SpecificVolume, Any]
-    ) -> Quantity[DynamicViscosity, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[KinematicViscosity, MT], other: Quantity[Velocity, Any]) -> Quantity[Length, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[KinematicViscosity, MT], other: Quantity[DynamicViscosity, Any]
-    ) -> Quantity[SpecificVolume, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[KinematicViscosity, MT], other: Quantity[Frequency, Any]) -> Quantity[Area, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[KinematicViscosity, MT], other: Quantity[EnergyPerMass, Any]
-    ) -> Quantity[Time, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[MolarMass, MT], other: Quantity[MassPerEnergy, Any]
-    ) -> Quantity[MolarSpecificEnthalpy, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[MolarMass, MT], other: Quantity[MolarSpecificEnthalpy, Any]
-    ) -> Quantity[MassPerEnergy, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[SubstancePerMass, MT], other: Quantity[SpecificVolume, Any]
-    ) -> Quantity[MolarDensity, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[SubstancePerMass, MT], other: Quantity[MolarDensity, Any]
-    ) -> Quantity[SpecificVolume, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[MolarDensity, MT], other: Quantity[Density, Any]
-    ) -> Quantity[SubstancePerMass, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[MolarDensity, MT], other: Quantity[SubstancePerMass, Any]
-    ) -> Quantity[Density, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Currency, MT], other: Quantity[Mass, Any]) -> Quantity[CurrencyPerMass, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Currency, MT], other: Quantity[Time, Any]) -> Quantity[CurrencyPerTime, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Currency, MT], other: Quantity[Volume, Any]) -> Quantity[CurrencyPerVolume, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Currency, MT], other: Quantity[Energy, Any]) -> Quantity[CurrencyPerEnergy, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Currency, MT], other: Quantity[CurrencyPerEnergy, Any]) -> Quantity[Energy, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Currency, MT], other: Quantity[CurrencyPerMass, Any]) -> Quantity[Mass, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Currency, MT], other: Quantity[CurrencyPerVolume, Any]) -> Quantity[Volume, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[Currency, MT], other: Quantity[CurrencyPerTime, Any]) -> Quantity[Time, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[CurrencyPerEnergy, MT], other: Quantity[CurrencyPerMass, Any]
-    ) -> Quantity[MassPerEnergy, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[CurrencyPerEnergy, MT], other: Quantity[MassPerEnergy, Any]
-    ) -> Quantity[CurrencyPerMass, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[CurrencyPerMass, MT], other: Quantity[SpecificVolume, Any]
-    ) -> Quantity[CurrencyPerVolume, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[CurrencyPerMass, MT], other: Quantity[CurrencyPerEnergy, Any]
-    ) -> Quantity[EnergyPerMass, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[CurrencyPerMass, MT], other: Quantity[CurrencyPerVolume, Any]
-    ) -> Quantity[SpecificVolume, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[CurrencyPerMass, MT], other: Quantity[EnergyPerMass, Any]
-    ) -> Quantity[CurrencyPerEnergy, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[CurrencyPerVolume, MT], other: Quantity[Pressure, Any]
-    ) -> Quantity[CurrencyPerEnergy, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[CurrencyPerVolume, MT], other: Quantity[Density, Any]
-    ) -> Quantity[CurrencyPerMass, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[CurrencyPerVolume, MT], other: Quantity[CurrencyPerEnergy, Any]
-    ) -> Quantity[Pressure, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[CurrencyPerVolume, MT], other: Quantity[CurrencyPerMass, Any]
-    ) -> Quantity[Density, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[CurrencyPerTime, MT], other: Quantity[MassFlow, Any]
-    ) -> Quantity[CurrencyPerMass, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[CurrencyPerTime, MT], other: Quantity[VolumeFlow, Any]
-    ) -> Quantity[CurrencyPerVolume, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[CurrencyPerTime, MT], other: Quantity[Power, Any]
-    ) -> Quantity[CurrencyPerEnergy, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[CurrencyPerTime, MT], other: Quantity[Frequency, Any]) -> Quantity[Currency, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[CurrencyPerTime, MT], other: Quantity[Currency, Any]) -> Quantity[Frequency, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[CurrencyPerTime, MT], other: Quantity[CurrencyPerEnergy, Any]
-    ) -> Quantity[Power, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[CurrencyPerTime, MT], other: Quantity[CurrencyPerMass, Any]
-    ) -> Quantity[MassFlow, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[CurrencyPerTime, MT], other: Quantity[CurrencyPerVolume, Any]
-    ) -> Quantity[VolumeFlow, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[PowerPerLength, MT], other: Quantity[Length, Any]) -> Quantity[PowerPerArea, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[PowerPerLength, MT], other: Quantity[TemperatureDifference, Any]
-    ) -> Quantity[ThermalConductivity, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[PowerPerLength, MT], other: Quantity[Area, Any]) -> Quantity[PowerPerVolume, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[PowerPerLength, MT], other: Quantity[Pressure, Any]
-    ) -> Quantity[KinematicViscosity, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[PowerPerLength, MT], other: Quantity[DynamicViscosity, Any]
-    ) -> Quantity[EnergyPerMass, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[PowerPerLength, MT], other: Quantity[KinematicViscosity, Any]
-    ) -> Quantity[Pressure, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[PowerPerLength, MT], other: Quantity[PowerPerArea, Any]) -> Quantity[Length, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[PowerPerLength, MT], other: Quantity[PowerPerVolume, Any]) -> Quantity[Area, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[PowerPerLength, MT], other: Quantity[ThermalConductivity, Any]
-    ) -> Quantity[TemperatureDifference, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[PowerPerLength, MT], other: Quantity[EnergyPerMass, Any]
-    ) -> Quantity[DynamicViscosity, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[PowerPerArea, MT], other: Quantity[Length, Any]) -> Quantity[PowerPerVolume, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[PowerPerArea, MT], other: Quantity[TemperatureDifference, Any]
-    ) -> Quantity[HeatTransferCoefficient, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[PowerPerArea, MT], other: Quantity[Pressure, Any]) -> Quantity[Velocity, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[PowerPerArea, MT], other: Quantity[Velocity, Any]) -> Quantity[Pressure, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[PowerPerArea, MT], other: Quantity[PowerPerVolume, Any]) -> Quantity[Length, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[PowerPerArea, MT], other: Quantity[HeatTransferCoefficient, Any]
-    ) -> Quantity[TemperatureDifference, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[PowerPerVolume, MT], other: Quantity[Pressure, Any]) -> Quantity[Frequency, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[PowerPerVolume, MT], other: Quantity[Frequency, Any]) -> Quantity[Pressure, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[PowerPerTemperature, MT], other: Quantity[Length, Any]
-    ) -> Quantity[ThermalConductivity, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[PowerPerTemperature, MT], other: Quantity[Area, Any]
-    ) -> Quantity[HeatTransferCoefficient, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[PowerPerTemperature, MT], other: Quantity[MassFlow, Any]
-    ) -> Quantity[SpecificHeatCapacity, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[PowerPerTemperature, MT],
-        other: Quantity[ThermalConductivity, Any],
-    ) -> Quantity[Length, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[PowerPerTemperature, MT],
-        other: Quantity[HeatTransferCoefficient, Any],
-    ) -> Quantity[Area, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[PowerPerTemperature, MT],
-        other: Quantity[SpecificHeatCapacity, Any],
-    ) -> Quantity[MassFlow, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[ThermalConductivity, MT], other: Quantity[Length, Any]
-    ) -> Quantity[HeatTransferCoefficient, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[ThermalConductivity, MT], other: Quantity[DynamicViscosity, Any]
-    ) -> Quantity[SpecificHeatCapacity, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[ThermalConductivity, MT],
-        other: Quantity[HeatTransferCoefficient, Any],
-    ) -> Quantity[Length, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[ThermalConductivity, MT],
-        other: Quantity[SpecificHeatCapacity, Any],
-    ) -> Quantity[DynamicViscosity, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[MolarSpecificEntropy, MT], other: Quantity[MolarMass, Any]
-    ) -> Quantity[SpecificHeatCapacity, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[MolarSpecificEntropy, MT],
-        other: Quantity[SpecificHeatCapacity, Any],
-    ) -> Quantity[MolarMass, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[NormalVolumePerMass, MT], other: Quantity[Normal, Any]
-    ) -> Quantity[SpecificVolume, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[NormalVolumePerMass, MT], other: Quantity[SpecificVolume, Any]
-    ) -> Quantity[Normal, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[NormalTemperature, MT], other: Quantity[Normal, Any]
-    ) -> Quantity[TemperatureDifference, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[NormalTemperature, MT],
-        other: Quantity[TemperatureDifference, Any],
-    ) -> Quantity[Normal, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[EnergyPerMass, MT], other: Quantity[TemperatureDifference, Any]
-    ) -> Quantity[SpecificHeatCapacity, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[EnergyPerMass, MT], other: Quantity[Pressure, Any]
-    ) -> Quantity[SpecificVolume, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[EnergyPerMass, MT], other: Quantity[SpecificVolume, Any]
-    ) -> Quantity[Pressure, MT]: ...
-    @overload
-    def __truediv__(self: Quantity[EnergyPerMass, MT], other: Quantity[Velocity, Any]) -> Quantity[Velocity, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[EnergyPerMass, MT], other: Quantity[KinematicViscosity, Any]
-    ) -> Quantity[Frequency, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[EnergyPerMass, MT], other: Quantity[Frequency, Any]
-    ) -> Quantity[KinematicViscosity, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[EnergyPerMass, MT], other: Quantity[SubstancePerMass, Any]
-    ) -> Quantity[MolarSpecificEnthalpy, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[EnergyPerMass, MT], other: Quantity[MolarSpecificEnthalpy, Any]
-    ) -> Quantity[SubstancePerMass, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[EnergyPerMass, MT], other: Quantity[SpecificHeatCapacity, Any]
-    ) -> Quantity[TemperatureDifference, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[MolarSpecificEnthalpy, MT],
-        other: Quantity[TemperatureDifference, Any],
-    ) -> Quantity[MolarSpecificEntropy, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[MolarSpecificEnthalpy, MT], other: Quantity[MolarMass, Any]
-    ) -> Quantity[EnergyPerMass, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[MolarSpecificEnthalpy, MT],
-        other: Quantity[MolarSpecificEntropy, Any],
-    ) -> Quantity[TemperatureDifference, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[MolarSpecificEnthalpy, MT], other: Quantity[EnergyPerMass, Any]
-    ) -> Quantity[MolarMass, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[SpecificHeatCapacity, MT], other: Quantity[SubstancePerMass, Any]
-    ) -> Quantity[MolarSpecificEntropy, MT]: ...
-    @overload
-    def __truediv__(
-        self: Quantity[SpecificHeatCapacity, MT],
-        other: Quantity[MolarSpecificEntropy, Any],
-    ) -> Quantity[SubstancePerMass, MT]: ...
-
-    # endregion
-
     @overload
     def __truediv__(self, other: Quantity[Dimensionless, Any]) -> Quantity[DT, MT]: ...
     @overload
@@ -2986,7 +1673,6 @@ class Quantity(
     def __truediv__(self, other: Quantity[Any, Any]) -> Quantity[Any, MT]: ...
     @overload
     def __truediv__(self: Quantity[Any, MT], other: Quantity[Any, Any]) -> Quantity[Any, MT]: ...
-
     def __truediv__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
         ret = super().__truediv__(other)
 
@@ -2996,37 +1682,7 @@ class Quantity(
 
         return self._call_subclass(ret)
 
-    # region: overload  __rtruediv__
-
-    @overload
-    def __rtruediv__(self: Quantity[Time, MT], other: float | int) -> Quantity[Frequency, MT]: ...
-    @overload
-    def __rtruediv__(self: Quantity[Density, MT], other: float | int) -> Quantity[SpecificVolume, MT]: ...
-    @overload
-    def __rtruediv__(self: Quantity[SpecificVolume, MT], other: float | int) -> Quantity[Density, MT]: ...
-    @overload
-    def __rtruediv__(self: Quantity[Frequency, MT], other: float | int) -> Quantity[Time, MT]: ...
-    @overload
-    def __rtruediv__(self: Quantity[MolarMass, MT], other: float | int) -> Quantity[SubstancePerMass, MT]: ...
-    @overload
-    def __rtruediv__(self: Quantity[SubstancePerMass, MT], other: float | int) -> Quantity[MolarMass, MT]: ...
-    @overload
-    def __rtruediv__(
-        self: Quantity[MassPerNormalVolume, MT], other: float | int
-    ) -> Quantity[NormalVolumePerMass, MT]: ...
-    @overload
-    def __rtruediv__(self: Quantity[MassPerEnergy, MT], other: float | int) -> Quantity[EnergyPerMass, MT]: ...
-    @overload
-    def __rtruediv__(
-        self: Quantity[NormalVolumePerMass, MT], other: float | int
-    ) -> Quantity[MassPerNormalVolume, MT]: ...
-    @overload
-    def __rtruediv__(self: Quantity[EnergyPerMass, MT], other: float | int) -> Quantity[MassPerEnergy, MT]: ...
-    @overload
-    def __rtruediv__(self, other: float | int) -> Quantity[Any, MT]: ...
-
-    # endregion
-
+    # TODO: add overloads
     def __rtruediv__(self, other: Quantity[Any, MT] | float | int) -> Quantity[Any, Any]:
         ret = super().__rtruediv__(other)
 
@@ -3057,8 +1713,6 @@ class Quantity(
 
         return self.__class__(np.round(self.m, ndigits or 0), self.u)
 
-    # region: overload __getitem__
-
     @overload
     def __getitem__(self: Quantity[DT, pd.Series], index: int) -> Quantity[DT, float]: ...
     @overload
@@ -3067,9 +1721,6 @@ class Quantity(
     def __getitem__(self: Quantity[DT, pl.Expr], index: int) -> Quantity[DT, pl.Expr]: ...
     @overload
     def __getitem__(self: Quantity[DT, Numpy1DArray], index: int) -> Quantity[DT, float]: ...
-
-    # endregion
-
     def __getitem__(self, index: int) -> Quantity[DT, Any]:
         ret = super().__getitem__(index)
         subcls = self._get_dimensional_subclass(
