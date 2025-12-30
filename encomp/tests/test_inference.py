@@ -18,7 +18,7 @@ def _assert_type(val: object, typ: type) -> None:
 assert_type.__code__ = _assert_type.__code__
 
 
-def test_inference() -> None:
+def test_inference_basic() -> None:
     assert_type(Q([1]), Q[ut.Dimensionless])
     assert_type(Q(1), Q[ut.Dimensionless, float])
     assert_type(Q(np.array([1])), Q[ut.Dimensionless, np.ndarray])
