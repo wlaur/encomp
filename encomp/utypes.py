@@ -707,6 +707,7 @@ _LuminosityUC = UnitsContainer({"[luminosity]": 1})
 Numpy1DArray = np.ndarray[tuple[int], np.dtype[np.float64]]
 Numpy1DBoolArray = np.ndarray[tuple[int], np.dtype[np.bool]]
 
+# TODO: dont support pd.Series, remove all pandas-related code
 
 MT = TypeVar(
     "MT",
