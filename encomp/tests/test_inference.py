@@ -1011,3 +1011,9 @@ def test_mul_area_length_to_volume_series() -> None:
 
 def test_mul_area_length_to_volume_expr() -> None:
     assert_type(Q(pl.lit(10.0), "m^2") * Q(2.0, "m"), Q[ut.Volume, pl.Expr])
+
+
+def test_unknown_second_unit_float() -> None:
+    unknown_q = Q(30.0, "s * m")
+    v = Q(2.0, "m^3/s") * unknown_q
+    assert_type(v, Q[ut.UnknownDimensionality, float])
