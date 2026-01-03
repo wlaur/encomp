@@ -47,6 +47,7 @@ from ..utypes import (
     Temperature,
     TemperatureDifference,
     UnitsContainer,
+    UnknownDimensionality,
     Velocity,
     Volume,
     VolumeFlow,
@@ -147,6 +148,9 @@ def test_asdim() -> None:
         Q(2).asdim(Dimensionality)
 
     Q(1).asdim(Dimensionless)
+
+    # remains the actual dimensionality at runtime, this is to "trick" the type checker
+    assert_type(Q(2).asdim(UnknownDimensionality), Q[UnknownDimensionality, float])
 
     with _reset_dimensionality_registry():
         # default dimensionality for kJ/kg is EnergyPerMass
@@ -1081,7 +1085,7 @@ def test_copy() -> None:
 def test_pydantic_integration() -> None:
     class Model(BaseModel):
         # a can be any dimensionality
-        a: Q[Any, float]
+        a: Q[UnknownDimensionality, float]
 
         m: Q[Mass, float]
         s: Q[Length, float]
@@ -1094,10 +1098,10 @@ def test_pydantic_integration() -> None:
 
         model_config = ConfigDict(validate_default=True)
 
-    Model(a=Q(25, "cSt"), m=Q(25, "kg"), s=Q(25, "cm"))
+    Model(a=Q(25, "cSt").asdim(UnknownDimensionality), m=Q(25, "kg"), s=Q(25, "cm"))
 
     with pytest.raises(ExpectedDimensionalityError):
-        Model(a=Q(25, "cSt"), m=Q(25, "kg/day"), s=Q(25, "cm"))
+        Model(a=Q(25, "cSt").asdim(UnknownDimensionality), m=Q(25, "kg/day"), s=Q(25, "cm"))
 
 
 def test_float_cast() -> None:

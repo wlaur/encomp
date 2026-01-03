@@ -420,6 +420,10 @@ class Quantity(
         else:
             raise TypeError(f"Invalid magnitude type: {mt} (origin {origin})")
 
+    @staticmethod
+    def get_unknown_dimensionality_subclass() -> type[Quantity[UnknownDimensionality, Any]]:
+        return Quantity[UnknownDimensionality]
+
     @classmethod
     def _get_dimensional_subclass(cls, dim: type[Dimensionality], mt: type | None) -> type[Quantity[DT, MT]]:
         # there are two levels of subclasses to Quantity: DimensionalQuantity and
@@ -1217,23 +1221,23 @@ class Quantity(
 
             if isinstance(mag, int | float):
                 val = mag
-                mtype = "int" if isinstance(mag, int) else "float"
+                magnitude_type = "int" if isinstance(mag, int) else "float"
             elif isinstance(mag, np.ndarray):
                 val = mag.tolist()
-                mtype = f"np.ndarray:{mag.dtype.str}:{mag.shape}"
+                magnitude_type = f"np.ndarray:{mag.dtype.str}:{mag.shape}"
             elif isinstance(mag, pl.Series):
                 val = mag.to_list()
-                mtype = f"pl.Series:{mag.dtype}"
+                magnitude_type = f"pl.Series:{mag.dtype}"
             elif isinstance(mag, list):
                 val = [float(x) for x in mag]
-                mtype = "list"
+                magnitude_type = "list"
             else:
                 raise ValueError(f"Unknown magnitude type {type(mag)}: {mag}")
 
             return {
                 "unit": str(qty.u),
                 "value": val,
-                "magnitude_type": mtype,
+                "magnitude_type": magnitude_type,
             }
 
         ser_schema = core_schema.plain_serializer_function_ser_schema(_serialize, info_arg=True)
@@ -1322,6 +1326,9 @@ class Quantity(
             ret = qty if isinstance(qty, Quantity) else cls(cast(Any, qty))
 
         if isinstance(ret, cls):
+            return ret
+
+        if issubclass(cls, cls.get_unknown_dimensionality_subclass()):
             return ret
 
         if cls._is_incomplete_dimensionality(cls._dimensionality_type):
@@ -1430,10 +1437,13 @@ class Quantity(
             dim = other
 
         if dim is UnknownDimensionality:
-            raise TypeError(f"Cannot convert {self} to unknown dimensionality ({dim})")
+            return cast("Quantity[DT_, MT]", self.__copy__())
+
+        if dim is Dimensionality:
+            raise TypeError(f"Cannot convert {self} to base dimensionality {dim}")
 
         if str(self._dimensionality_type.dimensions) != str(dim.dimensions):
-            raise TypeError(
+            raise ExpectedDimensionalityError(
                 f"Cannot convert {self} to dimensionality {dim}, "
                 f"the dimensions do not match: "
                 f"{self._dimensionality_type.dimensions} != "
@@ -1876,6 +1886,10 @@ class Quantity(
     @overload
     def __floordiv__(self: Quantity[DT, MT], other: float | int) -> Quantity[DT, MT]: ...
     def __floordiv__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
+        if isinstance(other, (float, int)):
+            return self._call_subclass(self.m // other, self.u)
+        elif other.dimensionless:
+            return self._call_subclass(self.m // other.to_base_units().m, self.u)
         return super().__floordiv__(other)
 
     @overload

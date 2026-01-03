@@ -1,6 +1,6 @@
 import ast
 from types import UnionType
-from typing import Any, TypeIs, cast, get_args, get_origin
+from typing import Any, TypeIs, get_args, get_origin
 
 import asttokens
 from typeguard import check_type
@@ -40,7 +40,6 @@ def isinstance_types[T](obj: Any, expected: type[T]) -> TypeIs[T]:  # noqa: ANN4
     """
 
     from .units import Quantity
-    from .utypes import UnknownDimensionality
 
     if get_origin(expected) is UnionType:
         try:
@@ -48,7 +47,7 @@ def isinstance_types[T](obj: Any, expected: type[T]) -> TypeIs[T]:  # noqa: ANN4
         except TypeError:
             return any(isinstance_types(obj, n) for n in get_args(expected))
 
-    unknown_quantity_subclass = cast(type, Quantity[UnknownDimensionality])
+    unknown_quantity_subclass = Quantity.get_unknown_dimensionality_subclass()
 
     # don't compare dimensionality against UnknownDimensionality, only check magnitude type in this case
     if isinstance(obj, Quantity) and isinstance(expected, type) and issubclass(expected, unknown_quantity_subclass):
