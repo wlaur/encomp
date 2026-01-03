@@ -246,6 +246,7 @@ PressureUnits = Literal[
     "MPa",
     "mbar",
     "mmHg",
+    "psi",
     "atm",
     "N/m2",
     "N/m^2",

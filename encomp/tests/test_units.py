@@ -483,6 +483,8 @@ def test_Q() -> None:
     assert P2.m == approx(2, rel=1e-12)
     assert isinstance_types(P2, Q[Pressure])
 
+    assert_type(Q(Q(2, "feet_water"), Q(2, "kPa").u), Q[Pressure, float])
+
     with pytest.raises(Exception):  # noqa: B017
         # incorrect dimensionalities should raise Exception
         Q(Q(2, "feet_water"), Q(321321, "kg").u).to(Q(123123, "feet_water"))
@@ -518,6 +520,14 @@ def test_Q() -> None:
 
 
 def test_custom_units() -> None:
+    assert Q(1, "kg") == Q(1, "kilogramme")
+
+    with pytest.raises(DimensionalityComparisonError):
+        assert Q(1, "kg") == Q(1, "m")  # pyright: ignore[reportOperatorIssue]
+
+    with pytest.raises(DimensionalityComparisonError):
+        assert Q(1, "kilogramme") == Q(1, "m")
+
     # "ton" should always default to metric ton
     assert Q(1, "ton") == Q(1, "Ton") == Q(1, "TON") == Q(1, "tonne") == Q(1, "metric_ton") == Q(1000, "kg")
 
@@ -842,7 +852,7 @@ def test_convert_volume_mass() -> None:
 
     assert V.check(VolumeFlow)
 
-    m = convert_volume_mass(Q(125, "liter/day"))
+    m = convert_volume_mass(Q(125, "liter/day").asdim(VolumeFlow))
 
     assert m.check(MassFlow)
 
@@ -1101,7 +1111,11 @@ def test_pydantic_integration() -> None:
     Model(a=Q(25, "cSt").asdim(UnknownDimensionality), m=Q(25, "kg"), s=Q(25, "cm"))
 
     with pytest.raises(ExpectedDimensionalityError):
-        Model(a=Q(25, "cSt").asdim(UnknownDimensionality), m=Q(25, "kg/day"), s=Q(25, "cm"))
+        Model(
+            a=Q(25, "cSt").asdim(UnknownDimensionality),
+            m=Q(25, "kg/day").asdim(MassFlow),  # pyright: ignore[reportArgumentType]
+            s=Q(25, "cm"),
+        )
 
 
 def test_float_cast() -> None:

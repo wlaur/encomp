@@ -826,23 +826,23 @@ class Quantity(
     @overload
     def __new__(cls, val: MT, unit: HeatTransferCoefficientUnits) -> Quantity[HeatTransferCoefficient, MT]: ...
     @overload
+    def __new__(cls, val: Quantity[DT, MT]) -> Quantity[DT, MT]: ...
+    @overload
+    def __new__(cls, val: Quantity[DT, MT], unit: Unit[DT]) -> Quantity[DT, MT]: ...
+    @overload
+    def __new__(
+        cls, val: Quantity[DT, MT], unit: str | UnitsContainer | Unit
+    ) -> Quantity[UnknownDimensionality, MT]: ...
+    @overload
+    def __new__(cls, val: Quantity[UnknownDimensionality, MT], unit: Unit[DT_]) -> Quantity[DT_, MT]: ...
+    @overload
     def __new__(cls, val: MT, unit: Unit[DT]) -> Quantity[DT, MT]: ...
     @overload
     def __new__(cls, val: MT, unit: str | UnitsContainer | Unit) -> Quantity[UnknownDimensionality, MT]: ...
-    @overload
-    def __new__(cls, val: Quantity[DT, MT]) -> Quantity[DT, MT]: ...
-    @overload
     def __new__(
         cls,
-        val: MT | list[float] | Quantity[DT, MT],
-        unit: Unit[DT] | Unit | UnitsContainer | str | dict[str, numbers.Number] | None = None,
-        _mt_orig: type[MT] | type[list[float]] | type[list[int]] | None = None,
-        _depth: int = 0,
-    ) -> Quantity[Any, Any]: ...
-    def __new__(
-        cls,
-        val: MT | list[float] | list[int] | Quantity[DT, MT],
-        unit: Unit[DT] | Unit | UnitsContainer | str | dict[str, numbers.Number] | None = None,
+        val: MT | list[float] | list[int] | Quantity[DT, MT] | Quantity[UnknownDimensionality, MT],
+        unit: Unit[DT] | Unit[DT_] | Unit | UnitsContainer | str | dict[str, numbers.Number] | None = None,
         _mt_orig: type[MT] | type[list[float]] | type[list[int]] | None = None,
         _depth: int = 0,
     ) -> Quantity[Any, Any]:
@@ -895,7 +895,7 @@ class Quantity(
                 valid_unit,
                 _mt_orig=_original_magnitude_type,
                 _depth=_depth + 1,
-            )
+            )  # pyright: ignore[reportCallIssue]
 
         _qty = super().__new__(cls, valid_magnitude, units=valid_unit)
         qty = cast("Quantity[DT, MT]", _qty)
@@ -952,7 +952,7 @@ class Quantity(
             cast(MT, m),
             cast(Unit[DT], u),
             _mt_orig=self._original_magnitude_type,
-        )
+        )  # pyright: ignore[reportCallIssue]
 
     def to_reduced_units(self) -> Quantity[DT, MT]:
         ret = super().to_reduced_units()
@@ -1004,12 +1004,11 @@ class Quantity(
                 raise e
 
         if self._is_temperature_difference_unit(valid_unit):
-            ret = Quantity(
+            return Quantity(
                 m,
                 valid_unit,
                 _mt_orig=self._original_magnitude_type,
-            )
-            return ret
+            )  # pyright: ignore[reportCallIssue]
 
         converted = self._call_subclass(m, unit)
 
@@ -1593,6 +1592,25 @@ class Quantity(
     def __eq__(self: Quantity[Dimensionless, pl.Series], other: float | int) -> pl.Series: ...
     @overload
     def __eq__(self: Quantity[Dimensionless, pl.Expr], other: float | int) -> pl.Expr: ...
+    @overload
+    def __eq__(self: Quantity[DT, float], other: Quantity[UnknownDimensionality, float]) -> bool: ...
+    @overload
+    def __eq__(
+        self: Quantity[DT, Numpy1DArray], other: Quantity[UnknownDimensionality, Numpy1DArray]
+    ) -> Numpy1DBoolArray: ...
+    @overload
+    def __eq__(self: Quantity[DT, Numpy1DArray], other: Quantity[UnknownDimensionality, float]) -> Numpy1DBoolArray: ...
+    @overload
+    def __eq__(self: Quantity[DT, float], other: Quantity[UnknownDimensionality, Numpy1DArray]) -> Numpy1DBoolArray: ...
+    @overload
+    @overload
+    def __eq__(self: Quantity[DT, pl.Series], other: Quantity[UnknownDimensionality, pl.Series]) -> pl.Series: ...
+    @overload
+    def __eq__(self: Quantity[DT, pl.Series], other: Quantity[UnknownDimensionality, float]) -> pl.Series: ...
+    @overload
+    def __eq__(self: Quantity[DT, pl.Expr], other: Quantity[UnknownDimensionality, pl.Expr]) -> pl.Expr: ...
+    @overload
+    def __eq__(self: Quantity[DT, pl.Expr], other: Quantity[UnknownDimensionality, float]) -> pl.Expr: ...
     @overload
     def __eq__(self: Quantity[DT, float], other: Quantity[DT, float]) -> bool: ...
     @overload
