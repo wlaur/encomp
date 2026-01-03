@@ -1,7 +1,19 @@
+from typing import assert_type
+
 from ..misc import isinstance_types
 from ..thermo import heat_balance, intermediate_temperatures
 from ..units import Quantity as Q
 from ..utypes import Energy, MassFlow, Power, Temperature, TemperatureDifference
+
+
+def _assert_type(val: object, typ: type) -> None:
+    from encomp.misc import isinstance_types
+
+    if not isinstance_types(val, typ):
+        raise TypeError(f"Type mismatch for {val}: {type(val)}, expected {typ}")
+
+
+assert_type.__code__ = _assert_type.__code__
 
 
 def test_heat_balance() -> None:
@@ -25,8 +37,8 @@ def test_intermediate_temperatures() -> None:
         0.7,
     )
 
-    assert isinstance_types(T1, Q[Temperature])
-    assert isinstance_types(T2, Q[Temperature])
+    assert_type(T1, Q[Temperature, float])
+    assert_type(T2, Q[Temperature, float])
 
     assert T2.check(Temperature)
     assert T2.check("K")

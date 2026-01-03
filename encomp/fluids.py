@@ -25,7 +25,7 @@ from .settings import SETTINGS
 from .structures import flatten
 from .units import DimensionalityError, ExpectedDimensionalityError, Quantity, Unit
 from .utypes import (
-    FMT,
+    MT,
     Density,
     Dimensionless,
     DynamicViscosity,
@@ -64,9 +64,9 @@ CName = Annotated[str, "CoolProp fluid name"]
 UnitString = Annotated[str, "Unit string"]
 
 
-class CoolPropFluid(ABC, Generic[FMT]):  # noqa: UP046
+class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     name: CName
-    points: list[tuple[CProperty, Quantity[Any, FMT] | Quantity[Any, float]]]
+    points: list[tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]]]
 
     BACKEND: ClassVar[dict[Literal["backend"], Callable]] = {"backend": PropsSI}
 
@@ -270,19 +270,19 @@ class CoolPropFluid(ABC, Generic[FMT]):  # noqa: UP046
         return all(not isinstance(n[1].m, Iterable) for n in self.points)
 
     @property
-    def _mt(self) -> type[FMT]:
+    def _mt(self) -> type[MT]:
         candidates = [type(n[1].m) for n in self.points]
         candidates = [n for n in candidates if n is not float]
 
         if not candidates:
-            return cast(type[FMT], float)
+            return cast(type[MT], float)
 
         magnitude_type = candidates[0]
 
-        return cast(type[FMT], magnitude_type)
+        return cast(type[MT], magnitude_type)
 
     @abstractmethod
-    def __init__(self, name: CName, **kwargs: Quantity[Any, FMT] | Quantity[Any, float]) -> None:
+    def __init__(self, name: CName, **kwargs: Quantity[Any, MT] | Quantity[Any, float]) -> None:
         """
         Base class that represents a fluid (pure or mixture, gas or liquid).
         Uses *CoolProp* as backend to determine fluid properties.
@@ -663,11 +663,11 @@ class CoolPropFluid(ABC, Generic[FMT]):  # noqa: UP046
 
     def construct_quantity(
         self, val: float | Numpy1DArray, output: CProperty, convert_magnitude: bool = True
-    ) -> Quantity[Any, FMT]:
+    ) -> Quantity[Any, MT]:
         unit_output = self.get_coolprop_unit(output)
 
         # the dimensionality is not known until runtime
-        qty = Quantity(cast(FMT, val), unit_output)
+        qty = Quantity(cast(MT, val), unit_output)
 
         # value with dimensions present in CoolProp (pressure, temperature, etc...)
         # cannot be zero
@@ -686,7 +686,7 @@ class CoolPropFluid(ABC, Generic[FMT]):  # noqa: UP046
                 raise TypeError(f"Invalid magnitude type for {qty} ({type(qty.m)})")
             elif isinstance(qty.m, float | int):
                 if qty.m < self._EPS:
-                    qty = cast("Quantity[Any, FMT]", Quantity(np.nan, unit_output))
+                    qty = cast("Quantity[Any, MT]", Quantity(np.nan, unit_output))
             else:
                 raise TypeError(f"Unexpected magnitude type: {qty.m} ({type(qty.m)})")
 
@@ -699,9 +699,9 @@ class CoolPropFluid(ABC, Generic[FMT]):  # noqa: UP046
         if convert_magnitude:
             qty = qty.astype(self._mt)
 
-        return cast("Quantity[Any, FMT]", qty)
+        return cast("Quantity[Any, MT]", qty)
 
-    def to_numeric(self, prop: CProperty, qty: Quantity[Any, FMT] | Quantity[Any, float]) -> float | np.ndarray:
+    def to_numeric(self, prop: CProperty, qty: Quantity[Any, MT] | Quantity[Any, float]) -> float | np.ndarray:
         unit = self.get_coolprop_unit(prop)
 
         try:
@@ -727,9 +727,9 @@ class CoolPropFluid(ABC, Generic[FMT]):  # noqa: UP046
     def get(
         self,
         output: CProperty,
-        points: list[tuple[CProperty, Quantity[Any, FMT] | Quantity[Any, float]]] | None = None,
+        points: list[tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]]] | None = None,
         convert_magnitude: bool = True,
-    ) -> Quantity[Any, FMT]:
+    ) -> Quantity[Any, MT]:
         """
         Wraps the function ``CoolProp.CoolProp.PropsSI``, handles input
         and output with :py:class:`encomp.units.Quantity` objects.
@@ -738,7 +738,7 @@ class CoolPropFluid(ABC, Generic[FMT]):  # noqa: UP046
         ----------
         output : CProperty
             Name of the output property
-        points : list[tuple[CProperty, Quantity[Any, FMT] | Quantity[Any, float]]] | None
+        points : list[tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]]] | None
             Fixed state variables: name and value of the property.
             The number of points must match the number expected
             by the CoolProp backend function.
@@ -749,7 +749,7 @@ class CoolPropFluid(ABC, Generic[FMT]):  # noqa: UP046
 
         Returns
         -------
-        Quantity[Any, FMT]
+        Quantity[Any, MT]
             Quantity representing the output property
         """
 
@@ -762,7 +762,7 @@ class CoolPropFluid(ABC, Generic[FMT]):  # noqa: UP046
 
         return self.construct_quantity(val, output, convert_magnitude=convert_magnitude)
 
-    def __getattr__(self, attr: CProperty) -> Quantity[Any, FMT]:
+    def __getattr__(self, attr: CProperty) -> Quantity[Any, MT]:
         if attr not in self.ALL_PROPERTIES:
             raise AttributeError(attr)
 
@@ -799,8 +799,8 @@ class CoolPropFluid(ABC, Generic[FMT]):  # noqa: UP046
         return qty_formatted
 
 
-class Fluid(CoolPropFluid[FMT]):
-    def __init__(self, name: CName, **kwargs: Quantity[Any, FMT] | Quantity[Any, float]) -> None:
+class Fluid(CoolPropFluid[MT]):
+    def __init__(self, name: CName, **kwargs: Quantity[Any, MT] | Quantity[Any, float]) -> None:
         """
         Represents a fluid at a fixed state, for example at a
         specific temperature and pressure.
@@ -809,7 +809,7 @@ class Fluid(CoolPropFluid[FMT]):
         ----------
         name : CName
             Name of the fluid
-        kwargs: Quantity[Any, FMT]
+        kwargs: Quantity[Any, MT]
             Values for the two fixed points. The name of the keyword argument is the
             CoolProp property name.
         """
@@ -823,8 +823,8 @@ class Fluid(CoolPropFluid[FMT]):
 
         kwargs_list = list(kwargs.items())
 
-        self.point_1: tuple[CProperty, Quantity[Any, FMT] | Quantity[Any, float]] = kwargs_list[0]
-        self.point_2: tuple[CProperty, Quantity[Any, FMT] | Quantity[Any, float]] = kwargs_list[1]
+        self.point_1: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = kwargs_list[0]
+        self.point_2: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = kwargs_list[1]
 
         self.points = [self.point_1, self.point_2]
 
@@ -847,139 +847,139 @@ class Fluid(CoolPropFluid[FMT]):
         raise TypeError(f"Cannot determine phase of {type(self)} when {phase_idx=}")
 
     @property
-    def PHASE(self) -> Quantity[Dimensionless, FMT]:
+    def PHASE(self) -> Quantity[Dimensionless, MT]:
         return self.get("PHASE").asdim(Dimensionless)
 
     @property
-    def PRANDTL(self) -> Quantity[Dimensionless, FMT]:
+    def PRANDTL(self) -> Quantity[Dimensionless, MT]:
         return self.get("PRANDTL").asdim(Dimensionless)
 
     @property
-    def P(self) -> Quantity[Pressure, FMT]:
+    def P(self) -> Quantity[Pressure, MT]:
         return self.get("P").asdim(Pressure)
 
     @property
-    def PCRIT(self) -> Quantity[Pressure, FMT]:
+    def PCRIT(self) -> Quantity[Pressure, MT]:
         return self.get("PCRIT").asdim(Pressure)
 
     @property
-    def PMAX(self) -> Quantity[Pressure, FMT]:
+    def PMAX(self) -> Quantity[Pressure, MT]:
         return self.get("PMAX").asdim(Pressure)
 
     @property
-    def PMIN(self) -> Quantity[Pressure, FMT]:
+    def PMIN(self) -> Quantity[Pressure, MT]:
         return self.get("PMIN").asdim(Pressure)
 
     @property
-    def PTRIPLE(self) -> Quantity[Pressure, FMT]:
+    def PTRIPLE(self) -> Quantity[Pressure, MT]:
         return self.get("PTRIPLE").asdim(Pressure)
 
     @property
-    def P_REDUCING(self) -> Quantity[Pressure, FMT]:
+    def P_REDUCING(self) -> Quantity[Pressure, MT]:
         return self.get("P_REDUCING").asdim(Pressure)
 
     @property
-    def T(self) -> Quantity[Temperature, FMT]:
+    def T(self) -> Quantity[Temperature, MT]:
         return self.get("T").asdim(Temperature)
 
     @property
-    def TCRIT(self) -> Quantity[Temperature, FMT]:
+    def TCRIT(self) -> Quantity[Temperature, MT]:
         return self.get("TCRIT").asdim(Temperature)
 
     @property
-    def TMAX(self) -> Quantity[Temperature, FMT]:
+    def TMAX(self) -> Quantity[Temperature, MT]:
         return self.get("TMAX").asdim(Temperature)
 
     @property
-    def TMIN(self) -> Quantity[Temperature, FMT]:
+    def TMIN(self) -> Quantity[Temperature, MT]:
         return self.get("TMIN").asdim(Temperature)
 
     @property
-    def TTRIPLE(self) -> Quantity[Temperature, FMT]:
+    def TTRIPLE(self) -> Quantity[Temperature, MT]:
         return self.get("TTRIPLE").asdim(Temperature)
 
     @property
-    def T_FREEZE(self) -> Quantity[Temperature, FMT]:
+    def T_FREEZE(self) -> Quantity[Temperature, MT]:
         return self.get("T_FREEZE").asdim(Temperature)
 
     @property
-    def T_REDUCING(self) -> Quantity[Temperature, FMT]:
+    def T_REDUCING(self) -> Quantity[Temperature, MT]:
         return self.get("T_REDUCING").asdim(Temperature)
 
     @property
-    def Q(self) -> Quantity[Dimensionless, FMT]:
+    def Q(self) -> Quantity[Dimensionless, MT]:
         return self.get("Q").asdim(Dimensionless)
 
     @property
-    def H(self) -> Quantity[SpecificEnthalpy, FMT]:
+    def H(self) -> Quantity[SpecificEnthalpy, MT]:
         return self.get("H").asdim(SpecificEnthalpy)
 
     @property
-    def HMOLAR(self) -> Quantity[MolarSpecificEnthalpy, FMT]:
+    def HMOLAR(self) -> Quantity[MolarSpecificEnthalpy, MT]:
         return self.get("HMOLAR").asdim(MolarSpecificEnthalpy)
 
     @property
-    def S(self) -> Quantity[SpecificEntropy, FMT]:
+    def S(self) -> Quantity[SpecificEntropy, MT]:
         return self.get("S").asdim(SpecificEntropy)
 
     @property
-    def SMOLAR(self) -> Quantity[MolarSpecificEntropy, FMT]:
+    def SMOLAR(self) -> Quantity[MolarSpecificEntropy, MT]:
         return self.get("SMOLAR").asdim(MolarSpecificEntropy)
 
     @property
-    def U(self) -> Quantity[SpecificInternalEnergy, FMT]:
+    def U(self) -> Quantity[SpecificInternalEnergy, MT]:
         return self.get("U").asdim(SpecificInternalEnergy)
 
     @property
-    def UMOLAR(self) -> Quantity[MolarSpecificInternalEnergy, FMT]:
+    def UMOLAR(self) -> Quantity[MolarSpecificInternalEnergy, MT]:
         return self.get("UMOLAR").asdim(MolarSpecificInternalEnergy)
 
     @property
-    def V(self) -> Quantity[DynamicViscosity, FMT]:
+    def V(self) -> Quantity[DynamicViscosity, MT]:
         return self.get("V").asdim(DynamicViscosity)
 
     @property
-    def Z(self) -> Quantity[Dimensionless, FMT]:
+    def Z(self) -> Quantity[Dimensionless, MT]:
         return self.get("Z").asdim(Dimensionless)
 
     @property
-    def DELTA(self) -> Quantity[Dimensionless, FMT]:
+    def DELTA(self) -> Quantity[Dimensionless, MT]:
         return self.get("DELTA").asdim(Dimensionless)
 
     @property
-    def D(self) -> Quantity[Density, FMT]:
+    def D(self) -> Quantity[Density, MT]:
         return self.get("D").asdim(Density)
 
     @property
-    def RHOMASS_REDUCING(self) -> Quantity[Density, FMT]:
+    def RHOMASS_REDUCING(self) -> Quantity[Density, MT]:
         return self.get("RHOMASS_REDUCING").asdim(Density)
 
     @property
-    def RHOMOLAR_CRITICAL(self) -> Quantity[MolarDensity, FMT]:
+    def RHOMOLAR_CRITICAL(self) -> Quantity[MolarDensity, MT]:
         return self.get("RHOMOLAR_CRITICAL").asdim(MolarDensity)
 
     @property
-    def RHOMOLAR_REDUCING(self) -> Quantity[MolarDensity, FMT]:
+    def RHOMOLAR_REDUCING(self) -> Quantity[MolarDensity, MT]:
         return self.get("RHOMOLAR_REDUCING").asdim(MolarDensity)
 
     @property
-    def DMOLAR(self) -> Quantity[MolarDensity, FMT]:
+    def DMOLAR(self) -> Quantity[MolarDensity, MT]:
         return self.get("DMOLAR").asdim(MolarDensity)
 
     @property
-    def A(self) -> Quantity[Velocity, FMT]:
+    def A(self) -> Quantity[Velocity, MT]:
         return self.get("A").asdim(Velocity)
 
     @property
-    def L(self) -> Quantity[ThermalConductivity, FMT]:
+    def L(self) -> Quantity[ThermalConductivity, MT]:
         return self.get("L").asdim(ThermalConductivity)
 
     @property
-    def C(self) -> Quantity[SpecificHeatCapacity, FMT]:
+    def C(self) -> Quantity[SpecificHeatCapacity, MT]:
         return self.get("C").asdim(SpecificHeatCapacity)
 
     @property
-    def M(self) -> Quantity[MolarMass, FMT]:
+    def M(self) -> Quantity[MolarMass, MT]:
         return self.get("M").asdim(MolarMass)
 
     def __repr__(self) -> str:
@@ -995,7 +995,7 @@ class Fluid(CoolPropFluid[FMT]):
         return s
 
 
-class Water(Fluid[FMT]):
+class Water(Fluid[MT]):
     REPR_PROPERTIES: tuple[tuple[str, str], ...] = (
         ("P", ".0f"),
         ("T", ".1f"),
@@ -1003,13 +1003,13 @@ class Water(Fluid[FMT]):
         ("V", ".1f"),
     )
 
-    def __init__(self, **kwargs: Quantity[Any, FMT] | Quantity[Any, float]) -> None:
+    def __init__(self, **kwargs: Quantity[Any, MT] | Quantity[Any, float]) -> None:
         """
         Convenience class to access water and steam properties via CoolProp.
 
         Parameters
         ----------
-        kwargs: Quantity[Any, FMT]
+        kwargs: Quantity[Any, MT]
             Values for the two fixed points. The name of the keyword argument is the
             CoolProp property name.
         """
@@ -1043,7 +1043,7 @@ class Water(Fluid[FMT]):
         return s
 
 
-class HumidAir(CoolPropFluid[FMT]):
+class HumidAir(CoolPropFluid[MT]):
     BACKEND = {"backend": HAPropsSI}
     _append_name_to_cp_inputs = False
     _evaluate_invalid_separately = True
@@ -1105,7 +1105,7 @@ class HumidAir(CoolPropFluid[FMT]):
         ("M", ".2g"),
     )
 
-    def __init__(self, **kwargs: Quantity[Any, FMT] | Quantity[Any, float]) -> None:
+    def __init__(self, **kwargs: Quantity[Any, MT] | Quantity[Any, float]) -> None:
         """
         Interface to the CoolProp function for humid air,
         ``CoolProp.CoolProp.HAPropsSI``.
@@ -1113,7 +1113,7 @@ class HumidAir(CoolPropFluid[FMT]):
 
         Parameters
         ----------
-        kwargs: Quantity[Any, FMT]
+        kwargs: Quantity[Any, MT]
             Values for the three fixed points. The name of the keyword argument is the
             CoolProp property name.
         """
@@ -1127,86 +1127,86 @@ class HumidAir(CoolPropFluid[FMT]):
 
         kwargs_list = list(kwargs.items())
 
-        self.point_1: tuple[CProperty, Quantity[Any, FMT] | Quantity[Any, float]] = kwargs_list[0]
-        self.point_2: tuple[CProperty, Quantity[Any, FMT] | Quantity[Any, float]] = kwargs_list[1]
-        self.point_3: tuple[CProperty, Quantity[Any, FMT] | Quantity[Any, float]] = kwargs_list[2]
+        self.point_1: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = kwargs_list[0]
+        self.point_2: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = kwargs_list[1]
+        self.point_3: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = kwargs_list[2]
 
         self.points = [self.point_1, self.point_2, self.point_3]
 
     @property
-    def psi_w(self) -> Quantity[Dimensionless, FMT]:
+    def psi_w(self) -> Quantity[Dimensionless, MT]:
         return self.get("psi_w").asdim(Dimensionless)
 
     @property
-    def W(self) -> Quantity[Dimensionless, FMT]:
+    def W(self) -> Quantity[Dimensionless, MT]:
         return self.get("W").asdim(Dimensionless)
 
     @property
-    def Z(self) -> Quantity[Dimensionless, FMT]:
+    def Z(self) -> Quantity[Dimensionless, MT]:
         return self.get("Z").asdim(Dimensionless)
 
     @property
-    def R(self) -> Quantity[Dimensionless, FMT]:
+    def R(self) -> Quantity[Dimensionless, MT]:
         return self.get("R").asdim(Dimensionless)
 
     @property
-    def P(self) -> Quantity[Pressure, FMT]:
+    def P(self) -> Quantity[Pressure, MT]:
         return self.get("P").asdim(Pressure)
 
     @property
-    def P_w(self) -> Quantity[Pressure, FMT]:
+    def P_w(self) -> Quantity[Pressure, MT]:
         return self.get("P_w").asdim(Pressure)
 
     @property
-    def B(self) -> Quantity[Temperature, FMT]:
+    def B(self) -> Quantity[Temperature, MT]:
         return self.get("B").asdim(Temperature)
 
     @property
-    def T(self) -> Quantity[Temperature, FMT]:
+    def T(self) -> Quantity[Temperature, MT]:
         return self.get("T").asdim(Temperature)
 
     @property
-    def D(self) -> Quantity[Temperature, FMT]:
+    def D(self) -> Quantity[Temperature, MT]:
         return self.get("D").asdim(Temperature)
 
     @property
-    def K(self) -> Quantity[ThermalConductivity, FMT]:
+    def K(self) -> Quantity[ThermalConductivity, MT]:
         return self.get("K").asdim(ThermalConductivity)
 
     @property
-    def M(self) -> Quantity[DynamicViscosity, FMT]:
+    def M(self) -> Quantity[DynamicViscosity, MT]:
         return self.get("M").asdim(DynamicViscosity)
 
     @property
-    def C(self) -> Quantity[SpecificHeatPerDryAir, FMT]:
+    def C(self) -> Quantity[SpecificHeatPerDryAir, MT]:
         return self.get("C").asdim(SpecificHeatPerDryAir)
 
     @property
-    def Cha(self) -> Quantity[SpecificHeatPerHumidAir, FMT]:
+    def Cha(self) -> Quantity[SpecificHeatPerHumidAir, MT]:
         return self.get("Cha").asdim(SpecificHeatPerHumidAir)
 
     @property
-    def H(self) -> Quantity[MixtureEnthalpyPerDryAir, FMT]:
+    def H(self) -> Quantity[MixtureEnthalpyPerDryAir, MT]:
         return self.get("H").asdim(MixtureEnthalpyPerDryAir)
 
     @property
-    def Hha(self) -> Quantity[MixtureEnthalpyPerHumidAir, FMT]:
+    def Hha(self) -> Quantity[MixtureEnthalpyPerHumidAir, MT]:
         return self.get("Hha").asdim(MixtureEnthalpyPerHumidAir)
 
     @property
-    def S(self) -> Quantity[MixtureEntropyPerDryAir, FMT]:
+    def S(self) -> Quantity[MixtureEntropyPerDryAir, MT]:
         return self.get("S").asdim(MixtureEntropyPerDryAir)
 
     @property
-    def Sha(self) -> Quantity[MixtureEntropyPerHumidAir, FMT]:
+    def Sha(self) -> Quantity[MixtureEntropyPerHumidAir, MT]:
         return self.get("Sha").asdim(MixtureEntropyPerHumidAir)
 
     @property
-    def V(self) -> Quantity[MixtureVolumePerDryAir, FMT]:
+    def V(self) -> Quantity[MixtureVolumePerDryAir, MT]:
         return self.get("V").asdim(MixtureVolumePerDryAir)
 
     @property
-    def Vha(self) -> Quantity[MixtureVolumePerHumidAir, FMT]:
+    def Vha(self) -> Quantity[MixtureVolumePerHumidAir, MT]:
         return self.get("Vha").asdim(MixtureVolumePerHumidAir)
 
     def __repr__(self) -> str:

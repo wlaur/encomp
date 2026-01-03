@@ -1,3 +1,5 @@
+from typing import assert_type
+
 from ..gases import (
     actual_volume_to_normal_volume,
     convert_gas_volume,
@@ -9,6 +11,16 @@ from ..gases import (
 from ..misc import isinstance_types
 from ..units import Quantity as Q
 from ..utypes import Density, Mass, Volume, VolumeFlow
+
+
+def _assert_type(val: object, typ: type) -> None:
+    from encomp.misc import isinstance_types
+
+    if not isinstance_types(val, typ):
+        raise TypeError(f"Type mismatch for {val}: {type(val)}, expected {typ}")
+
+
+assert_type.__code__ = _assert_type.__code__
 
 
 def test_convert_gas_volume() -> None:

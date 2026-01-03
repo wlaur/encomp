@@ -57,15 +57,18 @@ def convert_volume_mass(
     """
 
     if rho is None:
-        # TODO: remove once unit literal overloads are defined
         rho = Quantity(997, "kg/m³")
 
     if not isinstance_types(rho, Quantity[Density, Any]):
         assert_never(rho)
 
-    if isinstance_types(inp, Quantity[Mass, Any]) or isinstance_types(inp, Quantity[MassFlow, Any]):
-        return (inp / rho).to_reduced_units()
-    elif isinstance_types(inp, Quantity[Volume, Any]) or isinstance_types(inp, Quantity[VolumeFlow, Any]):
-        return (inp * rho).to_reduced_units()
+    if isinstance_types(inp, Quantity[Mass, Any]):
+        return (inp / rho).to_reduced_units().asdim(Volume)
+    elif isinstance_types(inp, Quantity[MassFlow, Any]):
+        return (inp / rho).to_reduced_units().asdim(VolumeFlow)
+    elif isinstance_types(inp, Quantity[Volume, Any]):
+        return (inp * rho).to_reduced_units().asdim(Mass)
+    elif isinstance_types(inp, Quantity[VolumeFlow, Any]):
+        return (inp * rho).to_reduced_units().asdim(MassFlow)
     else:
         assert_never(inp)

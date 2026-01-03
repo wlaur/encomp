@@ -54,6 +54,16 @@ from ..utypes import (
 )
 
 
+def _assert_type(val: object, typ: type) -> None:
+    from encomp.misc import isinstance_types
+
+    if not isinstance_types(val, typ):
+        raise TypeError(f"Type mismatch for {val}: {type(val)}, expected {typ}")
+
+
+assert_type.__code__ = _assert_type.__code__
+
+
 def test_registry() -> None:
     from pint import _DEFAULT_REGISTRY, application_registry
 
@@ -158,13 +168,11 @@ def test_asdim() -> None:
         assert q1 == q2.asdim(q1)
         assert q2 == q1.asdim(q2)
 
-        # TODO: this does not currently work
+        with pytest.raises(ExpectedDimensionalityError):
+            q1.asdim(Temperature)
 
-        # with pytest.raises(ExpectedDimensionalityError):
-        #     q1.asdim(Temperature)
-
-        # with pytest.raises(ExpectedDimensionalityError):
-        #     q1.asdim(Q(25, 'kg'))
+        with pytest.raises(ExpectedDimensionalityError):
+            q1.asdim(Q(25, "kg"))
 
 
 def test_custom_dimensionality() -> None:
@@ -189,7 +197,7 @@ def test_custom_dimensionality() -> None:
         # the values and units are equivalent
         # but the dimensionality types don't match
         with pytest.raises(DimensionalityComparisonError):
-            assert q1 == q2  # pyright: ignore[reportGeneralTypeIssues]
+            assert q1 == q2  # pyright: ignore[reportOperatorIssue]
 
         assert isinstance(q1.to("degC**2/km"), type(q1))
         assert isinstance(q1.to_base_units(), type(q1))
@@ -376,6 +384,15 @@ def test_Q() -> None:
     assert type(Q(1)) is type(Quantity(1))
     assert type(Q) is type(Quantity)
 
+    with pytest.raises(DimensionalityComparisonError):
+        _ = Q(2, "kg") == 2
+
+    with pytest.raises(DimensionalityComparisonError):
+        _ = 2 == Q(2, "kg")  # noqa: SIM300
+
+    with pytest.raises(DimensionalityComparisonError):
+        _ = Q(2, "kg") == Q(25, "m")  # pyright: ignore[reportOperatorIssue]
+
     # inputs can be nested
     Q(Q(1, "kg"))
 
@@ -491,9 +508,9 @@ def test_Q() -> None:
     vals = [1, 2, 3]
 
     # compare scalar and vector will return a vector
-    assert (Q(2, "bar") == Q(vals, "bar").to("kPa")).any()  # pyright: ignore[reportAttributeAccessIssue]
+    assert (Q(2, "bar") == Q(vals, "bar").to("kPa")).any()
 
-    assert not (Q(5, "bar") == Q(vals, "bar").to("kPa")).any()  # pyright: ignore[reportAttributeAccessIssue]
+    assert not (Q(5, "bar") == Q(vals, "bar").to("kPa")).any()
 
 
 def test_custom_units() -> None:
@@ -914,7 +931,8 @@ def test_compatibility() -> None:
     # prefer to use the asdim method
     q5_ = Q(25, "kJ/kg").asdim(SpecificEnthalpy)
 
-    assert q5 == q5_  # pyright: ignore[reportGeneralTypeIssues]
+    # this is not allowed on the type level, but works at runtime
+    assert q5 == q5_  # pyright: ignore[reportOperatorIssue]
 
     q6 = Q[EnergyPerMass, float](25, "kJ/kg")
 

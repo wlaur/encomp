@@ -5,7 +5,6 @@ from typing import (
     TypeIs,
     get_args,
     get_origin,
-    is_typeddict,
 )
 
 import asttokens
@@ -44,22 +43,6 @@ def isinstance_types[T](obj: Any, expected: type[T]) -> TypeIs[T]:  # noqa: ANN4
     bool
         Whether the input object matches the expected type
     """
-    from .units import Quantity
-    from .utypes import UNSET_DIMENSIONALITY
-
-    if isinstance(expected, type) and not is_typeddict(expected):
-        if (
-            issubclass(expected, Quantity)
-            and hasattr(expected, "_dimensionality_type")
-            and expected._dimensionality_type is UNSET_DIMENSIONALITY
-        ):
-            if not isinstance(obj, Quantity):
-                return False
-            exp_mt = getattr(expected, "_magnitude_type", None)
-            if exp_mt is not None:
-                return isinstance_types(obj.m, exp_mt)
-            return True
-        return isinstance(obj, expected)
 
     if get_origin(expected) is UnionType:
         try:
