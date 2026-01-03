@@ -1491,7 +1491,8 @@ class Quantity(
     @overload
     def __pow__(self, other: Quantity[Dimensionless, MT]) -> Quantity[UnknownDimensionality, MT]: ...
     def __pow__(self, other: Quantity[Dimensionless, Any] | float | int) -> Quantity[Any, Any]:
-        return cast("Quantity[Any, Any]", super().__pow__(other))
+        ret = super().__pow__(other)
+        return self._call_subclass(ret)
 
     @overload
     def __add__(self: Quantity[Dimensionless, MT], other: float | int) -> Quantity[Dimensionless, MT]: ...
@@ -1744,6 +1745,52 @@ class Quantity(
     def __mul__(self: Quantity[DT, MT], other: Quantity[Dimensionless, MT]) -> Quantity[DT, MT]: ...
     @overload
     def __mul__(self: Quantity[DT, MT], other: Quantity[Dimensionless, float]) -> Quantity[DT, MT]: ...
+
+    # --- Specific Dimensional Rules for __mul__ ---
+    # To add rules like MassFlow * Time = Mass, insert overloads here in this order:
+    # 1. Array self * scalar other (for each array type: Numpy1DArray, pl.Series, pl.Expr)
+    # 2. Same MT * Same MT
+    # 3. Any MT * scalar (float)
+    #
+    # Example structure for MassFlow * Time = Mass:
+    #
+    # @overload
+    # def __mul__(
+    #     self: Quantity[MassFlow, Numpy1DArray], other: Quantity[Time, float]
+    # ) -> Quantity[Mass, Numpy1DArray]: ...
+    # @overload
+    # def __mul__(
+    #     self: Quantity[MassFlow, pl.Series], other: Quantity[Time, float]
+    # ) -> Quantity[Mass, pl.Series]: ...
+    # @overload
+    # def __mul__(
+    #     self: Quantity[MassFlow, pl.Expr], other: Quantity[Time, float]
+    # ) -> Quantity[Mass, pl.Expr]: ...
+    # @overload
+    # def __mul__(self: Quantity[MassFlow, MT], other: Quantity[Time, MT]) -> Quantity[Mass, MT]: ...
+    # @overload
+    # def __mul__(self: Quantity[MassFlow, MT], other: Quantity[Time, float]) -> Quantity[Mass, MT]: ...
+    #
+    # For commutative operations (Time * MassFlow = Mass), add the reverse:
+    #
+    # @overload
+    # def __mul__(
+    #     self: Quantity[Time, Numpy1DArray], other: Quantity[MassFlow, float]
+    # ) -> Quantity[Mass, Numpy1DArray]: ...
+    # @overload
+    # def __mul__(self: Quantity[Time, MT], other: Quantity[MassFlow, MT]) -> Quantity[Mass, MT]: ...
+    # @overload
+    # def __mul__(self: Quantity[Time, MT], other: Quantity[MassFlow, float]) -> Quantity[Mass, MT]: ...
+    #
+    # Similar patterns for:
+    # - VolumeFlow * Time = Volume (and Time * VolumeFlow)
+    # - Power * Time = Energy (and Time * Power)
+    # - Velocity * Time = Length (and Time * Velocity)
+    # - Density * Volume = Mass (and Volume * Density)
+    # - Length * Length = Area
+    # - Length * Area = Volume (and Area * Length)
+    # --- End Specific Dimensional Rules ---
+
     @overload
     def __mul__(
         self: Quantity[DT, Numpy1DArray], other: Quantity[Any, float]
@@ -1821,6 +1868,40 @@ class Quantity(
     def __truediv__(self: Quantity[DT, MT], other: Quantity[DT, MT]) -> Quantity[Dimensionless, MT]: ...
     @overload
     def __truediv__(self: Quantity[DT, MT], other: Quantity[DT, float]) -> Quantity[Dimensionless, MT]: ...
+
+    # --- Specific Dimensional Rules for __truediv__ ---
+    # To add rules like Mass / Time = MassFlow, insert overloads here in this order:
+    # 1. Array self / scalar other (for each array type: Numpy1DArray, pl.Series, pl.Expr)
+    # 2. Same MT / Same MT
+    # 3. Any MT / scalar (float)
+    #
+    # Example structure for Mass / Time = MassFlow:
+    #
+    # @overload
+    # def __truediv__(
+    #     self: Quantity[Mass, Numpy1DArray], other: Quantity[Time, float]
+    # ) -> Quantity[MassFlow, Numpy1DArray]: ...
+    # @overload
+    # def __truediv__(
+    #     self: Quantity[Mass, pl.Series], other: Quantity[Time, float]
+    # ) -> Quantity[MassFlow, pl.Series]: ...
+    # @overload
+    # def __truediv__(
+    #     self: Quantity[Mass, pl.Expr], other: Quantity[Time, float]
+    # ) -> Quantity[MassFlow, pl.Expr]: ...
+    # @overload
+    # def __truediv__(self: Quantity[Mass, MT], other: Quantity[Time, MT]) -> Quantity[MassFlow, MT]: ...
+    # @overload
+    # def __truediv__(self: Quantity[Mass, MT], other: Quantity[Time, float]) -> Quantity[MassFlow, MT]: ...
+    #
+    # Similar patterns for:
+    # - Volume / Time = VolumeFlow
+    # - Energy / Time = Power
+    # - Length / Time = Velocity
+    # - Energy / Mass = EnergyPerMass
+    # - Mass / Volume = Density
+    # --- End Specific Dimensional Rules ---
+
     @overload
     def __truediv__(
         self: Quantity[Dimensionless, MT], other: Quantity[DT_, float]
@@ -1878,11 +1959,21 @@ class Quantity(
         return cast("Quantity[UnknownDimensionality, MT]", self._call_subclass(ret))
 
     @overload
-    def __floordiv__(self, other: Quantity[DT, MT]) -> Quantity[Dimensionless, MT]: ...
+    def __floordiv__(
+        self: Quantity[DT, Numpy1DArray], other: Quantity[DT, float]
+    ) -> Quantity[Dimensionless, Numpy1DArray]: ...
     @overload
-    def __floordiv__(self, other: Quantity[Dimensionless, float]) -> Quantity[DT, MT]: ...
+    def __floordiv__(
+        self: Quantity[DT, pl.Series], other: Quantity[DT, float]
+    ) -> Quantity[Dimensionless, pl.Series]: ...
     @overload
-    def __floordiv__(self, other: Quantity[Dimensionless, MT]) -> Quantity[DT, MT]: ...
+    def __floordiv__(self: Quantity[DT, pl.Expr], other: Quantity[DT, float]) -> Quantity[Dimensionless, pl.Expr]: ...
+    @overload
+    def __floordiv__(self: Quantity[DT, MT], other: Quantity[DT, MT]) -> Quantity[Dimensionless, MT]: ...
+    @overload
+    def __floordiv__(self: Quantity[DT, MT], other: Quantity[Dimensionless, float]) -> Quantity[DT, MT]: ...
+    @overload
+    def __floordiv__(self: Quantity[DT, MT], other: Quantity[Dimensionless, MT]) -> Quantity[DT, MT]: ...
     @overload
     def __floordiv__(self: Quantity[DT, MT], other: float | int) -> Quantity[DT, MT]: ...
     def __floordiv__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
