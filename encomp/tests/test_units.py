@@ -520,13 +520,14 @@ def test_Q() -> None:
 
 
 def test_custom_units() -> None:
-    assert Q(1, "kg") == Q(1, "kilogramme")
+    assert_type(Q(1, "kilogram"), Quantity[UnknownDimensionality, float])
+    assert Q(1, "kg") == Q(1, "kilogram")
 
     with pytest.raises(DimensionalityComparisonError):
         assert Q(1, "kg") == Q(1, "m")  # pyright: ignore[reportOperatorIssue]
 
     with pytest.raises(DimensionalityComparisonError):
-        assert Q(1, "kilogramme") == Q(1, "m")
+        assert Q(1, "kilogram") == Q(1, "m")
 
     # "ton" should always default to metric ton
     assert Q(1, "ton") == Q(1, "Ton") == Q(1, "TON") == Q(1, "tonne") == Q(1, "metric_ton") == Q(1000, "kg")

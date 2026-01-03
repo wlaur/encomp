@@ -1,10 +1,21 @@
-from typing import Any
+from typing import Any, assert_type
 
 import numpy as np
 import polars as pl
 from pydantic import BaseModel
 
 from ..units import Quantity
+from ..utypes import UnknownDimensionality
+
+
+def _assert_type(val: object, typ: type) -> None:
+    from encomp.misc import isinstance_types
+
+    if not isinstance_types(val, typ):
+        raise TypeError(f"Type mismatch for {val}: {type(val)}, expected {typ}")
+
+
+assert_type.__code__ = _assert_type.__code__
 
 
 def test_model_serialize() -> None:
@@ -46,3 +57,10 @@ def test_model_serialize() -> None:
             assert type(deserialized.qty.m) is type(m)
 
     assert isinstance(M.model_json_schema(), dict)
+
+
+def test_unknown_pydantic_field() -> None:
+    class A(BaseModel):
+        v: Quantity[UnknownDimensionality, float]
+
+    assert_type(A(v=Quantity(2, "kg").asdim(UnknownDimensionality)).v, Quantity[UnknownDimensionality, float])
