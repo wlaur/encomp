@@ -17,7 +17,6 @@ from collections.abc import Callable, Iterable
 from typing import Annotated, Any, ClassVar, Generic, Literal, cast
 
 import numpy as np
-import pandas as pd
 import polars as pl
 from CoolProp.CoolProp import PropsSI  # type: ignore[import-untyped]
 from CoolProp.HumidAirProp import HAPropsSI  # type: ignore[import-untyped]
@@ -281,19 +280,6 @@ class CoolPropFluid(ABC, Generic[FMT]):  # noqa: UP046
         magnitude_type = candidates[0]
 
         return cast(type[FMT], magnitude_type)
-
-    @property
-    def _mt_kwargs(self) -> dict[str, Any]:
-        kwargs: dict[str, Any] = {}
-
-        m0 = self.points[0][1].m
-
-        if isinstance(m0, pd.Series):
-            # NOTE: the series name should not be propagated here,
-            # the outputs will be separate series that should not have the same name
-            kwargs |= {"index": m0.index}
-
-        return kwargs
 
     @abstractmethod
     def __init__(self, name: CName, **kwargs: Quantity[Any, FMT] | Quantity[Any, float]) -> None:
@@ -696,7 +682,7 @@ class CoolPropFluid(ABC, Generic[FMT]):  # noqa: UP046
 
                 m[m < self._EPS] = np.nan
                 qty = Quantity(m, unit_output)
-            elif isinstance(qty.m, (pd.Series | pl.Series)):
+            elif isinstance(qty.m, pl.Series):
                 raise TypeError(f"Invalid magnitude type for {qty} ({type(qty.m)})")
             elif isinstance(qty.m, float | int):
                 if qty.m < self._EPS:
@@ -711,7 +697,7 @@ class CoolPropFluid(ABC, Generic[FMT]):  # noqa: UP046
             qty.ito(ret_unit)
 
         if convert_magnitude:
-            qty = qty.astype(self._mt, **self._mt_kwargs)
+            qty = qty.astype(self._mt)
 
         return cast("Quantity[Any, FMT]", qty)
 
@@ -727,16 +713,13 @@ class CoolPropFluid(ABC, Generic[FMT]):  # noqa: UP046
                 f"{qty.u} ({qty.dimensionality})"
             ) from e
 
-        if isinstance(m, pd.DatetimeIndex | pd.Timestamp):
-            raise TypeError(f"Cannot pass datetime magnitude as input to CoolProp: {m}")
-
         if isinstance(m, pl.Expr):
             raise TypeError(f"Cannot pass Polars expression as input to CoolProp: {m}")
 
         if isinstance(m, list):
             m = np.array(m)
 
-        if isinstance(m, pd.Series | pl.Series):
+        if isinstance(m, pl.Series):
             m = m.to_numpy()
 
         return m
@@ -790,12 +773,12 @@ class CoolPropFluid(ABC, Generic[FMT]):  # noqa: UP046
             return f"{self.get(prop).astype(float):{fmt}}"
 
         vector_inputs = [
-            (n[0], cast(Quantity[Any, Numpy1DArray] | Quantity[Any, pd.Series] | Quantity[Any, pl.Series], n[1]))
+            (n[0], cast(Quantity[Any, Numpy1DArray] | Quantity[Any, pl.Series], n[1]))
             for n in self.points
-            if isinstance(n[1].m, (np.ndarray, pd.Series, pl.Series))
+            if isinstance(n[1].m, (np.ndarray, pl.Series))
         ]
 
-        is_cutoff = max(len(n[1].m) for n in vector_inputs) > self._repr_cutoff  # type: ignore[arg-type]
+        is_cutoff = max(len(n[1].m) for n in vector_inputs) > self._repr_cutoff
 
         def _get_cutoff_qty(q: Quantity[Any, Any]) -> Quantity[Any, Any]:
             return Quantity(q.m[: self._repr_cutoff], q.u)

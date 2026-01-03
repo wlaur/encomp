@@ -11,7 +11,6 @@ from abc import ABC
 from typing import Literal, TypeVar, cast, get_origin
 
 import numpy as np
-import pandas as pd
 import polars as pl
 from pint.util import UnitsContainer
 
@@ -707,13 +706,11 @@ _LuminosityUC = UnitsContainer({"[luminosity]": 1})
 Numpy1DArray = np.ndarray[tuple[int], np.dtype[np.float64]]
 Numpy1DBoolArray = np.ndarray[tuple[int], np.dtype[np.bool]]
 
-# TODO: dont support pd.Series, remove all pandas-related code
 
 MT = TypeVar(
     "MT",
     float,
     Numpy1DArray,
-    pd.Series,
     pl.Series,
     pl.Expr,
     default=Numpy1DArray,
@@ -723,7 +720,6 @@ MT_ = TypeVar(
     "MT_",
     float,
     Numpy1DArray,
-    pd.Series,
     pl.Series,
     pl.Expr,
     default=Numpy1DArray,
@@ -733,7 +729,6 @@ FMT = TypeVar(
     "FMT",
     float,
     Numpy1DArray,
-    pd.Series,
     pl.Series,
     default=Numpy1DArray,
 )
@@ -741,7 +736,6 @@ FMT = TypeVar(
 MAGNITUDE_TYPES = (
     float,
     Numpy1DArray,
-    pd.Series,
     pl.Series,
     pl.Expr,
 )

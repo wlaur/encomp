@@ -1,7 +1,6 @@
 # ruff: noqa: B018
 
 import numpy as np
-import pandas as pd
 import pytest
 from pytest import approx
 
@@ -396,15 +395,4 @@ def test_properties_HumidAir() -> None:
 
 
 def test_magnitude_type() -> None:
-    index = pd.DatetimeIndex(["2021-01-01", "2021-01-02", "2021-01-03"])
-
-    s1 = pd.Series([1, 2, 3], name="s1", index=index)
-    assert Water(P=Q(s1, "kPa"), T=Q(25, "degC")).H.m.index[0] == pd.Timestamp("2021-01-01")
-
-    assert Fluid("water", P=Q(s1, "kPa"), T=Q(25, "degC")).H.m.index[0] == pd.Timestamp("2021-01-01")
-
-    assert HumidAir(P=Q(s1, "kPa"), T=Q(25, "degC"), R=Q(0.5)).H.m.index[0] == pd.Timestamp("2021-01-01")
-
-    assert isinstance(Water(P=Q(s1, "kPa"), T=Q(25, "degC")).H.m, pd.Series)
-
     assert isinstance(Water(T=Q(25, "degC"), P=Q(25, "kPa")).H.m, float)

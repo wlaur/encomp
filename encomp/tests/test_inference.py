@@ -1,7 +1,6 @@
 from typing import assert_type
 
 import numpy as np
-import pandas as pd
 import polars as pl
 
 from .. import utypes as ut
@@ -25,7 +24,6 @@ def test_inference_basic() -> None:
     assert_type(Q(np.array([1])), Q[ut.Dimensionless, ut.Numpy1DArray])
     assert_type(Q(pl.Series([1])), Q[ut.Dimensionless, pl.Series])
     assert_type(Q(pl.lit(1)), Q[ut.Dimensionless, pl.Expr])
-    assert_type(Q(pd.Series([1])), Q[ut.Dimensionless, pd.Series])
 
     assert_type(Q(1) * 1, Q[ut.Dimensionless, float])
     assert_type(Q(1) * Q(1), Q[ut.Dimensionless, float])
@@ -132,11 +130,7 @@ def test_inference_comparisons() -> None:
     assert isinstance(result3, np.ndarray)
 
 
-def test_inference_pandas_polars() -> None:
-    """Test type inference with pandas and polars types."""
-    # pandas Series construction
-    assert_type(Q(pd.Series([1, 2])), Q[ut.Dimensionless, pd.Series])
-
+def test_inference_polars() -> None:
     # polars Series construction
     assert_type(Q(pl.Series([1, 2])), Q[ut.Dimensionless, pl.Series])
 
@@ -172,7 +166,6 @@ def test_inference_dimensional_multiplication() -> None:
     assert_type(Q(5.0, "m") * Q(3.0, "m"), Q[ut.Area, float])
     assert_type(Q([5.0], "m") * Q(3.0, "m"), Q[ut.Area, np.ndarray])
     assert_type(Q(pl.Series([5.0]), "m") * Q(3.0, "m"), Q[ut.Area, pl.Series])
-    assert_type(Q(pd.Series([5.0]), "m") * Q(3.0, "m"), Q[ut.Area, pd.Series])
 
     # Length * Area = Volume
     assert_type(Q(2.0, "m") * Q(10.0, "m^2"), Q[ut.Volume, float])
@@ -187,7 +180,6 @@ def test_inference_dimensional_multiplication() -> None:
 
     # Time * Power = Energy
     assert_type(Q(3600.0, "s") * Q(1000.0, "W"), Q[ut.Energy, float])
-    assert_type(Q(pd.Series([3600.0]), "s") * Q(1000.0, "W"), Q[ut.Energy, pd.Series])
 
     # Time * MassFlow = Mass
     assert_type(Q(10.0, "s") * Q(5.0, "kg/s"), Q[ut.Mass, float])
@@ -214,7 +206,6 @@ def test_inference_dimensional_division() -> None:
     assert_type(Q(100.0, "kg") / Q(10.0, "s"), Q[ut.MassFlow, float])
     assert_type(Q([100.0, 200.0], "kg") / Q(10.0, "s"), Q[ut.MassFlow, np.ndarray])
     assert_type(Q(pl.Series([100.0]), "kg") / Q(10.0, "s"), Q[ut.MassFlow, pl.Series])
-    assert_type(Q(pd.Series([100.0]), "kg") / Q(10.0, "s"), Q[ut.MassFlow, pd.Series])
 
     # Volume / Time = VolumeFlow
     assert_type(Q(10.0, "m^3") / Q(5.0, "s"), Q[ut.VolumeFlow, float])
@@ -226,7 +217,6 @@ def test_inference_dimensional_division() -> None:
 
     # Length / Time = Velocity
     assert_type(Q(100.0, "m") / Q(10.0, "s"), Q[ut.Velocity, float])
-    assert_type(Q(pd.Series([100.0]), "m") / Q(10.0, "s"), Q[ut.Velocity, pd.Series])
 
     # Energy / Time = Power
     assert_type(Q(3600000.0, "J") / Q(3600.0, "s"), Q[ut.Power, float])
@@ -263,20 +253,17 @@ def test_inference_dimensional_derived_units() -> None:
 
     # Test with various magnitude types
     assert_type(Q([1000.0], "N/m2"), Q[ut.Pressure, np.ndarray])
-    assert_type(Q(pd.Series([1000.0]), "N/m^2"), Q[ut.Pressure, pd.Series])
     assert_type(Q(pl.Series([1000.0]), "N/m**2"), Q[ut.Pressure, pl.Series])
     assert_type(Q(pl.lit(1000.0), "N/m²"), Q[ut.Pressure, pl.Expr])
 
     # Kinematic Viscosity = Length * Velocity
     assert_type(Q(0.1, "m") * Q(0.5, "m/s"), Q[ut.KinematicViscosity, float])
     assert_type(Q(pl.Series([0.1]), "m") * Q(0.5, "m/s"), Q[ut.KinematicViscosity, pl.Series])
-    assert_type(Q(pd.Series([0.1]), "m") * Q(0.5, "m/s"), Q[ut.KinematicViscosity, pd.Series])
     assert_type(Q([0.1], "m") * Q(0.5, "m/s"), Q[ut.KinematicViscosity, np.ndarray])
 
     # Dynamic Viscosity = Density * Kinematic Viscosity
     assert_type(Q(1000.0, "kg/m^3") * Q(0.001, "m^2/s"), Q[ut.DynamicViscosity, float])
     assert_type(Q([1000.0], "kg/m^3") * Q(0.001, "m^2/s"), Q[ut.DynamicViscosity, np.ndarray])
-    assert_type(Q(pd.Series([1000.0]), "kg/m³") * Q(0.001, "m²/s"), Q[ut.DynamicViscosity, pd.Series])
     assert_type(Q(pl.lit(1000.0), "kg/m3") * Q(0.001, "m2/s"), Q[ut.DynamicViscosity, pl.Expr])
 
     # Specific Volume = Dimensionless / Density
@@ -288,13 +275,11 @@ def test_inference_dimensional_derived_units() -> None:
     # Using the relation: Length * ThermalConductivity = PowerPerTemperature
     assert_type(Q(0.6, "W/m/K"), Q[ut.ThermalConductivity, float])
     assert_type(Q([0.6, 0.8], "W/m/K"), Q[ut.ThermalConductivity, np.ndarray])
-    assert_type(Q(pd.Series([0.6]), "W/m/K"), Q[ut.ThermalConductivity, pd.Series])
     assert_type(Q(pl.lit(0.6), "W/m/K"), Q[ut.ThermalConductivity, pl.Expr])
 
     # Heat Transfer Coefficient = PowerPerArea / TemperatureDifference = W/(m²·K)
     assert_type(Q(10.0, "W/m^2/K"), Q[ut.HeatTransferCoefficient, float])
     assert_type(Q([10.0, 20.0], "W/m²/K"), Q[ut.HeatTransferCoefficient, np.ndarray])
-    assert_type(Q(pd.Series([10.0]), "W/m2/K"), Q[ut.HeatTransferCoefficient, pd.Series])
     assert_type(Q(pl.Series([10.0]), "W/m**2/K"), Q[ut.HeatTransferCoefficient, pl.Series])
 
     # Frequency = Dimensionless / Time
@@ -363,20 +348,6 @@ def test_inference_magnitude_type_promotion() -> None:
     result6 = Q(3, "m") + Q([1, 2], "m")
     assert isinstance(result6.m, np.ndarray)  # Runtime: ndarray ✓
     # Static: Q[Length, float] ✗
-
-    # ISSUE: pandas/polars Series operations - type preservation
-    # Some operations preserve Series type at runtime, but static inference doesn't reflect this
-    _ = Q(pd.Series([1, 2])) * Q(2)
-    # Runtime preserves pd.Series in some cases
-    # Static type: Q[Dimensionless, pd.Series] (actually correct at runtime sometimes)
-
-    _ = Q(pd.Series([1, 2]), "m") * Q(2, "s")
-    # May preserve pd.Series at runtime
-    # Static type mismatch: expected Q[KinematicViscosity, pd.Series] but got Q[Any, Any]
-
-    _ = Q(2) * Q(pd.Series([1, 2]), "m")
-    # Static type: Q[Length, float] but runtime may have pd.Series
-    # Type promotion issue: scalar * Series
 
     _ = Q(pl.Series([1, 2])) * Q(2)
     # Runtime behavior varies for polars Series

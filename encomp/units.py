@@ -33,7 +33,6 @@ from typing import (
 )
 
 import numpy as np
-import pandas as pd
 import pint
 import polars as pl
 from pint._typing import QuantityOrUnitLike
@@ -151,7 +150,6 @@ DimensionalityTypeName = Annotated[str, "Dimensionality name"]
 MagnitudeTypeName = Literal[
     "float",
     "ndarray",
-    "pd.Series",
     "pl.Series",
     "pl.Expr",
 ]
@@ -370,8 +368,7 @@ class Quantity(
     # instance attributes
     _magnitude: MT
     _magnitude_type: type[MT]
-    _original_magnitude_type: type[MT]
-    _original_magnitude_kwargs: dict[str, Any]
+    _original_magnitude_type: type[MT] | type[list[float]] | type[list[int]]
 
     _max_recursion_depth: int = 10
 
@@ -394,9 +391,7 @@ class Quantity(
             return
 
         if mt == np.float64:
-            raise TypeError(
-                f"Invalid magnitude type: {mt}, expected one of float, np.ndarray, pd.Series, pl.Series, pl.Expression"
-            )
+            raise TypeError(f"Invalid magnitude type: {mt}, expected one of float, np.ndarray, pl.Series, pl.Expr")
 
         for n in MAGNITUDE_TYPES:
             if mt is n:
@@ -406,9 +401,7 @@ class Quantity(
             if mt == n:
                 return
 
-        raise TypeError(
-            f"Invalid magnitude type: {mt}, expected one of float, np.ndarray, pd.Series, pl.Series, pl.Expression"
-        )
+        raise TypeError(f"Invalid magnitude type: {mt}, expected one of float, np.ndarray, pl.Series, pl.Expr")
 
     @staticmethod
     def _get_magnitude_type_name(mt: type) -> MagnitudeTypeName:
@@ -422,8 +415,6 @@ class Quantity(
             return "pl.Series"
         elif mt is pl.Expr:
             return "pl.Expr"
-        if mt is pd.Series or origin is pd.Series:
-            return "pd.Series"
         else:
             raise TypeError(f"Invalid magnitude type: {mt} (origin {origin})")
 
@@ -592,9 +583,9 @@ class Quantity(
             if len(val.shape) != 1:
                 raise ValueError(f"Only 1-dimensional Numpy arrays can be used as magnitude, got shape {val.shape}")
             return val
-        elif isinstance(val, (pd.Series, pl.Series, pl.Expr)):
+        elif isinstance(val, (pl.Series, pl.Expr)):
             return val
-        elif isinstance(val, (list, tuple)):
+        elif isinstance(val, list):
             arr = cast(MT, np.array(val).astype(np.float64))
             return arr
         # implicit way of checking if the value is a sympy symbol without having to import Sympy
@@ -611,9 +602,8 @@ class Quantity(
     def subclass(self) -> type[Quantity[DT, MT]]:
         return self._get_dimensional_subclass(self._dimensionality_type, self._magnitude_type)
 
-    def _set_original_magnitude_attributes(self, mt_orig: type[MT], mt_orig_kwargs: dict[str, Any]) -> None:
+    def _set_original_magnitude_type(self, mt_orig: type[MT] | type[list[float]] | type[list[int]]) -> None:
         self._original_magnitude_type = mt_orig
-        self._original_magnitude_kwargs = mt_orig_kwargs
 
     def __len__(self) -> int:
         # __len__() must return an integer
@@ -836,16 +826,14 @@ class Quantity(
         cls,
         val: MT | list[float] | Quantity[DT, MT],
         unit: Unit[DT] | Unit | UnitsContainer | str | dict[str, numbers.Number] | None = None,
-        _mt_orig: type[MT] | None = None,
-        _mt_orig_kwargs: dict[str, Any] | None = None,
+        _mt_orig: type[MT] | type[list[float]] | type[list[int]] | None = None,
         _depth: int = 0,
     ) -> Quantity[Any, Any]: ...
     def __new__(
         cls,
         val: MT | list[float] | list[int] | Quantity[DT, MT],
         unit: Unit[DT] | Unit | UnitsContainer | str | dict[str, numbers.Number] | None = None,
-        _mt_orig: type[MT] | None = None,
-        _mt_orig_kwargs: dict[str, Any] | None = None,
+        _mt_orig: type[MT] | type[list[float]] | type[list[int]] | None = None,
         _depth: int = 0,
     ) -> Quantity[Any, Any]:
         if isinstance(val, Quantity):
@@ -862,20 +850,6 @@ class Quantity(
         # that is actually passed to the constructor
         # for example list[int] is converted to np.ndarray before this (in _validate_magnitude)
         _original_magnitude_type = _mt_orig if _mt_orig is not None else type(valid_magnitude)
-        _original_magnitude_kwargs = _mt_orig_kwargs if _mt_orig_kwargs is not None else {}
-
-        # special case for pd.Series, must convert to np.ndarray to avoid
-        # TypeError: PlainQuantity cannot wrap upcast type
-        # NOTE: pl.Series and pl.Expr don't require this type of workaround
-        if isinstance(valid_magnitude, pd.Series):
-            # preserve pd.Series metadata
-            # (not dtype, this would cause issues with float/int)
-            _original_magnitude_kwargs |= {
-                "index": valid_magnitude.index,
-                "name": valid_magnitude.name,
-            }
-
-            valid_magnitude = cast(MT, cls._cast_array_float(valid_magnitude.to_numpy()))
 
         is_valid_subclass = True
 
@@ -910,7 +884,6 @@ class Quantity(
                 valid_magnitude,
                 valid_unit,
                 _mt_orig=_original_magnitude_type,
-                _mt_orig_kwargs=_original_magnitude_kwargs,
                 _depth=_depth + 1,
             )
 
@@ -921,16 +894,11 @@ class Quantity(
         if isinstance(qty._magnitude, np.ndarray):
             qty._magnitude = cls._cast_array_float(qty._magnitude)
 
-        # propagate the original magnitude type and constructor kwargs
-        qty._set_original_magnitude_attributes(_original_magnitude_type, _original_magnitude_kwargs)
+        qty._set_original_magnitude_type(_original_magnitude_type)
         return qty
 
     @property
     def m(self) -> MT:
-        if self._original_magnitude_type is pd.Series or get_origin(self._original_magnitude_type) is pd.Series:
-            assert isinstance(self._magnitude, np.ndarray)
-            return cast(MT, pd.Series(self._magnitude, **self._original_magnitude_kwargs))
-
         return self._magnitude
 
     @property
@@ -959,9 +927,6 @@ class Quantity(
             )
 
     def _call_subclass(self, *args: Any) -> Quantity[DT, MT]:  # noqa: ANN401
-        # handle the edge case where a 1-element pd.Series is
-        # multiplied or divided by an N-element pd.Series
-
         if len(args) == 1:
             qty = args[0]
             if not isinstance(qty, Quantity):
@@ -973,19 +938,10 @@ class Quantity(
         else:
             raise ValueError(f"Invalid input: {args}")
 
-        index = self._original_magnitude_kwargs.get("index")
-        if index is not None:
-            magnitude_length = len(m) if isinstance(m, Sized) else None
-
-            # strip the index in case it's not compatible
-            if magnitude_length is not None and magnitude_length != len(index):
-                del self._original_magnitude_kwargs["index"]
-
         return self.subclass(
             cast(MT, m),
             cast(Unit[DT], u),
             _mt_orig=self._original_magnitude_type,
-            _mt_orig_kwargs=self._original_magnitude_kwargs,
         )
 
     def to_reduced_units(self) -> Quantity[DT, MT]:
@@ -1042,7 +998,6 @@ class Quantity(
                 m,
                 valid_unit,
                 _mt_orig=self._original_magnitude_type,
-                _mt_orig_kwargs=self._original_magnitude_kwargs,
             )
             return ret
 
@@ -1486,11 +1441,7 @@ class Quantity(
         subcls = self._get_dimensional_subclass(dim, self._magnitude_type)
         return cast("Quantity[DT_, MT]", subcls(self.m, self.u))
 
-    def astype(
-        self,
-        magnitude_type: type[MT_],
-        **kwargs: Any,  # noqa: ANN401
-    ) -> Quantity[DT, MT_]:
+    def astype(self, magnitude_type: type[MT_]) -> Quantity[DT, MT_]:
         m, u = self.m, self.u
 
         if magnitude_type is pl.Expr:
@@ -1501,39 +1452,26 @@ class Quantity(
                 f"Cannot convert magnitude with type {type(m)} to Polars expression, "
                 "only scalar (float) quantities can be converted to pl.Expr"
             )
-
-        # astype for np.ndarray should be called directly except for some special cases
-        if isinstance(m, np.ndarray) and magnitude_type not in (pd.Series, pl.Series, list):
+        elif isinstance(m, np.ndarray) and magnitude_type not in (pl.Series, list):
             return cast("Quantity[DT, MT_]", self.subclass(m.astype(magnitude_type), u))
-
-        if magnitude_type is float:
+        elif magnitude_type is float:
             if isinstance(m, Iterable):
                 return cast("Quantity[DT, MT_]", self.subclass([float(n) for n in m], u))
             else:
                 return cast("Quantity[DT, MT_]", self.subclass(cast(MT, float(cast(Any, m))), u))
-
-        if magnitude_type is np.ndarray or get_origin(magnitude_type) is np.ndarray:
+        elif magnitude_type is np.ndarray or get_origin(magnitude_type) is np.ndarray:
             _m = [m] if not isinstance(m, Iterable) else m
             return cast("Quantity[DT, MT_]", self.subclass(cast(MT, np.array(_m)), u))
-
-        if magnitude_type is pd.Series or get_origin(magnitude_type) is pd.Series:
+        elif magnitude_type is pl.Series or get_origin(magnitude_type) is pl.Series:
             _m = [m] if not isinstance(m, Iterable) else m
-            return cast("Quantity[DT, MT_]", self.subclass(cast(MT, pd.Series(cast(Any, _m), **kwargs)), u))
-
-        if magnitude_type is pl.Series or get_origin(magnitude_type) is pl.Series:
-            _m = [m] if not isinstance(m, Iterable) else m
-            kwargs["values"] = _m
-            return cast("Quantity[DT, MT_]", self.subclass(cast(MT, pl.Series(**kwargs)), u))
-
-        # ensure that this method returns a new instance
-        return cast("Quantity[DT, MT_]", self.__copy__())
+            return cast("Quantity[DT, MT_]", self.subclass(cast(MT, pl.Series(values=_m)), u))
+        else:
+            return cast("Quantity[DT, MT_]", self.__copy__())
 
     @overload
     def __eq__(self: Quantity[DT, float], other: Quantity[DT, Any]) -> bool: ...
     @overload
     def __eq__(self: Quantity[DT, Numpy1DArray], other: Quantity[DT, Any]) -> Numpy1DBoolArray: ...
-    @overload
-    def __eq__(self: Quantity[DT, pd.Series], other: Quantity[DT, Any]) -> pd.Series: ...
     @overload
     def __eq__(self: Quantity[DT, pl.Series], other: Quantity[DT, Any]) -> pl.Series: ...
     @overload
@@ -1543,18 +1481,14 @@ class Quantity(
     @overload
     def __eq__(self: Quantity[Dimensionless, Numpy1DArray], other: float | int) -> Numpy1DBoolArray: ...
     @overload
-    def __eq__(self: Quantity[Dimensionless, pd.Series], other: float | int) -> pd.Series: ...
-    @overload
     def __eq__(self: Quantity[Dimensionless, pl.Series], other: float | int) -> pl.Series: ...
     @overload
     def __eq__(self: Quantity[Dimensionless, pl.Expr], other: float | int) -> pl.Expr: ...
     @overload
     def __eq__(self: Quantity[Dimensionless, Any], other: Numpy1DArray) -> Numpy1DBoolArray: ...
     @overload
-    def __eq__(
-        self: Quantity[Any, Any], other: object
-    ) -> bool | Numpy1DBoolArray | pd.Series | pl.Series | pl.Expr: ...
-    def __eq__(self, other: object) -> bool | Numpy1DBoolArray | pd.Series | pl.Series | pl.Expr:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def __eq__(self: Quantity[Any, Any], other: object) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr: ...
+    def __eq__(self, other: object) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:  # pyright: ignore[reportIncompatibleMethodOverride]
         if not isinstance(other, (Quantity, float, int)):
             return bool(super().__eq__(other))
 
@@ -1567,7 +1501,7 @@ class Quantity(
             other = Quantity(other, "dimensionless")
 
         m = self.m
-        other_m = cast(float | Numpy1DArray | pd.Series | pl.Series | pl.Expr, other.to(self.u).m)
+        other_m = cast(float | Numpy1DArray | pl.Series | pl.Expr, other.to(self.u).m)
 
         if isinstance(m, (float, int, np.ndarray)) and isinstance(other_m, (float, int, np.ndarray)):
             ret = np.isclose(m, other_m, self.rtol, self.atol)
@@ -2558,8 +2492,6 @@ class Quantity(
 
         return self._call_subclass(ret)
 
-    @overload
-    def __getitem__(self: Quantity[DT, pd.Series], index: int) -> Quantity[DT, float]: ...
     @overload
     def __getitem__(self: Quantity[DT, pl.Series], index: int) -> Quantity[DT, float]: ...
     @overload

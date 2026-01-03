@@ -4,7 +4,6 @@ from contextlib import contextmanager
 from typing import Any, TypedDict, assert_never, assert_type
 
 import numpy as np
-import pandas as pd
 import polars as pl
 import pytest
 from pandas.api.types import is_list_like as pandas_is_list_like  # type: ignore
@@ -14,7 +13,6 @@ from pytest import approx
 from typeguard import typechecked
 
 from ..conversion import convert_volume_mass
-from ..fluids import Water
 from ..misc import isinstance_types
 from ..serialize import decode
 from ..units import (
@@ -486,21 +484,14 @@ def test_Q() -> None:
     Q(1.124124e-3, "").to("%").to("percent")
     Q(1.124124e-3).to("%").to("percent")
 
-    vals = [2, 3, 4]
-    s = pd.Series(vals, name="Pressure")
-    arr = Q(s, "bar").to("kPa").m
-    assert isinstance(arr, pd.Series)
-    assert arr[0] == 200
-
-    _ = Q(vals)
-
     # np.ndarray magnitudes equality check
-    assert (Q(s, "bar") == Q(vals, "bar").to("kPa")).all()
     assert (Q([1, 2, 3], "kg") == Q([1000, 2000, 3000], "g")).all()
     assert not (Q([1, 2, 3], "kg") == Q([1000, 2000, 3001], "g")).all()
 
     with pytest.raises(DimensionalityComparisonError):
         (Q([1, 2, 3], "kg") == Q([1000, 2000, 300], "g * meter")).any()
+
+    vals = [1, 2, 3]
 
     # compare scalar and vector will return a vector
     assert (Q(2, "bar") == Q(vals, "bar").to("kPa")).any()
@@ -583,28 +574,6 @@ def test_numpy_integration() -> None:
     assert isinstance_types(list(Q(np.linspace(0, 1), "degC")), list[Q[Temperature]])
 
 
-def test_series_integration() -> None:
-    # indirectly support Polars via "to_numpy method"
-
-    s_pd = pd.Series([1, 2, 3], name="name")
-
-    # the "name" attribute it lost when creating a Quantity
-    qty = Q(s_pd, "kg")
-    assert qty.to("g")[0] == Q(1000, "g")
-
-    # ignore these tests if Polars is not installed
-    try:
-        import polars as pl
-    except ImportError:
-        return
-
-    s_pl = pl.Series("name", [1, 2, 3])
-
-    qty = Q(s_pl, "kg")
-
-    assert qty.to("g")[0] == Q(1000, "g")
-
-
 def test_check() -> None:
     pass
 
@@ -653,62 +622,6 @@ def test_typechecked() -> None:
 
     with pytest.raises(Exception):  # noqa: B017
         func_c(Q([2], "meter"))  # pyright: ignore[reportArgumentType]
-
-
-def test_dataframe_assign() -> None:
-    df_multiple_rows = pd.DataFrame(
-        {
-            "A": [1, 2, 3],
-            "B": [1, 2, 3],
-        }
-    )
-
-    df_single_row = pd.DataFrame(
-        {
-            "A": [1],
-            "B": [1],
-        }
-    )
-
-    df_empty = pd.DataFrame(
-        {
-            "A": [],
-            "B": [],
-        }
-    )
-
-    for df in [df_multiple_rows, df_single_row, df_empty]:
-        df["C"] = Q(df.A, "bar") * Q(25, "meter")  # pyright: ignore[reportArgumentType, reportCallIssue]
-
-        df["Temp"] = Q(df.A, "degC")  # pyright: ignore[reportArgumentType, reportCallIssue]
-
-        with pytest.raises(AttributeError):
-            density = Water(
-                # this is pd.Series[float]
-                T=df.Temp.to_numpy(),  # pyright: ignore[reportArgumentType]
-                Q=Q(0.5),
-            ).D
-
-        density = Water(T=Q(df.Temp.to_numpy(), "degC"), Q=Q(0.5)).D
-
-        # implicitly strips magnitude in whatever unit the Quantity happens to have
-        df["density"] = density  # pyright: ignore[reportArgumentType, reportCallIssue]
-
-        # assigns a column with specific unit
-        df["density_with_unit"] = density.to("kg/m3")  # pyright: ignore[reportArgumentType, reportCallIssue]
-
-        # the .m accessor is not necessary for vectors
-        df["density_with_unit_magnitude"] = density.to("kg/m3").m
-
-        # this does not work -- pandas function is_list_like(Q(4, 'bar')) -> True
-        # which means that this fails internally in pandas
-        # ValueError: Length of values (1) does not match length of index (3)
-        # df['D'] = Q(4, 'bar')
-
-        # i.e. the .m accessor must be used for scalar Quantity assignment
-
-        df["E"] = Q(df.A, "bar").m
-        df["F"] = Q(4, "bar").m
 
 
 def test_generic_dimensionality() -> None:
@@ -1117,44 +1030,6 @@ def test_pandas_is_list_like() -> None:
     assert not pandas_is_list_like(Q(0.2, "kg/s"))
 
 
-def test_pandas_integration() -> None:
-    index = pd.date_range("2020-01-01", "2020-01-02", freq="h")
-    df = pd.DataFrame(index=index)
-
-    index_qty = Q(index.to_series())
-
-    assert isinstance(index_qty.m, pd.Series)
-
-    df["input"] = np.linspace(0, 1, len(df))
-
-    q_vector = Q(df["input"], "m/s")
-
-    # assigns a float array, as expected
-    df["A"] = q_vector.to("kmh")  # pyright: ignore[reportArgumentType, reportCallIssue]
-
-    q_scalar = Q(25, "ton/h")
-
-    # assigns a repeated array of Quantity objects
-    df["B"] = q_scalar  # pyright: ignore[reportArgumentType, reportCallIssue]
-
-    # identical to the previous assignment
-    df["C"] = [q_scalar] * len(df)  # pyright: ignore[reportArgumentType, reportCallIssue]
-
-    # this will be correctly broadcasted to a repeated array
-    df["D"] = q_scalar.m
-
-    assert np.float64 == df.dtypes.A
-    assert object == df.dtypes.B  # noqa: E721
-    assert object == df.dtypes.C  # noqa: E721
-    # all inputs are cast to float when constructing a Quantity
-    assert np.float64 == df.dtypes.D
-
-    assert isinstance_types(df.A.to_numpy()[0], np.float64)
-    assert isinstance_types(df.B.to_numpy()[-1], Q[MassFlow])
-    assert isinstance_types(df.C.to_numpy()[0], Q[MassFlow])
-    assert isinstance_types(df.D.to_numpy()[0], np.float64)
-
-
 def test_unit_compatibility() -> None:
     # the UNIT_REGISTRY registry object contains unit attributes
     # that can be multiplied and divided by a magnitude
@@ -1330,22 +1205,12 @@ def test_getitem() -> None:
     m0 = ms[0]
     assert isinstance_types(m0, Q[Mass, float])
 
-    ts = Q(pd.DatetimeIndex([pd.Timestamp.now(), pd.Timestamp.now()]).to_series())
-    assert isinstance_types(ts, Q[Dimensionless, pd.Series])
-
-    t0 = ts[0]
-    assert isinstance_types(t0, Q[Dimensionless, float])
-
 
 def test_astype() -> None:
     assert isinstance(Q(25).astype(np.ndarray).m[0], float)
 
     assert isinstance(Q([1, 2, 3]).astype(np.ndarray).m, np.ndarray)
-    assert isinstance(Q([1, 2, 3]).astype(pd.Series).m, pd.Series)
     assert isinstance(Q([1, 2, 3]).astype(pl.Series).m, pl.Series)
-
-    assert Q([1, 2, 3]).astype(pd.Series, name="s1").m.name == "s1"
-    assert Q([1, 2, 3]).astype(pl.Series, name="s1").m.name == "s1"
 
     qe = Q(2).astype(pl.Expr)
     assert isinstance(qe.m, pl.Expr)
@@ -1364,11 +1229,6 @@ def test_single_element_array_magnitude() -> None:
     s2_arr = np.array([1, 2])
 
     _ = Q(s1_arr, "kg") * Q(s2_arr, "m") / Q(s2_arr, "kg")
-
-    s1_series = pd.Series([1], name="one")
-    s2_series = pd.Series([1, 2], name="two")
-
-    _ = Q(s1_series, "kg") * Q(s2_series, "m") / Q(s2_series, "kg")
 
 
 def test_check_temperature_difference() -> None:
