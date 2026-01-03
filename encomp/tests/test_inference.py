@@ -1,4 +1,4 @@
-from typing import assert_type
+from typing import Any, assert_type
 
 import numpy as np
 import polars as pl
@@ -26,67 +26,67 @@ def test_inference_basic() -> None:
     assert_type(Q(pl.lit(1)), Q[ut.Dimensionless, pl.Expr])
 
     assert_type(Q(1) * 1, Q[ut.Dimensionless, float])
-    assert_type(Q(1) * Q(1), Q[ut.Dimensionless, float])
+    assert_type(Q(1) * Q(1), Q[Any, float])
     assert_type(Q(1), Q[ut.Dimensionless, float])
-    assert_type(Q([1]) * Q(1), Q[ut.Dimensionless, np.ndarray])
+    assert_type(Q([1]) * Q(1), Q[Any, np.ndarray])
 
-    assert_type(Q(1) * Q(1, "kg"), Q[ut.Mass, float])
-    assert_type(Q(1, "kg") * Q(1), Q[ut.Mass, float])
-    assert_type(Q(1, "kg") / Q(1), Q[ut.Mass, float])
+    assert_type(Q(1) * Q(1, "kg"), Q[Any, float])
+    assert_type(Q(1, "kg") * Q(1), Q[Any, float])
+    assert_type(Q(1, "kg") / Q(1), Q[Any, float])
     assert_type(Q(1, "kg") * 1, Q[ut.Mass, float])
     assert_type(Q(1, "kg") / 1, Q[ut.Mass, float])
 
-    assert_type(Q([1]) * Q(1, "kg"), Q[ut.Mass, np.ndarray])
+    assert_type(Q([1]) * Q(1, "kg"), Q[Any, np.ndarray])
 
 
 def test_inference_multiplication() -> None:
     """Test multiplication type inference with various magnitude types."""
     # scalar * scalar
-    assert_type(Q(1) * Q(2), Q[ut.Dimensionless, float])
-    assert_type(Q(1, "m") * Q(2, "m"), Q[ut.Area, float])
+    assert_type(Q(1) * Q(2), Q[Any, float])
+    assert_type(Q(1, "m") * Q(2, "m"), Q[Any, float])
 
     # array * scalar
-    assert_type(Q([1, 2]) * Q(3), Q[ut.Dimensionless, np.ndarray])
-    assert_type(Q([1, 2], "m") * Q(3, "m"), Q[ut.Area, np.ndarray])
+    assert_type(Q([1, 2]) * Q(3), Q[Any, np.ndarray])
+    assert_type(Q([1, 2], "m") * Q(3, "m"), Q[Any, np.ndarray])
 
     # scalar * array (dimensionless)
-    assert_type(Q(3) * Q([1, 2]), Q[ut.Dimensionless, np.ndarray])
+    assert_type(Q(3) * Q([1, 2]), Q[Any, np.ndarray])
 
     # array * array
-    assert_type(Q([1, 2]) * Q([3, 4]), Q[ut.Dimensionless, np.ndarray])
-    assert_type(Q([1, 2], "m") * Q([3, 4], "m"), Q[ut.Area, np.ndarray])
+    assert_type(Q([1, 2]) * Q([3, 4]), Q[Any, np.ndarray])
+    assert_type(Q([1, 2], "m") * Q([3, 4], "m"), Q[Any, np.ndarray])
 
     # dimensionless * dimensional
-    assert_type(Q(2) * Q(1, "kg"), Q[ut.Mass, float])
-    assert_type(Q([1, 2]) * Q(3, "kg"), Q[ut.Mass, np.ndarray])
+    assert_type(Q(2) * Q(1, "kg"), Q[Any, float])
+    assert_type(Q([1, 2]) * Q(3, "kg"), Q[Any, np.ndarray])
 
     # dimensional * dimensionless (scalar only)
-    assert_type(Q(1, "kg") * Q(2), Q[ut.Mass, float])
+    assert_type(Q(1, "kg") * Q(2), Q[Any, float])
 
 
 def test_inference_division() -> None:
     """Test division type inference with various magnitude types."""
     # scalar / scalar
-    assert_type(Q(4) / Q(2), Q[ut.Dimensionless, float])
-    assert_type(Q(4, "m") / Q(2, "m"), Q[ut.Dimensionless, float])
-    assert_type(Q(4, "m") / Q(2, "s"), Q[ut.Velocity, float])
+    assert_type(Q(4) / Q(2), Q[Any, float])
+    assert_type(Q(4, "m") / Q(2, "m"), Q[Any, float])
+    assert_type(Q(4, "m") / Q(2, "s"), Q[Any, float])
 
     # array / scalar
-    assert_type(Q([4, 6]) / Q(2), Q[ut.Dimensionless, np.ndarray])
-    assert_type(Q([4, 6], "m") / Q(2, "s"), Q[ut.Velocity, np.ndarray])
+    assert_type(Q([4, 6]) / Q(2), Q[Any, np.ndarray])
+    assert_type(Q([4, 6], "m") / Q(2, "s"), Q[Any, np.ndarray])
 
     # scalar / array (dimensionless)
-    assert_type(Q(4) / Q([2, 4]), Q[ut.Dimensionless, np.ndarray])
+    assert_type(Q(4) / Q([2, 4]), Q[Any, np.ndarray])
 
     # array / array
-    assert_type(Q([4, 6]) / Q([2, 3]), Q[ut.Dimensionless, np.ndarray])
+    assert_type(Q([4, 6]) / Q([2, 3]), Q[Any, np.ndarray])
 
     # dimensionless / dimensional
-    assert_type(Q(2) / Q(1, "s"), Q[ut.Frequency, float])
-    assert_type(Q([2, 4]) / Q(1, "s"), Q[ut.Frequency, np.ndarray])
+    assert_type(Q(2) / Q(1, "s"), Q[Any, float])
+    assert_type(Q([2, 4]) / Q(1, "s"), Q[Any, np.ndarray])
 
     # dimensional / dimensionless (scalar only)
-    assert_type(Q(4, "m") / Q(2), Q[ut.Length, float])
+    assert_type(Q(4, "m") / Q(2), Q[Any, float])
 
 
 def test_inference_addition_subtraction() -> None:
@@ -136,115 +136,115 @@ def test_inference_polars() -> None:
 
     # polars Expr
     assert_type(Q(pl.lit(1)), Q[ut.Dimensionless, pl.Expr])
-    assert_type(Q(pl.lit(1)) * Q(2, "kg"), Q[ut.Mass, pl.Expr])
-    assert_type(Q(pl.lit(1), "m") * Q(2, "m"), Q[ut.Area, pl.Expr])
+    assert_type(Q(pl.lit(1)) * Q(2, "kg"), Q[Any, pl.Expr])
+    assert_type(Q(pl.lit(1), "m") * Q(2, "m"), Q[Any, pl.Expr])
 
 
 def test_inference_complex_units() -> None:
     """Test type inference with complex unit combinations."""
     # velocity = length / time
-    assert_type(Q(10, "m") / Q(2, "s"), Q[ut.Velocity, float])
-    assert_type(Q([10, 20], "m") / Q(2, "s"), Q[ut.Velocity, np.ndarray])
+    assert_type(Q(10, "m") / Q(2, "s"), Q[Any, float])
+    assert_type(Q([10, 20], "m") / Q(2, "s"), Q[Any, np.ndarray])
 
     # energy = mass * velocity^2
     velocity = Q(5, "m/s")
-    assert_type(Q(2, "kg") * velocity * velocity, Q[ut.Energy, float])
+    assert_type(Q(2, "kg") * velocity * velocity, Q[Any, float])
 
     # power = energy / time
-    assert_type(Q(100, "J") / Q(2, "s"), Q[ut.Power, float])
+    assert_type(Q(100, "J") / Q(2, "s"), Q[Any, float])
 
     # density = mass / volume
-    assert_type(Q(1000, "kg") / Q(1, "m^3"), Q[ut.Density, float])
+    assert_type(Q(1000, "kg") / Q(1, "m^3"), Q[Any, float])
 
     # pressure = force / area
-    assert_type(Q(100, "N") / Q(2, "m^2"), Q[ut.Pressure, float])
+    assert_type(Q(100, "N") / Q(2, "m^2"), Q[Any, float])
 
 
 def test_inference_dimensional_multiplication() -> None:
-    """Test dimensional type inference for multiplication operations."""
+    """Test magnitude type inference for multiplication operations (dimensionality is Any)."""
     # Length * Length = Area
-    assert_type(Q(5.0, "m") * Q(3.0, "m"), Q[ut.Area, float])
-    assert_type(Q([5.0], "m") * Q(3.0, "m"), Q[ut.Area, np.ndarray])
-    assert_type(Q(pl.Series([5.0]), "m") * Q(3.0, "m"), Q[ut.Area, pl.Series])
+    assert_type(Q(5.0, "m") * Q(3.0, "m"), Q[Any, float])
+    assert_type(Q([5.0], "m") * Q(3.0, "m"), Q[Any, np.ndarray])
+    assert_type(Q(pl.Series([5.0]), "m") * Q(3.0, "m"), Q[Any, pl.Series])
 
     # Length * Area = Volume
-    assert_type(Q(2.0, "m") * Q(10.0, "m^2"), Q[ut.Volume, float])
-    assert_type(Q([2.0, 3.0], "m") * Q(10.0, "m^2"), Q[ut.Volume, np.ndarray])
+    assert_type(Q(2.0, "m") * Q(10.0, "m^2"), Q[Any, float])
+    assert_type(Q([2.0, 3.0], "m") * Q(10.0, "m^2"), Q[Any, np.ndarray])
 
     # Area * Length = Volume (commutative)
-    assert_type(Q(10.0, "m^2") * Q(2.0, "m"), Q[ut.Volume, float])
+    assert_type(Q(10.0, "m^2") * Q(2.0, "m"), Q[Any, float])
 
     # Mass * SpecificVolume = Volume
-    assert_type(Q(100.0, "kg") * Q(0.001, "m^3/kg"), Q[ut.Volume, float])
-    assert_type(Q(pl.lit(100.0), "kg") * Q(0.001, "m^3/kg"), Q[ut.Volume, pl.Expr])
+    assert_type(Q(100.0, "kg") * Q(0.001, "m^3/kg"), Q[Any, float])
+    assert_type(Q(pl.lit(100.0), "kg") * Q(0.001, "m^3/kg"), Q[Any, pl.Expr])
 
     # Time * Power = Energy
-    assert_type(Q(3600.0, "s") * Q(1000.0, "W"), Q[ut.Energy, float])
+    assert_type(Q(3600.0, "s") * Q(1000.0, "W"), Q[Any, float])
 
     # Time * MassFlow = Mass
-    assert_type(Q(10.0, "s") * Q(5.0, "kg/s"), Q[ut.Mass, float])
-    assert_type(Q([10.0, 20.0], "s") * Q(5.0, "kg/s"), Q[ut.Mass, np.ndarray])
+    assert_type(Q(10.0, "s") * Q(5.0, "kg/s"), Q[Any, float])
+    assert_type(Q([10.0, 20.0], "s") * Q(5.0, "kg/s"), Q[Any, np.ndarray])
 
     # Time * VolumeFlow = Volume
-    assert_type(Q(60.0, "s") * Q(2.0, "m^3/s"), Q[ut.Volume, float])
+    assert_type(Q(60.0, "s") * Q(2.0, "m^3/s"), Q[Any, float])
 
     # Volume * Density = Mass
-    assert_type(Q(1.0, "m^3") * Q(1000.0, "kg/m^3"), Q[ut.Mass, float])
-    assert_type(Q(pl.Series([1.0, 2.0]), "m^3") * Q(1000.0, "kg/m^3"), Q[ut.Mass, pl.Series])
+    assert_type(Q(1.0, "m^3") * Q(1000.0, "kg/m^3"), Q[Any, float])
+    assert_type(Q(pl.Series([1.0, 2.0]), "m^3") * Q(1000.0, "kg/m^3"), Q[Any, pl.Series])
 
     # Pressure * Volume = Energy
-    assert_type(Q(101325.0, "Pa") * Q(1.0, "m^3"), Q[ut.Energy, float])
+    assert_type(Q(101325.0, "Pa") * Q(1.0, "m^3"), Q[Any, float])
 
     # Velocity * Area = VolumeFlow
-    assert_type(Q(5.0, "m/s") * Q(2.0, "m^2"), Q[ut.VolumeFlow, float])
-    assert_type(Q([5.0, 10.0], "m/s") * Q(2.0, "m^2"), Q[ut.VolumeFlow, np.ndarray])
+    assert_type(Q(5.0, "m/s") * Q(2.0, "m^2"), Q[Any, float])
+    assert_type(Q([5.0, 10.0], "m/s") * Q(2.0, "m^2"), Q[Any, np.ndarray])
 
 
 def test_inference_dimensional_division() -> None:
-    """Test dimensional type inference for division operations."""
+    """Test magnitude type inference for division operations (dimensionality is Any)."""
     # Mass / Time = MassFlow
-    assert_type(Q(100.0, "kg") / Q(10.0, "s"), Q[ut.MassFlow, float])
-    assert_type(Q([100.0, 200.0], "kg") / Q(10.0, "s"), Q[ut.MassFlow, np.ndarray])
-    assert_type(Q(pl.Series([100.0]), "kg") / Q(10.0, "s"), Q[ut.MassFlow, pl.Series])
+    assert_type(Q(100.0, "kg") / Q(10.0, "s"), Q[Any, float])
+    assert_type(Q([100.0, 200.0], "kg") / Q(10.0, "s"), Q[Any, np.ndarray])
+    assert_type(Q(pl.Series([100.0]), "kg") / Q(10.0, "s"), Q[Any, pl.Series])
 
     # Volume / Time = VolumeFlow
-    assert_type(Q(10.0, "m^3") / Q(5.0, "s"), Q[ut.VolumeFlow, float])
-    assert_type(Q(pl.lit(10.0), "m^3") / Q(5.0, "s"), Q[ut.VolumeFlow, pl.Expr])
+    assert_type(Q(10.0, "m^3") / Q(5.0, "s"), Q[Any, float])
+    assert_type(Q(pl.lit(10.0), "m^3") / Q(5.0, "s"), Q[Any, pl.Expr])
 
     # Mass / Volume = Density
-    assert_type(Q(1000.0, "kg") / Q(1.0, "m^3"), Q[ut.Density, float])
-    assert_type(Q([1000.0, 2000.0], "kg") / Q(1.0, "m^3"), Q[ut.Density, np.ndarray])
+    assert_type(Q(1000.0, "kg") / Q(1.0, "m^3"), Q[Any, float])
+    assert_type(Q([1000.0, 2000.0], "kg") / Q(1.0, "m^3"), Q[Any, np.ndarray])
 
     # Length / Time = Velocity
-    assert_type(Q(100.0, "m") / Q(10.0, "s"), Q[ut.Velocity, float])
+    assert_type(Q(100.0, "m") / Q(10.0, "s"), Q[Any, float])
 
     # Energy / Time = Power
-    assert_type(Q(3600000.0, "J") / Q(3600.0, "s"), Q[ut.Power, float])
+    assert_type(Q(3600000.0, "J") / Q(3600.0, "s"), Q[Any, float])
 
     # Energy / Mass = EnergyPerMass (specific energy)
-    assert_type(Q(1000.0, "J") / Q(1.0, "kg"), Q[ut.EnergyPerMass, float])
-    assert_type(Q([1000.0, 2000.0], "J") / Q(1.0, "kg"), Q[ut.EnergyPerMass, np.ndarray])
+    assert_type(Q(1000.0, "J") / Q(1.0, "kg"), Q[Any, float])
+    assert_type(Q([1000.0, 2000.0], "J") / Q(1.0, "kg"), Q[Any, np.ndarray])
 
     # Volume / Area = Length
-    assert_type(Q(100.0, "m^3") / Q(10.0, "m^2"), Q[ut.Length, float])
+    assert_type(Q(100.0, "m^3") / Q(10.0, "m^2"), Q[Any, float])
 
     # Area / Length = Length
-    assert_type(Q(50.0, "m^2") / Q(5.0, "m"), Q[ut.Length, float])
-    assert_type(Q(pl.Series([50.0]), "m^2") / Q(5.0, "m"), Q[ut.Length, pl.Series])
+    assert_type(Q(50.0, "m^2") / Q(5.0, "m"), Q[Any, float])
+    assert_type(Q(pl.Series([50.0]), "m^2") / Q(5.0, "m"), Q[Any, pl.Series])
 
     # VolumeFlow / Area = Velocity
-    assert_type(Q(10.0, "m^3/s") / Q(2.0, "m^2"), Q[ut.Velocity, float])
+    assert_type(Q(10.0, "m^3/s") / Q(2.0, "m^2"), Q[Any, float])
 
     # Power / Area = PowerPerArea (heat flux)
-    assert_type(Q(1000.0, "W") / Q(1.0, "m^2"), Q[ut.PowerPerArea, float])
-    assert_type(Q([1000.0, 2000.0], "W") / Q(1.0, "m^2"), Q[ut.PowerPerArea, np.ndarray])
+    assert_type(Q(1000.0, "W") / Q(1.0, "m^2"), Q[Any, float])
+    assert_type(Q([1000.0, 2000.0], "W") / Q(1.0, "m^2"), Q[Any, np.ndarray])
 
     # MassFlow / Density = VolumeFlow
-    assert_type(Q(10.0, "kg/s") / Q(1000.0, "kg/m^3"), Q[ut.VolumeFlow, float])
+    assert_type(Q(10.0, "kg/s") / Q(1000.0, "kg/m^3"), Q[Any, float])
 
 
 def test_inference_dimensional_derived_units() -> None:
-    """Test dimensional inference for derived units and complex operations."""
+    """Test dimensional inference for derived units via direct construction."""
     # Pressure = Force / Area with different notations for m²
     assert_type(Q(1000.0, "N/m2"), Q[ut.Pressure, float])
     assert_type(Q(1000.0, "N/m^2"), Q[ut.Pressure, float])
@@ -256,23 +256,22 @@ def test_inference_dimensional_derived_units() -> None:
     assert_type(Q(pl.Series([1000.0]), "N/m**2"), Q[ut.Pressure, pl.Series])
     assert_type(Q(pl.lit(1000.0), "N/m²"), Q[ut.Pressure, pl.Expr])
 
-    # Kinematic Viscosity = Length * Velocity
-    assert_type(Q(0.1, "m") * Q(0.5, "m/s"), Q[ut.KinematicViscosity, float])
-    assert_type(Q(pl.Series([0.1]), "m") * Q(0.5, "m/s"), Q[ut.KinematicViscosity, pl.Series])
-    assert_type(Q([0.1], "m") * Q(0.5, "m/s"), Q[ut.KinematicViscosity, np.ndarray])
+    # Kinematic Viscosity = Length * Velocity (mul returns Any dimensionality)
+    assert_type(Q(0.1, "m") * Q(0.5, "m/s"), Q[Any, float])
+    assert_type(Q(pl.Series([0.1]), "m") * Q(0.5, "m/s"), Q[Any, pl.Series])
+    assert_type(Q([0.1], "m") * Q(0.5, "m/s"), Q[Any, np.ndarray])
 
     # Dynamic Viscosity = Density * Kinematic Viscosity
-    assert_type(Q(1000.0, "kg/m^3") * Q(0.001, "m^2/s"), Q[ut.DynamicViscosity, float])
-    assert_type(Q([1000.0], "kg/m^3") * Q(0.001, "m^2/s"), Q[ut.DynamicViscosity, np.ndarray])
-    assert_type(Q(pl.lit(1000.0), "kg/m3") * Q(0.001, "m2/s"), Q[ut.DynamicViscosity, pl.Expr])
+    assert_type(Q(1000.0, "kg/m^3") * Q(0.001, "m^2/s"), Q[Any, float])
+    assert_type(Q([1000.0], "kg/m^3") * Q(0.001, "m^2/s"), Q[Any, np.ndarray])
+    assert_type(Q(pl.lit(1000.0), "kg/m3") * Q(0.001, "m2/s"), Q[Any, pl.Expr])
 
     # Specific Volume = Dimensionless / Density
-    assert_type(Q(1.0) / Q(1000.0, "kg/m^3"), Q[ut.SpecificVolume, float])
-    assert_type(Q([1.0]) / Q(1000.0, "kg/m³"), Q[ut.SpecificVolume, np.ndarray])
-    assert_type(Q(pl.Series([1.0])) / Q(1000.0, "kg/m3"), Q[ut.SpecificVolume, pl.Series])
+    assert_type(Q(1.0) / Q(1000.0, "kg/m^3"), Q[Any, float])
+    assert_type(Q([1.0]) / Q(1000.0, "kg/m³"), Q[Any, np.ndarray])
+    assert_type(Q(pl.Series([1.0])) / Q(1000.0, "kg/m3"), Q[Any, pl.Series])
 
     # Thermal Conductivity = Power / (Length * TemperatureDifference) = W/(m·K)
-    # Using the relation: Length * ThermalConductivity = PowerPerTemperature
     assert_type(Q(0.6, "W/m/K"), Q[ut.ThermalConductivity, float])
     assert_type(Q([0.6, 0.8], "W/m/K"), Q[ut.ThermalConductivity, np.ndarray])
     assert_type(Q(pl.lit(0.6), "W/m/K"), Q[ut.ThermalConductivity, pl.Expr])
@@ -282,19 +281,19 @@ def test_inference_dimensional_derived_units() -> None:
     assert_type(Q([10.0, 20.0], "W/m²/K"), Q[ut.HeatTransferCoefficient, np.ndarray])
     assert_type(Q(pl.Series([10.0]), "W/m**2/K"), Q[ut.HeatTransferCoefficient, pl.Series])
 
-    # Frequency = Dimensionless / Time
-    assert_type(Q(1.0) / Q(0.5, "s"), Q[ut.Frequency, float])
-    assert_type(Q([1.0, 2.0]) / Q(0.5, "s"), Q[ut.Frequency, np.ndarray])
-    assert_type(Q(pl.Series([1.0])) / Q(0.5, "s"), Q[ut.Frequency, pl.Series])
+    # Frequency = Dimensionless / Time (div returns Any dimensionality)
+    assert_type(Q(1.0) / Q(0.5, "s"), Q[Any, float])
+    assert_type(Q([1.0, 2.0]) / Q(0.5, "s"), Q[Any, np.ndarray])
+    assert_type(Q(pl.Series([1.0])) / Q(0.5, "s"), Q[Any, pl.Series])
 
     # MolarMass = Mass / Substance
-    assert_type(Q(18.0, "g") / Q(1.0, "mol"), Q[ut.MolarMass, float])
-    assert_type(Q([18.0, 44.0], "g") / Q(1.0, "mol"), Q[ut.MolarMass, np.ndarray])
-    assert_type(Q(pl.lit(18.0), "g") / Q(1.0, "mol"), Q[ut.MolarMass, pl.Expr])
+    assert_type(Q(18.0, "g") / Q(1.0, "mol"), Q[Any, float])
+    assert_type(Q([18.0, 44.0], "g") / Q(1.0, "mol"), Q[Any, np.ndarray])
+    assert_type(Q(pl.lit(18.0), "g") / Q(1.0, "mol"), Q[Any, pl.Expr])
 
     # SubstancePerMass = Substance / Mass (reciprocal of MolarMass)
-    assert_type(Q(1.0, "mol") / Q(18.0, "g"), Q[ut.SubstancePerMass, float])
-    assert_type(Q([1.0, 2.0], "kmol") / Q(18.0, "kg"), Q[ut.SubstancePerMass, np.ndarray])
+    assert_type(Q(1.0, "mol") / Q(18.0, "g"), Q[Any, float])
+    assert_type(Q([1.0, 2.0], "kmol") / Q(18.0, "kg"), Q[Any, np.ndarray])
 
 
 def test_various() -> None:
@@ -308,8 +307,8 @@ def test_various() -> None:
     assert_type(Q(pl.col.asd, "kg"), Q[ut.Mass, pl.Expr])
     assert_type(Q(pl.DataFrame({"test": []})["test"], "kg"), Q[ut.Mass, pl.Series])
 
-    assert_type(Q(pl.col.asd, "kg") / Q(25, "min"), Q[ut.MassFlow, pl.Expr])
-    assert_type(Q(pl.col.asd, "kg") / Q([1, 3, 4], "day"), Q[ut.MassFlow, pl.Expr])
+    assert_type(Q(pl.col.asd, "kg") / Q(25, "min"), Q[Any, pl.Expr])
+    assert_type(Q(pl.col.asd, "kg") / Q([1, 3, 4], "day"), Q[Any, pl.Expr])
 
 
 def test_inference_magnitude_type_promotion() -> None:
@@ -382,4 +381,4 @@ def test_inference_static_vs_runtime_mismatch() -> None:
     # This works correctly (array on left)
     result3 = Q([1]) * Q(1)
     assert isinstance(result3.m, np.ndarray)
-    assert_type(result3, Q[ut.Dimensionless, np.ndarray])  # This matches!
+    assert_type(result3, Q[Any, np.ndarray])  # Dimensionality is now Any

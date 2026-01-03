@@ -409,6 +409,12 @@ VelocityUnits = Literal[
     "kph",
 ]
 
+ForceUnits = Literal[
+    "N",
+    "kN",
+    "mN",
+]
+
 DynamicViscosityUnits = Literal[
     "Pa*s",
     "Pa s",
@@ -524,6 +530,7 @@ AllUnits = (
     | EnergyUnits
     | PowerUnits
     | VelocityUnits
+    | ForceUnits
     | DynamicViscosityUnits
     | KinematicViscosityUnits
     | EnergyPerMassUnits
@@ -805,6 +812,7 @@ _SpecificVolumeUC = 1 / _DensityUC
 _EnergyUC = _MassUC * _LengthUC**2 / _TimeUC**2
 _PowerUC = _EnergyUC / _TimeUC
 _VelocityUC = _LengthUC / _TimeUC
+_ForceUC = _MassUC * _LengthUC / _TimeUC**2
 _DynamicViscosityUC = _MassUC / _LengthUC / _TimeUC
 _KinematicViscosityUC = _LengthUC**2 / _TimeUC
 _FrequencyUC = 1 / _TimeUC
@@ -871,6 +879,10 @@ class Power(Dimensionality):
 
 class Velocity(Dimensionality):
     dimensions = _VelocityUC
+
+
+class Force(Dimensionality):
+    dimensions = _ForceUC
 
 
 class DynamicViscosity(Dimensionality):

@@ -44,9 +44,21 @@ def isinstance_types[T](obj: Any, expected: type[T]) -> TypeIs[T]:  # noqa: ANN4
     bool
         Whether the input object matches the expected type
     """
+    from encomp.units import Quantity
+    from encomp.utypes import Dimensionality
 
-    # normal types are checked with isinstance()
     if isinstance(expected, type) and not is_typeddict(expected):
+        if (
+            issubclass(expected, Quantity)
+            and hasattr(expected, "_dimensionality_type")
+            and expected._dimensionality_type is Dimensionality
+        ):
+            if not isinstance(obj, Quantity):
+                return False
+            exp_mt = getattr(expected, "_magnitude_type", None)
+            if exp_mt is not None:
+                return isinstance_types(obj.m, exp_mt)
+            return True
         return isinstance(obj, expected)
 
     if get_origin(expected) is UnionType:
@@ -56,7 +68,6 @@ def isinstance_types[T](obj: Any, expected: type[T]) -> TypeIs[T]:  # noqa: ANN4
             return any(isinstance_types(obj, n) for n in get_args(expected))
 
     try:
-        # check_type raises if the object type does not match the expected type
         check_type(obj, expected)
         return True
     except Exception:

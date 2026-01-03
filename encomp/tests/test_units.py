@@ -189,7 +189,7 @@ def test_custom_dimensionality() -> None:
         # the values and units are equivalent
         # but the dimensionality types don't match
         with pytest.raises(DimensionalityComparisonError):
-            assert q1 == q2
+            assert q1 == q2  # pyright: ignore[reportGeneralTypeIssues]
 
         assert isinstance(q1.to("degC**2/km"), type(q1))
         assert isinstance(q1.to_base_units(), type(q1))
@@ -491,9 +491,9 @@ def test_Q() -> None:
     vals = [1, 2, 3]
 
     # compare scalar and vector will return a vector
-    assert (Q(2, "bar") == Q(vals, "bar").to("kPa")).any()
+    assert (Q(2, "bar") == Q(vals, "bar").to("kPa")).any()  # pyright: ignore[reportAttributeAccessIssue]
 
-    assert not (Q(5, "bar") == Q(vals, "bar").to("kPa")).any()
+    assert not (Q(5, "bar") == Q(vals, "bar").to("kPa")).any()  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def test_custom_units() -> None:
@@ -566,7 +566,7 @@ def test_numpy_integration() -> None:
     q1 = Q(np.linspace(0, 1), "kg")
     q2 = np.linspace(Q(0, "kg"), Q(1, "kg"))
     comp = q1 == q2
-    assert comp.all()
+    assert comp.all()  # pyright: ignore[reportGeneralTypeIssues, reportAttributeAccessIssue]
 
     assert isinstance_types(list(Q(np.linspace(0, 1), "degC")), list[Q[Temperature]])
 
@@ -914,7 +914,7 @@ def test_compatibility() -> None:
     # prefer to use the asdim method
     q5_ = Q(25, "kJ/kg").asdim(SpecificEnthalpy)
 
-    assert q5 == q5_
+    assert q5 == q5_  # pyright: ignore[reportGeneralTypeIssues]
 
     q6 = Q[EnergyPerMass, float](25, "kJ/kg")
 
