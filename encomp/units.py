@@ -422,7 +422,7 @@ class Quantity(
 
     @staticmethod
     def get_unknown_dimensionality_subclass() -> type[Quantity[UnknownDimensionality, Any]]:
-        return Quantity[UnknownDimensionality]
+        return Quantity[UnknownDimensionality, Any]
 
     @classmethod
     def _get_dimensional_subclass(cls, dim: type[Dimensionality], mt: type | None) -> type[Quantity[DT, MT]]:
@@ -646,7 +646,7 @@ class Quantity(
     @overload
     def __new__(cls, val: list[float] | list[int], unit: None) -> Quantity[Dimensionless, Numpy1DArray]: ...
     @overload
-    def __new__(  # pyright: ignore[reportOverlappingOverload]
+    def __new__(
         cls, val: list[float] | list[int], unit: DimensionlessUnits
     ) -> Quantity[Dimensionless, Numpy1DArray]: ...
     @overload
@@ -748,7 +748,7 @@ class Quantity(
     @overload
     def __new__(cls, val: list[float] | list[int], unit: Unit[DT]) -> Quantity[DT, Numpy1DArray]: ...
     @overload
-    def __new__(  # 39
+    def __new__(
         cls, val: list[float] | list[int], unit: str | UnitsContainer | Unit
     ) -> Quantity[UnknownDimensionality, Numpy1DArray]: ...
     @overload
@@ -756,7 +756,7 @@ class Quantity(
     @overload
     def __new__(cls, val: MT, unit: None) -> Quantity[Dimensionless, MT]: ...
     @overload
-    def __new__(cls, val: MT, unit: DimensionlessUnits) -> Quantity[Dimensionless, MT]: ...  # pyright: ignore[reportOverlappingOverload]
+    def __new__(cls, val: MT, unit: DimensionlessUnits) -> Quantity[Dimensionless, MT]: ...
     @overload
     def __new__(cls, val: MT, unit: CurrencyUnits) -> Quantity[Currency, MT]: ...
     @overload
