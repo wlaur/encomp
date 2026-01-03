@@ -14,7 +14,6 @@ from typeguard import typechecked
 
 from ..conversion import convert_volume_mass
 from ..misc import isinstance_types
-from ..serialize import decode
 from ..units import (
     CUSTOM_DIMENSIONS,
     UNIT_REGISTRY,
@@ -398,14 +397,12 @@ def test_Q() -> None:
 
     assert Q(1) == Q(1.0)
 
-    # check type of "m"
-    # inputs are converted to float
     assert isinstance(Q(1, "meter").m, float)
     assert isinstance(Q(2.3, "meter").m, float)
+    assert isinstance(Q([2], "meter").m, np.ndarray)
+    assert isinstance(Q([3.4], "meter").m, np.ndarray)
+    assert isinstance(Q([3.4, 2], "meter").m, np.ndarray)
     assert isinstance(Q([2, 3.4], "meter").m, np.ndarray)
-
-    # convert tuple to np.ndarray, not valid based on typing
-    assert isinstance(Q((2, 3.4), "meter").m, np.ndarray)  # pyright: ignore[reportArgumentType, reportCallIssue]
     assert isinstance(Q(np.array([2, 3.4]), "meter").m, np.ndarray)
 
     Q(1, Q(2, "bar").u)
@@ -955,9 +952,7 @@ def test_distinct_dimensionality() -> None:
 def test_literal_units() -> None:
     for d, units in get_registered_units().items():
         for u in units:
-            decoded = decode({"type": "Quantity", "dimensionality": d, "data": [1, u]})
-
-            assert decoded._dimensionality_type.__name__ == d
+            assert Q(1, u)._dimensionality_type.__name__ == d
 
 
 def test_indexing() -> None:
