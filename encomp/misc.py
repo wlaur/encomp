@@ -1,11 +1,6 @@
 import ast
 from types import UnionType
-from typing import (
-    Any,
-    TypeIs,
-    get_args,
-    get_origin,
-)
+from typing import Any, TypeIs, cast, get_args, get_origin
 
 import asttokens
 from typeguard import check_type
@@ -44,11 +39,25 @@ def isinstance_types[T](obj: Any, expected: type[T]) -> TypeIs[T]:  # noqa: ANN4
         Whether the input object matches the expected type
     """
 
+    from .units import Quantity
+    from .utypes import UnknownDimensionality
+
     if get_origin(expected) is UnionType:
         try:
             return isinstance(obj, expected)
         except TypeError:
             return any(isinstance_types(obj, n) for n in get_args(expected))
+
+    unknown_quantity_subclass = cast(type, Quantity[UnknownDimensionality])
+
+    # don't compare dimensionality against UnknownDimensionality, only check magnitude type in this case
+    if isinstance(obj, Quantity) and isinstance(expected, type) and issubclass(expected, unknown_quantity_subclass):
+        expected_mt = getattr(expected, "_magnitude_type", None)
+
+        if expected_mt is None:
+            raise ValueError(f"Invalid expected quantity type: {expected}, missing attribute '_magnitude_type'")
+
+        return isinstance_types(obj.m, expected_mt)
 
     try:
         check_type(obj, expected)
