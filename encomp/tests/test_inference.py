@@ -308,7 +308,7 @@ def test_various() -> None:
     assert_type(Q(pl.DataFrame({"test": []})["test"], "kg"), Q[ut.Mass, pl.Series])
 
     assert_type(Q(pl.col.asd, "kg") / Q(25, "min"), Q[Any, pl.Expr])
-    assert_type(Q(pl.col.asd, "kg") / Q([1, 3, 4], "day"), Q[Any, pl.Expr])
+    assert_type(Q(pl.col.asd, "kg") / Q([1, 3, 4], "day"), Q[Any, Any])
 
 
 def test_inference_magnitude_type_promotion() -> None:
