@@ -28,8 +28,7 @@ def test_Fluid() -> None:
     # (default for "J/(K kg)")
     assert _approx_equal(fld.__getattr__("S"), Q(1087.7758824621442, "J/(K kg)"))
 
-    # property access will call asdim(), these are Q[SpecificEntropy]
-    assert _approx_equal(Q[SpecificEntropy, float](1087.7758824621442, "J/(K kg)"), fld.S)
+    assert _approx_equal(Q(1087.7758824621442, "J/(K kg)").asdim(SpecificEntropy), fld.S)
 
     assert _approx_equal(fld.__getattr__("D"), fld.D)
 
