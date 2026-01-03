@@ -44,14 +44,14 @@ def isinstance_types[T](obj: Any, expected: type[T]) -> TypeIs[T]:  # noqa: ANN4
     bool
         Whether the input object matches the expected type
     """
-    from encomp.units import Quantity
-    from encomp.utypes import Dimensionality
+    from .units import Quantity
+    from .utypes import UNSET_DIMENSIONALITY
 
     if isinstance(expected, type) and not is_typeddict(expected):
         if (
             issubclass(expected, Quantity)
             and hasattr(expected, "_dimensionality_type")
-            and expected._dimensionality_type is Dimensionality
+            and expected._dimensionality_type is UNSET_DIMENSIONALITY
         ):
             if not isinstance(obj, Quantity):
                 return False
