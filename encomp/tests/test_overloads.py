@@ -84,3 +84,13 @@ def test_magnitude_type_broadcasting() -> None:
     assert_type(Q(25, "kg") / Q([1, 2, 3], "m"), Q[UnknownDimensionality, Numpy1DArray])
     assert_type(Q([1, 2, 3], "g") * Q(25, "m"), Q[UnknownDimensionality, Numpy1DArray])
     assert_type(Q([1, 2, 3], "g") / Q(25, "m"), Q[UnknownDimensionality, Numpy1DArray])
+
+    assert_type(Q(25, "kg") + Q(pl.col.test, "g"), Q[Mass, pl.Expr])
+    assert_type(Q(25, "kg") - Q(pl.col.test, "g"), Q[Mass, pl.Expr])
+    assert_type(Q(pl.col.test, "g") - Q(25, "kg"), Q[Mass, pl.Expr])
+    assert_type(Q(pl.col.test, "g") + Q(25, "kg"), Q[Mass, pl.Expr])
+
+    assert_type(Q(25, "kg") * Q(pl.col.test, "m"), Q[UnknownDimensionality, pl.Expr])
+    assert_type(Q(25, "kg") / Q(pl.col.test, "m"), Q[UnknownDimensionality, pl.Expr])
+    assert_type(Q(pl.col.test, "g") * Q(25, "m"), Q[UnknownDimensionality, pl.Expr])
+    assert_type(Q(pl.col.test, "g") / Q(25, "m"), Q[UnknownDimensionality, pl.Expr])

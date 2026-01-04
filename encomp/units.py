@@ -367,10 +367,7 @@ class Quantity(
     # will restrict the dimensionality when creating the object
     _dimensionality_type: ClassVar[type[Dimensionality]] = UnknownDimensionality
 
-    # instance attributes
     _magnitude: MT
-    _magnitude_type: type[MT]
-    _original_magnitude_type: type[MT] | type[list[float]] | type[list[int]]
 
     _max_recursion_depth: int = 10
 
@@ -604,20 +601,15 @@ class Quantity(
     def get_unit(cls, unit_name: AllUnits | str) -> Unit:
         return Unit(cls._REGISTRY.parse_units(unit_name))
 
-    @property
-    def subclass(self) -> type[Quantity[DT, MT]]:
-        return self._get_dimensional_subclass(self._dimensionality_type, self._magnitude_type)
-
-    def _set_original_magnitude_type(self, mt_orig: type[MT] | type[list[float]] | type[list[int]]) -> None:
-        self._original_magnitude_type = mt_orig
+    def subclass(self, mt: type[MT_]) -> type[Quantity[DT, MT_]]:
+        subcls = self._get_dimensional_subclass(self._dimensionality_type, mt)
+        return cast("type[Quantity[DT, MT_]]", subcls)
 
     def __len__(self) -> int:
         # __len__() must return an integer
         # the len() function ensures this at a lower level
         if isinstance(self._magnitude, float | int):
-            raise TypeError(
-                f"Quantity with scalar magnitude ({self._magnitude}, type {type(self._magnitude)}) has no length"
-            )
+            raise TypeError(f"Quantity with scalar magnitude ({self._magnitude}) has no length")
         elif isinstance(self._magnitude, pl.Expr):
             raise TypeError(f"Cannot determine length of Polars expression: {self._magnitude}")
 
@@ -846,14 +838,12 @@ class Quantity(
         cls,
         val: MT | list[float] | list[int] | Quantity[Any, Any],
         unit: Unit[DT] | Unit | UnitsContainer | str | dict[str, numbers.Number] | None = None,
-        _mt_orig: type[MT] | type[list[float]] | type[list[int]] | None = None,
         _depth: int = 0,
     ) -> Quantity[Any, Any]: ...
     def __new__(
         cls,
         val: MT | list[float] | list[int] | Quantity[Any, Any],
         unit: Unit[DT] | Unit | UnitsContainer | str | dict[str, numbers.Number] | None = None,
-        _mt_orig: type[MT] | type[list[float]] | type[list[int]] | None = None,
         _depth: int = 0,
     ) -> Quantity[Any, Any]:
         if isinstance(val, Quantity):
@@ -865,11 +855,6 @@ class Quantity(
 
         valid_magnitude = cls._validate_magnitude(val)
         valid_unit = cls._validate_unit(unit)
-
-        # NOTE: "original" in this case does not necessarily refer to the type
-        # that is actually passed to the constructor
-        # for example list[int] is converted to np.ndarray before this (in _validate_magnitude)
-        _original_magnitude_type = _mt_orig if _mt_orig is not None else type(valid_magnitude)
 
         is_valid_subclass = True
 
@@ -895,15 +880,14 @@ class Quantity(
 
             # special case for temperature difference
             if cls._is_temperature_difference_unit(valid_unit):
-                subcls = cls._get_dimensional_subclass(TemperatureDifference, _original_magnitude_type)
+                subcls = cls._get_dimensional_subclass(TemperatureDifference, type(valid_magnitude))
             else:
                 dim = Dimensionality.get_dimensionality(valid_unit.dimensionality)
-                subcls = cls._get_dimensional_subclass(dim, _original_magnitude_type)
+                subcls = cls._get_dimensional_subclass(dim, type(valid_magnitude))
 
             return subcls(
                 valid_magnitude,
                 valid_unit,
-                _mt_orig=_original_magnitude_type,
                 _depth=_depth + 1,
             )
 
@@ -914,7 +898,6 @@ class Quantity(
         if isinstance(qty._magnitude, np.ndarray):
             qty._magnitude = cls._cast_array_float(qty._magnitude)
 
-        qty._set_original_magnitude_type(_original_magnitude_type)
         return qty
 
     @property
@@ -968,7 +951,9 @@ class Quantity(
             m = qty
             u = cast(Unit[DT], unit)
 
-        return self.subclass(m, u, _mt_orig=self._original_magnitude_type)
+        mt = cast(type[MT], type(m))
+        instance = self.subclass(mt)(m, u)
+        return instance
 
     def to_reduced_units(self) -> Quantity[DT, MT]:
         ret = super().to_reduced_units()
@@ -1020,11 +1005,7 @@ class Quantity(
                 raise e
 
         if self._is_temperature_difference_unit(valid_unit):
-            return Quantity(
-                m,
-                valid_unit,
-                _mt_orig=self._original_magnitude_type,
-            )
+            return Quantity(m, valid_unit)
 
         converted = self._call_subclass(m, unit)
 
@@ -1468,7 +1449,7 @@ class Quantity(
                 f"{dim.dimensions}"
             )
 
-        subcls = self._get_dimensional_subclass(dim, self._magnitude_type)
+        subcls = self._get_dimensional_subclass(dim, type(self.m))
         return cast("Quantity[DT_, MT]", subcls(self.m, self.u))
 
     def unknown(self) -> Quantity[UnknownDimensionality, MT]:
@@ -1477,29 +1458,32 @@ class Quantity(
     def astype(self, magnitude_type: type[MT_]) -> Quantity[DT, MT_]:
         m, u = self.m, self.u
 
+        if type(m) is magnitude_type:
+            return cast("Quantity[DT, MT_]", self)
+
         if magnitude_type is pl.Expr:
             if isinstance(m, float):
-                return cast("Quantity[DT, MT_]", self.subclass(cast(MT, pl.lit(m)), u))
+                return cast("Quantity[DT, MT_]", self.subclass(pl.Expr)(pl.lit(m), u))
 
             raise TypeError(
                 f"Cannot convert magnitude with type {type(m)} to Polars expression, "
                 "only scalar (float) quantities can be converted to pl.Expr"
             )
         elif isinstance(m, np.ndarray) and magnitude_type not in (pl.Series, list):
-            return cast("Quantity[DT, MT_]", self.subclass(m.astype(magnitude_type), u))
+            return cast("Quantity[DT, MT_]", self.subclass(np.ndarray)(m.astype(magnitude_type), u))
         elif magnitude_type is float:
             if isinstance(m, Iterable):
-                return cast("Quantity[DT, MT_]", self.subclass([float(n) for n in m], u))
+                return cast("Quantity[DT, MT_]", self.subclass(np.ndarray)([float(n) for n in m], u))
             else:
-                return cast("Quantity[DT, MT_]", self.subclass(cast(MT, float(cast(Any, m))), u))
+                return cast("Quantity[DT, MT_]", self.subclass(float)(float(cast(Any, m)), u))
         elif magnitude_type is np.ndarray or get_origin(magnitude_type) is np.ndarray:
             _m = [m] if not isinstance(m, Iterable) else m
-            return cast("Quantity[DT, MT_]", self.subclass(cast(MT, np.array(_m)), u))
-        elif magnitude_type is pl.Series or get_origin(magnitude_type) is pl.Series:
+            return cast("Quantity[DT, MT_]", self.subclass(np.ndarray)(np.array(_m), u))
+        elif magnitude_type is pl.Series:
             _m = [m] if not isinstance(m, Iterable) else m
-            return cast("Quantity[DT, MT_]", self.subclass(cast(MT, pl.Series(values=_m)), u))
+            return cast("Quantity[DT, MT_]", self.subclass(pl.Series)(pl.Series(values=_m), u))
         else:
-            return cast("Quantity[DT, MT_]", self)
+            raise TypeError(f"Cannot convert magnitude from type {type(m)} to {magnitude_type}")
 
     @overload
     def __pow__(self: Quantity[Length, MT], other: Literal[2]) -> Quantity[Area, MT]: ...
