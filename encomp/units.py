@@ -929,6 +929,22 @@ class Quantity(
                 f"Cannot convert {self.units} (dimensionality {current_name}) to {unit} (dimensionality {new_name})"
             )
 
+    def _get_magnitude_type_safe(self, mt: type[MT]) -> type[MT]:
+        # fall back to the source instance magnitude type in case
+        # unsupported magnitudes are used, e.g. sp.Symbol
+        # typing does not work at all in this case
+        try:
+            self.validate_magnitude_type(mt)
+        except TypeError:
+            mt = type(self.m)
+
+            try:
+                self.validate_magnitude_type(mt)
+            except TypeError:
+                mt = cast(type[MT], float)
+
+        return mt
+
     @overload
     def _call_subclass(self, qty: Quantity[DT, MT] | PlainQuantity) -> Quantity[DT, MT]: ...
 
@@ -951,7 +967,8 @@ class Quantity(
             m = qty
             u = cast(Unit[DT], unit)
 
-        mt = cast(type[MT], type(m))
+        mt = self._get_magnitude_type_safe(cast(type[MT], type(m)))
+
         instance = self.subclass(mt)(m, u)
         return instance
 
