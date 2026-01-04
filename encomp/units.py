@@ -646,7 +646,7 @@ class Quantity(
     @overload
     def __new__(cls, val: list[float] | list[int], unit: None) -> Quantity[Dimensionless, Numpy1DArray]: ...
     @overload
-    def __new__(
+    def __new__(  # pyright: ignore[reportOverlappingOverload]
         cls, val: list[float] | list[int], unit: DimensionlessUnits
     ) -> Quantity[Dimensionless, Numpy1DArray]: ...
     @overload
@@ -758,7 +758,7 @@ class Quantity(
     @overload
     def __new__(cls, val: MT, unit: None) -> Quantity[Dimensionless, MT]: ...
     @overload
-    def __new__(cls, val: MT, unit: DimensionlessUnits) -> Quantity[Dimensionless, MT]: ...
+    def __new__(cls, val: MT, unit: DimensionlessUnits) -> Quantity[Dimensionless, MT]: ...  # pyright: ignore[reportOverlappingOverload]
     @overload
     def __new__(cls, val: MT, unit: CurrencyUnits) -> Quantity[Currency, MT]: ...
     @overload
