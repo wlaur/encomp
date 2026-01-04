@@ -941,6 +941,12 @@ def test_compatibility() -> None:
 
     assert str((Q(25, "MSEK/GWh") * Q(25, "kWh")).to_base_units()) == "625.0 currency"
 
+    with pytest.raises(DimensionalityTypeError):
+        _ = Q(25, "kg") + Q(2, "m")
+
+    with pytest.raises(DimensionalityTypeError):
+        _ = Q(25, "kg") - Q(2, "m")
+
     # if the _distinct class attribute is True, an unspecified
     # dimensionality will default to this
     # for example, EnergyPerMass has _distinct=True even though
