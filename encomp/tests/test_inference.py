@@ -1017,3 +1017,17 @@ def test_unknown_second_unit_float() -> None:
     unknown_q = Q(30.0, "s * m")
     v = Q(2.0, "m^3/s") * unknown_q
     assert_type(v, Q[ut.UnknownDimensionality, float])
+
+
+def test_pow_inference() -> None:
+    assert_type(Q(25, "kg"), Q[ut.Mass, float])
+    assert_type(Q(25, "kg") ** 1, Q[ut.Mass, float])
+    assert_type(Q(25, "kg") ** 2, Q[ut.UnknownDimensionality, float])
+    assert_type(Q(25, "m") ** 2, Q[ut.Area, float])
+    assert_type(Q(25, "m") ** 3, Q[ut.Volume, float])
+    assert_type(Q(25, "m") ** 2 * Q(2, "m"), Q[ut.Volume, float])
+    assert_type(Q(25, "m") * Q(2, "m") ** 2, Q[ut.Volume, float])
+    assert_type(Q(25, "m") * Q(2, "m") * Q(25, "cm"), Q[ut.Volume, float])
+
+    assert_type(Q(25, "kg") ** 0.5, Q[ut.UnknownDimensionality, float])
+    assert_type(Q(25, "m") ** 0.5, Q[ut.UnknownDimensionality, float])
