@@ -946,23 +946,29 @@ class Quantity(
                 f"Cannot convert {self.units} (dimensionality {current_name}) to {unit} (dimensionality {new_name})"
             )
 
-    def _call_subclass(self, *args: Any) -> Quantity[DT, MT]:  # noqa: ANN401
-        if len(args) == 1:
-            qty = args[0]
+    @overload
+    def _call_subclass(self, qty: Quantity[DT, MT] | PlainQuantity) -> Quantity[DT, MT]: ...
+
+    @overload
+    def _call_subclass(self, qty: MT, unit: Unit[DT] | QuantityOrUnitLike) -> Quantity[DT, MT]: ...
+
+    def _call_subclass(
+        self,
+        qty: Quantity[DT, MT] | PlainQuantity | MT,
+        unit: Unit[DT] | QuantityOrUnitLike | None = None,
+    ) -> Quantity[DT, MT]:
+        if unit is None:
             if not isinstance(qty, Quantity):
-                raise TypeError(f"Invalid single input: {args}")
+                raise TypeError(f"Invalid single input: {qty} ({type(qty)})")
 
             m, u = qty.m, qty.u
-        elif len(args) == 2:
-            m, u = args
         else:
-            raise ValueError(f"Invalid input: {args}")
+            if isinstance(qty, PlainQuantity):
+                raise TypeError(f"Invalid first input: {qty} ({type(qty)})")
+            m = qty
+            u = cast(Unit[DT], unit)
 
-        return self.subclass(
-            cast(MT, m),
-            cast(Unit[DT], u),
-            _mt_orig=self._original_magnitude_type,
-        )
+        return self.subclass(m, u, _mt_orig=self._original_magnitude_type)
 
     def to_reduced_units(self) -> Quantity[DT, MT]:
         ret = super().to_reduced_units()
@@ -1445,8 +1451,11 @@ class Quantity(
         else:
             dim = other
 
+        if dim is self._dimensionality_type:
+            return cast("Quantity[DT_, MT]", self)
+
         if dim is UnknownDimensionality:
-            return cast("Quantity[DT_, MT]", self.__copy__())
+            return cast("Quantity[DT_, MT]", self)
 
         if dim is Dimensionality:
             raise TypeError(f"Cannot convert {self} to base dimensionality {dim}")
@@ -1461,6 +1470,9 @@ class Quantity(
 
         subcls = self._get_dimensional_subclass(dim, self._magnitude_type)
         return cast("Quantity[DT_, MT]", subcls(self.m, self.u))
+
+    def unknown(self) -> Quantity[UnknownDimensionality, MT]:
+        return self.asdim(UnknownDimensionality)
 
     def astype(self, magnitude_type: type[MT_]) -> Quantity[DT, MT_]:
         m, u = self.m, self.u
@@ -1487,7 +1499,7 @@ class Quantity(
             _m = [m] if not isinstance(m, Iterable) else m
             return cast("Quantity[DT, MT_]", self.subclass(cast(MT, pl.Series(values=_m)), u))
         else:
-            return cast("Quantity[DT, MT_]", self.__copy__())
+            return cast("Quantity[DT, MT_]", self)
 
     @overload
     def __pow__(self: Quantity[Length, MT], other: Literal[2]) -> Quantity[Area, MT]: ...
@@ -1542,7 +1554,7 @@ class Quantity(
 
         ret = super().__add__(other)
 
-        return self._call_subclass(ret)
+        return self._call_subclass(cast("Quantity", ret))
 
     @overload
     def __sub__(self: Quantity[Dimensionless, MT], other: float | int) -> Quantity[Dimensionless, MT]: ...
@@ -1775,6 +1787,8 @@ class Quantity(
     def __mul__(self: Quantity[DT, MT], other: Quantity[Dimensionless, MT]) -> Quantity[DT, MT]: ...
     @overload
     def __mul__(self: Quantity[DT, MT], other: Quantity[Dimensionless, float]) -> Quantity[DT, MT]: ...
+    @overload
+    def __mul__(self: Quantity[DT, float], other: Quantity[Dimensionless, MT_]) -> Quantity[DT, MT_]: ...
 
     # MassFlow * Time = Mass
     @overload
@@ -1789,6 +1803,8 @@ class Quantity(
     def __mul__(self: Quantity[MassFlow, MT], other: Quantity[Time, MT]) -> Quantity[Mass, MT]: ...
     @overload
     def __mul__(self: Quantity[MassFlow, MT], other: Quantity[Time, float]) -> Quantity[Mass, MT]: ...
+    @overload
+    def __mul__(self: Quantity[MassFlow, float], other: Quantity[Time, MT_]) -> Quantity[Mass, MT_]: ...
 
     # Time * MassFlow = Mass
     @overload
@@ -1803,6 +1819,8 @@ class Quantity(
     def __mul__(self: Quantity[Time, MT], other: Quantity[MassFlow, MT]) -> Quantity[Mass, MT]: ...
     @overload
     def __mul__(self: Quantity[Time, MT], other: Quantity[MassFlow, float]) -> Quantity[Mass, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Time, float], other: Quantity[MassFlow, MT_]) -> Quantity[Mass, MT_]: ...
 
     # VolumeFlow * Time = Volume
     @overload
@@ -1817,6 +1835,8 @@ class Quantity(
     def __mul__(self: Quantity[VolumeFlow, MT], other: Quantity[Time, MT]) -> Quantity[Volume, MT]: ...
     @overload
     def __mul__(self: Quantity[VolumeFlow, MT], other: Quantity[Time, float]) -> Quantity[Volume, MT]: ...
+    @overload
+    def __mul__(self: Quantity[VolumeFlow, float], other: Quantity[Time, MT_]) -> Quantity[Volume, MT_]: ...
 
     # Time * VolumeFlow = Volume
     @overload
@@ -1831,6 +1851,8 @@ class Quantity(
     def __mul__(self: Quantity[Time, MT], other: Quantity[VolumeFlow, MT]) -> Quantity[Volume, MT]: ...
     @overload
     def __mul__(self: Quantity[Time, MT], other: Quantity[VolumeFlow, float]) -> Quantity[Volume, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Time, float], other: Quantity[VolumeFlow, MT_]) -> Quantity[Volume, MT_]: ...
 
     # Power * Time = Energy
     @overload
@@ -1845,6 +1867,8 @@ class Quantity(
     def __mul__(self: Quantity[Power, MT], other: Quantity[Time, MT]) -> Quantity[Energy, MT]: ...
     @overload
     def __mul__(self: Quantity[Power, MT], other: Quantity[Time, float]) -> Quantity[Energy, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Power, float], other: Quantity[Time, MT_]) -> Quantity[Energy, MT_]: ...
 
     # Time * Power = Energy
     @overload
@@ -1859,6 +1883,8 @@ class Quantity(
     def __mul__(self: Quantity[Time, MT], other: Quantity[Power, MT]) -> Quantity[Energy, MT]: ...
     @overload
     def __mul__(self: Quantity[Time, MT], other: Quantity[Power, float]) -> Quantity[Energy, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Time, float], other: Quantity[Power, MT_]) -> Quantity[Energy, MT_]: ...
 
     # Velocity * Time = Length
     @overload
@@ -1873,6 +1899,9 @@ class Quantity(
     def __mul__(self: Quantity[Velocity, MT], other: Quantity[Time, MT]) -> Quantity[Length, MT]: ...
     @overload
     def __mul__(self: Quantity[Velocity, MT], other: Quantity[Time, float]) -> Quantity[Length, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Velocity, float], other: Quantity[Time, MT_]) -> Quantity[Length, MT_]: ...
+
     # Time * Velocity = Length
     @overload
     def __mul__(
@@ -1886,6 +1915,8 @@ class Quantity(
     def __mul__(self: Quantity[Time, MT], other: Quantity[Velocity, MT]) -> Quantity[Length, MT]: ...
     @overload
     def __mul__(self: Quantity[Time, MT], other: Quantity[Velocity, float]) -> Quantity[Length, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Time, float], other: Quantity[Velocity, MT_]) -> Quantity[Length, MT_]: ...
 
     # Density * Volume = Mass
     @overload
@@ -1900,6 +1931,8 @@ class Quantity(
     def __mul__(self: Quantity[Density, MT], other: Quantity[Volume, MT]) -> Quantity[Mass, MT]: ...
     @overload
     def __mul__(self: Quantity[Density, MT], other: Quantity[Volume, float]) -> Quantity[Mass, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Density, float], other: Quantity[Volume, MT_]) -> Quantity[Mass, MT_]: ...
 
     # Volume * Density = Mass
     @overload
@@ -1914,6 +1947,8 @@ class Quantity(
     def __mul__(self: Quantity[Volume, MT], other: Quantity[Density, MT]) -> Quantity[Mass, MT]: ...
     @overload
     def __mul__(self: Quantity[Volume, MT], other: Quantity[Density, float]) -> Quantity[Mass, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Volume, float], other: Quantity[Density, MT_]) -> Quantity[Mass, MT_]: ...
 
     # Length * Length = Area
     @overload
@@ -1928,6 +1963,8 @@ class Quantity(
     def __mul__(self: Quantity[Length, MT], other: Quantity[Length, MT]) -> Quantity[Area, MT]: ...
     @overload
     def __mul__(self: Quantity[Length, MT], other: Quantity[Length, float]) -> Quantity[Area, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Length, float], other: Quantity[Length, MT_]) -> Quantity[Area, MT_]: ...
 
     # Length * Area = Volume
     @overload
@@ -1942,6 +1979,9 @@ class Quantity(
     def __mul__(self: Quantity[Length, MT], other: Quantity[Area, MT]) -> Quantity[Volume, MT]: ...
     @overload
     def __mul__(self: Quantity[Length, MT], other: Quantity[Area, float]) -> Quantity[Volume, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Length, float], other: Quantity[Area, MT_]) -> Quantity[Volume, MT_]: ...
+
     # Area * Length = Volume
     @overload
     def __mul__(
@@ -1955,6 +1995,34 @@ class Quantity(
     def __mul__(self: Quantity[Area, MT], other: Quantity[Length, MT]) -> Quantity[Volume, MT]: ...
     @overload
     def __mul__(self: Quantity[Area, MT], other: Quantity[Length, float]) -> Quantity[Volume, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Area, float], other: Quantity[Length, MT_]) -> Quantity[Volume, MT_]: ...
+
+    # Unknown * Unknown = Unknown
+    @overload
+    def __mul__(
+        self: Quantity[UnknownDimensionality, Numpy1DArray], other: Quantity[UnknownDimensionality, float]
+    ) -> Quantity[UnknownDimensionality, Numpy1DArray]: ...
+    @overload
+    def __mul__(
+        self: Quantity[UnknownDimensionality, pl.Series], other: Quantity[UnknownDimensionality, float]
+    ) -> Quantity[UnknownDimensionality, pl.Series]: ...
+    @overload
+    def __mul__(
+        self: Quantity[UnknownDimensionality, pl.Expr], other: Quantity[UnknownDimensionality, float]
+    ) -> Quantity[UnknownDimensionality, pl.Expr]: ...
+    @overload
+    def __mul__(
+        self: Quantity[UnknownDimensionality, MT], other: Quantity[UnknownDimensionality, MT]
+    ) -> Quantity[UnknownDimensionality, MT]: ...
+    @overload
+    def __mul__(
+        self: Quantity[UnknownDimensionality, MT], other: Quantity[UnknownDimensionality, float]
+    ) -> Quantity[UnknownDimensionality, MT]: ...
+    @overload
+    def __mul__(
+        self: Quantity[UnknownDimensionality, float], other: Quantity[UnknownDimensionality, MT_]
+    ) -> Quantity[UnknownDimensionality, MT_]: ...
 
     @overload
     def __mul__(
@@ -2025,6 +2093,33 @@ class Quantity(
     def __truediv__(
         self: Quantity[Dimensionless, float], other: Quantity[Dimensionless, pl.Expr]
     ) -> Quantity[Dimensionless, pl.Expr]: ...
+
+    # Unknown / Unknown = Unknown
+    @overload
+    def __truediv__(
+        self: Quantity[UnknownDimensionality, Numpy1DArray], other: Quantity[UnknownDimensionality, float]
+    ) -> Quantity[UnknownDimensionality, Numpy1DArray]: ...
+    @overload
+    def __truediv__(
+        self: Quantity[UnknownDimensionality, pl.Series], other: Quantity[UnknownDimensionality, float]
+    ) -> Quantity[UnknownDimensionality, pl.Series]: ...
+    @overload
+    def __truediv__(
+        self: Quantity[UnknownDimensionality, pl.Expr], other: Quantity[UnknownDimensionality, float]
+    ) -> Quantity[UnknownDimensionality, pl.Expr]: ...
+    @overload
+    def __truediv__(
+        self: Quantity[UnknownDimensionality, MT], other: Quantity[UnknownDimensionality, MT]
+    ) -> Quantity[UnknownDimensionality, MT]: ...
+    @overload
+    def __truediv__(
+        self: Quantity[UnknownDimensionality, MT], other: Quantity[UnknownDimensionality, float]
+    ) -> Quantity[UnknownDimensionality, MT]: ...
+    @overload
+    def __truediv__(
+        self: Quantity[UnknownDimensionality, float], other: Quantity[UnknownDimensionality, MT_]
+    ) -> Quantity[UnknownDimensionality, MT_]: ...
+
     @overload
     def __truediv__(self: Quantity[DT, MT], other: Quantity[Dimensionless, float]) -> Quantity[DT, MT]: ...
     @overload
@@ -2047,6 +2142,8 @@ class Quantity(
     def __truediv__(self: Quantity[Mass, MT], other: Quantity[Time, MT]) -> Quantity[MassFlow, MT]: ...
     @overload
     def __truediv__(self: Quantity[Mass, MT], other: Quantity[Time, float]) -> Quantity[MassFlow, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Mass, float], other: Quantity[Time, MT_]) -> Quantity[MassFlow, MT_]: ...
 
     # Volume / Time = VolumeFlow
     @overload
@@ -2063,6 +2160,8 @@ class Quantity(
     def __truediv__(self: Quantity[Volume, MT], other: Quantity[Time, MT]) -> Quantity[VolumeFlow, MT]: ...
     @overload
     def __truediv__(self: Quantity[Volume, MT], other: Quantity[Time, float]) -> Quantity[VolumeFlow, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Volume, float], other: Quantity[Time, MT_]) -> Quantity[VolumeFlow, MT_]: ...
 
     # Energy / Time = Power
     @overload
@@ -2077,6 +2176,8 @@ class Quantity(
     def __truediv__(self: Quantity[Energy, MT], other: Quantity[Time, MT]) -> Quantity[Power, MT]: ...
     @overload
     def __truediv__(self: Quantity[Energy, MT], other: Quantity[Time, float]) -> Quantity[Power, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Energy, float], other: Quantity[Time, MT_]) -> Quantity[Power, MT_]: ...
 
     # Length / Time = Velocity
     @overload
@@ -2093,6 +2194,8 @@ class Quantity(
     def __truediv__(self: Quantity[Length, MT], other: Quantity[Time, MT]) -> Quantity[Velocity, MT]: ...
     @overload
     def __truediv__(self: Quantity[Length, MT], other: Quantity[Time, float]) -> Quantity[Velocity, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Length, float], other: Quantity[Time, MT_]) -> Quantity[Velocity, MT_]: ...
 
     # Energy / Mass = EnergyPerMass
     @overload
@@ -2111,6 +2214,8 @@ class Quantity(
     def __truediv__(self: Quantity[Energy, MT], other: Quantity[Mass, MT]) -> Quantity[EnergyPerMass, MT]: ...
     @overload
     def __truediv__(self: Quantity[Energy, MT], other: Quantity[Mass, float]) -> Quantity[EnergyPerMass, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Energy, float], other: Quantity[Mass, MT_]) -> Quantity[EnergyPerMass, MT_]: ...
 
     # Mass / Volume = Density
     @overload
@@ -2127,6 +2232,8 @@ class Quantity(
     def __truediv__(self: Quantity[Mass, MT], other: Quantity[Volume, MT]) -> Quantity[Density, MT]: ...
     @overload
     def __truediv__(self: Quantity[Mass, MT], other: Quantity[Volume, float]) -> Quantity[Density, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Mass, float], other: Quantity[Volume, MT_]) -> Quantity[Density, MT_]: ...
 
     @overload
     def __truediv__(

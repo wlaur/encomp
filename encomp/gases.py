@@ -30,10 +30,10 @@ R = CONSTANTS.R
 
 
 def ideal_gas_density(
-    T: Quantity[Temperature, Any],
-    P: Quantity[Pressure, Any],
-    M: Quantity[MolarMass, Any],
-) -> Quantity[Density, Any]:
+    T: Quantity[Temperature, MT],
+    P: Quantity[Pressure, MT],
+    M: Quantity[MolarMass, MT],
+) -> Quantity[Density, MT]:
     """
     Returns the density :math:`\\rho` of an ideal gas.
 
@@ -48,24 +48,24 @@ def ideal_gas_density(
 
     Parameters
     ----------
-    T : Quantity[Temperature, Any]
+    T : Quantity[Temperature, MT]
         Temperature of the gas
-    P : Quantity[Pressure, Any]
+    P : Quantity[Pressure, MT]
         Absolute pressure of the gas
-    M : Quantity[MolarMass, Any]
+    M : Quantity[MolarMass, MT]
         Molar mass of the gas
 
     Returns
     -------
-    Quantity[Density, Any]
+    Quantity[Density, MT]
         Density of the ideal gas at the specified temperature and pressure
     """
 
     # directly from ideal gas law
     # override the inferred type here since it's sure to be Density
-    rho = cast(Quantity[Density, Any], (P * M) / (R * T.to("K")))
+    rho = (P * M) / (R * T.to("K").unknown())
 
-    return rho.to("kg/m³")
+    return rho.to("kg/m³").asdim(Density)
 
 
 @overload

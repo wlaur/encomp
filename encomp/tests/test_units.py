@@ -144,6 +144,17 @@ def test_dimensionality_subtype_protocol() -> None:
 
 
 def test_asdim() -> None:
+    q = Q(2)
+    _q = q.asdim(Dimensionless)
+    # if the dimension already matches, return the same object
+    assert q is _q
+
+    _q_unknown = q.asdim(UnknownDimensionality)
+    _q_unknown_alt = q.unknown()
+
+    assert q is _q_unknown
+    assert q is _q_unknown_alt
+
     with pytest.raises(TypeError):
         Q(2).asdim(Dimensionality)
 

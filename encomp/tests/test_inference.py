@@ -718,7 +718,7 @@ def test_mul_float_scalar_by_array_dimensional() -> None:
 
 
 def test_truediv_float_scalar_by_array_dimensional() -> None:
-    assert_type(Q(4.0, "m") / Q([2.0, 4.0], "s"), Q[ut.UnknownDimensionality, np.ndarray])
+    assert_type(Q(4.0, "m") / Q([2.0, 4.0], "s"), Q[ut.Velocity, np.ndarray])
 
 
 def test_mul_array_dimensional_by_array_dimensional() -> None:
@@ -1031,3 +1031,9 @@ def test_pow_inference() -> None:
 
     assert_type(Q(25, "kg") ** 0.5, Q[ut.UnknownDimensionality, float])
     assert_type(Q(25, "m") ** 0.5, Q[ut.UnknownDimensionality, float])
+
+
+def test_unknown() -> None:
+    assert_type(Q(25, "kg").unknown(), Q[ut.UnknownDimensionality, float])
+    assert_type(Q([1, 23], "kg").unknown(), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
+    assert_type(Q([1, 23], "kg").unknown(), Q[ut.UnknownDimensionality, np.ndarray])

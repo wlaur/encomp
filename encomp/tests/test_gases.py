@@ -1,5 +1,7 @@
 from typing import assert_type
 
+import numpy as np
+
 from ..gases import (
     actual_volume_to_normal_volume,
     convert_gas_volume,
@@ -35,7 +37,10 @@ def test_convert_gas_volume() -> None:
 
 
 def test_ideal_gas_density() -> None:
-    assert isinstance_types(ideal_gas_density(Q(25, "degC"), Q(12, "bar"), Q(12, "g/mol")), Q[Density])
+    assert_type(ideal_gas_density(Q(25, "degC"), Q(12, "bar"), Q(12, "g/mol")), Q[Density, float])
+
+    ret = ideal_gas_density(Q([25, 26], "degC"), Q(12, "bar"), Q(12, "g/mol"))  # pyright: ignore[reportArgumentType]
+    assert_type(ret, Q[Density, np.ndarray])
 
 
 def test_gas_conversion() -> None:
