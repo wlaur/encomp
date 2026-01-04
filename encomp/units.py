@@ -605,9 +605,9 @@ class Quantity(
     def get_unit(cls, unit_name: AllUnits | str) -> Unit:
         return Unit(cls._REGISTRY.parse_units(unit_name))
 
-    def subclass(self, mt: type[MT_]) -> type[Quantity[DT, MT_]]:
-        subcls = self._get_dimensional_subclass(self._dimensionality_type, mt)
-        return cast("type[Quantity[DT, MT_]]", subcls)
+    def get_subclass(self, dt: type[DT_], mt: type[MT_]) -> type[Quantity[DT_, MT_]]:
+        subcls = self._get_dimensional_subclass(dt, mt)
+        return cast("type[Quantity[DT_, MT_]]", subcls)
 
     def __len__(self) -> int:
         # __len__() must return an integer
@@ -909,6 +909,10 @@ class Quantity(
         return self._magnitude
 
     @property
+    def mt(self) -> type[MT]:
+        return self._magnitude_type
+
+    @property
     def units(self) -> Unit[DT]:
         return Unit(super().units)
 
@@ -917,8 +921,12 @@ class Quantity(
         return self.units
 
     @property
+    def dt(self) -> type[DT]:
+        return cast(type[DT], self._dimensionality_type)
+
+    @property
     def _is_temperature_difference(self) -> bool:
-        return self._dimensionality_type == TemperatureDifference
+        return self.dt == TemperatureDifference
 
     @classmethod
     def _is_temperature_difference_unit(cls, unit: Unit[DT]) -> bool:
@@ -926,7 +934,7 @@ class Quantity(
 
     def _check_temperature_compatibility(self, unit: Unit[DT]) -> None:
         if self._is_temperature_difference and unit._units not in self.TEMPERATURE_DIFFERENCE_UCS:
-            current_name = self._dimensionality_type.__name__
+            current_name = self.dt.__name__
             new_name = Quantity(1, unit)._dimensionality_type.__name__
 
             raise DimensionalityTypeError(
@@ -957,24 +965,26 @@ class Quantity(
 
     def _call_subclass(
         self,
-        qty: Quantity[DT, MT] | PlainQuantity | MT,
-        unit: Unit[DT] | QuantityOrUnitLike | None = None,
+        qty: Quantity[DT, MT] | Quantity[DT_, MT_] | Quantity[DT_, MT] | Quantity[DT, MT_] | PlainQuantity | MT | MT_,
+        unit: Unit[DT] | Unit[DT_] | QuantityOrUnitLike | None = None,
     ) -> Quantity[DT, MT]:
         if unit is None:
             if not isinstance(qty, Quantity):
                 raise TypeError(f"Invalid single input: {qty} ({type(qty)})")
 
             m, u = qty.m, qty.u
+            dt = cast(type[DT], getattr(qty, "_dimensionality_type", self.dt))
         else:
             if isinstance(qty, PlainQuantity):
                 raise TypeError(f"Invalid first input: {qty} ({type(qty)})")
             m = qty
             u = cast(Unit[DT], unit)
+            dt = self.dt
 
         mt = self._get_magnitude_type_safe(cast(type[MT], type(m)))
 
-        instance = self.subclass(mt)(m, u)
-        return instance
+        subcls = self.get_subclass(dt, mt)
+        return subcls(cast(MT, m), cast("Unit[DT]", u))
 
     def to_reduced_units(self) -> Quantity[DT, MT]:
         ret = super().to_reduced_units()
@@ -1075,7 +1085,7 @@ class Quantity(
         | QuantityOrUnitLike,
     ) -> bool:
         if isinstance(dimension, Quantity):
-            return self._dimensionality_type == dimension._dimensionality_type
+            return self.dt == dimension._dimensionality_type
 
         if isinstance(dimension, Unit):
             # it's not possible to know if an instance of Unit is Temperature or TemperatureDifference
@@ -1364,7 +1374,7 @@ class Quantity(
 
             return
 
-        dim = self._dimensionality_type
+        dim = self.dt
         other_dim = other._dimensionality_type
 
         # if the dimensionality of self is a subclass of the
@@ -1384,7 +1394,7 @@ class Quantity(
 
         # normal case, check that the types of Quantity is the same
         if type(self) is not type(other):
-            if self._dimensionality_type.dimensions == other._dimensionality_type.dimensions:
+            if self.dt.dimensions == other._dimensionality_type.dimensions:
                 raise DimensionalityTypeError(
                     f"Quantities with different dimensionalities are not compatible: "
                     f"{type(self)} and {type(other)}. The dimensions match, "
@@ -1453,7 +1463,7 @@ class Quantity(
         else:
             dim = other
 
-        if dim == self._dimensionality_type:
+        if dim == self.dt:
             return cast("Quantity[DT_, MT]", self)
 
         if dim == UnknownDimensionality:
@@ -1462,11 +1472,11 @@ class Quantity(
         if dim == Dimensionality:
             raise TypeError(f"Cannot convert {self} to base dimensionality {dim}")
 
-        if str(self._dimensionality_type.dimensions) != str(dim.dimensions):
+        if str(self.dt.dimensions) != str(dim.dimensions):
             raise ExpectedDimensionalityError(
                 f"Cannot convert {self} to dimensionality {dim}, "
                 f"the dimensions do not match: "
-                f"{self._dimensionality_type.dimensions} != "
+                f"{self.dt.dimensions} != "
                 f"{dim.dimensions}"
             )
 
@@ -1479,30 +1489,32 @@ class Quantity(
     def astype(self, magnitude_type: type[MT_]) -> Quantity[DT, MT_]:
         m, u = self.m, self.u
 
+        dt = self.dt
+
         if type(m) is magnitude_type:
             return cast("Quantity[DT, MT_]", self)
 
         if magnitude_type is pl.Expr:
             if isinstance(m, float):
-                return cast("Quantity[DT, MT_]", self.subclass(pl.Expr)(pl.lit(m), u))
+                return cast("Quantity[DT, MT_]", self.get_subclass(dt, pl.Expr)(pl.lit(m), u))
 
             raise TypeError(
                 f"Cannot convert magnitude with type {type(m)} to Polars expression, "
                 "only scalar (float) quantities can be converted to pl.Expr"
             )
         elif isinstance(m, np.ndarray) and magnitude_type not in (pl.Series, list):
-            return cast("Quantity[DT, MT_]", self.subclass(np.ndarray)(m.astype(magnitude_type), u))
+            return cast("Quantity[DT, MT_]", self.get_subclass(dt, np.ndarray)(m.astype(magnitude_type), u))
         elif magnitude_type is float:
             if isinstance(m, Iterable):
-                return cast("Quantity[DT, MT_]", self.subclass(np.ndarray)([float(n) for n in m], u))
+                return cast("Quantity[DT, MT_]", self.get_subclass(dt, np.ndarray)([float(n) for n in m], u))
             else:
-                return cast("Quantity[DT, MT_]", self.subclass(float)(float(cast(Any, m)), u))
+                return cast("Quantity[DT, MT_]", self.get_subclass(dt, float)(float(cast(Any, m)), u))
         elif magnitude_type is np.ndarray or get_origin(magnitude_type) is np.ndarray:
             _m = [m] if not isinstance(m, Iterable) else m
-            return cast("Quantity[DT, MT_]", self.subclass(np.ndarray)(np.array(_m), u))
+            return cast("Quantity[DT, MT_]", self.get_subclass(dt, np.ndarray)(np.array(_m), u))
         elif magnitude_type is pl.Series:
             _m = [m] if not isinstance(m, Iterable) else m
-            return cast("Quantity[DT, MT_]", self.subclass(pl.Series)(pl.Series(values=_m), u))
+            return cast("Quantity[DT, MT_]", self.get_subclass(dt, pl.Series)(pl.Series(values=_m), u))
         else:
             raise TypeError(f"Cannot convert magnitude from type {type(m)} to {magnitude_type}")
 
@@ -1550,7 +1562,7 @@ class Quantity(
             )
 
             if self_is_temp_or_diff_temp and other_is_temp_or_diff_temp:
-                if self._dimensionality_type == TemperatureDifference:
+                if self.dt == TemperatureDifference:
                     raise e
 
                 return self._temperature_difference_add_sub(other, "add")
@@ -1593,7 +1605,7 @@ class Quantity(
             )
 
             if self_is_temp_or_diff_temp and other_is_temp_or_diff_temp:
-                if self._dimensionality_type == TemperatureDifference:
+                if self.dt == TemperatureDifference:
                     raise e
 
                 return self._temperature_difference_add_sub(other, "sub")
@@ -1602,11 +1614,7 @@ class Quantity(
 
         ret = super().__sub__(other)
 
-        if (
-            isinstance(other, Quantity)
-            and self._dimensionality_type == Temperature
-            and other._dimensionality_type == Temperature
-        ):
+        if isinstance(other, Quantity) and self.dt == Temperature and other._dimensionality_type == Temperature:
             _mt = type(ret.m)
             subcls = self._get_dimensional_subclass(TemperatureDifference, _mt)
             return subcls(ret.m, ret.u)
@@ -2327,9 +2335,7 @@ class Quantity(
     def __getitem__(self: Quantity[DT, Numpy1DArray], index: int) -> Quantity[DT, float]: ...
     def __getitem__(self, index: int) -> Quantity[DT, Any]:
         ret = super().__getitem__(index)
-        subcls = self._get_dimensional_subclass(
-            self._dimensionality_type, type(ret.m) if isinstance(ret, Quantity) else type(ret)
-        )
+        subcls = self._get_dimensional_subclass(self.dt, type(ret.m) if isinstance(ret, Quantity) else type(ret))
         return subcls(ret.m, ret.u)
 
 
