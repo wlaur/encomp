@@ -6,6 +6,7 @@ from typeguard import typechecked
 
 from encomp.units import Quantity as Q
 from encomp.utypes import (
+    DT,
     Area,
     Density,
     Dimensionless,
@@ -16,6 +17,7 @@ from encomp.utypes import (
     Numpy1DArray,
     Power,
     Time,
+    UnknownDimensionality,
     Velocity,
     Volume,
     VolumeFlow,
@@ -591,3 +593,54 @@ def test_default_mt_dag() -> None:
     assert np.allclose(total_masses.to("kg").m, [150.0, 250.0, 350.0])
     assert np.allclose(densities.to("kg/m3").m, [15.0, 12.5, 11.666667])
     assert np.allclose(masses_from_density.to("kg").m, [75.0, 62.5, 58.333333])
+
+
+@typechecked
+def _times_2_unknown(q: Q[UnknownDimensionality, float]) -> Q[UnknownDimensionality, float]:
+    return q * 2
+
+
+def test_unknown() -> None:
+    assert_type(_times_2_unknown(Q(25, "kg").unknown()), Q[UnknownDimensionality, float])
+
+
+@typechecked
+def _times_2_unset(q: Q) -> Q:
+    return q * 2
+
+
+def test_unset() -> None:
+    v = Q(25, "kg").astype(np.ndarray).unknown()
+    assert_type(_times_2_unset(v), Q[UnknownDimensionality, np.ndarray])
+
+
+@typechecked
+def _asdim(q: Q[Mass]) -> Q[Power]:
+    r = q * Q(2, "kW/kg")
+    return r.asdim(Power)
+
+
+def test_asdim() -> None:
+    assert_type(_asdim(Q([25], "kg")), Q[Power, np.ndarray])
+
+
+@typechecked
+def _dynamic(*q: Q[DT]) -> Q[DT]:
+    assert len(q)
+    return sum(q[1:], start=q[0])
+
+
+def test_dynamic() -> None:
+    v = _dynamic(Q([25], "kg"), Q([25], "kg"))
+    assert_type(v, Q[Mass, np.ndarray])
+
+
+@typechecked
+def _dynamic_scalar(*q: Q[DT, float]) -> Q[DT, float]:
+    assert len(q)
+    return sum(q[1:], start=q[0])
+
+
+def test_dynamic_scalar() -> None:
+    v = _dynamic_scalar(Q(25, "kg"), Q(25, "g"))
+    assert_type(v, Q[Mass, float])
