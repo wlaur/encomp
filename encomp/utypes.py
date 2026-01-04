@@ -7,7 +7,6 @@ Some commonly used derived dimensionalities (like density) are defined for conve
 
 from __future__ import annotations
 
-from abc import ABC
 from typing import Literal, TypeVar, cast, get_origin
 
 import numpy as np
@@ -551,7 +550,18 @@ def get_registered_units() -> dict[str, tuple[str, ...]]:
     return ret
 
 
-class Dimensionality(ABC):  # noqa: B024
+class _DimensionalityMeta(type):
+    def __eq__(cls, other: object) -> bool:
+        if not isinstance(other, type):
+            return False
+
+        return cls.__qualname__ == other.__qualname__
+
+    def __hash__(cls) -> int:
+        return id(cls)
+
+
+class Dimensionality(metaclass=_DimensionalityMeta):
     r"""
     Represents the *dimensionality* of a unit, i.e.
     a combination (product) of the base dimensions (with optional rational exponents).

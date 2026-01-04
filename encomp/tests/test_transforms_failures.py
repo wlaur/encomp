@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 from typeguard import TypeCheckError, typechecked
 
-from encomp.units import Quantity as Q
-from encomp.utypes import (
+from ..units import Quantity as Q
+from ..utypes import (
     Density,
     Dimensionless,
     Energy,

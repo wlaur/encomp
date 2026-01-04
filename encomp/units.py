@@ -368,6 +368,7 @@ class Quantity(
     _dimensionality_type: ClassVar[type[Dimensionality]] = UnknownDimensionality
 
     _magnitude: MT
+    _magnitude_type: type[MT]
 
     _max_recursion_depth: int = 10
 
@@ -479,7 +480,7 @@ class Quantity(
 
     @staticmethod
     def _is_incomplete_dimensionality(dim: type[Dimensionality]) -> bool:
-        return dim is UnknownDimensionality or dim is Any or isinstance(dim, TypeVar)
+        return dim == UnknownDimensionality or dim is Any or isinstance(dim, TypeVar)
 
     @staticmethod
     def _units_containers_equal(
@@ -514,6 +515,9 @@ class Quantity(
         else:
             dim = types
             mt = None
+
+        if dim == Dimensionality:
+            raise TypeError(f"Generic type parameter to Quantity cannot be the Dimensionality base class: {dim}")
 
         if cls._is_incomplete_dimensionality(dim):
             return cls._get_dimensional_subclass(UnknownDimensionality, mt)
@@ -914,7 +918,7 @@ class Quantity(
 
     @property
     def _is_temperature_difference(self) -> bool:
-        return self._dimensionality_type is TemperatureDifference
+        return self._dimensionality_type == TemperatureDifference
 
     @classmethod
     def _is_temperature_difference_unit(cls, unit: Unit[DT]) -> bool:
@@ -1449,13 +1453,13 @@ class Quantity(
         else:
             dim = other
 
-        if dim is self._dimensionality_type:
+        if dim == self._dimensionality_type:
             return cast("Quantity[DT_, MT]", self)
 
-        if dim is UnknownDimensionality:
+        if dim == UnknownDimensionality:
             return cast("Quantity[DT_, MT]", self)
 
-        if dim is Dimensionality:
+        if dim == Dimensionality:
             raise TypeError(f"Cannot convert {self} to base dimensionality {dim}")
 
         if str(self._dimensionality_type.dimensions) != str(dim.dimensions):
@@ -1546,7 +1550,7 @@ class Quantity(
             )
 
             if self_is_temp_or_diff_temp and other_is_temp_or_diff_temp:
-                if self._dimensionality_type is TemperatureDifference:
+                if self._dimensionality_type == TemperatureDifference:
                     raise e
 
                 return self._temperature_difference_add_sub(other, "add")
@@ -1589,7 +1593,7 @@ class Quantity(
             )
 
             if self_is_temp_or_diff_temp and other_is_temp_or_diff_temp:
-                if self._dimensionality_type is TemperatureDifference:
+                if self._dimensionality_type == TemperatureDifference:
                     raise e
 
                 return self._temperature_difference_add_sub(other, "sub")
@@ -1600,8 +1604,8 @@ class Quantity(
 
         if (
             isinstance(other, Quantity)
-            and self._dimensionality_type is Temperature
-            and other._dimensionality_type is Temperature
+            and self._dimensionality_type == Temperature
+            and other._dimensionality_type == Temperature
         ):
             _mt = type(ret.m)
             subcls = self._get_dimensional_subclass(TemperatureDifference, _mt)

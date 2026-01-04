@@ -7,39 +7,8 @@ from typeguard import check_type
 
 
 def isinstance_types[T](obj: Any, expected: type[T]) -> TypeIs[T]:  # noqa: ANN401
-    """
-    Checks if the input object matches the expected type.
-    This function also supports complex type annotations that cannot
-    be checked with the builtin ``isinstance()``.
-    Uses ``typeguard.check_type`` for runtime checks of complex types.
-
-    .. note::
-
-        Type narrowing only works for simple types (e.g., ``isinstance_types(x, str)``).
-        For union types (e.g., ``str | int``), the function works at runtime but
-        **does not narrow types** at type-check time. Use builtin ``isinstance()``
-        for union type narrowing when possible.
-
-    .. note::
-
-        For mappings (e.g. ``dict[str, list[float]]``), only the
-        first item is checked. Use custom validation logic to ensure
-        that all elements are checked.
-
-    Parameters
-    ----------
-    obj : Any
-        Object to check
-    expected : type
-        Expected type or type alias
-
-    Returns
-    -------
-    bool
-        Whether the input object matches the expected type
-    """
-
     from .units import Quantity
+    from .utypes import UnknownDimensionality
 
     if get_origin(expected) is UnionType:
         try:
@@ -47,16 +16,23 @@ def isinstance_types[T](obj: Any, expected: type[T]) -> TypeIs[T]:  # noqa: ANN4
         except TypeError:
             return any(isinstance_types(obj, n) for n in get_args(expected))
 
-    unknown_quantity_subclass = Quantity.get_unknown_dimensionality_subclass()
+    if isinstance(obj, Quantity) and isinstance(expected, type) and (issubclass(expected, Quantity)):
+        if expected is Quantity:
+            return isinstance(obj, expected)
 
-    # don't compare dimensionality against UnknownDimensionality, only check magnitude type in this case
-    if isinstance(obj, Quantity) and isinstance(expected, type) and issubclass(expected, unknown_quantity_subclass):
+        expected_dt = getattr(expected, "_dimensionality_type", None)
         expected_mt = getattr(expected, "_magnitude_type", None)
 
-        if expected_mt is None:
-            raise ValueError(f"Invalid expected quantity type: {expected}, missing attribute '_magnitude_type'")
+        if expected_dt == UnknownDimensionality:
+            if expected_mt is None:
+                return True
 
-        return isinstance_types(obj.m, expected_mt)
+            return isinstance_types(obj.m, expected_mt)
+
+        if expected_dt is not None and obj._dimensionality_type is not expected_dt:
+            return False
+
+        return not (expected_mt is not None and not isinstance_types(obj.m, expected_mt))
 
     try:
         check_type(obj, expected)

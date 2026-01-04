@@ -4,8 +4,8 @@ import numpy as np
 import polars as pl
 from typeguard import typechecked
 
-from encomp.units import Quantity as Q
-from encomp.utypes import (
+from ..units import Quantity as Q
+from ..utypes import (
     DT,
     Area,
     Density,

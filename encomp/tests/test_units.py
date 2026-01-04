@@ -99,7 +99,7 @@ def _reset_dimensionality_registry() -> Generator[None]:
 
     import importlib
 
-    from encomp import utypes
+    from .. import utypes
 
     # this does not completely reload the module,
     # since there are multiple references to encomp.utypes
@@ -531,7 +531,7 @@ def test_Q() -> None:
 
 
 def test_custom_units() -> None:
-    assert_type(Q(1, "kilogram"), Quantity[UnknownDimensionality, float])
+    assert_type(Q(1, "kilogram"), Q[UnknownDimensionality, float])
     assert Q(1, "kg") == Q(1, "kilogram")
 
     with pytest.raises(DimensionalityComparisonError):
@@ -751,6 +751,7 @@ def test_instance_checks() -> None:
 
     assert isinstance_types(Q(25, "kg"), Q[Mass])
 
+    assert isinstance(Q(25, "kg"), Q)
     assert isinstance_types(Q(25, "kg"), Q)
 
     assert isinstance_types(Q(25, "°C"), Q)
@@ -1253,6 +1254,23 @@ def test_getitem() -> None:
 
     m0 = ms[0]
     assert isinstance_types(m0, Q[Mass, float])
+
+
+def test_class_getitem() -> None:
+    Q[Length]
+    Q[Length, float]
+
+    with pytest.raises(TypeError):
+        Q[Dimensionality]
+
+    with pytest.raises(TypeError):
+        Q[Length, str]  # pyright: ignore[reportInvalidTypeArguments]
+
+    with pytest.raises(TypeError):
+        Q[None]  # pyright: ignore[reportInvalidTypeArguments]
+
+    with pytest.raises(TypeError):
+        Q[None, float]  # pyright: ignore[reportInvalidTypeArguments]
 
 
 def test_astype() -> None:

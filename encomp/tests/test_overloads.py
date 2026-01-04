@@ -3,8 +3,8 @@ from typing import assert_type
 import numpy as np
 import polars as pl
 
-from encomp.units import Quantity as Q
-from encomp.utypes import (
+from ..units import Quantity as Q
+from ..utypes import (
     Area,
     Density,
     Dimensionless,
