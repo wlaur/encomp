@@ -7,6 +7,16 @@ from encomp.units import Quantity as Q
 from encomp.utypes import Dimensionless, Mass, MassFlow, Numpy1DArray, Numpy1DBoolArray, UnknownDimensionality
 
 
+def _assert_type(val: object, typ: type) -> None:
+    from encomp.misc import isinstance_types
+
+    if not isinstance_types(val, typ):
+        raise TypeError(f"Type mismatch for {val}: {type(val)}, expected {typ}")
+
+
+assert_type.__code__ = _assert_type.__code__
+
+
 def test_eq() -> None:
     r0 = Q(5, "kg") == Q(5_000, "g")
     assert_type(r0, bool)
@@ -67,7 +77,7 @@ def test_unknown_mul_div() -> None:
     assert_type(q3 / q1, Q[UnknownDimensionality, pl.Series])
     assert_type(q1 / q3, Q[UnknownDimensionality, pl.Series])
 
-    assert_type(Q(2, "m") / Q(25, "cm"), Q[Dimensionless, float])
+    assert_type(Q(2, "m") / Q(25, "km"), Q[Dimensionless, float])
     assert_type(Q(2, "kg") / Q(25, "g"), Q[Dimensionless, float])
 
     assert_type(Q(25, "kg") / Q([1, 2, 3], "s"), Q[MassFlow, Numpy1DArray])
