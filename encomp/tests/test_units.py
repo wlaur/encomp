@@ -282,13 +282,19 @@ def test_dimensionality_type_hierarchy() -> None:
         assert issubclass(m._dimensionality_type, Estimation)
 
         # the dimensionality type is preserved for add, sub and
-        # mul, div with scalars (not with Q[Dimensionless])
+        # mul, div with scalars and Q[Dimensionless]
 
         assert isinstance_types(s, Q[EstimatedLength])
+        assert isinstance_types(s.to_root_units(), Q[EstimatedLength])
+        assert isinstance_types(s.to_base_units(), Q[EstimatedLength])
+        assert isinstance_types(s.to(s.u), Q[EstimatedLength])
+        assert isinstance_types(s.to("cm"), Q[EstimatedLength])
+
         assert isinstance_types(s * 2, Q[EstimatedLength])
         assert isinstance_types(2 * s, Q[EstimatedLength])
 
         assert isinstance_types(s / 2, Q[EstimatedLength])
+        assert isinstance_types(s // 2, Q[EstimatedLength])
 
         # inverted dimensionality 1/Length
         assert not isinstance_types(2 / s, Q[EstimatedLength])
@@ -305,6 +311,11 @@ def test_dimensionality_type_hierarchy() -> None:
 
         assert isinstance_types(Q(1) * s, Q[EstimatedLength])
         assert isinstance_types(s * Q(1), Q[EstimatedLength])
+
+        assert not isinstance_types(Q(1) / s, Q[EstimatedLength])
+        assert isinstance_types(s / Q(1), Q[EstimatedLength])
+
+        assert isinstance_types(s // Q(1), Q[EstimatedLength])
 
         # these quantities are not compatible with normal Length/Mass
         # TODO: use a more specific exception here

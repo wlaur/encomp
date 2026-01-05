@@ -609,6 +609,19 @@ class Quantity(
         subcls = self._get_dimensional_subclass(dt, mt)
         return cast("type[Quantity[DT_, MT_]]", subcls)
 
+    def _call_subclass(
+        self,
+        m: MT | MT_,
+        unit: Unit[DT] | Unit[DT_] | QuantityOrUnitLike,
+    ) -> Quantity[DT, MT]:
+        u = cast(Unit[DT], unit)
+        dt = self.dt
+
+        mt = self._get_magnitude_type_safe(cast(type[MT], type(m)))
+        subcls = self.get_subclass(dt, mt)
+
+        return subcls(cast(MT, m), cast("Unit[DT]", u))
+
     def __len__(self) -> int:
         # __len__() must return an integer
         # the len() function ensures this at a lower level
@@ -957,48 +970,18 @@ class Quantity(
 
         return mt
 
-    @overload
-    def _call_subclass(self, qty: Quantity[DT, MT] | PlainQuantity) -> Quantity[DT, MT]: ...
-
-    @overload
-    def _call_subclass(self, qty: MT, unit: Unit[DT] | QuantityOrUnitLike) -> Quantity[DT, MT]: ...
-
-    def _call_subclass(
-        self,
-        qty: Quantity[DT, MT] | Quantity[DT_, MT_] | Quantity[DT_, MT] | Quantity[DT, MT_] | PlainQuantity | MT | MT_,
-        unit: Unit[DT] | Unit[DT_] | QuantityOrUnitLike | None = None,
-    ) -> Quantity[DT, MT]:
-        if unit is None:
-            if not isinstance(qty, Quantity):
-                raise TypeError(f"Invalid single input: {qty} ({type(qty)})")
-
-            m, u = qty.m, qty.u
-            dt = cast(type[DT], getattr(qty, "_dimensionality_type", self.dt))
-        else:
-            if isinstance(qty, PlainQuantity):
-                raise TypeError(f"Invalid first input: {qty} ({type(qty)})")
-            m = qty
-            u = cast(Unit[DT], unit)
-            dt = self.dt
-
-        mt = self._get_magnitude_type_safe(cast(type[MT], type(m)))
-
-        subcls = self.get_subclass(dt, mt)
-        return subcls(cast(MT, m), cast("Unit[DT]", u))
-
     def to_reduced_units(self) -> Quantity[DT, MT]:
         ret = super().to_reduced_units()
-        return self._call_subclass(ret)
+        return cast("Quantity[DT, MT]", ret)
 
     def to_root_units(self) -> Quantity[DT, MT]:
         ret = super().to_root_units()
-        return self._call_subclass(ret)
+        return cast("Quantity[DT, MT]", ret)
 
     def to_base_units(self) -> Quantity[DT, MT]:
         self._check_temperature_compatibility(Unit("kelvin"))
-
         ret = super().to_base_units()
-        return self._call_subclass(ret)
+        return cast("Quantity[DT, MT]", ret)
 
     def _dimensionalities_match(self, unit: Unit[DT_]) -> bool:
         src_dim = cast(dict[str, float], dict(self.dimensionality))
@@ -1227,8 +1210,10 @@ class Quantity(
 
             unit *= unit_i
 
-        ret = cls(cast(MT, magnitude), cast(Unit, unit))
-        return cast("Quantity[DT, float]", ret.to_base_units())
+        ret = cls(cast(MT, magnitude), cast(Unit, unit)).to_base_units()
+        ret_ = ret._call_subclass(ret.m, ret.u)
+
+        return cast("Quantity[DT, float]", ret_)
 
     @classmethod
     def __get_pydantic_core_schema__(
@@ -1532,7 +1517,7 @@ class Quantity(
     def __pow__(self, other: Quantity[Dimensionless, MT]) -> Quantity[UnknownDimensionality, MT]: ...
     def __pow__(self, other: Quantity[Dimensionless, Any] | float | int) -> Quantity[Any, Any]:
         ret = super().__pow__(other)
-        return self._call_subclass(ret)
+        return cast("Quantity[DT, MT]", ret)
 
     @overload
     def __add__(self: Quantity[Dimensionless, MT], other: float | int) -> Quantity[Dimensionless, MT]: ...
@@ -1569,9 +1554,9 @@ class Quantity(
 
             raise e
 
-        ret = super().__add__(other)
+        ret = cast("Quantity[DT, MT]", super().__add__(other))
 
-        return self._call_subclass(cast("Quantity", ret))
+        return self._call_subclass(ret.m, ret.u)
 
     @overload
     def __sub__(self: Quantity[Dimensionless, MT], other: float | int) -> Quantity[Dimensionless, MT]: ...
@@ -1612,14 +1597,14 @@ class Quantity(
 
             raise e
 
-        ret = super().__sub__(other)
+        ret = cast("Quantity[DT, MT]", super().__sub__(other))
 
         if isinstance(other, Quantity) and self.dt == Temperature and other._dimensionality_type == Temperature:
             _mt = type(ret.m)
             subcls = self._get_dimensional_subclass(TemperatureDifference, _mt)
             return subcls(ret.m, ret.u)
 
-        return self._call_subclass(ret)
+        return self._call_subclass(ret.m, ret.u)
 
     @overload
     def __eq__(self: Quantity[Dimensionless, float], other: float | int) -> bool: ...
@@ -2072,15 +2057,17 @@ class Quantity(
     def __mul__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
         ret = super().__mul__(other)
 
+        # preserve the dimensionality for other
+        # it might be a distinct subclass with identical units as another dimensionality
         if self.dimensionless and isinstance(other, Quantity):
-            subcls = self._get_dimensional_subclass(other._dimensionality_type, type(ret.m))
+            subcls = self.get_subclass(other._dimensionality_type, type(ret.m))
             return subcls(ret)
 
-        return self._call_subclass(ret)
+        return cast("Quantity[DT, MT]", ret)
 
     def __rmul__(self, other: float | int) -> Quantity[DT, MT]:
         ret = super().__rmul__(other)
-        return self._call_subclass(ret)
+        return cast("Quantity[DT, MT]", ret)
 
     @overload
     def __truediv__(
@@ -2293,16 +2280,17 @@ class Quantity(
     def __truediv__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
         ret = super().__truediv__(other)
 
+        # preserve the dimensionality for other
+        # it might be a distinct subclass with identical units as another dimensionality
         if self.dimensionless and isinstance(other, Quantity):
-            subcls = self._get_dimensional_subclass(other._dimensionality_type, type(ret.m))
+            subcls = self.get_subclass(other._dimensionality_type, type(ret.m))
             return subcls(ret)
 
-        return self._call_subclass(ret)
+        return cast("Quantity[DT, MT]", ret)
 
     def __rtruediv__(self, other: float | int) -> Quantity[UnknownDimensionality, MT]:
         ret = super().__rtruediv__(other)
-
-        return cast("Quantity[UnknownDimensionality, MT]", self._call_subclass(ret))
+        return cast("Quantity[UnknownDimensionality, MT]", ret)
 
     @overload
     def __floordiv__(
