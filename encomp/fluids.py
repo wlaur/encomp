@@ -1014,7 +1014,8 @@ class Water(Fluid[MT]):
             CoolProp property name.
         """
 
-        self.name = "Water"
+        # default IF97, set to "Water to use IAPWS-95
+        self.name = "IF97::Water"
 
         self.check_inputs(kwargs)
 
