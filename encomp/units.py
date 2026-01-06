@@ -909,6 +909,10 @@ class Quantity(
     def m(self) -> MT:
         return self._magnitude
 
+    @m.setter
+    def m(self, val: MT) -> None:
+        self._magnitude = val
+
     @property
     def mt(self) -> type[MT]:
         return self._magnitude_type
@@ -1460,14 +1464,14 @@ class Quantity(
         return self.asdim(UnknownDimensionality)
 
     def astype(self, magnitude_type: type[MT_]) -> Quantity[DT, MT_]:
+        magnitude_type_origin = get_origin(magnitude_type)
         m, u = self.m, self.u
 
         dt = self.dt
 
-        if type(m) is magnitude_type:
+        if type(m) is magnitude_type or type(m) is magnitude_type_origin:
             return cast("Quantity[DT, MT_]", self)
-
-        if magnitude_type is pl.Expr:
+        elif magnitude_type is pl.Expr:
             if isinstance(m, float):
                 return cast("Quantity[DT, MT_]", self.get_subclass(dt, pl.Expr)(pl.lit(m), u))
 
@@ -1475,19 +1479,19 @@ class Quantity(
                 f"Cannot convert magnitude with type {type(m)} to Polars expression, "
                 "only scalar (float) quantities can be converted to pl.Expr"
             )
-        elif isinstance(m, np.ndarray) and magnitude_type not in (pl.Series, list):
-            return cast("Quantity[DT, MT_]", self.get_subclass(dt, np.ndarray)(m.astype(magnitude_type), u))
         elif magnitude_type is float:
             if isinstance(m, Iterable):
                 return cast("Quantity[DT, MT_]", self.get_subclass(dt, np.ndarray)([float(n) for n in m], u))
             else:
                 return cast("Quantity[DT, MT_]", self.get_subclass(dt, float)(float(cast(Any, m)), u))
-        elif magnitude_type is np.ndarray or get_origin(magnitude_type) is np.ndarray:
+        elif magnitude_type is np.ndarray or magnitude_type_origin is np.ndarray:
             _m = [m] if not isinstance(m, Iterable) else m
-            return cast("Quantity[DT, MT_]", self.get_subclass(dt, np.ndarray)(np.array(_m), u))
+            vals = np.array(_m)
+            return cast("Quantity[DT, MT_]", self.get_subclass(dt, np.ndarray)(vals, u))
         elif magnitude_type is pl.Series:
             _m = [m] if not isinstance(m, Iterable) else m
-            return cast("Quantity[DT, MT_]", self.get_subclass(dt, pl.Series)(pl.Series(values=_m), u))
+            vals = pl.Series(values=_m)
+            return cast("Quantity[DT, MT_]", self.get_subclass(dt, pl.Series)(vals, u))
         else:
             raise TypeError(f"Cannot convert magnitude from type {type(m)} to {magnitude_type}")
 

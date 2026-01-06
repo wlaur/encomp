@@ -73,6 +73,9 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     # PropsSI expects the fluid name as the first input, but not HAPropsSI
     _append_name_to_cp_inputs: bool = True
 
+    _convert_pl_series_nan_null: bool = True
+    _convert_pl_series_f32: bool = True
+
     # HAPropsSI fails if one or more inputs are incorrect,
     # PropsSI returns NaN for invalid inputs in case valid inputs are also present
     _evaluate_invalid_separately: bool = False
@@ -505,53 +508,6 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         _LOGGER.warning(f'CoolProp could not calculate "{prop}" for fluid "{self.name}", output is NaN: {msg}')
 
-    def evaluate(self, output: CProperty, *points: tuple[CProperty, float | np.ndarray]) -> float | np.ndarray:
-        # case 1: all inputs are scalar, output is scalar
-        if all(isinstance(pt[1], float) for pt in points):
-            return self.evaluate_single(output, *points)  # pyright: ignore[reportArgumentType]
-
-        # at this point, the output will be a vector with length 1 or more
-
-        def single_element_vector_to_float(x: float | np.ndarray) -> float | np.ndarray:
-            if isinstance(x, float):
-                return x
-
-            if isinstance(x, np.ndarray) and x.size == 1:
-                return float(x[0])
-
-            return x
-
-        points = tuple((p, single_element_vector_to_float(v)) for p, v in points)
-
-        sizes = [v.size for _, v in points if isinstance(v, np.ndarray)]
-        shapes = [v.shape for _, v in points if isinstance(v, np.ndarray)]
-
-        # the sizes list is empty if all inputs were 1-element vectors
-        if len(sizes):
-            n = sizes[0]
-            shape = shapes[0]
-
-            # 1-length vectors were converted to float, so this error will be relevant
-            if len(set(sizes)) != 1:
-                raise ValueError(f"All inputs must have the same size, passed {points} with sizes {sizes}")
-
-            if len(set(shapes)) != 1:
-                raise ValueError(f"All inputs must have the same shape, passed {points} with shapes {shapes}")
-
-        else:
-            n = 1
-            shape = (1,)
-
-        def expand_scalars(x: float | np.ndarray) -> np.ndarray:
-            if isinstance(x, np.ndarray):
-                return x
-
-            return np.repeat(float(x), n).astype(float).reshape(shape)
-
-        points_arr = tuple((p, expand_scalars(v)) for p, v in points)
-
-        return self.evaluate_multiple(output, *points_arr)
-
     def evaluate_single(self, output: CProperty, *points: tuple[CProperty, float]) -> float:
         inputs = list(flatten(points))
 
@@ -573,13 +529,16 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             self.check_exception(output, e)
             return np.nan
 
+    def evaluate_expression(self, output: CProperty, *points: tuple[CProperty, pl.Expr]) -> pl.Expr:  # noqa: ARG002
+        return pl.lit(1)
+
     def evaluate_multiple_separately(
         self,
         output: CProperty,
         props: list[CProperty],
-        arrs_flat_masked: list[np.ndarray],
+        arrs_flat_masked: list[Numpy1DArray],
         N: int,
-    ) -> np.ndarray:
+    ) -> Numpy1DArray:
         vals: list[float] = []
 
         for i in range(N):
@@ -604,7 +563,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         return np.array(vals)
 
-    def evaluate_multiple(self, output: CProperty, *points: tuple[CProperty, np.ndarray]) -> np.ndarray:
+    def evaluate_multiple(self, output: CProperty, *points: tuple[CProperty, Numpy1DArray]) -> Numpy1DArray:
         props = [pt[0] for pt in points]
         arrs = [pt[1] for pt in points]
         shape = arrs[0].shape
@@ -649,15 +608,74 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
             val[mask] = val_masked
 
-        def validate_output(x: np.ndarray) -> np.ndarray:
+        def validate_output(x: Numpy1DArray) -> Numpy1DArray:
             x[x == np.inf] = np.nan
             x[x == -np.inf] = np.nan
             return x.reshape(shape)
 
         return validate_output(val)
 
+    def evaluate(
+        self, output: CProperty, *points: tuple[CProperty, float | Numpy1DArray | pl.Expr]
+    ) -> float | Numpy1DArray | pl.Expr:
+        if all(isinstance(pt[1], float) for pt in points):
+            scalar_points = [cast("tuple[CProperty, float]", n) for n in points]
+            return self.evaluate_single(output, *scalar_points)
+
+        if any(isinstance(pt[1], pl.Expr) for pt in points):
+            if not all(isinstance(pt[1], (float, pl.Expr)) for pt in points):
+                raise TypeError(
+                    "Only pl.Expr and float inputs are supported when one or more inputs is pl.Expr, "
+                    f"passed types: {[(n[0], type(n[1])) for n in points]}"
+                )
+
+            expr_points = [(n[0], n[1] if isinstance(n[1], pl.Expr) else pl.lit(n[1])) for n in points]
+            return self.evaluate_expression(output, *expr_points)
+
+        def single_element_vector_to_float(x: float | Numpy1DArray) -> float | Numpy1DArray:
+            if isinstance(x, float):
+                return x
+
+            if isinstance(x, np.ndarray) and x.size == 1:
+                return float(x[0])
+
+            return x
+
+        points = tuple(
+            (p, single_element_vector_to_float(v))
+            for p, v in cast("tuple[tuple[CProperty, float | Numpy1DArray]]", points)
+        )
+
+        sizes = [v.size for _, v in points if isinstance(v, np.ndarray)]
+        shapes = [v.shape for _, v in points if isinstance(v, np.ndarray)]
+
+        # the sizes list is empty if all inputs were 1-element vectors
+        if len(sizes):
+            n = sizes[0]
+            shape = shapes[0]
+
+            # 1-length vectors were converted to float, so this error will be relevant
+            if len(set(sizes)) != 1:
+                raise ValueError(f"All inputs must have the same size, passed {points} with sizes {sizes}")
+
+            if len(set(shapes)) != 1:
+                raise ValueError(f"All inputs must have the same shape, passed {points} with shapes {shapes}")
+        else:
+            n = 1
+            shape = (1,)
+
+        def expand_scalars(x: float | np.ndarray) -> Numpy1DArray:
+            if isinstance(x, np.ndarray):
+                return x
+
+            return np.repeat(float(x), n).astype(float).reshape(shape)
+
+        points_arr = tuple((p, expand_scalars(v)) for p, v in points)
+
+        return self.evaluate_multiple(output, *points_arr)
+
     def construct_quantity(
-        self, val: float | Numpy1DArray, output: CProperty, convert_magnitude: bool = True
+        self, val: float | Numpy1DArray | pl.Expr, output: CProperty, convert_magnitude: bool = True
     ) -> Quantity[Any, MT]:
         unit_output = self.get_coolprop_unit(output)
 
@@ -694,9 +712,18 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         if convert_magnitude:
             qty = qty.astype(self._mt)
 
+        if isinstance(qty.m, pl.Series):
+            if self._convert_pl_series_nan_null:
+                qty.m = qty.m.fill_nan(None)  # pyright: ignore[reportAttributeAccessIssue]
+
+            if self._convert_pl_series_f32:
+                qty.m = qty.m.cast(pl.Float32)  # pyright: ignore[reportAttributeAccessIssue]
+
         return cast("Quantity[Any, MT]", qty)
 
-    def to_numeric(self, prop: CProperty, qty: Quantity[Any, MT] | Quantity[Any, float]) -> float | np.ndarray:
+    def to_numeric(
+        self, prop: CProperty, qty: Quantity[Any, MT] | Quantity[Any, float]
+    ) -> float | Numpy1DArray | pl.Expr:
         unit = self.get_coolprop_unit(prop)
 
         try:
@@ -708,16 +735,14 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 f"{qty.u} ({qty.dimensionality})"
             ) from e
 
-        if isinstance(m, pl.Expr):
-            raise TypeError(f"Cannot pass Polars expression as input to CoolProp: {m}")
-
-        if isinstance(m, list):
-            m = np.array(m)
-
-        if isinstance(m, pl.Series):
-            m = m.to_numpy()
-
-        return m
+        if isinstance(m, (float, int, pl.Expr)):
+            return m
+        elif isinstance(m, pl.Series):
+            return m.to_numpy()
+        elif isinstance(m, list):
+            return np.array(m)
+        else:
+            return m
 
     def get(
         self,
@@ -783,7 +808,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         # add optional scalar points also
         vector_inputs_cutoff += [n for n in self.points if n[0] not in (n[0] for n in vector_inputs_cutoff)]
 
-        qty = self.get(prop, points=vector_inputs_cutoff, convert_magnitude=False).astype(np.ndarray)
+        qty = self.get(prop, points=vector_inputs_cutoff, convert_magnitude=False).astype(Numpy1DArray)
 
         qty_formatted = f"{qty:{fmt}}"
 
