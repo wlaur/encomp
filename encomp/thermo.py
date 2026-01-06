@@ -79,13 +79,13 @@ def heat_balance(
         "Q_h": (Quantity[Energy] | Quantity[Power], ("kJ", "kW")),
     }
 
-    vals = {}
+    vals: dict[str, Quantity[Any, Any]] = {}
     units = {a: b[1] for a, b in params.items()}
 
     for a in args:
         for param_name, tp in params.items():
             if isinstance(a, tp[0]):
-                if param_name == "dT" and not a._ok_for_muldiv():
+                if param_name == "dT" and not a._ok_for_muldiv():  # pyright: ignore[reportPrivateUsage]
                     raise ValueError(
                         f"Cannot pass temperature difference using degree unit {a.u}, convert to delta_deg"
                     )
@@ -120,7 +120,7 @@ def heat_balance(
 
     ret = ret.to(unit)
 
-    return ret
+    return ret  # pyright: ignore[reportReturnType]
 
 
 def intermediate_temperatures(
@@ -192,7 +192,7 @@ def intermediate_temperatures(
     # system of coupled equations: heat transfer rate through all layers is identical
     # inner convection == conduction == (outer convection + radiation)
 
-    def fun(x):  # noqa: ANN202, ANN001
+    def fun(x: tuple[np.ndarray, np.ndarray]) -> list[np.ndarray]:
         T1, T2 = x
 
         eq1 = k_val / d_val * (T1 - T2) - h_out_val * (T2 - T_s_val) - epsilon * SIGMA.m * (T2**4 - T_s_val**4)
@@ -202,7 +202,7 @@ def intermediate_temperatures(
         return [eq1, eq2]
 
     # use the boundary temperatures as initial guesses
-    _ret = fsolve(fun, [T_b_val, T_s_val])
+    _ret = fsolve(fun, [T_b_val, T_s_val])  # pyright: ignore[reportArgumentType]
 
     T1_val: float = _ret[0]
     T2_val: float = _ret[1]

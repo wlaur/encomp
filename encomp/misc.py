@@ -1,6 +1,6 @@
 import ast
 from types import UnionType
-from typing import Any, TypeIs, get_args, get_origin
+from typing import Any, TypeIs, cast, get_args, get_origin
 
 import asttokens
 from typeguard import check_type
@@ -16,26 +16,26 @@ def isinstance_types[T](obj: Any, expected: type[T]) -> TypeIs[T]:  # noqa: ANN4
         except TypeError:
             return any(isinstance_types(obj, n) for n in get_args(expected))
 
-    if isinstance(obj, Quantity) and isinstance(expected, type) and (issubclass(expected, Quantity)):
+    if isinstance(obj, Quantity) and isinstance(expected, type) and (issubclass(expected, Quantity)):  # pyright: ignore[reportUnnecessaryIsInstance]
         if expected is Quantity:
-            return isinstance(obj, expected)
+            return isinstance(obj, expected)  # pyright: ignore[reportUnnecessaryIsInstance]
 
-        expected_dt = getattr(expected, "_dimensionality_type", None)
-        expected_mt = getattr(expected, "_magnitude_type", None)
+        expected_dt = getattr(expected, "_dimensionality_type", None)  # pyright: ignore[reportUnknownArgumentType]
+        expected_mt = getattr(expected, "_magnitude_type", None)  # pyright: ignore[reportUnknownArgumentType]
 
         if expected_dt == UnknownDimensionality:
             if expected_mt is None:
                 return True
 
-            return isinstance_types(obj.m, expected_mt)
+            return isinstance_types(obj.m, expected_mt)  # pyright: ignore[reportUnknownMemberType]
 
-        if expected_dt is not None and obj._dimensionality_type is not expected_dt:
+        if expected_dt is not None and obj._dimensionality_type is not expected_dt:  # pyright: ignore[reportPrivateUsage]
             return False
 
-        return not (expected_mt is not None and not isinstance_types(obj.m, expected_mt))
+        return not (expected_mt is not None and not isinstance_types(obj.m, expected_mt))  # pyright: ignore[reportUnknownMemberType]
 
     try:
-        check_type(obj, expected)
+        check_type(obj, expected)  # pyright: ignore[reportUnknownArgumentType]
         return True
     except Exception:
         return False
@@ -85,20 +85,6 @@ def grid_dimensions(N: int, nrows: int, ncols: int) -> tuple[int, int]:
 
 
 def name_assignments(src: str) -> list[tuple[str, str]]:
-    """
-    Finds all names that are assigned in the input Python source code.
-
-    Parameters
-    ----------
-    src : str
-        Python source code
-
-    Returns
-    -------
-    list[tuple[str, str]]
-        List of names and the assignment statements
-    """
-
     assigned_names: list[tuple[str, str]] = []
 
     atok = asttokens.ASTTokens(src, parse=True)
@@ -108,8 +94,8 @@ def name_assignments(src: str) -> list[tuple[str, str]]:
 
     for node in ast.walk(atok.tree):
         if hasattr(node, "lineno") and isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name):
-            start = node.first_token.startpos  # type: ignore
-            end = node.last_token.endpos  # type: ignore
+            start = cast(int, node.first_token.startpos)  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+            end = cast(int, node.last_token.endpos)  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
             assignment_src = atok.text[start:end]
 
             assigned_names.append((node.targets[0].id, assignment_src))

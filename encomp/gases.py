@@ -138,15 +138,8 @@ def convert_gas_volume(
     if condition_2 in ("N", "S"):
         condition_2 = n_s_conditions[condition_2]
 
-    if isinstance(condition_1, tuple):
-        P1, T1 = condition_1
-    else:
-        raise ValueError(f"Incorrect value for condition 1: {condition_1}")
-
-    if isinstance(condition_2, tuple):
-        P2, T2 = condition_2
-    else:
-        raise ValueError(f"Incorrect value for condition 2: {condition_2}")
+    P1, T1 = condition_1
+    P2, T2 = condition_2
 
     Z1 = Fluid(fluid_name, T=T1, P=P1).Z
     Z2 = Fluid(fluid_name, T=T2, P=P2).Z
@@ -157,7 +150,7 @@ def convert_gas_volume(
     V2 = V1 * (P1 / P2) * (T2.to("K") / T1.to("K")) * (Z2 / Z1)
 
     # volume at P2, T2 in same units as V1
-    return V2.to(V1.u)
+    return V2.to(V1.u)  # pyright: ignore[reportArgumentType]
 
 
 @overload

@@ -50,7 +50,7 @@ def flatten(container: Iterable[Any], max_depth: int | None = None, _depth: int 
 
         # check if this object can be flattened further
         if isinstance(obj, Iterable):
-            yield from flatten(obj, max_depth=max_depth, _depth=_depth + 1)
+            yield from flatten(obj, max_depth=max_depth, _depth=_depth + 1)  # pyright: ignore[reportUnknownArgumentType]
 
             continue
 
