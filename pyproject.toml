@@ -172,6 +172,7 @@ enableTypeIgnoreComments = false
 strictListInference = true
 strictDictionaryInference = true
 strictSetInference = true
+reportUnusedImport = false
 
 [tool.uv.sources]
 microsoft-python-type-stubs = { git = "https://github.com/microsoft/python-type-stubs.git" }
