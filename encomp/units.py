@@ -1055,6 +1055,9 @@ class Quantity(
         if isinstance(dimension, Quantity):
             return self.dt == dimension._dimensionality_type
 
+        if isinstance(dimension, str):
+            return self.check(self._validate_unit(dimension))
+
         if isinstance(dimension, Unit):
             # it's not possible to know if an instance of Unit is Temperature or TemperatureDifference
             # until it is used to construct a Quantity

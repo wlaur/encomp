@@ -47,12 +47,12 @@ The unit registry contains a number of common units as attributes.
 
 .. code-block:: python
 
-    from encomp.units import ureg as u
+    from encomp.units import UNIT_REGISTRY
 
-    d = 50 * u.m
-    v = d / u.s
+    d = 50 * UNIT_REGISTRY.m
+    v = d / UNIT_REGISTRY.s
 
-    mf = Q(25, u.kg / u.h)
+    mf = Q(25, UNIT_REGISTRY.kg / UNIT_REGISTRY.h)
 
 
 
@@ -91,7 +91,7 @@ The module :py:mod:`encomp.utypes` contains :py:class:`encomp.utypes.Dimensional
 
     from encomp.utypes import Pressure, Length, Power, Dimensionality
 
-    Q[Pressure] # subclass with dimensionality pressure
+    Q[Pressure, float] # subclass with dimensionality pressure and magnitude float
 
     Pressure.dimensions # <UnitsContainer({'[length]': -1, '[mass]': 1, '[time]': -2})>
 
@@ -99,7 +99,7 @@ The module :py:mod:`encomp.utypes` contains :py:class:`encomp.utypes.Dimensional
     class PowerPerLength(Dimensionality):
         dimensions = Power.dimensions / Length.dimensions
 
-    Q[PowerPerLength] # new dimensionality
+    Q[PowerPerLength, float] # new dimensionality
 
 The builtin ``isinstance()`` can be used to check dimensionalities of quantity objects.
 Alteratively, the :py:meth:`encomp.units.Quantity.check` method can be used.
@@ -174,19 +174,11 @@ The new dimensionality will have a single unit with the same name as the dimensi
 Quantities with vector magnitudes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-
-Lists, tuples, sets, Numpy arrays and Pandas Series objects can also be used as magnitude.
-In case a tuple or list is given as magnitude when creating a quantity, it will be converted to a Numpy array.
-
+Lists, Numpy arrays and Polars Series objects can also be used as magnitude.
 
 .. code-block:: python
 
-    # lists and tuples are converted to array
     type(Q([1, 2, 3], 'kg').m) # numpy.ndarray
-    type(Q((1, 2, 3), 'kg').m) # numpy.ndarray
-
-    # set is not converted, since Numpy has no corresponding type
-    type(Q({1, 2, 3}, 'kg').m) # set
 
     import numpy as np
 
@@ -194,9 +186,17 @@ In case a tuple or list is given as magnitude when creating a quantity, it will 
     Q(arr, 'bar')
     # [0.0 0.0204 0.0408 ... 0.9795 1.0] bar
 
-.. todo::
 
-    Document integration with Polars series and expressions.
+Quantities with expression magnitudes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Polars Expressions can be used as magnitude:
+
+.. code-block:: python
+
+    import polars as pl
+
+    type(Q(pl.lit(5), 'kg').m) # pl.Expr
 
 
 Combining quantities
@@ -336,6 +336,7 @@ Pydantic models inherit from the ``pydantic.BaseModel`` class.
 
 .. code-block:: python
 
+    from typing import Any
     from pydantic import BaseModel
 
     class Model(BaseModel):
@@ -347,7 +348,7 @@ Pydantic models inherit from the ``pydantic.BaseModel`` class.
         s: Q[Length]
 
         # float can be converted to Quantity[Dimensionless]
-        r: Q[Dimensionless] = 0.5
+        r: Q[Dimensionless, float] = Q(0.5)
 
         # float cannot be converted to Quantity[Length]
         # this raises pydantic.ValidationError (if Config.validate_all is set)
@@ -712,8 +713,8 @@ The units are automatically converted to their symbolic representations (in the 
 
     This behavior is not encoded in the type hints.
 
-Intergration with other libraries
----------------------------------
+Integration with other libraries
+--------------------------------
 
 
 ``fluids``
