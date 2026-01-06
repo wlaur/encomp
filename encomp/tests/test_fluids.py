@@ -1,8 +1,9 @@
 # ruff: noqa: B018
+# pyright: reportConstantRedefinition=false
 
 import numpy as np
 import pytest
-from pytest import approx
+from pytest import approx  # pyright: ignore[reportUnknownVariableType]
 
 from ..fluids import Fluid, HumidAir, Water
 from ..units import Quantity as Q
@@ -327,7 +328,7 @@ def test_properties_Fluid() -> None:
 
     for fluid_name in fluid_names:
         for T, P in zip(Ts, Ps, strict=False):
-            fluid = Fluid(fluid_name, T=Q(T, "°C"), P=Q(P, "bar"))
+            fluid = Fluid(fluid_name, T=Q(T, "°C"), P=Q(P, "bar"))  # pyright: ignore[reportArgumentType, reportCallIssue]
             repr(fluid)
 
             for p in props:
@@ -386,7 +387,7 @@ def test_properties_HumidAir() -> None:
     ]
 
     for T, P, R in zip(Ts, Ps, Rs, strict=False):
-        ha = HumidAir(T=Q(T, "°C"), P=Q(P, "bar"), R=Q(R))
+        ha = HumidAir(T=Q(T, "°C"), P=Q(P, "bar"), R=Q(R))  # pyright: ignore[reportCallIssue, reportArgumentType]
         repr(ha)
 
         for p in props:

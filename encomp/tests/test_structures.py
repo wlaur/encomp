@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 from hypothesis import given
 from hypothesis.strategies import integers, lists
@@ -34,7 +36,7 @@ def test_flatten() -> None:
     deep_nested = [[[[[[[[1]]], [2]]]]]]
     _ = list(flatten(deep_nested, max_depth=2)) == [[[[[[[1]]], [2]]]]]
 
-    recursive: list = [None]
+    recursive: list[Any] = [None]
     recursive[0] = recursive
 
     with pytest.raises(RecursionError):
@@ -51,7 +53,7 @@ def test_flatten() -> None:
 @given(
     lst=lists(integers(), min_size=1, max_size=100),
 )
-def test_divide_chunks(lst: list) -> None:
+def test_divide_chunks(lst: list[Any]) -> None:
     m = len(lst)
 
     for N in range(1, m + 1):
@@ -76,4 +78,4 @@ def test_divide_chunks_errors() -> None:
         next(divide_chunks([1, 2, 3], -5))
 
     with pytest.raises(ValueError):
-        next(divide_chunks([], 2))
+        next(divide_chunks([], 2))  # pyright: ignore[reportUnknownArgumentType]

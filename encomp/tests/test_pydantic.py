@@ -1,11 +1,11 @@
-from typing import Any, assert_type
+from typing import Any, assert_type, cast
 
 import numpy as np
 import polars as pl
 from pydantic import BaseModel
 
 from ..units import Quantity
-from ..utypes import UnknownDimensionality
+from ..utypes import Mass, Numpy1DArray, UnknownDimensionality
 
 
 def _assert_type(val: object, typ: type) -> None:
@@ -20,7 +20,7 @@ assert_type.__code__ = _assert_type.__code__
 
 def test_model_serialize() -> None:
     class M(BaseModel):
-        qty: Quantity[Any]
+        qty: Quantity[Mass, Any]
 
     for m in [
         2,
@@ -33,9 +33,9 @@ def test_model_serialize() -> None:
         pl.Series([2, 34, 5], dtype=pl.Int16),
         pl.Series([2, 34, 5], dtype=pl.Float32),
         pl.Series([2, 34, 5], dtype=pl.Float64),
-        np.array([[1, 2, 3], [3, 2, 1], [2, 2, 2]]).ravel(),
+        cast(Numpy1DArray, np.array([[1, 2, 3], [3, 2, 1], [2, 2, 2]]).ravel()),
     ]:
-        qty = Quantity(m, "kg")
+        qty = cast("Quantity[Mass, Any]", Quantity(m, "kg"))  # pyright: ignore[reportCallIssue, reportArgumentType]
         serialized = M(qty=qty).model_dump_json()
 
         deserialized = M.model_validate_json(serialized)
@@ -50,11 +50,11 @@ def test_model_serialize() -> None:
             assert qty == deserialized.qty
 
         if isinstance(m, float | int):
-            assert deserialized.qty.m == m
+            assert deserialized.qty.m == m  # pyright: ignore[reportUnknownMemberType, reportGeneralTypeIssues]
         elif isinstance(m, list):
             m = np.array(m)
         else:
-            assert type(deserialized.qty.m) is type(m)
+            assert type(deserialized.qty.m) is type(m)  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
 
     assert isinstance(M.model_json_schema(), dict)
 

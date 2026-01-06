@@ -1,3 +1,5 @@
+# pyright: reportConstantRedefinition=false
+
 import copy
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -6,10 +8,9 @@ from typing import Any, TypedDict, assert_never, assert_type
 import numpy as np
 import polars as pl
 import pytest
-from pandas.api.types import is_list_like as pandas_is_list_like
 from pint.errors import OffsetUnitCalculusError
 from pydantic import BaseModel, ConfigDict
-from pytest import approx
+from pytest import approx  # pyright: ignore[reportUnknownVariableType]
 from typeguard import typechecked
 
 from ..conversion import convert_volume_mass
@@ -66,15 +67,19 @@ assert_type.__code__ = _assert_type.__code__
 
 
 def test_registry() -> None:
-    from pint import _DEFAULT_REGISTRY, application_registry
+    from pint import (
+        _DEFAULT_REGISTRY,  # pyright: ignore[reportUnknownVariableType, reportPrivateUsage]
+        application_registry,
+    )
 
-    us = [UNIT_REGISTRY, _DEFAULT_REGISTRY, application_registry.get()]
+    us: list[Any] = [UNIT_REGISTRY, _DEFAULT_REGISTRY, application_registry.get()]
 
     # check that all these objects are the same
     assert len(set(map(id, us))) == 1
 
     # check that units from all objects can be combined
-    q = 1 * UNIT_REGISTRY.kg / _DEFAULT_REGISTRY.s**2 / application_registry.get().m  # pyright: ignore[reportOperatorIssue]
+    # NOTE: there is not typing for quantities created by this method
+    q = 1 * UNIT_REGISTRY.kg / _DEFAULT_REGISTRY.s**2 / application_registry.get().m  # pyright: ignore[reportUnknownVariableType, reportOperatorIssue]
     assert isinstance_types(q, Q[Pressure, Any])
 
     # options cannot be overridden once set
@@ -111,11 +116,11 @@ def _reset_dimensionality_registry() -> Generator[None]:
     # explicitly replace the registry dicts on the version of
     # Dimensionality that was loaded on module-level in this test module
 
-    _registry_orig = Dimensionality._registry
-    _registry_reversed_orig = Dimensionality._registry_reversed
+    _registry_orig = Dimensionality._registry  # pyright: ignore[reportPrivateUsage]
+    _registry_reversed_orig = Dimensionality._registry_reversed  # pyright: ignore[reportPrivateUsage]
 
-    Dimensionality._registry = utypes_reloaded.Dimensionality._registry
-    Dimensionality._registry_reversed = utypes_reloaded.Dimensionality._registry_reversed
+    Dimensionality._registry = utypes_reloaded.Dimensionality._registry  # pyright: ignore[reportPrivateUsage]
+    Dimensionality._registry_reversed = utypes_reloaded.Dimensionality._registry_reversed  # pyright: ignore[reportPrivateUsage]
 
     try:
         yield
@@ -124,12 +129,12 @@ def _reset_dimensionality_registry() -> Generator[None]:
         # reset to original registries
         # otherwise any code executed after this context manager
         # will have issues with isinstance() and issubclass()
-        Dimensionality._registry = _registry_orig
-        Dimensionality._registry_reversed = _registry_reversed_orig
+        Dimensionality._registry = _registry_orig  # pyright: ignore[reportPrivateUsage]
+        Dimensionality._registry_reversed = _registry_reversed_orig  # pyright: ignore[reportPrivateUsage]
 
         # clear existing mapping from dimensionality subclass name to Quantity subclass
         # this will be dynamically rebuilt
-        Q._subclasses.clear()
+        Q._subclasses.clear()  # pyright: ignore[reportPrivateUsage]
 
 
 def test_dimensionality_subtype_protocol() -> None:
@@ -278,8 +283,8 @@ def test_dimensionality_type_hierarchy() -> None:
         s = Q[EstimatedLength, float](25, "m")
         m = Q[EstimatedMass, float](25, "kg")
 
-        assert issubclass(s._dimensionality_type, Estimation)
-        assert issubclass(m._dimensionality_type, Estimation)
+        assert issubclass(s._dimensionality_type, Estimation)  # pyright: ignore[reportPrivateUsage]
+        assert issubclass(m._dimensionality_type, Estimation)  # pyright: ignore[reportPrivateUsage]
 
         # the dimensionality type is preserved for add, sub and
         # mul, div with scalars and Q[Dimensionless]
@@ -367,7 +372,7 @@ def test_type_eq() -> None:
     assert isinstance_types(q, Q[Length, float])
     assert isinstance_types(q, Q[Length, Any])
 
-    if isinstance(q, Q):
+    if isinstance(q, Q):  # pyright: ignore[reportUnnecessaryIsInstance]
         assert_type(q, Q[Length, float])
     else:
         assert_never(q)
@@ -441,7 +446,7 @@ def test_Q() -> None:
         _ = 2 == Q(2, "kg")  # noqa: SIM300
 
     with pytest.raises(DimensionalityComparisonError):
-        _ = Q(2, "kg") == Q(25, "m")  # pyright: ignore[reportOperatorIssue]
+        _ = Q(2, "kg") == Q(25, "m")  # pyright: ignore[reportUnknownVariableType, reportOperatorIssue]
 
     # inputs can be nested
     Q(Q(1, "kg"))
@@ -531,9 +536,12 @@ def test_Q() -> None:
 
     assert_type(Q(Q(2, "feet_water"), Q(2, "kPa").u), Q[Pressure, float])
 
-    with pytest.raises(Exception):  # noqa: B017
-        # incorrect dimensionalities should raise Exception
-        Q(Q(2, "feet_water"), Q(321321, "kg").u).to(Q(123123, "feet_water"))
+    assert_type(
+        Q(Q(2, "feet_water"), Q(321321, "psi").u).to(Q(123123, "feet_water").asdim(Pressure)), Q[Pressure, float]
+    )
+
+    with pytest.raises(DimensionalityTypeError):
+        Q(Q(2, "feet_water"), Q(321321, "kg").u).to(Q(123123, "feet_water").asdim(Pressure))  # pyright: ignore[reportArgumentType]
 
     # the UnitsContainer objects can be used to construct new dimensionalities
     # NOTE: custom dimensionalities must have unique names
@@ -622,9 +630,10 @@ def test_wraps() -> None:
     # @UNIT_REGISTRY.wraps(ret, args, strict=True|False) is a convenience
     # decorator for making the input/output of a function into Quantity
     # however, it does not enforce the return value
+    # NOTE: do not use this, does not support typing at all
 
-    @UNIT_REGISTRY.wraps("kg", ("m", "kg"), strict=True)
-    def func(a, b):  # noqa: ANN001, ANN202
+    @UNIT_REGISTRY.wraps("kg", ("m", "kg"), strict=True)  # pyright: ignore[reportUnknownMemberType]
+    def func(a: Any, b: Any) -> Any:  # noqa: ANN401
         # this is incorrect, cannot add 1 to a dimensional Quantity
         return a * b**2 + 1
 
@@ -978,10 +987,10 @@ def test_compatibility() -> None:
     assert str((Q(25, "MSEK/GWh") * Q(25, "kWh")).to_base_units()) == "625.0 currency"
 
     with pytest.raises(DimensionalityTypeError):
-        _ = Q(25, "kg") + Q(2, "m")
+        _ = Q(25, "kg") + Q(2, "m")  # pyright: ignore[reportUnknownVariableType]
 
     with pytest.raises(DimensionalityTypeError):
-        _ = Q(25, "kg") - Q(2, "m")
+        _ = Q(25, "kg") - Q(2, "m")  # pyright: ignore[reportUnknownVariableType]
 
     # if the _distinct class attribute is True, an unspecified
     # dimensionality will default to this
@@ -1038,7 +1047,7 @@ def test_distinct_dimensionality() -> None:
 def test_literal_units() -> None:
     for d, units in get_registered_units().items():
         for u in units:
-            assert Q(1, u)._dimensionality_type.__name__ == d
+            assert Q(1, u)._dimensionality_type.__name__ == d  # pyright: ignore[reportPrivateUsage]
 
 
 def test_indexing() -> None:
@@ -1056,12 +1065,12 @@ def test_plus_minus() -> None:
     length = Q(2, "m")
 
     # TODO: add type hints for this
-    l_e = length.plus_minus(Q(1, "cm"))
+    l_e = length.plus_minus(Q(1, "cm"))  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
 
-    l2_e = (l_e**2).to("km**2")
+    l2_e = (l_e**2).to("km**2")  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
 
-    assert l2_e.error == Q(4e-8, "km**2")  # pyright: ignore[reportAttributeAccessIssue]
-    assert isinstance_types(l2_e.error, Q[Area])  # pyright: ignore[reportAttributeAccessIssue]
+    assert l2_e.error == Q(4e-8, "km**2")  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+    assert isinstance_types(l2_e.error, Q[Area])  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
 
 
 def test_round() -> None:
@@ -1097,18 +1106,6 @@ def test_abs() -> None:
 
     assert q_a.m[0] == 25
     assert q_a.m[1] == 25
-
-
-def test_pandas_is_list_like() -> None:
-    # scalar magnitude is not list like
-
-    assert pandas_is_list_like(Q([25]))
-    assert pandas_is_list_like(Q([25, 25]))
-    assert pandas_is_list_like(Q(np.linspace(0, 1), "kg"))
-
-    assert not pandas_is_list_like(Q(25))
-    assert not pandas_is_list_like(Q(0.2))
-    assert not pandas_is_list_like(Q(0.2, "kg/s"))
 
 
 def test_unit_compatibility() -> None:

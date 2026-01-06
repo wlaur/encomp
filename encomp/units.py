@@ -551,12 +551,14 @@ class Quantity(
 
     @staticmethod
     def _validate_unit(
-        unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | None,
+        unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | Quantity[DT, Any] | None,
     ) -> Unit[DT]:
         if unit is None:
             return Unit("dimensionless")
         elif isinstance(unit, Unit):
             return Unit(unit)
+        elif isinstance(unit, Quantity):
+            return unit.u
         elif isinstance(unit, dict):
             # compatibility with internal pint API
             return Unit(Quantity._validate_unit(str(UnitsContainer(unit))))
@@ -981,10 +983,14 @@ class Quantity(
             for key in set(src_dim.keys()) | set(dst_dim.keys())
         )
 
-    def _to_unit(self, unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number]) -> Unit[DT]:
+    def _to_unit(
+        self, unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | Quantity[DT, Any]
+    ) -> Unit[DT]:
         return self._validate_unit(unit)
 
-    def to(self, unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number]) -> Quantity[DT, MT]:
+    def to(
+        self, unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | Quantity[DT, Any]
+    ) -> Quantity[DT, MT]:
         valid_unit = self._to_unit(unit)
         self._check_temperature_compatibility(valid_unit)
 
@@ -1039,7 +1045,8 @@ class Quantity(
                 raise e
 
     def check(  # pyright: ignore[reportIncompatibleMethodOverride]
-        self, dimension: Quantity[Any, Any] | UnitsContainer | Unit | str | Dimensionality | type[Dimensionality]
+        self,
+        dimension: Quantity[Any, Any] | UnitsContainer | Unit[DT_] | Unit | str | Dimensionality | type[Dimensionality],
     ) -> bool:
         if isinstance(dimension, Quantity):
             return self.dt == dimension._dimensionality_type
@@ -1050,7 +1057,7 @@ class Quantity(
             unit_qty = Quantity(1.0, dimension)
 
             if isinstance_types(unit_qty, Quantity[TemperatureDifference]):
-                unit_qty = Quantity[TemperatureDifference, float](1.0, dimension)
+                unit_qty = Quantity(1.0, dimension).asdim(TemperatureDifference)
 
             return self.check(unit_qty)
 
