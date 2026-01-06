@@ -25,9 +25,7 @@ from typing import (
     Generic,
     Literal,
     TypeVar,
-    assert_never,
     cast,
-    get_args,
     get_origin,
     overload,
 )
@@ -35,7 +33,6 @@ from typing import (
 import numpy as np
 import pint
 import polars as pl
-from pint._typing import QuantityOrUnitLike
 from pint.errors import DimensionalityError
 from pint.facets.measurement.objects import MeasurementQuantity
 from pint.facets.nonmultiplicative.objects import NonMultiplicativeQuantity
@@ -54,7 +51,6 @@ from .utypes import (
     BASE_SI_UNITS,
     DT,
     DT_,
-    MAGNITUDE_TYPES,
     MT,
     MT_,
     AllUnits,
@@ -220,7 +216,7 @@ _REGISTRY_STATIC_OPTIONS = {
 }
 
 
-class _UnitRegistry(UnitRegistry):
+class _UnitRegistry(UnitRegistry[Any]):
     def __setattr__(self, key: str, value: Any) -> None:  # noqa: ANN401
         # ensure that static options cannot be overridden
         if key in _REGISTRY_STATIC_OPTIONS and value != _REGISTRY_STATIC_OPTIONS[key]:
@@ -229,8 +225,8 @@ class _UnitRegistry(UnitRegistry):
         return super().__setattr__(key, value)
 
 
-class _LazyRegistry(LazyRegistry):
-    def __init(self) -> None:
+class _LazyRegistry(LazyRegistry[Any, Any]):
+    def __init(self) -> None:  # pyright: ignore[reportUnusedFunction]
         args, kwargs = self.__dict__["params"]
         kwargs["on_redefinition"] = "raise"
 
@@ -238,19 +234,19 @@ class _LazyRegistry(LazyRegistry):
         kwargs["filename"] = str(SETTINGS.units.resolve().absolute())
 
         setattr(self, "__class__", _UnitRegistry)  # noqa: B010
-        self.__init__(*args, **kwargs)
+        self.__init__(*args, **kwargs)  # pyright: ignore[reportUnknownMemberType]
         assert self._after_init != "raise"
         self._after_init()
 
 
-UNIT_REGISTRY = cast(UnitRegistry, _LazyRegistry())
+UNIT_REGISTRY = cast(UnitRegistry[Any], _LazyRegistry())
 
 for k, v in _REGISTRY_STATIC_OPTIONS.items():
     setattr(UNIT_REGISTRY, k, v)
 
 # make sure that UNIT_REGISTRY is the only registry that can be used
 setattr(pint, "_DEFAULT_REGISTRY", UNIT_REGISTRY)  # noqa: B010
-pint.application_registry.set(UNIT_REGISTRY)
+pint.application_registry.set(UNIT_REGISTRY)  # pyright: ignore[reportUnknownMemberType]
 
 # the default format must be set after Quantity and Unit are registered
 UNIT_REGISTRY.formatter.default_format = SETTINGS.default_unit_format
@@ -336,9 +332,9 @@ class Unit(PlainUnit, Generic[DT]):
 
 
 class Quantity(
-    NumpyQuantity,
-    NonMultiplicativeQuantity,
-    MeasurementQuantity,
+    NumpyQuantity[Any],
+    NonMultiplicativeQuantity[Any],
+    MeasurementQuantity[Any],
     Generic[DT, MT],
     metaclass=_QuantityMeta,
 ):
@@ -353,7 +349,7 @@ class Quantity(
     # compact, Latex, HTML, Latex/siunitx formatting
     FORMATTING_SPECS = PINT_FORMATTING_SPECIFIERS
 
-    _REGISTRY: ClassVar[UnitRegistry] = UNIT_REGISTRY
+    _REGISTRY: ClassVar[UnitRegistry[Any]] = UNIT_REGISTRY
 
     # mapping from dimensionality subclass name to quantity subclass
     # this dict will be populated at runtime
@@ -383,23 +379,24 @@ class Quantity(
 
     # NOTE: pint NumpyQuantity does not have copy and dtype as kwargs for __array__
     def __array__(self, t: Any | None = None, copy: bool = False, dtype: str | None = None) -> np.ndarray:  # noqa: ANN401
-        return super().__array__(t)
+        return super().__array__(t)  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
 
     @staticmethod
     def validate_magnitude_type(mt: type) -> None:
-        if mt == np.ndarray:
-            return
-
         if mt == np.float64:
             raise TypeError(f"Invalid magnitude type: {mt}, expected one of float, np.ndarray, pl.Series, pl.Expr")
 
-        for n in MAGNITUDE_TYPES:
-            if mt is n:
-                return
-            if isinstance(n, type) and isinstance(mt, type) and issubclass(mt, n):
-                return
-            if mt == n:
-                return
+        if mt is float:
+            return
+
+        if mt is pl.Series:
+            return
+
+        if mt is pl.Expr:
+            return
+
+        if mt is np.ndarray or get_origin(mt) is np.ndarray:
+            return
 
         raise TypeError(f"Invalid magnitude type: {mt}, expected one of float, np.ndarray, pl.Series, pl.Expr")
 
@@ -423,7 +420,9 @@ class Quantity(
         return Quantity[UnknownDimensionality, Any]
 
     @classmethod
-    def _get_dimensional_subclass(cls, dim: type[Dimensionality], mt: type | None) -> type[Quantity[DT, MT]]:
+    def _get_dimensional_subclass(
+        cls, dim: type[Dimensionality], mt: type | TypeVar | UnionType | None
+    ) -> type[Quantity[DT, MT]]:
         # there are two levels of subclasses to Quantity: DimensionalQuantity and
         # DimensionalMagnitudeQuantity, which is a subclass of DimensionalQuantity
         # this distinction only exists at runtime, the type checker will use the
@@ -448,13 +447,13 @@ class Quantity(
 
             cls._subclasses[dim_name, None] = DimensionalQuantity
 
+        if isinstance(mt, UnionType):
+            raise TypeError(
+                f"Type unions are not supported for magnitude type MT: {mt}. Use a single magnitude type instead"
+            )
+
         if mt is None or mt is Any or isinstance(mt, TypeVar):
             return DimensionalQuantity
-
-        if isinstance(mt, UnionType):
-            mt = next(n for n in get_args(mt) if n is not None)
-            if mt is None:
-                raise RuntimeError("No non-null magnitude types were detected")
 
         cls.validate_magnitude_type(mt)
         mt_name = cls._get_magnitude_type_name(mt)
@@ -479,19 +478,19 @@ class Quantity(
         return DimensionalMagnitudeQuantity
 
     @staticmethod
-    def _is_incomplete_dimensionality(dim: type[Dimensionality]) -> bool:
+    def _is_incomplete_dimensionality(dim: type[Dimensionality] | TypeVar) -> bool:
         return dim == UnknownDimensionality or dim is Any or isinstance(dim, TypeVar)
 
     @staticmethod
     def _units_containers_equal(
         uc1: UnitsContainer, uc2: UnitsContainer, rtol: float = 1e-9, atol: float = 1e-12
     ) -> bool:
-        if set(uc1._d.keys()) != set(uc2._d.keys()):
+        if set(uc1._d.keys()) != set(uc2._d.keys()):  # pyright: ignore[reportPrivateUsage]
             return False
 
-        for dim_name in uc1._d:
-            _exp1 = uc1._d[dim_name]
-            _exp2 = uc2._d[dim_name]
+        for dim_name in uc1._d:  # pyright: ignore[reportPrivateUsage]
+            _exp1 = uc1._d[dim_name]  # pyright: ignore[reportPrivateUsage]
+            _exp2 = uc2._d[dim_name]  # pyright: ignore[reportPrivateUsage]
 
             if isinstance(_exp1, complex):
                 raise TypeError(f"Exponent for {dim_name=} cannot be complex: {_exp1}")
@@ -522,7 +521,7 @@ class Quantity(
         if cls._is_incomplete_dimensionality(dim):
             return cls._get_dimensional_subclass(UnknownDimensionality, mt)
 
-        if not isinstance(dim, type):
+        if not isinstance(dim, type):  # pyright: ignore[reportUnnecessaryIsInstance]
             raise TypeError(
                 f"Generic type parameter to Quantity must be a type, passed an instance of {type(dim)}: {dim}"
             )
@@ -552,32 +551,20 @@ class Quantity(
 
     @staticmethod
     def _validate_unit(
-        unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | QuantityOrUnitLike | None,
+        unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | None,
     ) -> Unit[DT]:
         if unit is None:
             return Unit("dimensionless")
-
-        if isinstance(unit, Unit):
+        elif isinstance(unit, Unit):
             return Unit(unit)
-
-        # compatibility with internal pint API
-        if isinstance(unit, dict):
+        elif isinstance(unit, dict):
+            # compatibility with internal pint API
             return Unit(Quantity._validate_unit(str(UnitsContainer(unit))))
-
-        # compatibility with internal pint API
-        if isinstance(unit, UnitsContainer):
+        elif isinstance(unit, UnitsContainer):
+            # compatibility with internal pint API
             return Unit(Quantity._validate_unit(str(unit)))
-
-        if isinstance(unit, str):
+        else:
             return Unit(Quantity._REGISTRY.parse_units(Quantity.correct_unit(unit)))
-
-        if isinstance(unit, PlainUnit):
-            return Unit(unit)
-
-        if isinstance(unit, PlainQuantity):
-            return Unit(unit.u)
-
-        assert_never(unit)
 
     @staticmethod
     def _validate_magnitude(val: MT | list[float] | list[int]) -> MT:
@@ -592,14 +579,12 @@ class Quantity(
             return val
         elif isinstance(val, (pl.Series, pl.Expr)):
             return val
-        elif isinstance(val, list):
+        elif hasattr(val, "is_Atom"):
+            # implicit way of checking if the value is a sympy symbol without having to import Sympy
+            return cast("MT", val)
+        else:
             arr = cast(MT, np.array(val).astype(np.float64))
             return arr
-        # implicit way of checking if the value is a sympy symbol without having to import Sympy
-        elif hasattr(val, "is_Atom"):
-            return val
-        else:
-            raise TypeError(f"Input magnitude has incorrect type {type(val)}: {val}")
 
     @classmethod
     def get_unit(cls, unit_name: AllUnits | str) -> Unit:
@@ -612,7 +597,7 @@ class Quantity(
     def _call_subclass(
         self,
         m: MT | MT_,
-        unit: Unit[DT] | Unit[DT_] | QuantityOrUnitLike,
+        unit: Unit[DT] | Unit[DT_] | UnitsContainer,
     ) -> Quantity[DT, MT]:
         u = cast(Unit[DT], unit)
         dt = self.dt
@@ -620,7 +605,7 @@ class Quantity(
         mt = self._get_magnitude_type_safe(cast(type[MT], type(m)))
         subcls = self.get_subclass(dt, mt)
 
-        return subcls(cast(MT, m), cast("Unit[DT]", u))
+        return subcls(cast(MT, m), u)
 
     def __len__(self) -> int:
         # __len__() must return an integer
@@ -863,6 +848,8 @@ class Quantity(
         unit: Unit[DT] | Unit | UnitsContainer | str | dict[str, numbers.Number] | None = None,
         _depth: int = 0,
     ) -> Quantity[Any, Any]:
+        unit = cast("Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | None", unit)
+
         if isinstance(val, Quantity):
             _input_qty = cast("Quantity[DT, MT]", val)
             if unit is not None:
@@ -908,11 +895,9 @@ class Quantity(
                 _depth=_depth + 1,
             )
 
-        _qty = super().__new__(cls, valid_magnitude, units=valid_unit)
-        qty = cast("Quantity[DT, MT]", _qty)
+        qty = cast("Quantity[DT, MT]", super().__new__(cls, valid_magnitude, units=valid_unit))  # pyright: ignore[reportUnknownMemberType]
 
-        # ensure that pint did not change the dtype of numpy arrays
-        if isinstance(qty._magnitude, np.ndarray):
+        if isinstance(qty._magnitude, np.ndarray) and qty._magnitude.dtype != np.float64:
             qty._magnitude = cls._cast_array_float(qty._magnitude)
 
         return qty
@@ -971,12 +956,12 @@ class Quantity(
         return mt
 
     def to_reduced_units(self) -> Quantity[DT, MT]:
-        ret = super().to_reduced_units()
-        return cast("Quantity[DT, MT]", ret)
+        ret = cast("Quantity[DT, MT]", super().to_reduced_units())  # pyright: ignore[reportUnknownMemberType]
+        return ret
 
     def to_root_units(self) -> Quantity[DT, MT]:
-        ret = super().to_root_units()
-        return cast("Quantity[DT, MT]", ret)
+        ret = cast("Quantity[DT, MT]", super().to_root_units())
+        return ret
 
     def to_base_units(self) -> Quantity[DT, MT]:
         self._check_temperature_compatibility(Unit("kelvin"))
@@ -995,39 +980,33 @@ class Quantity(
             for key in set(src_dim.keys()) | set(dst_dim.keys())
         )
 
-    def _to_unit(
-        self, unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | QuantityOrUnitLike
-    ) -> Unit[DT]:
+    def _to_unit(self, unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number]) -> Unit[DT]:
         return self._validate_unit(unit)
 
-    def to(
-        self, unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | QuantityOrUnitLike
-    ) -> Quantity[DT, MT]:
+    def to(self, unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number]) -> Quantity[DT, MT]:
         valid_unit = self._to_unit(unit)
         self._check_temperature_compatibility(valid_unit)
 
         m: MT
         try:
-            m = self._convert_magnitude_not_inplace(valid_unit)
+            m = self._convert_magnitude_not_inplace(valid_unit)  # pyright: ignore[reportUnknownMemberType]
         except DimensionalityError as e:
             # if direct conversion fails due to complex fractional units,
             # try converting to base units first, then to the target unit
             if self._dimensionalities_match(valid_unit):
                 base_quantity = self.to_base_units()
-                m = base_quantity._convert_magnitude_not_inplace(valid_unit)
+                m = base_quantity._convert_magnitude_not_inplace(valid_unit)  # pyright: ignore[reportUnknownMemberType]
             else:
                 raise e
 
         if self._is_temperature_difference_unit(valid_unit):
             return Quantity(m, valid_unit)
 
-        converted = self._call_subclass(m, unit)
+        converted = self._call_subclass(m, valid_unit)
 
         return converted
 
-    def ito(
-        self, unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | QuantityOrUnitLike
-    ) -> None:
+    def ito(self, unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number]) -> None:
         # NOTE: this method cannot convert the dimensionality type
         valid_unit = self._to_unit(unit)
         self._check_temperature_compatibility(valid_unit)
@@ -1047,25 +1026,18 @@ class Quantity(
             self._magnitude = self._magnitude.astype(np.float64)
 
         try:
-            super().ito(valid_unit)
+            super().ito(valid_unit)  # pyright: ignore[reportUnknownMemberType]
         except DimensionalityError as e:
             if self._dimensionalities_match(valid_unit):
                 base_quantity = self.to_base_units()
-                converted_magnitude = base_quantity._convert_magnitude_not_inplace(valid_unit)
+                converted_magnitude = base_quantity._convert_magnitude_not_inplace(valid_unit)  # pyright: ignore[reportUnknownMemberType]
                 self._magnitude = cast(MT, converted_magnitude)
                 self._units = valid_unit._units
             else:
                 raise e
 
-    def check(
-        self,
-        dimension: Quantity[Any, Any]
-        | UnitsContainer
-        | Unit
-        | str
-        | Dimensionality
-        | type[Dimensionality]
-        | QuantityOrUnitLike,
+    def check(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, dimension: Quantity[Any, Any] | UnitsContainer | Unit | str | Dimensionality | type[Dimensionality]
     ) -> bool:
         if isinstance(dimension, Quantity):
             return self.dt == dimension._dimensionality_type
@@ -1084,12 +1056,12 @@ class Quantity(
             _dims = getattr(dimension, "dimensions", None)
             if _dims is None:
                 raise TypeError(f"Attribute 'dimensions' is missing or None: {dimension}")
-            return super().check(cast(UnitsContainer, _dims))
+            return super().check(cast(UnitsContainer, _dims))  # pyright: ignore[reportUnknownMemberType]
 
         if isinstance(dimension, (Dimensionality, type, PlainQuantity)):
             raise TypeError(f"Invalid type for dimension: {dimension} ({type(dimension)})")
 
-        return super().check(dimension)
+        return super().check(dimension)  # pyright: ignore[reportUnknownMemberType]
 
     def __format__(self, format_type: str) -> str:
         if not format_type.endswith(Quantity.FORMATTING_SPECS):
@@ -1137,12 +1109,12 @@ class Quantity(
         _ensure_sympy()
 
         if self.dimensionless:
-            return sp.sympify(self.to_base_units().m)
+            return sp.sympify(self.to_base_units().m)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
 
         base_qty = self.to_base_units()
 
-        unit_parts = []
-        symbols = []
+        unit_parts: list[str] = []
+        symbols: list[str] = []
 
         for unit_name, power in base_qty.u._units.items():
             unit_symbol = self._REGISTRY.get_symbol(unit_name)
@@ -1156,7 +1128,10 @@ class Quantity(
 
         # use \text{symbol} to make sure that the unit symbols
         # do not clash with commonly used symbols like "m" or "s"
-        expr = sp.sympify(f"{base_qty.m} * {unit_repr}").subs({sp.Symbol(n): self.get_unit_symbol(n) for n in symbols})
+        expr = cast(
+            "sp.Basic",
+            sp.sympify(f"{base_qty.m} * {unit_repr}").subs({sp.Symbol(n): self.get_unit_symbol(n) for n in symbols}),  # pyright: ignore[reportUnknownMemberType]
+        )
 
         return expr
 
@@ -1178,7 +1153,7 @@ class Quantity(
         # this needs to be populated here to account for custom dimensions
         cls._populate_dimension_symbol_map()
 
-        expr = expr.simplify()
+        expr = cast(sp.Basic, expr.simplify())  # pyright: ignore[reportUnknownMemberType]
         args = expr.args
 
         if not args:
@@ -1206,9 +1181,10 @@ class Quantity(
             powers_dict = cast(dict[sp.Basic, float], _as_powers_dict()).items()
 
             for symbol, power in powers_dict:
-                unit_i *= cls._dimension_symbol_map[symbol] ** power
+                s = cls._dimension_symbol_map[symbol]
+                unit_i *= s**power  # pyright: ignore[reportUnknownVariableType]
 
-            unit *= unit_i
+            unit *= unit_i  # pyright: ignore[reportUnknownVariableType]
 
         ret = cls(cast(MT, magnitude), cast(Unit, unit)).to_base_units()
         ret_ = ret._call_subclass(ret.m, ret.u)
@@ -1229,19 +1205,19 @@ class Quantity(
         ) -> dict[str, Any]:
             mag = qty.magnitude
 
-            val: int | float | list
+            val: int | float | list[float]
 
             if isinstance(mag, int | float):
                 val = mag
                 magnitude_type = "int" if isinstance(mag, int) else "float"
             elif isinstance(mag, np.ndarray):
                 val = mag.tolist()
-                magnitude_type = f"np.ndarray:{mag.dtype.str}:{mag.shape}"
+                magnitude_type = f"np.ndarray:{mag.dtype.str}:{mag.shape}"  # pyright: ignore[reportUnknownMemberType]
             elif isinstance(mag, pl.Series):
                 val = mag.to_list()
                 magnitude_type = f"pl.Series:{mag.dtype}"
             elif isinstance(mag, list):
-                val = [float(x) for x in mag]
+                val = [float(x) for x in mag]  # pyright: ignore[reportUnknownArgumentType, reportUnknownVariableType]
                 magnitude_type = "list"
             else:
                 raise ValueError(f"Unknown magnitude type {type(mag)}: {mag}")
@@ -1297,8 +1273,8 @@ class Quantity(
         info: Any,  # noqa: ANN401, ARG003
     ) -> Quantity[DT, MT]:
         if isinstance(qty, dict) and "value" in qty and "magnitude_type" in qty:
-            val = qty["value"]
-            magnitude_type = qty["magnitude_type"]
+            val = cast(Any, qty["value"])
+            magnitude_type = cast(Literal["int", "float", "list"] | str, qty["magnitude_type"])
 
             if magnitude_type.startswith("np.ndarray"):
                 _, dtype_str, _ = magnitude_type.split(":", 2)
@@ -1332,22 +1308,23 @@ class Quantity(
                 magnitude = float(val)
             else:
                 raise TypeError(f"Unknown magnitude_type {magnitude_type!r}")
-            unit = qty.get("unit")
+
+            unit = cast(str | None, qty.get("unit"))  # pyright: ignore[reportUnknownMemberType]
             ret = cls(cast(MT, magnitude), unit=unit)
         else:
-            ret = qty if isinstance(qty, Quantity) else cls(cast(Any, qty))
+            ret = qty if isinstance(qty, Quantity) else cls(cast(Any, qty))  # pyright: ignore[reportUnknownVariableType]
 
         if isinstance(ret, cls):
             return ret
 
         if issubclass(cls, cls.get_unknown_dimensionality_subclass()):
-            return ret
+            return ret  # pyright: ignore[reportUnknownVariableType]
 
         if cls._is_incomplete_dimensionality(cls._dimensionality_type):
-            return ret
+            return ret  # pyright: ignore[reportUnknownVariableType]
 
         raise ExpectedDimensionalityError(
-            f"Value {ret} ({type(ret).__name__}) does not match expected dimensionality {cls.__name__}"
+            f"Value {ret} ({type(ret).__name__}) does not match expected dimensionality {cls.__name__}"  # pyright: ignore[reportUnknownArgumentType]
         )
 
     def check_compatibility(self, other: Quantity[Any, Any] | float | int) -> None:
@@ -1516,8 +1493,8 @@ class Quantity(
     @overload
     def __pow__(self, other: Quantity[Dimensionless, MT]) -> Quantity[UnknownDimensionality, MT]: ...
     def __pow__(self, other: Quantity[Dimensionless, Any] | float | int) -> Quantity[Any, Any]:
-        ret = super().__pow__(other)
-        return cast("Quantity[DT, MT]", ret)
+        ret = cast("Quantity[DT, MT]", super().__pow__(other))  # pyright: ignore[reportUnknownMemberType]
+        return ret
 
     @overload
     def __add__(self: Quantity[Dimensionless, MT], other: float | int) -> Quantity[Dimensionless, MT]: ...
@@ -1554,7 +1531,7 @@ class Quantity(
 
             raise e
 
-        ret = cast("Quantity[DT, MT]", super().__add__(other))
+        ret = cast("Quantity[DT, MT]", super().__add__(other))  # pyright: ignore[reportUnknownMemberType]
 
         return self._call_subclass(ret.m, ret.u)
 
@@ -1597,7 +1574,7 @@ class Quantity(
 
             raise e
 
-        ret = cast("Quantity[DT, MT]", super().__sub__(other))
+        ret = cast("Quantity[DT, MT]", super().__sub__(other))  # pyright: ignore[reportUnknownMemberType]
 
         if isinstance(other, Quantity) and self.dt == Temperature and other._dimensionality_type == Temperature:
             _mt = type(ret.m)
@@ -1652,10 +1629,10 @@ class Quantity(
     def __eq__(self: Quantity[DT, pl.Expr], other: Quantity[DT, float]) -> pl.Expr: ...
     def __eq__(self, other: object) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:  # pyright: ignore[reportIncompatibleMethodOverride]
         if not isinstance(other, (Quantity, float, int)):
-            return bool(super().__eq__(other))
+            return bool(super().__eq__(other))  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
 
         try:
-            self.check_compatibility(other)
+            self.check_compatibility(other)  # pyright: ignore[reportUnknownArgumentType]
         except DimensionalityTypeError as e:
             raise DimensionalityComparisonError(f"Cannot compare {self} with {other}") from e
 
@@ -1663,13 +1640,13 @@ class Quantity(
             other = Quantity(other, "dimensionless")
 
         m = self.m
-        other_m = cast(float | Numpy1DArray | pl.Series | pl.Expr, other.to(self.u).m)
+        other_m = cast(float | Numpy1DArray | pl.Series | pl.Expr, other.to(self.u).m)  # pyright: ignore[reportArgumentType, reportUnknownMemberType]
 
         if isinstance(m, (float, int, np.ndarray)) and isinstance(other_m, (float, int, np.ndarray)):
             ret = np.isclose(m, other_m, self.rtol, self.atol)
 
             if isinstance(ret, np.bool):
-                return bool(ret)
+                return bool(ret)  # pyright: ignore[reportUnknownArgumentType]
             else:
                 return ret
 
@@ -1691,7 +1668,7 @@ class Quantity(
     def __gt__(self: Quantity[DT, float], other: Quantity[DT, Numpy1DArray]) -> Numpy1DBoolArray: ...
     def __gt__(self, other: Quantity[DT, Any] | float | int) -> bool | Numpy1DBoolArray:
         try:
-            return super().__gt__(other)
+            return super().__gt__(other)  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
         except ValueError as e:
             raise DimensionalityComparisonError(str(e)) from e
 
@@ -1709,7 +1686,7 @@ class Quantity(
     def __ge__(self: Quantity[DT, float], other: Quantity[DT, Numpy1DArray]) -> Numpy1DBoolArray: ...
     def __ge__(self, other: Quantity[DT, Any] | float | int) -> bool | Numpy1DBoolArray:
         try:
-            return super().__ge__(other)
+            return super().__ge__(other)  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
         except ValueError as e:
             raise DimensionalityComparisonError(str(e)) from e
 
@@ -1727,7 +1704,7 @@ class Quantity(
     def __lt__(self: Quantity[DT, float], other: Quantity[DT, Numpy1DArray]) -> Numpy1DBoolArray: ...
     def __lt__(self, other: Quantity[DT, Any] | float | int) -> bool | Numpy1DBoolArray:
         try:
-            return super().__lt__(other)
+            return super().__lt__(other)  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
         except ValueError as e:
             raise DimensionalityComparisonError(str(e)) from e
 
@@ -1745,7 +1722,7 @@ class Quantity(
     def __le__(self: Quantity[DT, float], other: Quantity[DT, Numpy1DArray]) -> Numpy1DBoolArray: ...
     def __le__(self, other: Quantity[DT, Any] | float | int) -> bool | Numpy1DBoolArray:
         try:
-            return super().__le__(other)
+            return super().__le__(other)  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
         except ValueError as e:
             raise DimensionalityComparisonError(str(e)) from e
 
@@ -2055,7 +2032,7 @@ class Quantity(
     @overload
     def __mul__(self, other: Quantity[DT_, MT]) -> Quantity[UnknownDimensionality, MT]: ...
     def __mul__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
-        ret = super().__mul__(other)
+        ret = cast("Quantity[DT, MT]", super().__mul__(other))  # pyright: ignore[reportUnknownMemberType]
 
         # preserve the dimensionality for other
         # it might be a distinct subclass with identical units as another dimensionality
@@ -2063,11 +2040,11 @@ class Quantity(
             subcls = self.get_subclass(other._dimensionality_type, type(ret.m))
             return subcls(ret)
 
-        return cast("Quantity[DT, MT]", ret)
+        return ret
 
     def __rmul__(self, other: float | int) -> Quantity[DT, MT]:
-        ret = super().__rmul__(other)
-        return cast("Quantity[DT, MT]", ret)
+        ret = cast("Quantity[DT, MT]", super().__rmul__(other))  # pyright: ignore[reportUnknownMemberType]
+        return ret
 
     @overload
     def __truediv__(
@@ -2278,7 +2255,7 @@ class Quantity(
     @overload
     def __truediv__(self, other: Quantity[DT_, MT]) -> Quantity[UnknownDimensionality, MT]: ...
     def __truediv__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
-        ret = super().__truediv__(other)
+        ret = cast("Quantity[DT, MT]", super().__truediv__(other))  # pyright: ignore[reportUnknownMemberType]
 
         # preserve the dimensionality for other
         # it might be a distinct subclass with identical units as another dimensionality
@@ -2286,11 +2263,11 @@ class Quantity(
             subcls = self.get_subclass(other._dimensionality_type, type(ret.m))
             return subcls(ret)
 
-        return cast("Quantity[DT, MT]", ret)
+        return ret
 
     def __rtruediv__(self, other: float | int) -> Quantity[UnknownDimensionality, MT]:
-        ret = super().__rtruediv__(other)
-        return cast("Quantity[UnknownDimensionality, MT]", ret)
+        ret = cast("Quantity[UnknownDimensionality, MT]", super().__rtruediv__(other))  # pyright: ignore[reportUnknownMemberType]
+        return ret
 
     @overload
     def __floordiv__(
@@ -2315,16 +2292,20 @@ class Quantity(
             return self._call_subclass(self.m // other, self.u)
         elif other.dimensionless:
             return self._call_subclass(self.m // other.to_base_units().m, self.u)
-        return super().__floordiv__(other)
+
+        return super().__floordiv__(other)  # pyright: ignore[reportUnknownMemberType]
 
     @overload
     def __getitem__(self: Quantity[DT, pl.Series], index: int) -> Quantity[DT, float]: ...
     @overload
     def __getitem__(self: Quantity[DT, Numpy1DArray], index: int) -> Quantity[DT, float]: ...
-    def __getitem__(self, index: int) -> Quantity[DT, Any]:
-        ret = super().__getitem__(index)
-        subcls = self._get_dimensional_subclass(self.dt, type(ret.m) if isinstance(ret, Quantity) else type(ret))
-        return subcls(ret.m, ret.u)
+    def __getitem__(self, index: int) -> Quantity[DT, float]:
+        ret = cast("Quantity[DT, float]", super().__getitem__(index))  # pyright: ignore[reportUnknownMemberType]
+
+        subcls = self._get_dimensional_subclass(self.dt, type(ret.m))
+        instance = subcls(ret.m, ret.u)  # pyright: ignore[reportArgumentType, reportCallIssue]
+
+        return cast("Quantity[DT, float]", instance)
 
 
 # override the implementations for the Quantity

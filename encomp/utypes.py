@@ -541,7 +541,7 @@ AllUnits = (
 
 
 def get_registered_units() -> dict[str, tuple[str, ...]]:
-    ret = {}
+    ret: dict[str, tuple[str, ...]] = {}
 
     for k, v in globals().items():
         if get_origin(v) is Literal and k.endswith("Units"):
@@ -634,16 +634,6 @@ class Dimensionality(metaclass=_DimensionalityMeta):
             # don't create a new subclass with the same name
             return
 
-        if cls.dimensions is None:
-            return
-
-        if not isinstance(cls.dimensions, UnitsContainer):
-            raise TypeError(
-                'The "dimensions" attribute of the Dimensionality type '
-                "must be an instance of pint.util.UnitsContainer, "
-                f"{cls} has dimensions: {cls.dimensions} ({type(cls.dimensions)})"
-            )
-
         # make sure a subclass of an existing Dimensionality has the same dimensions
         # the first element in __mro__ is the class that is being created, the
         # second is the direct parent class
@@ -695,7 +685,7 @@ class Dimensionality(metaclass=_DimensionalityMeta):
     def is_distinct(cls) -> bool:
         if cls._distinct is None:
             # special case if dimensions was overridden to None
-            if cls.dimensions is None:
+            if getattr(cls, "dimensions", None) is None:
                 return True
 
             ucs = list(cls._registry.values())
@@ -739,13 +729,6 @@ MT_ = TypeVar(
     pl.Series,
     pl.Expr,
     default=Numpy1DArray,
-)
-
-MAGNITUDE_TYPES = (
-    float,
-    Numpy1DArray,
-    pl.Series,
-    pl.Expr,
 )
 
 

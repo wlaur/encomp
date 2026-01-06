@@ -317,6 +317,30 @@ def test_dimensionality_type_hierarchy() -> None:
 
         assert isinstance_types(s // Q(1), Q[EstimatedLength])
 
+        s_arr = Q([25], "m")
+        s_arr_first = s_arr[0]
+
+        assert_type(s_arr, Q[Length, np.ndarray])
+        assert_type(s_arr_first, Q[Length, float])
+
+        s_series = Q(pl.Series([25]), "m")
+        s_series_first = s_series[0]
+
+        assert_type(s_series, Q[Length, pl.Series])
+        assert_type(s_series_first, Q[Length, float])
+
+        s_arr = Q([25], "m").asdim(EstimatedLength)
+        s_arr_first = s_arr[0]
+
+        assert_type(s_arr, Q[EstimatedLength, np.ndarray])
+        assert_type(s_arr_first, Q[EstimatedLength, float])
+
+        s_series = Q(pl.Series([25]), "m").asdim(EstimatedLength)
+        s_series_first = s_series[0]
+
+        assert_type(s_series, Q[EstimatedLength, pl.Series])
+        assert_type(s_series_first, Q[EstimatedLength, float])
+
         # these quantities are not compatible with normal Length/Mass
         # TODO: use a more specific exception here
         with pytest.raises(Exception):  # noqa: B017
