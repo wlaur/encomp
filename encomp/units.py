@@ -131,7 +131,7 @@ from .utypes import (
 )
 
 if TYPE_CHECKING:
-    import sympy as sp
+    import sympy as sp  # pyright: ignore[reportMissingTypeStubs]
 else:
     sp = None
 
@@ -139,7 +139,7 @@ else:
 def _ensure_sympy() -> None:
     global sp
     if sp is None:
-        import sympy as sp
+        import sympy as sp  # pyright: ignore[reportMissingTypeStubs]
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -897,8 +897,9 @@ class Quantity(
 
         qty = cast("Quantity[DT, MT]", super().__new__(cls, valid_magnitude, units=valid_unit))  # pyright: ignore[reportUnknownMemberType]
 
-        if isinstance(qty._magnitude, np.ndarray) and qty._magnitude.dtype != np.float64:
-            qty._magnitude = cls._cast_array_float(qty._magnitude)
+        _m = qty._magnitude
+        if isinstance(_m, np.ndarray) and _m.dtype != np.float64:
+            qty._magnitude = cls._cast_array_float(_m)
 
         return qty
 
@@ -1022,8 +1023,9 @@ class Quantity(
 
         # avoid numpy.core._exceptions.UFuncTypeError (not on all platforms?)
         # convert integer arrays to float(64) (creating a copy)
-        if isinstance(self._magnitude, np.ndarray) and issubclass(self._magnitude.dtype.type, numbers.Integral):
-            self._magnitude = self._magnitude.astype(np.float64)
+        _m = self._magnitude
+        if isinstance(_m, np.ndarray) and issubclass(_m.dtype.type, numbers.Integral):
+            self._magnitude = _m.astype(np.float64)
 
         try:
             super().ito(valid_unit)  # pyright: ignore[reportUnknownMemberType]
@@ -1063,11 +1065,11 @@ class Quantity(
 
         return super().check(dimension)  # pyright: ignore[reportUnknownMemberType]
 
-    def __format__(self, format_type: str) -> str:
-        if not format_type.endswith(Quantity.FORMATTING_SPECS):
-            format_type = f"{format_type}{self._REGISTRY.formatter.default_format}"
+    def __format__(self, spec: str) -> str:
+        if not spec.endswith(Quantity.FORMATTING_SPECS):
+            spec = f"{spec}{self._REGISTRY.formatter.default_format}"
 
-        return super().__format__(format_type)
+        return super().__format__(spec)
 
     @staticmethod
     def correct_unit(unit: str) -> str:
@@ -1109,7 +1111,7 @@ class Quantity(
         _ensure_sympy()
 
         if self.dimensionless:
-            return sp.sympify(self.to_base_units().m)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+            return sp.sympify(self.to_base_units().m)
 
         base_qty = self.to_base_units()
 
@@ -1128,10 +1130,7 @@ class Quantity(
 
         # use \text{symbol} to make sure that the unit symbols
         # do not clash with commonly used symbols like "m" or "s"
-        expr = cast(
-            "sp.Basic",
-            sp.sympify(f"{base_qty.m} * {unit_repr}").subs({sp.Symbol(n): self.get_unit_symbol(n) for n in symbols}),  # pyright: ignore[reportUnknownMemberType]
-        )
+        expr = sp.sympify(f"{base_qty.m} * {unit_repr}").subs({sp.Symbol(n): self.get_unit_symbol(n) for n in symbols})
 
         return expr
 
@@ -1153,7 +1152,7 @@ class Quantity(
         # this needs to be populated here to account for custom dimensions
         cls._populate_dimension_symbol_map()
 
-        expr = cast(sp.Basic, expr.simplify())  # pyright: ignore[reportUnknownMemberType]
+        expr = expr.simplify()  # pyright: ignore[reportUnknownMemberType]
         args = expr.args
 
         if not args:

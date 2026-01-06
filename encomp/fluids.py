@@ -18,8 +18,8 @@ from typing import Annotated, Any, ClassVar, Generic, Literal, cast
 
 import numpy as np
 import polars as pl
-from CoolProp.CoolProp import PropsSI
-from CoolProp.HumidAirProp import HAPropsSI
+from CoolProp.CoolProp import PropsSI  # pyright: ignore[reportUnknownVariableType]
+from CoolProp.HumidAirProp import HAPropsSI  # pyright: ignore[reportMissingTypeStubs, reportUnknownVariableType]
 
 from .settings import SETTINGS
 from .structures import flatten
@@ -68,7 +68,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     name: CName
     points: list[tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]]]
 
-    BACKEND: ClassVar[dict[Literal["backend"], Callable]] = {"backend": PropsSI}
+    BACKEND: ClassVar[dict[Literal["backend"], Callable[..., float | Numpy1DArray]]] = {"backend": PropsSI}
 
     # PropsSI expects the fluid name as the first input, but not HAPropsSI
     _append_name_to_cp_inputs: bool = True
@@ -473,22 +473,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
     @classmethod
     def search(cls, inp: str) -> list[str]:
-        """
-        Returns a list of CoolProp properties that matches the search input.
-
-        Parameters
-        ----------
-        inp : str
-            Input search string
-
-        Returns
-        -------
-        list[str]
-            list of CoolProp properties (with descriptions)
-            that matches the search string.
-        """
-
-        matches = []
+        matches: list[str] = []
 
         for key in cls.PROPERTY_MAP:
             description = cls.describe(key[0])
@@ -523,7 +508,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     def evaluate(self, output: CProperty, *points: tuple[CProperty, float | np.ndarray]) -> float | np.ndarray:
         # case 1: all inputs are scalar, output is scalar
         if all(isinstance(pt[1], float) for pt in points):
-            return self.evaluate_single(output, *points)  # type: ignore
+            return self.evaluate_single(output, *points)  # pyright: ignore[reportArgumentType]
 
         # at this point, the output will be a vector with length 1 or more
 
@@ -543,7 +528,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         # the sizes list is empty if all inputs were 1-element vectors
         if len(sizes):
-            N = sizes[0]
+            n = sizes[0]
             shape = shapes[0]
 
             # 1-length vectors were converted to float, so this error will be relevant
@@ -554,14 +539,14 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 raise ValueError(f"All inputs must have the same shape, passed {points} with shapes {shapes}")
 
         else:
-            N = 1
+            n = 1
             shape = (1,)
 
         def expand_scalars(x: float | np.ndarray) -> np.ndarray:
             if isinstance(x, np.ndarray):
                 return x
 
-            return np.repeat(float(x), N).astype(float).reshape(shape)
+            return np.repeat(float(x), n).astype(float).reshape(shape)
 
         points_arr = tuple((p, expand_scalars(v)) for p, v in points)
 
@@ -574,7 +559,10 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             inputs.append(self.name)
 
         try:
-            val: float = self.BACKEND["backend"](output, *inputs)
+            val = self.BACKEND["backend"](output, *inputs)
+
+            if not isinstance(val, float):
+                raise TypeError(f"Unexpected value type: {type(val)}, expected float")
 
             if val == np.inf or val == -np.inf:
                 val = np.nan
@@ -592,7 +580,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         arrs_flat_masked: list[np.ndarray],
         N: int,
     ) -> np.ndarray:
-        vals = []
+        vals: list[float] = []
 
         for i in range(N):
             arrs_flat_masked_i = [n[i] for n in arrs_flat_masked]
@@ -603,7 +591,11 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 inputs_i.append(self.name)
 
             try:
-                val_i: float = self.BACKEND["backend"](output, *inputs_i)
+                val_i = self.BACKEND["backend"](output, *inputs_i)
+
+                if not isinstance(val_i, float):
+                    raise TypeError(f"Unexpected value type: {type(val_i)}, expected float")
+
             except ValueError as e:
                 self.check_exception(output, e)
                 val_i = np.nan
@@ -642,7 +634,10 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             # this can fail if the numeric values
             # are *all* incorrect, for example negative pressure
             try:
-                val_masked: np.ndarray = self.BACKEND["backend"](output, *inputs)
+                val_masked = self.BACKEND["backend"](output, *inputs)
+
+                if isinstance(val_masked, float):
+                    raise TypeError(f"Unexpected value type: {type(val)}, expected np.ndarray")
 
             except ValueError as e:
                 self.check_exception(output, e)
@@ -983,7 +978,7 @@ class Fluid(CoolPropFluid[MT]):
         return self.get("M").asdim(MolarMass)
 
     def __repr__(self) -> str:
-        props = []
+        props: list[str] = []
 
         for p, fmt in self.REPR_PROPERTIES:
             props.append(f"{p}={self._get_repr(p, fmt)}")

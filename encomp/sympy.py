@@ -1,4 +1,4 @@
-# pyright: reportUnknownVariableType=false, reportUnknownParameterType=false, reportUnknownMemberType=false, reportUnknownArgumentType=false, reportMissingTypeArgument=false
+# pyright: reportUnknownVariableType=false, reportUnknownParameterType=false, reportUnknownMemberType=false, reportUnknownArgumentType=false, reportMissingTypeArgument=false, reportMissingTypeStubs=false
 """
 Imports and extends the ``sympy`` library for symbolic mathematics.
 Contains tools for converting Sympy expressions to Python modules and functions.
