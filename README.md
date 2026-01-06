@@ -30,7 +30,6 @@ Main functionality of the `encomp` library:
   - Additional functions to convert (algebraic) expressions and systems to Python code that supports Numpy arrays
 
 The other modules implement calculations related to process engineering and thermodynamics.
-The module `encomp.serialize` implements custom JSON serialization and decoding for classes used elsewhere in the library.
 
 ## Getting started
 

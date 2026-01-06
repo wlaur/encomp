@@ -23,7 +23,7 @@ from encomp import __version__
 # -- Project information -----------------------------------------------------
 
 project = "encomp"
-copyright = "2023, IndMeas"
+copyright = "2026, William Laurén"
 author = "William Laurén"
 
 
