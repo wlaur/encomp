@@ -74,7 +74,6 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     _append_name_to_cp_inputs: bool = True
 
     _convert_pl_series_nan_null: bool = True
-    _convert_pl_series_f32: bool = True
 
     # HAPropsSI fails if one or more inputs are incorrect,
     # PropsSI returns NaN for invalid inputs in case valid inputs are also present
@@ -534,8 +533,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             if self._convert_pl_series_nan_null:
                 ret_series = ret_series.fill_nan(None)
 
-            if self._convert_pl_series_f32:
-                ret_series = ret_series.cast(pl.Float32)
+            ret_series = ret_series.cast(pl.Float32)
 
             return ret_series
 
@@ -723,12 +721,11 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             if self._convert_pl_series_nan_null:
                 qty.m = qty.m.fill_nan(None)
 
-            if self._convert_pl_series_f32:
-                qty.m = qty.m.cast(pl.Float32)
+            qty.m = qty.m.cast(pl.Float32)
 
         return cast("Quantity[Any, MT]", qty)
 
-    def to_numeric(
+    def to_numeric_correct_unit(
         self, prop: CProperty, qty: Quantity[Any, MT] | Quantity[Any, float]
     ) -> float | Numpy1DArray | pl.Expr:
         unit = self.get_coolprop_unit(prop)
@@ -783,8 +780,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         if points is None:
             points = self.points
 
-        points_numeric = [(pt[0], self.to_numeric(*pt)) for pt in points]
-
+        points_numeric = [(pt[0], self.to_numeric_correct_unit(*pt)) for pt in points]
         val = self.evaluate(output, *points_numeric)
 
         return self.construct_quantity(val, output, convert_magnitude=convert_magnitude)
