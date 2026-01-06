@@ -21,7 +21,7 @@ Main functionality of the ``encomp`` library:
    * Uses Python's type system to validate dimensionalities
    * Compatible with ``mypy`` and other type checkers
    * Integrates with with Numpy arrays, Pandas series and Polars series and expressions
-   * JSON serialization and decoding
+   * JSON serialization and decoding via Pydantic
 * Implements a flexible interface to `CoolProp <http://www.coolprop.org>`_
    * Module :py:mod:`encomp.fluids`
    * Uses quantities for all inputs and outputs (including dimensionless quantities)
@@ -33,8 +33,6 @@ Main functionality of the ``encomp`` library:
 
 
 The other modules implement calculations related to process engineering and thermodynamics.
-The module :py:mod:`encomp.serialize` implements custom JSON serialization and decoding for classes used elsewhere in the library.
-
 
 .. tip::
 
@@ -51,7 +49,6 @@ Contents
 .. toctree::
    :maxdepth: 3
 
-   setup
    usage
    examples
 

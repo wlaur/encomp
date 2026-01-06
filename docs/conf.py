@@ -11,19 +11,19 @@
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 
 
-import os
 import sys
+from pathlib import Path
 
 from sphinx.domains.python import PythonDomain
 
 # make sure the local source is loaded when importing
-sys.path.insert(0, os.path.abspath(".."))
-from encomp import __version__  # noqa: E402
+sys.path.insert(0, str(Path("..").absolute()))
+from encomp import __version__
 
 # -- Project information -----------------------------------------------------
 
 project = "encomp"
-copyright = "2023, William Laurén"
+copyright = "2026, William Laurén"
 author = "William Laurén"
 
 
@@ -100,6 +100,16 @@ html_logo = "img/logo-small.svg"
 html_favicon = "img/favicon.ico"
 
 autosummary_generate = True
+# Generate summaries only for documented items (reduces stub warnings)
+autodoc_default_options = {
+    "members": True,
+    "undoc-members": False,
+    "show-inheritance": True,
+}
+
+# Disable numpydoc autosummary to avoid stub file warnings
+numpydoc_show_class_members = False
+
 todo_include_todos = True
 
 pygments_style = "sphinx"
@@ -115,22 +125,30 @@ nbsphinx_thumbnails = {
 add_module_names = False
 html_scaled_image_link = False
 
-
 # show type hints in doc body instead of signature
 autodoc_typehints = "description"
 autoclass_content = "both"  # get docstring from class level and init simultaneously
 
+# Suppress warnings for forward references in type hints and missing autosummary stubs
+suppress_warnings = [
+    "sphinx_autodoc_typehints",  # Suppress all typehints warnings including forward refs
+    "autosummary",  # Suppress missing stub file warnings
+]
+
 nbsphinx_allow_errors = True
+
+nbsphinx_requirejs_path = ""
+nbsphinx_requirejs_options = {}
 
 
 class PatchedPythonDomain(PythonDomain):
     def resolve_xref(self, env, fromdocname, builder, typ, target, node, contnode):
         if "refspecific" in node:
             del node["refspecific"]
-        return super(PatchedPythonDomain, self).resolve_xref(
+        return super().resolve_xref(
             env, fromdocname, builder, typ, target, node, contnode
         )
 
 
-def setup(sphinx):
+def setup(sphinx) -> None:
     sphinx.add_domain(PatchedPythonDomain, override=True)

@@ -2,9 +2,7 @@
 
 > General-purpose library for *en*gineering *comp*utations, with focus on clean and consistent interfaces.
 
-Documentation at <https://encomp.readthedocs.io/en/latest/>
-
-`encomp` is tested on Windows and Linux, with Python 3.11.
+`encomp` is tested on Windows, Linux, and macOS, with Python 3.13.
 
 ## Features
 
@@ -16,8 +14,8 @@ Main functionality of the `encomp` library:
   - Extends the [pint](https://pypi.org/project/Pint) library
   - Uses Python's type system to validate dimensionalities
   - Compatible with `mypy` and other type checkers
-  - Integrates with Numpy arrays, Pandas series and Polars series and expressions
-  - JSON serialization and decoding
+  - Integrates with Numpy arrays and Polars series and expressions
+  - JSON serialization and decoding via Pydantic
 
 - Implements a flexible interface to [CoolProp](http://www.coolprop.org)
 
@@ -32,32 +30,8 @@ Main functionality of the `encomp` library:
   - Additional functions to convert (algebraic) expressions and systems to Python code that supports Numpy arrays
 
 The other modules implement calculations related to process engineering and thermodynamics.
-The module `encomp.serialize` implements custom JSON serialization and decoding for classes used elsewhere in the library.
-
-## Installation
-
-Install with `pip`:
-
-```bash
-pip install encomp
-```
-
-This will install `encomp` along with its dependencies into the currently active Python environment.
-To also install optional dependencies:
-
-```bash
-pip install encomp[optional]
-```
 
 ## Getting started
-
-To use `encomp` in a Jupyter Notebook (or REPL), star-import the `encomp.session` module:
-
-```python
-from encomp.session import *
-```
-
-This will import commonly used functions and classes.
 
 ### The `Quantity` class
 
@@ -89,9 +63,8 @@ Each dimensionality (for example *pressure*, *length*, *time*, *dimensionless*) 
 Common dimensionalities can be statically determined based on overload variants of the `Quantity.__new__` method (see `encomp.utypes.get_registered_units` for a list of units that support this).
 Additionally, operations using `*`, `**` and `/` are also defined using overload variants for combinations of the default dimensionalities.
 
-In case the dimensionality cannot be inferred, the type checker will use the dimensionality `Unknown`.
+In case the dimensionality cannot be inferred, the type checker will use the dimensionality `Any`.
 At runtime, the dimensionality will be evaluated based on the unit that was specified.
-The `Unknown` dimensionality is also used for operations using `*`, `**` and `/` that are not explicitly defined as overload variants.
 
 If necessary, the dimensionality of a quantity can be explicitly specified by providing a subclass of `encomp.utypes.Dimensionality` as type parameter.
 
@@ -104,7 +77,7 @@ from encomp.utypes import Volume, MassFlow
 
 # the types are inferred by a static type checker like mypy
 
-# the unit "m" is registered as a Mass unit
+# the unit "kg" is registered as a Mass unit
 m = Q(12, 'kg')  # Quantity[Mass]
 
 V = Q(25, 'liter')  # Quantity[Volume]
@@ -125,14 +98,13 @@ isinstance(m_, Q[MassFlow])  # True
 # Quantity[Dimensionality[[mass] ** 2 / [length] ** 3]]
 x = m**2 / V  # Quantity[Unknown]
 
-# the unit name "meter cubed" is not defined using an overload,
-# the type parameter Volume is instead used to infer the type
-y = Q[Volume](15, 'meter cubed')  # Quantity[Volume]
+# the unit name "meter cubed" is not defined using an overload
+y = Q(15, 'meter cubed').asdim(Volume)  # Quantity[Volume]
 
 # in case the explicitly defined dimensionality does
 # not match the unit, an error will be raised at runtime
 
-y = Q[MassFlow](15, 'meter cubed')
+y = Q(15, 'meter cubed').asdim(MassFlow)
 # ExpectedDimensionalityError: Quantity with unit "m³" has incorrect dimensionality
 # [length] ** 3, expected [mass] / [time]
 ```
@@ -150,8 +122,8 @@ from encomp.units import Quantity as Q
 from encomp.utypes import Temperature, Length, Pressure
 
 @typechecked
-def some_func(T: Q[Temperature]) -> tuple[Q[Length], Q[Pressure]]:
-    return T * Q(12.4, 'm/K'), Q(1, 'bar')
+def some_func(T: Q[Temperature, float]) -> tuple[Q[Length, float], Q[Pressure, float]]:
+    return (T * Q(12.4, 'm/K')).asdim(Length), Q(1, 'bar')
 
 some_func(Q(12, 'delta_degC'))  # the dimensionalities check out
 some_func(Q(26, 'kW'))  # raises an exception:
@@ -187,22 +159,21 @@ class TemperaturePerMassFlow(Dimensionality):
     dimensions = TemperatureDifference.dimensions / MassFlow.dimensions
 
 # note the extra parentheses around (kg/s)
-qty = Q[TemperaturePerMassFlow](1, 'delta_degC/(kg/s)')
+qty = Q(1, 'delta_degC/(kg/s)').asdim(TemperaturePerMassFlow)
 
 # raises an exception since liter is Length**3 and the Quantity expects Mass
 try:
-    another_qty = Q[TemperaturePerMassFlow](1, 'delta_degC/(liter/hour)')
+    another_qty = Q(1, 'delta_degC/(liter/hour)').asdim(TemperaturePerMassFlow)
 except DimensionalityError:
     pass
 
 # create a new subclass of Quantity with restricted input units
-
-CustomCoolingCapacity = Q[TemperaturePerMassFlow]
+CustomCoolingCapacity = Q[TemperaturePerMassFlow, float]
 
 # the pint library handles a wide range of input formats and unit names
 # the prefix "delta_" can be omitted in this case
 q1 = CustomCoolingCapacity(6, '°F per (lbs per week)')
-q2 = Q('3 deltdegree_Fahrenheit per (pound per fortnight)')
+q2 = Q('3 delta_degF per (pound per fortnight)')
 
 assert q1 == q2
 assert type(q1) is type(q2)
@@ -265,11 +236,11 @@ HumidAir(P=Q(1, 'bar'), T=Q(100, 'degC'), R=Q(0.5))
 
 ## Tests
 
-First, make sure the development dependencies are installed with `pip install encomp[dev]` or `pip install encomp[full]`.
+First, make sure the development dependencies are installed with `uv sync --all-extras --all-groups`.
 Run the tests with
 
 ```bash
-pytest -W ignore --pyargs encomp -p no:mypy-testing
+pytest
 ```
 
 ## Settings
@@ -277,11 +248,3 @@ pytest -W ignore --pyargs encomp -p no:mypy-testing
 The attributes in the `encomp.settings.Settings` class can be modified with an `.env`-file.
 Place a file named `.env` in the current working directory to override the default settings.
 The attribute names are prefixed with `ENCOMP_`.
-
-## TODO
-
-- Document the `Quantity[Dimensionality]` type system
-- What is the license of this package?
-  - For example, `pint` uses *3-Clause BSD License*, this should be compatible with `MIT`
-  - Should this package include the `pint` license text somewhere?
-    - Extending the `pint` package counts as modification

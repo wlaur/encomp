@@ -5,21 +5,22 @@ Uses CoolProp as backend.
 .. note::
     This module has the same name as the package `fluids <https://pypi.org/project/fluids/>`_,
     which is also included when installing ``encomp``.
-    Avoid importing as a standalone module (``from encomp import fluids``) to differentiate between these.
+    Avoid importing as a standalone module
+    (``from encomp import fluids``) to differentiate between these.
 
 """
 
+import logging
 import warnings
 from abc import ABC, abstractmethod
-from typing import Annotated, Any, Callable, ClassVar, Generic, Iterable, Literal
+from collections.abc import Callable
+from typing import Annotated, Any, ClassVar, Generic, Literal, cast
 
 import numpy as np
-import pandas as pd
 import polars as pl
-from CoolProp.CoolProp import PropsSI
-from CoolProp.HumidAirProp import HAPropsSI
+from CoolProp.CoolProp import PropsSI  # pyright: ignore[reportUnknownVariableType]
+from CoolProp.HumidAirProp import HAPropsSI  # pyright: ignore[reportMissingTypeStubs, reportUnknownVariableType]
 
-from .misc import isinstance_types
 from .settings import SETTINGS
 from .structures import flatten
 from .units import DimensionalityError, ExpectedDimensionalityError, Quantity, Unit
@@ -39,6 +40,7 @@ from .utypes import (
     MolarSpecificEnthalpy,
     MolarSpecificEntropy,
     MolarSpecificInternalEnergy,
+    Numpy1DArray,
     Pressure,
     SpecificEnthalpy,
     SpecificEntropy,
@@ -48,9 +50,10 @@ from .utypes import (
     SpecificInternalEnergy,
     Temperature,
     ThermalConductivity,
-    Variable,
     Velocity,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 if SETTINGS.ignore_coolprop_warnings:
     warnings.filterwarnings("ignore", message="CoolProp could not calculate")
@@ -60,18 +63,17 @@ CProperty = Annotated[str, "CoolProp property name"]
 CName = Annotated[str, "CoolProp fluid name"]
 UnitString = Annotated[str, "Unit string"]
 
-# NOTE: the generic magnitude type MT is not correct if the inputs
-# are not heterogenous (e.g. mixed np.ndarray and scalar inputs)
 
-
-class CoolPropFluid(ABC, Generic[MT]):
+class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     name: CName
-    points: list[tuple[CProperty, Quantity[Variable, MT]]]
+    points: list[tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]]]
 
-    BACKEND: ClassVar[dict[Literal["backend"], Callable]] = {"backend": PropsSI}
+    BACKEND: ClassVar[dict[Literal["backend"], Callable[..., float | Numpy1DArray]]] = {"backend": PropsSI}
 
     # PropsSI expects the fluid name as the first input, but not HAPropsSI
     _append_name_to_cp_inputs: bool = True
+
+    _convert_pl_series_nan_null: bool = True
 
     # HAPropsSI fails if one or more inputs are incorrect,
     # PropsSI returns NaN for invalid inputs in case valid inputs are also present
@@ -81,7 +83,8 @@ class CoolPropFluid(ABC, Generic[MT]):
     _repr_cutoff: int = 3
 
     # substrings from the CoolProp error messages for when inputs are
-    # not valid or not implemented (CoolProp will always raise ValueError, no matter the error)
+    # not valid or not implemented (CoolProp will always raise ValueError,
+    # no matter the error)
     # in case the error message does not match any of these, a warning is emitted
     COOLPROP_ERROR_MESSAGES = (
         "is not valid for keyed_output",
@@ -264,37 +267,29 @@ class CoolPropFluid(ABC, Generic[MT]):
     _SKIP_ZERO_CHECK: tuple[CProperty, ...] = ("PHASE",)
 
     @property
-    def is_scalar(self) -> bool:
-        # the output is only scalar if all inputs are scalars
-        return all(not isinstance(n[1].m, Iterable) for n in self.points)
-
-    @property
     def _mt(self) -> type[MT]:
-        return type(self.points[0][1].m)
+        candidates = [type(n[1].m) for n in self.points]
+        candidates = [n for n in candidates if n is not float]
 
-    @property
-    def _mt_kwargs(self) -> dict[str, Any]:
-        kwargs = {}
+        if not candidates:
+            return cast(type[MT], float)
 
-        m0 = self.points[0][1].m
+        magnitude_type = candidates[0]
 
-        if isinstance(m0, pd.Series):
-            # NOTE: the series name should not be propagated here,
-            # the outputs will be separate series that should not have the same name
-            kwargs |= {"index": m0.index}
-
-        return kwargs
+        return cast(type[MT], magnitude_type)
 
     @abstractmethod
-    def __init__(self, name: CName, **kwargs: Quantity[Variable, MT]):
+    def __init__(self, name: CName, **kwargs: Quantity[Any, MT] | Quantity[Any, float]) -> None:
         """
         Base class that represents a fluid (pure or mixture, gas or liquid).
         Uses *CoolProp* as backend to determine fluid properties.
 
         This class should not be used directly, since it does not contain a fixed
-        point to determine fluid properties (temperature, pressure, enthalpy, entropy, ...).
+        point to determine fluid properties
+        (temperature, pressure, enthalpy, entropy, ...).
         Define a subclass of :py:class:`encomp.fluids.CoolPropFluid` that implements
-        the ``__init__`` method (this method must set instance attributes ``name`` and ``points``).
+        the ``__init__`` method
+        (this method must set instance attributes ``name`` and ``points``).
 
         Fluid names for pure fluids are not case-sensitive, but the mixture names are.
         The following fluid names are recognized by CoolProp:
@@ -391,19 +386,22 @@ class CoolPropFluid(ABC, Generic[MT]):
         - http://www.coolprop.org/fluid_properties/HumidAir.html
 
 
-        The names ``Water`` and ``HEOS::Water`` uses the formulation defined by IAPWS-95.
+        The names ``Water`` and ``HEOS::Water``
+        uses the formulation defined by IAPWS-95.
         Use the name ``IF97::Water`` to instead use the slightly faster
         (but less accurate) IAPWS-97 formulation.
         In most cases, the difference between IAPWS-95 and IAPWS-97 is negligible.
         Read CoolProp's `introduction
-        <http://www.coolprop.org/fluid_properties/IF97.html>`_ about water properties for more information.
+        <http://www.coolprop.org/fluid_properties/IF97.html>`_
+        about water properties for more information.
 
 
         Parameters
         ----------
         name : CName
             The name of the fluid, same name as is used by CoolProp.
-            Include the ``INCOMP::`` prefix and potential mixing ratio for incompressible mixtures.
+            Include the ``INCOMP::`` prefix and potential mixing ratio
+            for incompressible mixtures.
 
             Examples:
 
@@ -444,14 +442,14 @@ class CoolPropFluid(ABC, Generic[MT]):
             return False
 
     @classmethod
-    def check_inputs(cls, kwargs: dict[CProperty, Quantity]) -> None:
+    def check_inputs(cls, kwargs: dict[CProperty, Quantity[Any, Any]]) -> None:
         invalid = [key for key in kwargs if not cls.is_valid_prop(key)]
 
         if len(invalid):
             raise ValueError(
-                f'Invalid CoolProp property name{"s" if len(invalid) > 1 else ""}: '
-                f'{", ".join(invalid)}\n'
-                f'Valid names:\n{", ".join(sorted(cls.ALL_PROPERTIES))}'
+                f"Invalid CoolProp property name{'s' if len(invalid) > 1 else ''}: "
+                f"{', '.join(invalid)}\n"
+                f"Valid names:\n{', '.join(sorted(cls.ALL_PROPERTIES))}"
             )
 
     @classmethod
@@ -466,27 +464,13 @@ class CoolPropFluid(ABC, Generic[MT]):
             if not unit_repr:
                 unit_repr = "dimensionless"
 
-            return f'{", ".join(key)}: {description} [{unit_repr}]'
+            return f"{', '.join(key)}: {description} [{unit_repr}]"
 
         raise ValueError(f'Could not get description, key "{key}" does not exist')
 
     @classmethod
     def search(cls, inp: str) -> list[str]:
-        """
-        Returns a list of CoolProp properties that matches the search input.
-
-        Parameters
-        ----------
-        inp : str
-            Input search string
-
-        Returns
-        -------
-        list[str]
-            list of CoolProp properties (with descriptions) that matches the search string.
-        """
-
-        matches = []
+        matches: list[str] = []
 
         for key in cls.PROPERTY_MAP:
             description = cls.describe(key[0])
@@ -513,81 +497,22 @@ class CoolPropFluid(ABC, Generic[MT]):
 
         if "Initialize failed for backend" in msg:
             raise ValueError(
-                f'Fluid "{self.name}" could not be initalized, '
-                "ensure that the name is a valid CoolProp fluid name"
+                f"Fluid '{self.name}' could not be initalized, ensure that the name is a valid CoolProp fluid name"
             ) from e
 
-        warnings.warn(
-            f'CoolProp could not calculate "{prop}" for fluid "{self.name}", '
-            f"output is NaN: {msg}"
-        )
+        _LOGGER.warning(f'CoolProp could not calculate "{prop}" for fluid "{self.name}", output is NaN: {msg}')
 
-    def evaluate(
-        self, output: CProperty, *points: tuple[CProperty, float | np.ndarray]
-    ) -> float | np.ndarray:
-        # case 1: all inputs are scalar, output is scalar
-        if all(isinstance_types(pt[1], float) for pt in points):
-            return self.evaluate_single(output, *points)  # type: ignore
-
-        # at this point, the output will be a vector with length 1 or more
-
-        def single_element_vector_to_float(x: float | np.ndarray) -> float | np.ndarray:
-            if isinstance(x, float):
-                return x
-
-            if isinstance(x, np.ndarray) and x.size == 1:
-                return float(x[0])
-
-            return x
-
-        points = tuple((p, single_element_vector_to_float(v)) for p, v in points)
-
-        sizes = [v.size for _, v in points if isinstance(v, np.ndarray)]
-        shapes = [v.shape for _, v in points if isinstance(v, np.ndarray)]
-
-        # the sizes list is empty if all inputs were 1-element vectors
-        if len(sizes):
-            N = sizes[0]
-            shape = shapes[0]
-
-            # 1-length vectors were converted to float, so this error will be relevant
-            if len(set(sizes)) != 1:
-                raise ValueError(
-                    "All inputs must have the same size, "
-                    f"passed {points} with sizes {sizes}"
-                )
-
-            if len(set(shapes)) != 1:
-                raise ValueError(
-                    "All inputs must have the same shape, "
-                    f"passed {points} with shapes {shapes}"
-                )
-
-        else:
-            N = 1
-            shape = (1,)
-
-        def expand_scalars(x: float | np.ndarray) -> np.ndarray:
-            if isinstance_types(x, float):
-                return np.repeat(float(x), N).astype(float).reshape(shape)
-
-            # TODO: typing.TypeGuard if-else constructs are not handled by the type checker
-            return x
-
-        points_arr = tuple((p, expand_scalars(v)) for p, v in points)
-
-        return self.evaluate_multiple(output, *points_arr)
-
-    def evaluate_single(
-        self, output: CProperty, *points: tuple[CProperty, float]
-    ) -> float:
+    def evaluate_single(self, output: CProperty, *points: tuple[CProperty, float]) -> float:
         inputs = list(flatten(points))
 
         if self._append_name_to_cp_inputs:
             inputs.append(self.name)
 
         try:
-            val: float = self.BACKEND["backend"](output, *inputs)
+            val = self.BACKEND["backend"](output, *inputs)
+
+            if not isinstance(val, float):
+                raise TypeError(f"Unexpected value type: {type(val)}, expected float")
 
             if val == np.inf or val == -np.inf:
                 val = np.nan
@@ -598,25 +523,45 @@ class CoolPropFluid(ABC, Generic[MT]):
             self.check_exception(output, e)
             return np.nan
 
+    def evaluate_expression(self, output: CProperty, *points: tuple[CProperty, pl.Expr]) -> pl.Expr:
+        def _evaluate(s: pl.Series) -> pl.Series:
+            materalized = tuple((n[0], s.struct.field(n[0]).to_numpy()) for n in points)
+            ret = self.evaluate_multiple(output, *materalized)
+
+            ret_series = pl.Series(ret)
+
+            if self._convert_pl_series_nan_null:
+                ret_series = ret_series.fill_nan(None)
+
+            ret_series = ret_series.cast(pl.Float32)
+
+            return ret_series
+
+        return pl.struct(*[n[1].alias(n[0]) for n in points]).map_batches(_evaluate, pl.Float32).alias(output)
+
     def evaluate_multiple_separately(
         self,
         output: CProperty,
         props: list[CProperty],
-        arrs_flat_masked: list[np.ndarray],
+        arrs_flat_masked: list[Numpy1DArray],
         N: int,
-    ) -> np.ndarray:
-        vals = []
+    ) -> Numpy1DArray:
+        vals: list[float] = []
 
         for i in range(N):
             arrs_flat_masked_i = [n[i] for n in arrs_flat_masked]
 
-            inputs_i = list(flatten(list(zip(props, arrs_flat_masked_i))))
+            inputs_i = list(flatten(list(zip(props, arrs_flat_masked_i, strict=False))))
 
             if self._append_name_to_cp_inputs:
                 inputs_i.append(self.name)
 
             try:
-                val_i: float = self.BACKEND["backend"](output, *inputs_i)
+                val_i = self.BACKEND["backend"](output, *inputs_i)
+
+                if not isinstance(val_i, float):
+                    raise TypeError(f"Unexpected value type: {type(val_i)}, expected float")
+
             except ValueError as e:
                 self.check_exception(output, e)
                 val_i = np.nan
@@ -625,9 +570,7 @@ class CoolPropFluid(ABC, Generic[MT]):
 
         return np.array(vals)
 
-    def evaluate_multiple(
-        self, output: CProperty, *points: tuple[CProperty, np.ndarray]
-    ) -> np.ndarray:
+    def evaluate_multiple(self, output: CProperty, *points: tuple[CProperty, Numpy1DArray]) -> Numpy1DArray:
         props = [pt[0] for pt in points]
         arrs = [pt[1] for pt in points]
         shape = arrs[0].shape
@@ -649,7 +592,7 @@ class CoolPropFluid(ABC, Generic[MT]):
         if N > 0:
             arrs_flat_masked = [n[mask] for n in arrs_flat]
 
-            inputs = list(flatten(list(zip(props, arrs_flat_masked))))
+            inputs = list(flatten(list(zip(props, arrs_flat_masked, strict=False))))
 
             if self._append_name_to_cp_inputs:
                 inputs.append(self.name)
@@ -657,52 +600,113 @@ class CoolPropFluid(ABC, Generic[MT]):
             # this can fail if the numeric values
             # are *all* incorrect, for example negative pressure
             try:
-                val_masked: np.ndarray = self.BACKEND["backend"](output, *inputs)
+                val_masked = self.BACKEND["backend"](output, *inputs)
+
+                if isinstance(val_masked, float):
+                    raise TypeError(f"Unexpected value type: {type(val)}, expected np.ndarray")
 
             except ValueError as e:
                 self.check_exception(output, e)
 
                 if self._evaluate_invalid_separately:
-                    val_masked = self.evaluate_multiple_separately(
-                        output, props, arrs_flat_masked, N
-                    )
+                    val_masked = self.evaluate_multiple_separately(output, props, arrs_flat_masked, N)
                 else:
                     val_masked = get_empty_like(arrs_flat_masked[0])
 
             val[mask] = val_masked
 
-        def validate_output(x: np.ndarray) -> np.ndarray:
+        def validate_output(x: Numpy1DArray) -> Numpy1DArray:
             x[x == np.inf] = np.nan
             x[x == -np.inf] = np.nan
             return x.reshape(shape)
 
         return validate_output(val)
 
+    def evaluate(
+        self, output: CProperty, *points: tuple[CProperty, float | Numpy1DArray | pl.Expr]
+    ) -> float | Numpy1DArray | pl.Expr:
+        if all(isinstance(pt[1], float) for pt in points):
+            scalar_points = [cast("tuple[CProperty, float]", n) for n in points]
+            return self.evaluate_single(output, *scalar_points)
+
+        if any(isinstance(pt[1], pl.Expr) for pt in points):
+            if not all(isinstance(pt[1], (float, pl.Expr)) for pt in points):
+                raise TypeError(
+                    "Only pl.Expr and float inputs are supported when one or more inputs is pl.Expr, "
+                    f"passed types: {[(n[0], type(n[1])) for n in points]}"
+                )
+
+            expr_points = [(n[0], n[1] if isinstance(n[1], pl.Expr) else pl.lit(n[1])) for n in points]
+            return self.evaluate_expression(output, *expr_points)
+
+        def single_element_vector_to_float(x: float | Numpy1DArray) -> float | Numpy1DArray:
+            if isinstance(x, float):
+                return x
+
+            if isinstance(x, np.ndarray) and x.size == 1:
+                return float(x[0])
+
+            return x
+
+        points = tuple(
+            (p, single_element_vector_to_float(v))
+            for p, v in cast("tuple[tuple[CProperty, float | Numpy1DArray]]", points)
+        )
+
+        sizes = [v.size for _, v in points if isinstance(v, np.ndarray)]
+        shapes = [v.shape for _, v in points if isinstance(v, np.ndarray)]
+
+        # the sizes list is empty if all inputs were 1-element vectors
+        if len(sizes):
+            n = sizes[0]
+            shape = shapes[0]
+
+            # 1-length vectors were converted to float, so this error will be relevant
+            if len(set(sizes)) != 1:
+                raise ValueError(f"All inputs must have the same size, passed {points} with sizes {sizes}")
+
+            if len(set(shapes)) != 1:
+                raise ValueError(f"All inputs must have the same shape, passed {points} with shapes {shapes}")
+        else:
+            n = 1
+            shape = (1,)
+
+        def expand_scalars(x: float | np.ndarray) -> Numpy1DArray:
+            if isinstance(x, np.ndarray):
+                return x
+
+            return np.repeat(float(x), n).astype(float).reshape(shape)
+
+        points_arr = tuple((p, expand_scalars(v)) for p, v in points)
+
+        return self.evaluate_multiple(output, *points_arr)
+
     def construct_quantity(
-        self, val: float | np.ndarray, output: CProperty, convert_magnitude: bool = True
-    ) -> Quantity[Variable, MT]:
+        self, val: float | Numpy1DArray | pl.Expr, output: CProperty, convert_magnitude: bool = True
+    ) -> Quantity[Any, MT]:
         unit_output = self.get_coolprop_unit(output)
 
         # the dimensionality is not known until runtime
-        qty = Quantity(val, unit_output)
+        qty = Quantity(cast(MT, val), unit_output)
 
-        # value with dimensions present in CoolProp (pressure, temperature, etc...) cannot be zero
+        # value with dimensions present in CoolProp (pressure, temperature, etc...)
+        # cannot be zero
         # CoolProp uses 0.0 for missing data, change this to NaN
-        # the values are not always exactly 0, use the _EPS class attribute to check this
+        # the values are not always exactly 0,
+        # use the _EPS class attribute to check this
         # skip this check for some properties
-        if not not qty.dimensionless and output not in self._SKIP_ZERO_CHECK:
+        if qty.dimensionless and output not in self._SKIP_ZERO_CHECK:
             if isinstance(qty.m, np.ndarray):
-                # Quantity.m is a @property, cannot be set
                 m = qty.m
-
                 m[m < self._EPS] = np.nan
-                qty = Quantity(m, unit_output)
-
-            elif isinstance(qty.m, (float, int)):
-                if qty.m < self._EPS:
-                    qty = Quantity(np.nan, unit_output)
+                qty.m = m
+            elif isinstance(qty.m, pl.Series):
+                raise TypeError(f"Invalid magnitude type for {qty} ({type(qty.m)})")
+            elif isinstance(qty.m, pl.Expr):
+                pass
             else:
-                raise TypeError(f"Unexpected magnitude type: {qty.m} ({type(qty.m)})")
+                if qty.m < self._EPS:
+                    qty = cast("Quantity[Any, MT]", Quantity(np.nan, unit_output))
 
         key = self.get_prop_key(output)
 
@@ -711,44 +715,45 @@ class CoolPropFluid(ABC, Generic[MT]):
             qty.ito(ret_unit)
 
         if convert_magnitude:
-            qty = qty.astype(self._mt, **self._mt_kwargs)
+            qty = qty.astype(self._mt)
 
-        return qty
+        if isinstance(qty.m, pl.Series):
+            if self._convert_pl_series_nan_null:
+                qty.m = qty.m.fill_nan(None)
 
-    def to_numeric(
-        self, prop: CProperty, qty: Quantity[Variable, MT]
-    ) -> float | np.ndarray:
+            qty.m = qty.m.cast(pl.Float32)
+
+        return cast("Quantity[Any, MT]", qty)
+
+    def to_numeric_correct_unit(
+        self, prop: CProperty, qty: Quantity[Any, MT] | Quantity[Any, float]
+    ) -> float | Numpy1DArray | pl.Expr:
         unit = self.get_coolprop_unit(prop)
 
         try:
             m = qty.to(unit).m
-        except DimensionalityError:
+        except DimensionalityError as e:
             raise ExpectedDimensionalityError(
                 f'CoolProp input for property "{prop}" is incorrect. '
                 f"expected {unit} ({unit.dimensionality}), but passed "
                 f"{qty.u} ({qty.dimensionality})"
-            )
+            ) from e
 
-        if isinstance(m, (pd.DatetimeIndex, pd.Timestamp)):
-            raise TypeError(f"Cannot pass datetime magnitude as input to CoolProp: {m}")
-
-        if isinstance(m, pl.Expr):
-            raise TypeError(f"Cannot pass Polars expression as input to CoolProp: {m}")
-
-        if isinstance(m, list):
-            m = np.array(m)
-
-        if isinstance(m, (pd.Series, pl.Series)):
-            m = m.to_numpy()
-
-        return m
+        if isinstance(m, (float, int, pl.Expr)):
+            return m
+        elif isinstance(m, pl.Series):
+            return m.to_numpy()
+        elif isinstance(m, list):
+            return np.array(m)
+        else:
+            return m
 
     def get(
         self,
         output: CProperty,
-        points: list[tuple[CProperty, Quantity[Variable, MT]]] | None = None,
+        points: list[tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]]] | None = None,
         convert_magnitude: bool = True,
-    ) -> Quantity[Variable, MT]:
+    ) -> Quantity[Any, MT]:
         """
         Wraps the function ``CoolProp.CoolProp.PropsSI``, handles input
         and output with :py:class:`encomp.units.Quantity` objects.
@@ -757,7 +762,7 @@ class CoolPropFluid(ABC, Generic[MT]):
         ----------
         output : CProperty
             Name of the output property
-        points : list[tuple[CProperty, Quantity[Variable, MT]]] | None
+        points : list[tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]]] | None
             Fixed state variables: name and value of the property.
             The number of points must match the number expected
             by the CoolProp backend function.
@@ -768,47 +773,48 @@ class CoolPropFluid(ABC, Generic[MT]):
 
         Returns
         -------
-        Quantity[Variable, MT]
+        Quantity[Any, MT]
             Quantity representing the output property
         """
 
         if points is None:
             points = self.points
 
-        points_numeric = [(pt[0], self.to_numeric(*pt)) for pt in points]
-
+        points_numeric = [(pt[0], self.to_numeric_correct_unit(*pt)) for pt in points]
         val = self.evaluate(output, *points_numeric)
 
         return self.construct_quantity(val, output, convert_magnitude=convert_magnitude)
 
-    def __getattr__(self, attr: CProperty) -> Quantity[Variable, MT]:
+    def __getattr__(self, attr: CProperty) -> Quantity[Any, MT]:
         if attr not in self.ALL_PROPERTIES:
             raise AttributeError(attr)
 
         return self.get(attr)
 
-    def _get_repr(
-        self, prop: CProperty, fmt: str
-    ) -> Quantity[Variable, np.ndarray | float]:
-        if self.is_scalar:
+    def _get_repr(self, prop: CProperty, fmt: str) -> str:
+        if all(isinstance(n[1].m, (float, int)) for n in self.points):
             return f"{self.get(prop).astype(float):{fmt}}"
 
-        vector_inputs = [n for n in self.points if isinstance(n[1].m, Iterable)]
+        if any(isinstance(n[1].m, pl.Expr) for n in self.points):
+            return "<pl.Expr>"
+
+        vector_inputs = [
+            (n[0], cast(Quantity[Any, Numpy1DArray] | Quantity[Any, pl.Series], n[1]))
+            for n in self.points
+            if isinstance(n[1].m, (np.ndarray, pl.Series))
+        ]
 
         is_cutoff = max(len(n[1].m) for n in vector_inputs) > self._repr_cutoff
 
-        vector_inputs_cutoff = [
-            (n[0], Quantity(n[1].m[: self._repr_cutoff], n[1].u)) for n in vector_inputs
-        ]
+        def _get_cutoff_qty(q: Quantity[Any, Any]) -> Quantity[Any, Any]:
+            return Quantity(q.m[: self._repr_cutoff], q.u)
+
+        vector_inputs_cutoff = [(n[0], _get_cutoff_qty(n[1])) for n in vector_inputs]
 
         # add optional scalar points also
-        vector_inputs_cutoff += [
-            n for n in self.points if n[0] not in (n[0] for n in vector_inputs_cutoff)
-        ]
+        vector_inputs_cutoff += [n for n in self.points if n[0] not in (n[0] for n in vector_inputs_cutoff)]
 
-        qty = self.get(
-            prop, points=vector_inputs_cutoff, convert_magnitude=False
-        ).astype(np.ndarray)
+        qty = self.get(prop, points=vector_inputs_cutoff, convert_magnitude=False).astype(Numpy1DArray)
 
         qty_formatted = f"{qty:{fmt}}"
 
@@ -820,7 +826,7 @@ class CoolPropFluid(ABC, Generic[MT]):
 
 
 class Fluid(CoolPropFluid[MT]):
-    def __init__(self, name: CName, **kwargs: Quantity[Variable, MT]):
+    def __init__(self, name: CName, **kwargs: Quantity[Any, MT] | Quantity[Any, float]) -> None:
         """
         Represents a fluid at a fixed state, for example at a
         specific temperature and pressure.
@@ -829,7 +835,7 @@ class Fluid(CoolPropFluid[MT]):
         ----------
         name : CName
             Name of the fluid
-        kwargs: Quantity[Variable, MT]
+        kwargs: Quantity[Any, MT]
             Values for the two fixed points. The name of the keyword argument is the
             CoolProp property name.
         """
@@ -839,34 +845,35 @@ class Fluid(CoolPropFluid[MT]):
         self.check_inputs(kwargs)
 
         if len(kwargs) != 2:
-            raise ValueError(
-                f"Exactly two fixed points are required, passed {list(kwargs)}"
-            )
+            raise ValueError(f"Exactly two fixed points are required, passed {list(kwargs)}")
 
         kwargs_list = list(kwargs.items())
 
-        self.point_1 = kwargs_list[0]
-        self.point_2 = kwargs_list[1]
+        self.point_1: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = kwargs_list[0]
+        self.point_2: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = kwargs_list[1]
 
         self.points = [self.point_1, self.point_2]
 
     @property
     def phase(self) -> str:
+        if any(isinstance(n[1].m, pl.Expr) for n in self.points):
+            return "Unknown"
+
         phase_idx = self.get("PHASE", convert_magnitude=False)
         phase_idx_val = phase_idx.m
 
         if isinstance(phase_idx_val, np.ndarray):
             if len(set(phase_idx_val)) == 1:
-                phase_idx_val = float(phase_idx_val[0])
-                return self.PHASES.get(phase_idx_val, "N/A")
+                phase_idx_val_element = float(phase_idx_val[0])
+                return self.PHASES.get(phase_idx_val_element, "N/A")
 
             else:
                 return "Variable"
 
-        elif isinstance(phase_idx_val, (int, float)):
+        elif isinstance(phase_idx_val, int | float):
             return self.PHASES.get(float(phase_idx_val), "N/A")
 
-        raise TypeError(f"Cannot determine phase of {type(self)} when " f"{phase_idx=}")
+        raise TypeError(f"Cannot determine phase of {type(self)} when {phase_idx=}")
 
     @property
     def PHASE(self) -> Quantity[Dimensionless, MT]:
@@ -921,8 +928,8 @@ class Fluid(CoolPropFluid[MT]):
         return self.get("TTRIPLE").asdim(Temperature)
 
     @property
-    def T_FREEZING(self) -> Quantity[Temperature, MT]:
-        return self.get("T_FREEZING").asdim(Temperature)
+    def T_FREEZE(self) -> Quantity[Temperature, MT]:
+        return self.get("T_FREEZE").asdim(Temperature)
 
     @property
     def T_REDUCING(self) -> Quantity[Temperature, MT]:
@@ -1005,7 +1012,7 @@ class Fluid(CoolPropFluid[MT]):
         return self.get("M").asdim(MolarMass)
 
     def __repr__(self) -> str:
-        props = []
+        props: list[str] = []
 
         for p, fmt in self.REPR_PROPERTIES:
             props.append(f"{p}={self._get_repr(p, fmt)}")
@@ -1025,31 +1032,29 @@ class Water(Fluid[MT]):
         ("V", ".1f"),
     )
 
-    def __init__(self, **kwargs: Quantity[Variable, MT]):
+    def __init__(self, **kwargs: Quantity[Any, MT] | Quantity[Any, float]) -> None:
         """
         Convenience class to access water and steam properties via CoolProp.
 
         Parameters
         ----------
-        kwargs: Quantity[Variable, MT]
+        kwargs: Quantity[Any, MT]
             Values for the two fixed points. The name of the keyword argument is the
             CoolProp property name.
         """
 
-        self.name = "Water"
+        # default IF97, set to "Water to use IAPWS-95
+        self.name = "IF97::Water"
 
         self.check_inputs(kwargs)
 
         if len(kwargs) != 2:
             if set(kwargs) == {"P", "T", "Q"}:
                 raise ValueError(
-                    "Cannot set both P, T and vapor quality Q. Remove one of P, T to "
-                    "get properties of saturated steam."
+                    "Cannot set both P, T and vapor quality Q. Remove one of P, T to get properties of saturated steam."
                 )
 
-            raise ValueError(
-                f"Exactly two fixed points are required, passed {list(kwargs)}"
-            )
+            raise ValueError(f"Exactly two fixed points are required, passed {list(kwargs)}")
 
         kwargs_list = list(kwargs.items())
 
@@ -1061,9 +1066,7 @@ class Water(Fluid[MT]):
     def __repr__(self) -> str:
         repr_properties = self.REPR_PROPERTIES
 
-        props_str = ", ".join(
-            f"{p}={self._get_repr(p, fmt)}" for p, fmt in repr_properties
-        )
+        props_str = ", ".join(f"{p}={self._get_repr(p, fmt)}" for p, fmt in repr_properties)
 
         s = f"<{self.__class__.__name__} ({self.phase}), {props_str}>"
 
@@ -1132,14 +1135,15 @@ class HumidAir(CoolPropFluid[MT]):
         ("M", ".2g"),
     )
 
-    def __init__(self, **kwargs: Quantity[Variable, MT]):
+    def __init__(self, **kwargs: Quantity[Any, MT] | Quantity[Any, float]) -> None:
         """
-        Interface to the CoolProp function for humid air, ``CoolProp.CoolProp.HAPropsSI``.
+        Interface to the CoolProp function for humid air,
+        ``CoolProp.CoolProp.HAPropsSI``.
         Needs three fixed points instead of two.
 
         Parameters
         ----------
-        kwargs: Quantity[Variable, MT]
+        kwargs: Quantity[Any, MT]
             Values for the three fixed points. The name of the keyword argument is the
             CoolProp property name.
         """
@@ -1149,15 +1153,13 @@ class HumidAir(CoolPropFluid[MT]):
         self.check_inputs(kwargs)
 
         if len(kwargs) != 3:
-            raise ValueError(
-                f"Exactly three fixed points are required, passed {list(kwargs)}"
-            )
+            raise ValueError(f"Exactly three fixed points are required, passed {list(kwargs)}")
 
         kwargs_list = list(kwargs.items())
 
-        self.point_1 = kwargs_list[0]
-        self.point_2 = kwargs_list[1]
-        self.point_3 = kwargs_list[2]
+        self.point_1: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = kwargs_list[0]
+        self.point_2: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = kwargs_list[1]
+        self.point_3: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = kwargs_list[2]
 
         self.points = [self.point_1, self.point_2, self.point_3]
 
@@ -1238,9 +1240,7 @@ class HumidAir(CoolPropFluid[MT]):
         return self.get("Vha").asdim(MixtureVolumePerHumidAir)
 
     def __repr__(self) -> str:
-        props_str = ", ".join(
-            f"{p}={self._get_repr(p, fmt)}" for p, fmt in self.REPR_PROPERTIES
-        )
+        props_str = ", ".join(f"{p}={self._get_repr(p, fmt)}" for p, fmt in self.REPR_PROPERTIES)
 
         s = f"<{self.__class__.__name__}, {props_str}>"
 

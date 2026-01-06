@@ -5,7 +5,7 @@ from ..units import Quantity as Q
 from ..utypes import Dimensionless, Mass, Power, Temperature
 
 
-def test_grid_dimensions():
+def test_grid_dimensions() -> None:
     assert [
         grid_dimensions(1, 2, 3),
         grid_dimensions(-1, -1, 3),
@@ -14,7 +14,7 @@ def test_grid_dimensions():
     ] == [(2, 3), (0, 3), (2, 3), (1, 3)]
 
 
-def test_name_assignments():
+def test_name_assignments() -> None:
     s = "a = 5; b = [1, 2, 3]"
 
     assignments = name_assignments(s)
@@ -35,7 +35,7 @@ def test_name_assignments():
     assert {n[0] for n in name_assignments(src)} == {"a", "b", "c"}
 
 
-def test_isinstance_types():
+def test_isinstance_types() -> None:
     assert isinstance_types((1, 4), tuple)
     assert isinstance_types((1, 4), tuple[int, int])
     assert isinstance_types((1, 4), tuple[int, ...])
@@ -50,26 +50,26 @@ def test_isinstance_types():
     assert not isinstance_types(d, dict[str, list[float]])
 
     x = (2, 2, 3)
-    assert not isinstance_types(x, tuple[int, int] | tuple[str, str])
-    assert isinstance_types(x, tuple[int, int, int] | tuple[str, str])
+    assert not (isinstance_types(x, tuple[int, int]) or isinstance_types(x, tuple[str, str]))
+    assert isinstance_types(x, tuple[int, int, int]) or isinstance_types(x, tuple[str, str])
 
     y = (2, 2, "3")
-    assert isinstance_types(y, tuple[int, int, str] | str)
+    assert isinstance_types(y, tuple[int, int, str]) or isinstance_types(y, str)
 
 
-def test_isinstance_types_quantity():
+def test_isinstance_types_quantity() -> None:
     q = Q(1)
     assert isinstance_types(q, Q)
     assert isinstance_types(q, Q[Dimensionless])
     assert isinstance_types(q, Q[Dimensionless, float])
 
     assert not isinstance_types(q, int)
-    assert not isinstance_types(q, int | float)
+    assert not (isinstance_types(q, int) or isinstance_types(q, float))
 
     q2 = Q(2, "kg")
     assert isinstance_types(q2, Q)
     assert isinstance_types(q2, Q[Mass])
     assert isinstance_types(q2, Q[Mass, float])
 
-    assert isinstance_types(q2, Q[Mass] | Q[Temperature])
-    assert not isinstance_types(q2, Q[Power] | Q[Temperature])
+    assert isinstance_types(q2, Q[Mass]) or isinstance_types(q2, Q[Temperature])
+    assert not (isinstance_types(q2, Q[Power]) or isinstance_types(q2, Q[Temperature]))

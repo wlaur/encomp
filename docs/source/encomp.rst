@@ -44,34 +44,10 @@ encomp.gases module
    :undoc-members:
    :show-inheritance:
 
-encomp.math module
-------------------
-
-.. automodule:: encomp.math
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 encomp.misc module
 ------------------
 
 .. automodule:: encomp.misc
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-encomp.serialize module
------------------------
-
-.. automodule:: encomp.serialize
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-encomp.session module
----------------------
-
-.. automodule:: encomp.session
    :members:
    :undoc-members:
    :show-inheritance:

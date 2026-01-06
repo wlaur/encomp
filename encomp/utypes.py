@@ -3,34 +3,47 @@ Contains type definitions for :py:class:`encomp.units.Quantity` objects.
 
 The dimensionalities defined in this module can be combined with ``*`` and ``/``.
 Some commonly used derived dimensionalities (like density) are defined for convenience.
-
-This module can be star-imported, variables prefixed with ``_`` will not
-be imported in this case.
 """
 
 from __future__ import annotations
 
-from abc import ABC
-from typing import (
-    TYPE_CHECKING,
-    Literal,
-    TypeVar,
-    _LiteralGenericAlias,  # type: ignore
-)
+from typing import Literal, TypeVar, cast, get_origin
 
 import numpy as np
-import pandas as pd
 import polars as pl
 from pint.util import UnitsContainer
 
-_BASE_SI_UNITS = ("m", "kg", "s", "K", "mol", "A", "cd")
+BASE_SI_UNITS = (
+    "m",
+    "kg",
+    "s",
+    "K",
+    "mol",
+    "A",
+    "cd",
+)
 
 # these string literals are used to infer the dimensionality of commonly created quantities
 # they are only used by type checkers and ignored at runtime
-DimensionlessUnits = Literal["", "%", "-", "dimensionless", None]
+DimensionlessUnits = Literal[
+    "",
+    "%",
+    "percent",
+    "pct",
+    "-",
+    "dimensionless",
+]
 
 CurrencyUnits = Literal[
-    "SEK", "EUR", "USD", "kSEK", "kEUR", "kUSD", "MSEK", "MEUR", "MUSD"
+    "SEK",
+    "EUR",
+    "USD",
+    "kSEK",
+    "kEUR",
+    "kUSD",
+    "MSEK",
+    "MEUR",
+    "MUSD",
 ]
 
 CurrencyPerEnergyUnits = Literal[
@@ -102,9 +115,24 @@ CurrencyPerTimeUnits = Literal[
 ]
 
 
-LengthUnits = Literal["m", "meter", "km", "cm", "mm", "um"]
+LengthUnits = Literal[
+    "m",
+    "meter",
+    "km",
+    "cm",
+    "mm",
+    "um",
+]
 
-MassUnits = Literal["kg", "g", "ton", "tonne", "t", "mg", "ug"]
+MassUnits = Literal[
+    "kg",
+    "g",
+    "ton",
+    "tonne",
+    "t",
+    "mg",
+    "ug",
+]
 
 TimeUnits = Literal[
     "s",
@@ -126,23 +154,59 @@ TimeUnits = Literal[
     "us",
 ]
 
-TemperatureUnits = Literal["degC", "°C", "K", "degF", "°F", "℃", "℉"]
-
-TemperatureDifferenceUnits = Literal[
-    "delta_°C", "delta_degC", "Δ°C", "Δ℃", "delta_°F", "delta_degF", "Δ°F", "Δ℉"
+TemperatureUnits = Literal[
+    "degC",
+    "°C",
+    "K",
+    "degF",
+    "°F",
+    "℃",
+    "℉",
 ]
 
-SubstanceUnits = Literal["mol", "kmol"]
+TemperatureDifferenceUnits = Literal[
+    "delta_°C",
+    "delta_degC",
+    "Δ°C",
+    "Δ℃",
+    "delta_°F",
+    "delta_degF",
+    "Δ°F",
+    "Δ℉",
+]
 
-MolarMassUnits = Literal["g/mol", "kg/kmol"]
+SubstanceUnits = Literal[
+    "mol",
+    "kmol",
+]
 
-SubstancePerMassUnits = Literal["mol/g", "kmol/kg"]
+MolarMassUnits = Literal[
+    "g/mol",
+    "kg/kmol",
+]
 
-CurrentUnits = Literal["A", "mA"]
+SubstancePerMassUnits = Literal[
+    "mol/g",
+    "kmol/kg",
+]
+
+CurrentUnits = Literal[
+    "A",
+    "mA",
+]
 
 LuminosityUnits = Literal["lm"]
 
-AreaUnits = Literal["m2", "m^2", "m**2", "m²", "cm2", "cm^2", "cm**2", "cm²"]
+AreaUnits = Literal[
+    "m2",
+    "m^2",
+    "m**2",
+    "m²",
+    "cm2",
+    "cm^2",
+    "cm**2",
+    "cm²",
+]
 
 VolumeUnits = Literal[
     "L",
@@ -163,10 +227,31 @@ VolumeUnits = Literal[
 ]
 
 NormalVolumeUnits = Literal[
-    "normal liter", "Nm3", "nm3", "Nm^3", "nm^3", "Nm³", "nm³", "Nm**3", "nm**3"
+    "normal liter",
+    "Nm3",
+    "nm3",
+    "Nm^3",
+    "nm^3",
+    "Nm³",
+    "nm³",
+    "Nm**3",
+    "nm**3",
 ]
 
-PressureUnits = Literal["bar", "kPa", "Pa", "MPa", "mbar", "mmHg", "atm"]
+PressureUnits = Literal[
+    "bar",
+    "kPa",
+    "Pa",
+    "MPa",
+    "mbar",
+    "mmHg",
+    "psi",
+    "atm",
+    "N/m2",
+    "N/m^2",
+    "N/m**2",
+    "N/m²",
+]
 
 MassFlowUnits = Literal[
     "kg/s",
@@ -243,12 +328,23 @@ NormalVolumeFlowUnits = Literal[
 ]
 
 DensityUnits = Literal[
-    "kg/m3", "kg/m**3", "kg/m^3", "kg/m³", "kg/liter", "g/l", "g/L", "gram/liter"
+    "kg/m3",
+    "kg/m**3",
+    "kg/m^3",
+    "kg/m³",
+    "kg/liter",
+    "g/l",
+    "g/L",
+    "gram/liter",
 ]
 
-
-SpecificVolumeUnits = Literal["m3/kg", "m^3/kg", "m³/kg", "l/g", "L/g"]
-
+SpecificVolumeUnits = Literal[
+    "m3/kg",
+    "m^3/kg",
+    "m³/kg",
+    "l/g",
+    "L/g",
+]
 
 NormalVolumePerMassUnits = Literal[
     "Nm3/kg",
@@ -259,9 +355,18 @@ NormalVolumePerMassUnits = Literal[
     "nm³/kg",
 ]
 
-
 EnergyUnits = Literal[
-    "J", "kJ", "MJ", "GJ", "TJ", "PJ", "kWh", "MWh", "Wh", "GWh", "TWh"
+    "J",
+    "kJ",
+    "MJ",
+    "GJ",
+    "TJ",
+    "PJ",
+    "kWh",
+    "MWh",
+    "Wh",
+    "GWh",
+    "TWh",
 ]
 
 PowerUnits = Literal[
@@ -293,12 +398,39 @@ PowerUnits = Literal[
     "TWh/year",
 ]
 
-VelocityUnits = Literal["m/s", "km/s", "m/min", "cm/s", "cm/min", "km/h", "kmh", "kph"]
+VelocityUnits = Literal[
+    "m/s",
+    "km/s",
+    "m/min",
+    "cm/s",
+    "cm/min",
+    "km/h",
+    "kmh",
+    "kph",
+]
 
-DynamicViscosityUnits = Literal["Pa*s", "Pa s", "cP"]
+ForceUnits = Literal[
+    "N",
+    "kN",
+    "mN",
+]
+
+DynamicViscosityUnits = Literal[
+    "Pa*s",
+    "Pa s",
+    "cP",
+]
 
 KinematicViscosityUnits = Literal[
-    "m2/s", "m**2/s", "m^2/s", "m²/s", "cSt", "cm2/s", "cm**2/s", "cm^2/s", "cm²/s"
+    "m2/s",
+    "m**2/s",
+    "m^2/s",
+    "m²/s",
+    "cSt",
+    "cm2/s",
+    "cm**2/s",
+    "cm^2/s",
+    "cm²/s",
 ]
 
 EnergyPerMassUnits = Literal[
@@ -340,19 +472,96 @@ SpecificHeatCapacityUnits = Literal[
     "J/g/degC",
 ]
 
+ThermalConductivityUnits = Literal[
+    "W/m/K",
+    "W/m/delta_degC",
+    "W/m/Δ°C",
+    "W/m/Δ℃",
+    "kW/m/K",
+    "mW/m/K",
+]
+
+HeatTransferCoefficientUnits = Literal[
+    "W/m2/K",
+    "W/m^2/K",
+    "W/m**2/K",
+    "W/m²/K",
+    "W/m2/delta_degC",
+    "W/m^2/delta_degC",
+    "W/m**2/delta_degC",
+    "W/m²/delta_degC",
+    "W/m2/Δ°C",
+    "W/m^2/Δ°C",
+    "W/m**2/Δ°C",
+    "W/m²/Δ°C",
+    "kW/m2/K",
+    "kW/m^2/K",
+    "kW/m**2/K",
+    "kW/m²/K",
+]
+
+AllUnits = (
+    DimensionlessUnits
+    | CurrencyUnits
+    | CurrencyPerEnergyUnits
+    | CurrencyPerMassUnits
+    | CurrencyPerVolumeUnits
+    | CurrencyPerTimeUnits
+    | LengthUnits
+    | MassUnits
+    | TimeUnits
+    | TemperatureUnits
+    | TemperatureDifferenceUnits
+    | SubstanceUnits
+    | MolarMassUnits
+    | SubstancePerMassUnits
+    | CurrentUnits
+    | LuminosityUnits
+    | AreaUnits
+    | VolumeUnits
+    | NormalVolumeUnits
+    | PressureUnits
+    | MassFlowUnits
+    | VolumeFlowUnits
+    | NormalVolumeFlowUnits
+    | DensityUnits
+    | SpecificVolumeUnits
+    | NormalVolumePerMassUnits
+    | EnergyUnits
+    | PowerUnits
+    | VelocityUnits
+    | ForceUnits
+    | DynamicViscosityUnits
+    | KinematicViscosityUnits
+    | EnergyPerMassUnits
+    | SpecificHeatCapacityUnits
+    | ThermalConductivityUnits
+    | HeatTransferCoefficientUnits
+)
+
 
 def get_registered_units() -> dict[str, tuple[str, ...]]:
-    ret = {}
+    ret: dict[str, tuple[str, ...]] = {}
 
     for k, v in globals().items():
-        if isinstance(v, _LiteralGenericAlias):
-            if k.endswith("Units"):
-                ret[k.removesuffix("Units")] = v.__args__
+        if get_origin(v) is Literal and k.endswith("Units"):
+            ret[k.removesuffix("Units")] = v.__args__
 
     return ret
 
 
-class Dimensionality(ABC):
+class _DimensionalityMeta(type):
+    def __eq__(cls, other: object) -> bool:
+        if not isinstance(other, type):
+            return False
+
+        return cls.__qualname__ == other.__qualname__
+
+    def __hash__(cls) -> int:
+        return id(cls)
+
+
+class Dimensionality(metaclass=_DimensionalityMeta):
     r"""
     Represents the *dimensionality* of a unit, i.e.
     a combination (product) of the base dimensions (with optional rational exponents).
@@ -363,7 +572,8 @@ class Dimensionality(ABC):
 
         \Pi \, d^n_d, d \in \{T, L, M ,I, \Theta, N, J, \ldots\}, n_d \in \mathbb{Q}
 
-    where $\{T, L, M, ...\}$ are the base dimensions (time, length, mass, ...) and $n_d$ is a rational number.
+    where $\{T, L, M, ...\}$ are the base dimensions (time, length, mass, ...)
+    and $n_d$ is a rational number.
 
     Subclasses of this abstract base class are used
     as type parameters when creating instances of
@@ -403,8 +613,7 @@ class Dimensionality(ABC):
 
         if cls.dimensions is cls._UnsetUC:
             raise TypeError(
-                f"Cannot initialize {cls}, class attribute "
-                '"dimensionality" is not defined for this subclass'
+                f"Cannot initialize {cls}, class attribute 'dimensionality' is not defined for this subclass"
             )
 
         # ensure that the subclass names are unique
@@ -425,38 +634,23 @@ class Dimensionality(ABC):
             # don't create a new subclass with the same name
             return
 
-        # the Unknown dimensionality subclass has dimensions=None
-        # it will never be used at runtime, only during type checking
-        # a subclass that will be used to create more subclasses
-        # might also have dimensions=None
-        # it's necessary to use "type: ignore" when defining dimensions = None
-        if cls.dimensions is None:
-            return
-
-        if not isinstance(cls.dimensions, UnitsContainer):
-            raise TypeError(
-                'The "dimensions" attribute of the Dimensionality type '
-                "must be an instance of pint.util.UnitsContainer, "
-                f"{cls} has dimensions: {cls.dimensions} ({type(cls.dimensions)})"
-            )
-
         # make sure a subclass of an existing Dimensionality has the same dimensions
         # the first element in __mro__ is the class that is being created, the
         # second is the direct parent class
         # parent must be either Dimensionality or a subclass
-        parent: type[Dimensionality] = cls.__mro__[1]  # type: ignore
+        parent = cast(type[Dimensionality], cls.__mro__[1])
 
         # ignore this check if the parent is the base class Dimensionality
-        if parent.dimensions is not cls._UnsetUC:
-            if parent.dimensions != cls.dimensions:
-                raise TypeError(
-                    f"Cannot create subclass of {parent} where "
-                    "the dimensions do not match. Tried to "
-                    f"create subclass with dimensions {cls.dimensions}, but "
-                    f"the parent has dimensions {parent.dimensions}"
-                )
+        if parent.dimensions is not cls._UnsetUC and parent.dimensions != cls.dimensions:
+            raise TypeError(
+                f"Cannot create subclass of {parent} where "
+                "the dimensions do not match. Tried to "
+                f"create subclass with dimensions {cls.dimensions}, but "
+                f"the parent has dimensions {parent.dimensions}"
+            )
 
-        # this will never happen, since the class name was already checked for duplicates
+        # this will never happen,
+        # since the class name was already checked for duplicates
         if cls in cls._registry:
             return
 
@@ -476,10 +670,13 @@ class Dimensionality(ABC):
         # not possible to generate a proper name for this,
         # so it will just contain the literal dimensions
         # this will call __init_subclass__ to register the type
-        _Dimensionality = type(
-            f"Dimensionality[{dimensions}]",
-            (Dimensionality,),
-            {"dimensions": dimensions},
+        _Dimensionality = cast(
+            type[Dimensionality],
+            type(
+                f"Dimensionality[{dimensions}]",
+                (Dimensionality,),
+                {"dimensions": dimensions},
+            ),
         )
 
         return _Dimensionality
@@ -488,7 +685,7 @@ class Dimensionality(ABC):
     def is_distinct(cls) -> bool:
         if cls._distinct is None:
             # special case if dimensions was overridden to None
-            if cls.dimensions is None:
+            if getattr(cls, "dimensions", None) is None:
                 return True
 
             ucs = list(cls._registry.values())
@@ -512,96 +709,37 @@ _CurrentUC = UnitsContainer({"[current]": 1})
 _LuminosityUC = UnitsContainer({"[luminosity]": 1})
 
 
-# NOTE: each subclass definition will create an entry in Dimensionality._registry
-# reloading (re-importing) this module will clear and reset the registry
-
-# the Unknown and Unset dimensionalities override dimensions to None
-# NOTE: never initialize subclasses Q[Unknown] or Q[Unset] at runtime,
-# this is only meant for type checking
+Numpy1DArray = np.ndarray[tuple[int], np.dtype[np.float64]]
+Numpy1DBoolArray = np.ndarray[tuple[int], np.dtype[np.bool]]
 
 
-class Unknown(Dimensionality):
-    dimensions = None  # type: ignore
+MT = TypeVar(
+    "MT",
+    float,
+    Numpy1DArray,
+    pl.Series,
+    pl.Expr,
+    default=Numpy1DArray,
+)
+
+MT_ = TypeVar(
+    "MT_",
+    float,
+    Numpy1DArray,
+    pl.Series,
+    pl.Expr,
+    default=Numpy1DArray,
+)
 
 
-# pyright supports TypeVar default (PEP 696), but it raises an error at runtime
-# this will be implemented in Python 3.12
-# TODO: this will likely not work with mypy
-if TYPE_CHECKING:
-    # NOTE: int and float are interchangeable as far as the type checker is concerned,
-    # but list[int] and list[float] are distinct
-    MT = TypeVar(
-        "MT",
-        float,
-        list[float],
-        np.ndarray,
-        pd.Series,
-        pd.DatetimeIndex,
-        pd.Timestamp,
-        pl.Series,
-        pl.Expr,
-        default=np.ndarray,
-    )
-
-    MT_ = TypeVar(
-        "MT_",
-        float,
-        list[float],
-        np.ndarray,
-        pd.Series,
-        pd.DatetimeIndex,
-        pd.Timestamp,
-        pl.Series,
-        pl.Expr,
-        default=np.ndarray,
-    )
-
-    # type variables that represent a certain dimensionality
-    # the DT_ type variable is used to signify a different (possible identical) dimensionality than DT
-    # these type variables are invariant, since
-    # Q[DimA] is not a subclass of Q[DimB] if DimA is a subclass of DimB
-    # all Q[DT] subclasses are direct subclasses of Q
-    # it might make sense to consider DT as covariant, but it won't have any practical advantages,
-    # and it does not match the actual implementation
-    DT = TypeVar("DT", bound=Dimensionality, default=Unknown)
-    DT_ = TypeVar("DT_", bound=Dimensionality, default=Unknown)
-
-else:
-    # this does nothing at runtime
-    MT = TypeVar(
-        "MT",
-        float,
-        list[float],
-        np.ndarray,
-        pd.Series,
-        pd.DatetimeIndex,
-        pd.Timestamp,
-        pl.Series,
-        pl.Expr,
-    )
-
-    MT_ = TypeVar(
-        "MT_",
-        float,
-        list[float],
-        np.ndarray,
-        pd.Series,
-        pd.DatetimeIndex,
-        pd.Timestamp,
-        pl.Series,
-        pl.Expr,
-    )
-
-    DT = TypeVar("DT", bound=Dimensionality)
-    DT_ = TypeVar("DT_", bound=Dimensionality)
+class UnknownDimensionality(Dimensionality):
+    _intermediate = True
 
 
-class Unset(Dimensionality):
-    dimensions = None  # type: ignore
-
-
-class Variable(Dimensionality):
-    dimensions = None  # type: ignore
+# type variables that represent a certain dimensionality
+# the DT_ type variable is used to signify a different (possible identical) dimensionality than DT
+DT = TypeVar("DT", bound=Dimensionality, default=UnknownDimensionality)
+DT_ = TypeVar("DT_", bound=Dimensionality, default=UnknownDimensionality)
 
 
 class Dimensionless(Dimensionality):
@@ -658,6 +796,7 @@ _SpecificVolumeUC = 1 / _DensityUC
 _EnergyUC = _MassUC * _LengthUC**2 / _TimeUC**2
 _PowerUC = _EnergyUC / _TimeUC
 _VelocityUC = _LengthUC / _TimeUC
+_ForceUC = _MassUC * _LengthUC / _TimeUC**2
 _DynamicViscosityUC = _MassUC / _LengthUC / _TimeUC
 _KinematicViscosityUC = _LengthUC**2 / _TimeUC
 _FrequencyUC = 1 / _TimeUC
@@ -724,6 +863,10 @@ class Power(Dimensionality):
 
 class Velocity(Dimensionality):
     dimensions = _VelocityUC
+
+
+class Force(Dimensionality):
+    dimensions = _ForceUC
 
 
 class DynamicViscosity(Dimensionality):

@@ -1,5 +1,5 @@
 from ..settings import SETTINGS
 
 
-def test_SETTINGS():
+def test_SETTINGS() -> None:
     assert isinstance(SETTINGS.autoconvert_offset_to_baseunit, bool)

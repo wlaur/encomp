@@ -2,12 +2,12 @@
 Functions relating to thermodynamics.
 """
 
-try:
-    from scipy.optimize import fsolve
-except ImportError:
-    fsolve = None
+from typing import Any
+
+import numpy as np
 
 from .constants import CONSTANTS
+from .misc import isinstance_types
 from .units import Quantity
 from .utypes import (
     Energy,
@@ -27,19 +27,19 @@ DEFAULT_CP = Quantity(4.18, "kJ/kg/K").asdim(SpecificHeatCapacity)
 
 
 def heat_balance(
-    *args: Quantity[Mass]
-    | Quantity[MassFlow]
-    | Quantity[Energy]
-    | Quantity[Power]
-    | Quantity[TemperatureDifference]
-    | Quantity[Temperature],
-    cp: Quantity[SpecificHeatCapacity] = DEFAULT_CP,
+    *args: Quantity[Mass, Any]
+    | Quantity[MassFlow, Any]
+    | Quantity[Energy, Any]
+    | Quantity[Power, Any]
+    | Quantity[TemperatureDifference, Any]
+    | Quantity[Temperature, Any],
+    cp: Quantity[SpecificHeatCapacity, float] = DEFAULT_CP,
 ) -> (
-    Quantity[Mass]
-    | Quantity[MassFlow]
-    | Quantity[Energy]
-    | Quantity[Power]
-    | Quantity[TemperatureDifference]
+    Quantity[Mass, Any]
+    | Quantity[MassFlow, Any]
+    | Quantity[Energy, Any]
+    | Quantity[Power, Any]
+    | Quantity[TemperatureDifference, Any]
 ):
     """
     Solves the heat balance equation
@@ -64,7 +64,8 @@ def heat_balance(
         The third unknown variable
     """
 
-    # this function might be too general to be expressed succinctly using type annotations
+    # this function might be too general to be
+    # expressed succinctly using type annotations
 
     if len(args) != 2:
         raise ValueError("Must pass exactly two parameters out of dT, Q_h and m")
@@ -78,16 +79,15 @@ def heat_balance(
         "Q_h": (Quantity[Energy] | Quantity[Power], ("kJ", "kW")),
     }
 
-    vals = {}
+    vals: dict[str, Quantity[Any, Any]] = {}
     units = {a: b[1] for a, b in params.items()}
 
     for a in args:
         for param_name, tp in params.items():
             if isinstance(a, tp[0]):
-                if param_name == "dT" and not a._ok_for_muldiv():
+                if param_name == "dT" and not a._ok_for_muldiv():  # pyright: ignore[reportPrivateUsage]
                     raise ValueError(
-                        f"Cannot pass temperature difference using "
-                        f"degree unit {a.u}, convert to delta_deg"
+                        f"Cannot pass temperature difference using degree unit {a.u}, convert to delta_deg"
                     )
 
                 vals[param_name] = a
@@ -96,12 +96,9 @@ def heat_balance(
         vals["dT"] = vals["dT"].to("delta_degC")
 
     # whether the calculation is per unit time or amount of mass / energy
-    per_time = any(isinstance(a, Quantity[MassFlow] | Quantity[Power]) for a in args)
+    per_time = any(isinstance_types(a, Quantity[MassFlow]) or isinstance_types(a, Quantity[Power]) for a in args)
 
-    if per_time:
-        unit_idx = 1
-    else:
-        unit_idx = 0
+    unit_idx = 1 if per_time else 0
 
     if "Q_h" not in vals:
         ret = cp * vals["m"] * vals["dT"]
@@ -116,28 +113,26 @@ def heat_balance(
         unit = units["dT"][0]
 
         if not ret.check(TemperatureDifference):
-            raise ValueError(
-                f"Both units must be per unit time in case one " f"of them is: {vals}"
-            )
-
-        ret.ito("delta_degC")
+            raise ValueError(f"Both units must be per unit time in case one of them is: {vals}")
 
     else:
         raise ValueError(f"Incorrect input to heat_balance: {vals}")
 
-    return ret.to(unit)  # type: ignore
+    ret = ret.to(unit)
+
+    return ret  # pyright: ignore[reportReturnType]
 
 
 def intermediate_temperatures(
-    T_b: Quantity[Temperature],
-    T_s: Quantity[Temperature],
-    k: Quantity[ThermalConductivity],
-    d: Quantity[Length],
-    h_in: Quantity[HeatTransferCoefficient],
-    h_out: Quantity[HeatTransferCoefficient],
+    T_b: Quantity[Temperature, Any],
+    T_s: Quantity[Temperature, Any],
+    k: Quantity[ThermalConductivity, Any],
+    d: Quantity[Length, Any],
+    h_in: Quantity[HeatTransferCoefficient, Any],
+    h_out: Quantity[HeatTransferCoefficient, Any],
     epsilon: float,
     tol: float = 1e-6,
-) -> tuple[Quantity[Temperature], Quantity[Temperature]]:
+) -> tuple[Quantity[Temperature, float], Quantity[Temperature, float]]:
     """
     Solves a nonlinear system of equations to find intermediate
     temperatures of a barrier with the following modes of heat transfer:
@@ -168,52 +163,46 @@ def intermediate_temperatures(
     h_out : Quantity[HeatTransferCoefficient]
         The convective heat transfer coefficient at the outer barrier wall
     epsilon : float
-        The emissivity of the outside surface, used to account for radiative heat transfer
+        The emissivity of the outside surface,
+        used to account for radiative heat transfer
     tol : float, optional
         Numerical accuracy for the conduction layer:
         ``d`` is set to this if 0 is passed, by default 1e-6
 
     Returns
     -------
-    tuple[Quantity[Temperature], Quantity[Temperature]]
+    tuple[Quantity[Temperature, float], Quantity[Temperature, float]]
         The intermediate temperatures :math:`T_1` and :math:`T_2`:
         the surface temperatures of the inside and outside of the barrier
     """
 
-    if fsolve is None:
-        raise ModuleNotFoundError(
-            "Module scipy.optimize was not found, " 'install with "pip install scipy"'
-        )
+    from scipy.optimize import fsolve
 
     # convert input to numerical values with correct unit
     T_s_val = T_s.to("K").m
     T_b_val = T_b.to("K").m
     k_val = k.to("W/m/K").m
-    d_val = d.to("m").m
+    d_val: float | np.ndarray = d.to("m").m
     h_in_val = h_in.to("W/m²/K").m
     h_out_val = h_out.to("W/m²/K").m
 
-    if abs(d_val - 0) < tol:  # type: ignore
+    if abs(d_val - 0) < tol:
         d_val = tol
 
     # system of coupled equations: heat transfer rate through all layers is identical
     # inner convection == conduction == (outer convection + radiation)
 
-    def fun(x):
+    def fun(x: tuple[np.ndarray, np.ndarray]) -> list[np.ndarray]:
         T1, T2 = x
 
-        eq1 = (
-            k_val / d_val * (T1 - T2)
-            - h_out_val * (T2 - T_s_val)
-            - epsilon * SIGMA.m * (T2**4 - T_s_val**4)
-        )
+        eq1 = k_val / d_val * (T1 - T2) - h_out_val * (T2 - T_s_val) - epsilon * SIGMA.m * (T2**4 - T_s_val**4)
 
         eq2 = k_val / d_val * (T1 - T2) - h_in_val * (T_b_val - T1)
 
         return [eq1, eq2]
 
     # use the boundary temperatures as initial guesses
-    _ret = fsolve(fun, [T_b_val, T_s_val])
+    _ret = fsolve(fun, [T_b_val, T_s_val])  # pyright: ignore[reportArgumentType]
 
     T1_val: float = _ret[0]
     T2_val: float = _ret[1]

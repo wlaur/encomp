@@ -1,106 +1,42 @@
-"""
-Miscellaneous functions that do not fit anywhere else.
-"""
 import ast
 from types import UnionType
-from typing import Any, Type, TypeVar, _GenericAlias, _TypedDictMeta, overload  # type: ignore
+from typing import Any, TypeIs, cast, get_args, get_origin
 
 import asttokens
 from typeguard import check_type
-from typing_extensions import TypeGuard
-
-T = TypeVar("T")
 
 
-# NOTE: these overloads are a workaround to avoid issues with type[T] -> T
-# signatures with mypy
+def isinstance_types[T](obj: Any, expected: type[T]) -> TypeIs[T]:  # noqa: ANN401
+    from .units import Quantity
+    from .utypes import UnknownDimensionality
 
-
-@overload
-def isinstance_types(obj: Any, expected: type[T]) -> TypeGuard[T]:
-    ...
-
-
-@overload
-def isinstance_types(obj: Any, expected: T) -> bool:
-    ...
-
-
-def isinstance_types(obj: Any, expected: _GenericAlias | type) -> bool:
-    """
-    Checks if the input object matches the expected type.
-    This function also supports complex type annotations that cannot
-    be checked with the builtin ``isinstance()``.
-    Uses ``typeguard.check_type`` for runtime checks of complex types.
-
-    .. note::
-
-        For mappings (e.g. ``dict[str, list[float]]``), only the
-        first item is checked. Use custom validation logic to ensure
-        that all elements are checked.
-
-    .. todo::
-
-        Return type hint should be a ``TypeGuard`` that helps static type checkers
-        to narrow down the type of the input object.
-
-        This does not work with complex types using ``mypy`` (https://github.com/python/mypy/issues/9003).
-        However, it does work with Pylance.
-        The current implementation is a workaround to avoid ``mypy`` errors when calling
-        this function. The type guard does not work with ``mypy`` (the type will not be narrowed at all).
-
-        ``mypy`` and Pylance do not support type negation using ``TypeGuard``.
-        This means that the following does not work as expected (compare with behavior for
-        the builtin ``isinstance()``):
-
-        .. code-block:: python
-
-            a: str | int = ...
-
-            if isinstance_types(a, int):
-                reveal_type(a)  # int
-            else:
-                reveal_type(a)  # str | int, should be str
-
-            # this works with builtin isinstance()
-            if isinstance(a, int):
-                reveal_type(a)  # int
-            else:
-                reveal_type(a)  # str
-
-
-    Parameters
-    ----------
-    obj : Any
-        Object to check
-    expected : _GenericAlias | type
-        Expected type or type alias
-
-    Returns
-    -------
-    bool
-        Whether the input object matches the expected type
-    """
-
-    # normal types are checked with isinstance()
-    # note: this check must use typing.Type, not the builtin type (lower case)
-    if isinstance(expected, Type):  # type: ignore
-        # typing.TypedDict is a special case
-        if not isinstance(expected, _TypedDictMeta):
-            return isinstance(obj, expected)
-
-    if type(expected) is UnionType:
+    if get_origin(expected) is UnionType:
         try:
             return isinstance(obj, expected)
         except TypeError:
-            return any(isinstance_types(obj, n) for n in expected.__args__)
+            return any(isinstance_types(obj, n) for n in get_args(expected))
+
+    if isinstance(obj, Quantity) and isinstance(expected, type) and (issubclass(expected, Quantity)):  # pyright: ignore[reportUnnecessaryIsInstance]
+        if expected is Quantity:
+            return isinstance(obj, expected)  # pyright: ignore[reportUnnecessaryIsInstance]
+
+        expected_dt = getattr(expected, "_dimensionality_type", None)  # pyright: ignore[reportUnknownArgumentType]
+        expected_mt = getattr(expected, "_magnitude_type", None)  # pyright: ignore[reportUnknownArgumentType]
+
+        if expected_dt == UnknownDimensionality:
+            if expected_mt is None:
+                return True
+
+            return isinstance_types(obj.m, expected_mt)  # pyright: ignore[reportUnknownMemberType]
+
+        if expected_dt is not None and obj._dimensionality_type is not expected_dt:  # pyright: ignore[reportPrivateUsage]
+            return False
+
+        return not (expected_mt is not None and not isinstance_types(obj.m, expected_mt))  # pyright: ignore[reportUnknownMemberType]
 
     try:
-        # this function raises an exception in case the object type
-        # does not match the expected type
-        check_type(obj, expected)
+        check_type(obj, expected)  # pyright: ignore[reportUnknownArgumentType]
         return True
-
     except Exception:
         return False
 
@@ -136,16 +72,10 @@ def grid_dimensions(N: int, nrows: int, ncols: int) -> tuple[int, int]:
         return nrows, ncols
 
     if nrows == -1:
-        if N % ncols == 0:
-            nrows = N // ncols
-        else:
-            nrows = N // ncols + 1
+        nrows = N // ncols if N % ncols == 0 else N // ncols + 1
 
     elif ncols == -1:
-        if N % nrows == 0:
-            ncols = N // nrows
-        else:
-            ncols = N // nrows + 1
+        ncols = N // nrows if N % nrows == 0 else N // nrows + 1
 
     else:
         if nrows * ncols < N:
@@ -155,32 +85,19 @@ def grid_dimensions(N: int, nrows: int, ncols: int) -> tuple[int, int]:
 
 
 def name_assignments(src: str) -> list[tuple[str, str]]:
-    """
-    Finds all names that are assigned in the input Python source code.
-
-    Parameters
-    ----------
-    src : str
-        Python source code
-
-    Returns
-    -------
-    list[tuple[str, str]]
-        List of names and the assignment statements
-    """
-
-    assigned_names = []
+    assigned_names: list[tuple[str, str]] = []
 
     atok = asttokens.ASTTokens(src, parse=True)
 
-    for node in ast.walk(atok.tree):
-        if hasattr(node, "lineno"):
-            if isinstance(node, ast.Assign):
-                if isinstance(node.targets[0], ast.Name):
-                    start = node.first_token.startpos  # type: ignore
-                    end = node.last_token.endpos  # type: ignore
-                    assignment_src = atok.text[start:end]
+    if atok.tree is None:
+        return assigned_names
 
-                    assigned_names.append((node.targets[0].id, assignment_src))
+    for node in ast.walk(atok.tree):
+        if hasattr(node, "lineno") and isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name):
+            start = cast(int, node.first_token.startpos)  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+            end = cast(int, node.last_token.endpos)  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
+            assignment_src = atok.text[start:end]
+
+            assigned_names.append((node.targets[0].id, assignment_src))
 
     return assigned_names
