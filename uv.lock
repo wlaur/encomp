@@ -535,6 +535,7 @@ dev = [
     { name = "hvplot" },
     { name = "hypothesis" },
     { name = "ipykernel" },
+    { name = "microsoft-python-type-stubs" },
     { name = "mypy" },
     { name = "nbsphinx" },
     { name = "pre-commit" },
@@ -584,6 +585,7 @@ dev = [
     { name = "hvplot", specifier = ">=0.12.2" },
     { name = "hypothesis" },
     { name = "ipykernel", specifier = ">=7.1.0" },
+    { name = "microsoft-python-type-stubs", git = "https://github.com/microsoft/python-type-stubs.git" },
     { name = "mypy" },
     { name = "nbsphinx" },
     { name = "pre-commit" },
@@ -1096,6 +1098,11 @@ sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec9
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
 ]
+
+[[package]]
+name = "microsoft-python-type-stubs"
+version = "0"
+source = { git = "https://github.com/microsoft/python-type-stubs.git#692c37c3969d22612b295ddf7e7af5907204a386" }
 
 [[package]]
 name = "mistune"

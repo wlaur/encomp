@@ -54,6 +54,7 @@ dev = [
     "hvplot>=0.12.2",
     "pyparsing>=3.3.1",
     "altair>=6.0.0",
+    "microsoft-python-type-stubs",
 ]
 
 [tool.hatch.build.targets.sdist]
@@ -166,7 +167,11 @@ warn_required_dynamic_aliases = true
 include = ["encomp"]
 typeCheckingMode = "strict"
 reportUnnecessaryTypeIgnoreComment = "error"
+useLibraryCodeForTypes = true
 enableTypeIgnoreComments = false
 strictListInference = true
 strictDictionaryInference = true
 strictSetInference = true
+
+[tool.uv.sources]
+microsoft-python-type-stubs = { git = "https://github.com/microsoft/python-type-stubs.git" }

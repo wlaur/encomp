@@ -131,7 +131,7 @@ from .utypes import (
 )
 
 if TYPE_CHECKING:
-    import sympy as sp  # pyright: ignore[reportMissingTypeStubs]
+    import sympy as sp
 else:
     sp = None
 
@@ -139,7 +139,7 @@ else:
 def _ensure_sympy() -> None:
     global sp
     if sp is None:
-        import sympy as sp  # pyright: ignore[reportMissingTypeStubs]
+        import sympy as sp
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -1111,7 +1111,7 @@ class Quantity(
         _ensure_sympy()
 
         if self.dimensionless:
-            return sp.sympify(self.to_base_units().m)
+            return sp.sympify(self.to_base_units().m)  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
 
         base_qty = self.to_base_units()
 
@@ -1130,7 +1130,12 @@ class Quantity(
 
         # use \text{symbol} to make sure that the unit symbols
         # do not clash with commonly used symbols like "m" or "s"
-        expr = sp.sympify(f"{base_qty.m} * {unit_repr}").subs({sp.Symbol(n): self.get_unit_symbol(n) for n in symbols})
+        expr = cast(
+            "sp.Basic",
+            sp.sympify(f"{base_qty.m} * {unit_repr}").subs(  # pyright: ignore[reportUnknownMemberType]
+                {sp.Symbol(n): self.get_unit_symbol(n) for n in symbols}
+            ),
+        )
 
         return expr
 
@@ -1152,7 +1157,7 @@ class Quantity(
         # this needs to be populated here to account for custom dimensions
         cls._populate_dimension_symbol_map()
 
-        expr = expr.simplify()  # pyright: ignore[reportUnknownMemberType]
+        expr = cast("sp.Basic", expr.simplify())  # pyright: ignore[reportUnknownMemberType]
         args = expr.args
 
         if not args:
