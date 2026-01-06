@@ -1,13 +1,27 @@
 # ruff: noqa: B018
 # pyright: reportConstantRedefinition=false
 
+from typing import assert_type
+
 import numpy as np
+import polars as pl
 import pytest
 from pytest import approx  # pyright: ignore[reportUnknownVariableType]
 
+from .. import utypes as ut
 from ..fluids import Fluid, HumidAir, Water
 from ..units import Quantity as Q
 from ..utypes import DT, Density, SpecificEntropy
+
+
+def _assert_type(val: object, typ: type) -> None:
+    from encomp.misc import isinstance_types
+
+    if not isinstance_types(val, typ):
+        raise TypeError(f"Type mismatch for {val}: {type(val)}, expected {typ}")
+
+
+assert_type.__code__ = _assert_type.__code__
 
 
 def _approx_equal(q1: Q[DT, float], q2: Q[DT, float]) -> bool:
@@ -396,3 +410,11 @@ def test_properties_HumidAir() -> None:
 
 def test_magnitude_type() -> None:
     assert isinstance(Water(T=Q(25, "degC"), P=Q(25, "kPa")).H.m, float)
+
+
+def test_polars_fluids() -> None:
+    w_series = Water(P=Q(pl.Series([1, 2, 3]), "bar"), T=Q(pl.Series([150, 250, 350]), "degC"))
+    assert_type(w_series.D, Q[ut.Density, pl.Series])
+
+    w_series_const_T = Water(P=Q(pl.Series([1, 2, 3]), "bar"), T=Q(150, "degC"))
+    assert_type(w_series_const_T.D, Q[ut.Density, pl.Series])
