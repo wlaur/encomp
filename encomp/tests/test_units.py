@@ -540,7 +540,7 @@ def test_Q() -> None:
         Q(Q(2, "feet_water"), Q(321321, "psi").u).to(Q(123123, "feet_water").asdim(Pressure)), Q[Pressure, float]
     )
 
-    with pytest.raises(DimensionalityTypeError):
+    with pytest.raises(DimensionalityError):
         Q(Q(2, "feet_water"), Q(321321, "kg").u).to(Q(123123, "feet_water").asdim(Pressure))  # pyright: ignore[reportArgumentType]
 
     # the UnitsContainer objects can be used to construct new dimensionalities
