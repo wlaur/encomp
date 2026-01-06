@@ -135,7 +135,7 @@ from .utypes import (
 )
 
 if TYPE_CHECKING:
-    import sympy as sp  # type: ignore[import-untyped]
+    import sympy as sp
 else:
     sp = None
 

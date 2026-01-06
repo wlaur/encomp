@@ -6,7 +6,7 @@ from typing import Any, TypedDict, assert_never, assert_type
 import numpy as np
 import polars as pl
 import pytest
-from pandas.api.types import is_list_like as pandas_is_list_like  # type: ignore
+from pandas.api.types import is_list_like as pandas_is_list_like
 from pint.errors import OffsetUnitCalculusError
 from pydantic import BaseModel, ConfigDict
 from pytest import approx
@@ -470,7 +470,7 @@ def test_Q() -> None:
 
     Q[Mass, float](1, str(P.u))
 
-    Q[Mass, float](P)  # pyright: ignore[reportArgumentType, reportCallIssue]
+    Q[Mass, float](P)
 
     # in-place conversion
     # NOTE: don't use this for objects that are passed in by the user
@@ -620,7 +620,7 @@ def test_numpy_integration() -> None:
     q1 = Q(np.linspace(0, 1), "kg")
     q2 = np.linspace(Q(0, "kg"), Q(1, "kg"))
     comp = q1 == q2
-    assert comp.all()  # pyright: ignore[reportGeneralTypeIssues, reportAttributeAccessIssue]
+    assert comp.all()
 
     assert isinstance_types(list(Q(np.linspace(0, 1), "degC")), list[Q[Temperature]])
 

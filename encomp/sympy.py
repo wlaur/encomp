@@ -1,3 +1,4 @@
+# pyright: reportUnknownVariableType=false, reportUnknownParameterType=false, reportUnknownMemberType=false, reportUnknownArgumentType=false, reportMissingTypeArgument=false
 """
 Imports and extends the ``sympy`` library for symbolic mathematics.
 Contains tools for converting Sympy expressions to Python modules and functions.
@@ -9,9 +10,9 @@ from functools import lru_cache
 from typing import Any, Literal, Self, cast, overload
 
 import numpy as np
-import sympy as sp  # type: ignore[import-untyped]
+import sympy as sp
 from sympy import default_sort_key
-from sympy.utilities.lambdify import lambdastr, lambdify  # type: ignore[import-untyped]
+from sympy.utilities.lambdify import lambdastr, lambdify
 
 from .settings import SETTINGS
 from .units import Quantity
@@ -119,11 +120,14 @@ def recursive_subs(e: sp.Basic, replacements: list[tuple[sp.Symbol, sp.Basic]]) 
         new_e = e.subs(replacements)
 
         if new_e == e:
-            return cast(sp.Basic, new_e)
+            return new_e
         else:
             e = new_e
 
-    return cast(sp.Basic, new_e)
+    if new_e is None:
+        raise ValueError(f"Could not substitute, {e=}, {replacements=}")
+
+    return new_e
 
 
 def simplify_exponents(e: sp.Basic) -> sp.Basic:
@@ -155,7 +159,7 @@ def simplify_exponents(e: sp.Basic) -> sp.Basic:
 
         return type(expr)(*new_args_list)
 
-    def is_float_pow(expr):  # noqa: ANN001, ANN202
+    def is_float_pow(expr: sp.Basic) -> bool:
         return expr.is_Pow and expr.args[1].is_Float
 
     if not e.args:
@@ -171,7 +175,7 @@ def simplify_exponents(e: sp.Basic) -> sp.Basic:
 
 
 def get_sol_expr(
-    eqns: sp.Equality | list[sp.Equality],
+    equations: sp.Equality | list[sp.Equality],
     symbol: sp.Symbol,
     avoid: set[sp.Symbol] | None = None,
 ) -> sp.Basic | None:
@@ -201,8 +205,8 @@ def get_sol_expr(
     if avoid is None:
         avoid = set()
 
-    if isinstance(eqns, sp.Equality):
-        eqns = [eqns]
+    if isinstance(equations, sp.Equality):
+        equations = [equations]
 
     # only include unique equations that actually contains the symbol,
     # preferably on the LHS
@@ -210,15 +214,15 @@ def get_sol_expr(
     # that the equations can be solved
     # sort by the number of free symbols, use default_sort_key as the
     # secondary sort key to make sure that the order is consistent
-    def eqn_simplicity(eqn):  # noqa: ANN001, ANN202
+    def eqn_simplicity(eqn: sp.Eq) -> tuple[int, tuple[Any, ...]]:
         return len(eqn.lhs.free_symbols), default_sort_key(eqn)
 
-    eqns = sorted(set(filter(lambda eqn: symbol in eqn.free_symbols, eqns)), key=eqn_simplicity)
+    equations = sorted(set(filter(lambda eqn: symbol in eqn.free_symbols, equations)), key=eqn_simplicity)
 
     # in case there are multiple equations containing the requested symbol,
     # first check if any of the equations directly contain the symbol on the LHS
-    if len(eqns) > 1:
-        for eqn in eqns:
+    if len(equations) > 1:
+        for eqn in equations:
             if symbol in eqn.lhs.free_symbols:
                 ret = get_sol_expr(eqn, symbol)
 
@@ -231,7 +235,7 @@ def get_sol_expr(
     # use dict=True to avoid inconsistent return types from sp.solve
     # make sure to define the assumptions correctly for all symbols, otherwise the
     # Sympy solver might not be able to find an explicit solution
-    sol = sp.solve(eqns, symbol, dict=True)
+    sol = sp.solve(equations, symbol, dict=True)
 
     if not sol:
         return None
@@ -409,7 +413,7 @@ def get_function(e: sp.Basic, *, units: bool = False) -> Callable:
 
     fcn, args = get_lambda(e)
 
-    def expr_func(params):  # noqa: ANN001, ANN202
+    def expr_func(params: dict) -> Any:  # noqa: ANN401
         return fcn(**get_lambda_kwargs(params, args, units=units))
 
     return expr_func
@@ -478,8 +482,8 @@ def substitute_unknowns(
 
     replacements: list[tuple[sp.Symbol, sp.Basic]] = []
 
-    def _get_unknowns(expr):  # noqa: ANN001, ANN202
-        all_symbols: list[sp.Symbol] = sorted(expr.free_symbols, key=default_sort_key)
+    def _get_unknowns(expr: sp.Basic) -> list[sp.Symbol]:
+        all_symbols = cast(list[sp.Symbol], sorted(expr.free_symbols, key=default_sort_key))
 
         already_replaced = [m[0] for m in replacements]
 

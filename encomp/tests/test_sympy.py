@@ -29,7 +29,7 @@ def test_get_args() -> None:
     x = sp.Symbol("x", positive=True)
     y = sp.Symbol("y", positive=True)
 
-    e = x**2 + sp.sin(sp.sqrt(y))  # pyright: ignore[reportOperatorIssue]
+    e = x**2 + sp.sin(sp.sqrt(y))
 
     assert set(get_args(e)) == {"x", "y"}
 
@@ -66,10 +66,10 @@ def test_sympy_to_Quantity_integration() -> None:
 def test_Quantity_to_sympy_integration() -> None:
     x = sp.Symbol("x")
 
-    x * Q(25, "kg")  # pyright: ignore[reportUnusedExpression, reportOperatorIssue]
-    x * Q(25, "kg")  # pyright: ignore[reportUnusedExpression, reportOperatorIssue]
+    _ = x * Q(25, "kg")
+    _ = x * Q(25, "kg")
 
-    Q(25, "kg") * x  # pyright: ignore[reportUnusedExpression, reportOperatorIssue]
+    _ = Q(25, "kg") * x
 
     _ = x + Q(2)
     _ = x + Q(2, "m")

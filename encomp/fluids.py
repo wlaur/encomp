@@ -18,8 +18,8 @@ from typing import Annotated, Any, ClassVar, Generic, Literal, cast
 
 import numpy as np
 import polars as pl
-from CoolProp.CoolProp import PropsSI  # type: ignore[import-untyped]
-from CoolProp.HumidAirProp import HAPropsSI  # type: ignore[import-untyped]
+from CoolProp.CoolProp import PropsSI
+from CoolProp.HumidAirProp import HAPropsSI
 
 from .settings import SETTINGS
 from .structures import flatten

@@ -186,7 +186,7 @@ def intermediate_temperatures(
     h_in_val = h_in.to("W/m²/K").m
     h_out_val = h_out.to("W/m²/K").m
 
-    if abs(d_val - 0) < tol:  # type: ignore
+    if abs(d_val - 0) < tol:
         d_val = tol
 
     # system of coupled equations: heat transfer rate through all layers is identical
@@ -202,7 +202,7 @@ def intermediate_temperatures(
         return [eq1, eq2]
 
     # use the boundary temperatures as initial guesses
-    _ret = fsolve(fun, [T_b_val, T_s_val])  # pyright: ignore[reportArgumentType]
+    _ret = fsolve(fun, [T_b_val, T_s_val])
 
     T1_val: float = _ret[0]
     T2_val: float = _ret[1]
