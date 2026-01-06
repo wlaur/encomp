@@ -13,7 +13,7 @@ Uses CoolProp as backend.
 import logging
 import warnings
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from typing import Annotated, Any, ClassVar, Generic, Literal, cast
 
 import numpy as np
@@ -266,11 +266,6 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
     # skip checking for zero for these properties
     _SKIP_ZERO_CHECK: tuple[CProperty, ...] = ("PHASE",)
-
-    @property
-    def is_scalar(self) -> bool:
-        # the output is only scalar if all inputs are scalars
-        return all(not isinstance(n[1].m, Iterable) for n in self.points)
 
     @property
     def _mt(self) -> type[MT]:
@@ -529,8 +524,22 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             self.check_exception(output, e)
             return np.nan
 
-    def evaluate_expression(self, output: CProperty, *points: tuple[CProperty, pl.Expr]) -> pl.Expr:  # noqa: ARG002
-        return pl.lit(1)
+    def evaluate_expression(self, output: CProperty, *points: tuple[CProperty, pl.Expr]) -> pl.Expr:
+        def _evaluate(s: pl.Series) -> pl.Series:
+            materalized = tuple((n[0], s.struct.field(n[0]).to_numpy()) for n in points)
+            ret = self.evaluate_multiple(output, *materalized)
+
+            ret_series = pl.Series(ret)
+
+            if self._convert_pl_series_nan_null:
+                ret_series = ret_series.fill_nan(None)
+
+            if self._convert_pl_series_f32:
+                ret_series = ret_series.cast(pl.Float32)
+
+            return ret_series
+
+        return pl.struct(*[n[1].alias(n[0]) for n in points]).map_batches(_evaluate, pl.Float32).alias(output)
 
     def evaluate_multiple_separately(
         self,
@@ -690,18 +699,16 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         # skip this check for some properties
         if qty.dimensionless and output not in self._SKIP_ZERO_CHECK:
             if isinstance(qty.m, np.ndarray):
-                # Quantity.m is a @property, cannot be set
                 m = qty.m
-
                 m[m < self._EPS] = np.nan
-                qty = Quantity(m, unit_output)
+                qty.m = m
             elif isinstance(qty.m, pl.Series):
                 raise TypeError(f"Invalid magnitude type for {qty} ({type(qty.m)})")
-            elif isinstance(qty.m, float | int):
+            elif isinstance(qty.m, pl.Expr):
+                pass
+            else:
                 if qty.m < self._EPS:
                     qty = cast("Quantity[Any, MT]", Quantity(np.nan, unit_output))
-            else:
-                raise TypeError(f"Unexpected magnitude type: {qty.m} ({type(qty.m)})")
 
         key = self.get_prop_key(output)
 
@@ -714,10 +721,10 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         if isinstance(qty.m, pl.Series):
             if self._convert_pl_series_nan_null:
-                qty.m = qty.m.fill_nan(None)  # pyright: ignore[reportAttributeAccessIssue]
+                qty.m = qty.m.fill_nan(None)
 
             if self._convert_pl_series_f32:
-                qty.m = qty.m.cast(pl.Float32)  # pyright: ignore[reportAttributeAccessIssue]
+                qty.m = qty.m.cast(pl.Float32)
 
         return cast("Quantity[Any, MT]", qty)
 
@@ -789,8 +796,11 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         return self.get(attr)
 
     def _get_repr(self, prop: CProperty, fmt: str) -> str:
-        if self.is_scalar:
+        if all(isinstance(n[1].m, (float, int)) for n in self.points):
             return f"{self.get(prop).astype(float):{fmt}}"
+
+        if any(isinstance(n[1].m, pl.Expr) for n in self.points):
+            return "<pl.Expr>"
 
         vector_inputs = [
             (n[0], cast(Quantity[Any, Numpy1DArray] | Quantity[Any, pl.Series], n[1]))
@@ -850,6 +860,9 @@ class Fluid(CoolPropFluid[MT]):
 
     @property
     def phase(self) -> str:
+        if any(isinstance(n[1].m, pl.Expr) for n in self.points):
+            return "Unknown"
+
         phase_idx = self.get("PHASE", convert_magnitude=False)
         phase_idx_val = phase_idx.m
 

@@ -418,3 +418,26 @@ def test_polars_fluids() -> None:
 
     w_series_const_T = Water(P=Q(pl.Series([1, 2, 3]), "bar"), T=Q(150, "degC"))
     assert_type(w_series_const_T.D, Q[ut.Density, pl.Series])
+
+    assert pl.select(Water(P=Q(pl.lit(5), "bar"), T=Q(pl.lit(250), "degC")).D.m).item(0, 0) == approx(2.107798)
+
+    w_expr = Water(P=Q(pl.lit(5), "bar"), T=Q(pl.col.T, "degC"))
+
+    D = pl.DataFrame({"T": [150, 200, 250]}).with_columns(w_expr.D.m)["D"]
+
+    assert D[0] == approx(917.020203)
+    assert D[2] == approx(2.107798)
+
+    w_expr_K = Water(P=Q(pl.lit(5), "bar"), T=Q(pl.col.T, "K"))
+
+    D = pl.DataFrame({"T": [150, 200, 250]}).with_columns(w_expr_K.D.m)["D"]
+
+    assert D.is_null().all()
+
+    repr(Water(P=Q(pl.lit(5), "bar"), T=Q(50, "degC")))
+
+    with pytest.raises(TypeError):
+        Water(P=Q(pl.lit(5), "bar"), T=Q([1, 2, 3], "degC")).D  # pyright: ignore[reportArgumentType]
+
+    with pytest.raises(TypeError):
+        Water(P=Q([1, 2, 3], "bar"), T=Q(pl.col.asd, "degC")).D  # pyright: ignore[reportArgumentType]
