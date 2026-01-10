@@ -15,7 +15,7 @@ import logging
 import numbers
 import re
 import warnings
-from collections.abc import Iterable, Sized
+from collections.abc import Iterable, Iterator, Sized
 from types import UnionType
 from typing import (
     TYPE_CHECKING,
@@ -2312,6 +2312,20 @@ class Quantity(
             return self._call_subclass(self.m // other.to_base_units().m, self.u)
 
         return super().__floordiv__(other)  # pyright: ignore[reportUnknownMemberType]
+
+    def __abs__(self) -> Quantity[DT, MT]:
+        ret = cast("Quantity[DT, MT]", super().__abs__())
+        return self._call_subclass(ret.m, ret.u)
+
+    @overload
+    def __iter__(self: Quantity[DT, Numpy1DArray]) -> Iterator[Quantity[DT, float]]: ...
+    @overload
+    def __iter__(self: Quantity[DT, pl.Series]) -> Iterator[Quantity[DT, float]]: ...
+    @overload
+    @overload
+    def __iter__(self: Quantity[DT, MT]) -> Iterator[Any]: ...
+    def __iter__(self) -> Iterator[Any]:
+        return (self._call_subclass(n.m, n.u) for n in super().__iter__())
 
     @overload
     def __getitem__(self: Quantity[DT, pl.Series], index: int) -> Quantity[DT, float]: ...

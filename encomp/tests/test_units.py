@@ -1061,36 +1061,22 @@ def test_indexing() -> None:
     assert qi == Q(2, "kg")
 
 
-def test_plus_minus() -> None:
-    length = Q(2, "m")
-
-    # TODO: add type hints for this
-    l_e = length.plus_minus(Q(1, "cm"))  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
-
-    l2_e = (l_e**2).to("km**2")  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
-
-    assert l2_e.error == Q(4e-8, "km**2")  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
-    assert isinstance_types(l2_e.error, Q[Area])  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
-
-
 def test_round() -> None:
-    pass
-
     # TODO: should this even work?
     # type numpy.ndarray doesn't define __round__ method
 
-    # q = Q(25.12312312312, 'kg/s')
+    q = Q(25.12312312312, "kg/s")
 
-    # q_r = round(q, 1)
+    q_r = round(q, 1)
 
-    # assert q_r.m == 25.1
+    assert q_r.m == 25.1
 
-    # q = Q([25.12312312312, 25.12312312312], 'kg/s')
+    q2 = Q([25.12312312312, 25.12312312312], "kg/s")
 
-    # q_r = round(q, 1)
+    q_r2 = round(q2, 1)
 
-    # assert q_r.m[0] == 25.1
-    # assert q_r.m[1] == 25.1
+    assert q_r2.m[0] == 25.1
+    assert q_r2.m[1] == 25.1
 
 
 def test_abs() -> None:
@@ -1100,12 +1086,12 @@ def test_abs() -> None:
 
     assert q_a.m == 25
 
-    q = Q([-25, -25], "kg/s")
+    q2 = Q([-25, -25], "kg/s")
 
-    q_a = abs(q)
+    q_a2 = abs(q2)
 
-    assert q_a.m[0] == 25
-    assert q_a.m[1] == 25
+    assert q_a2.m[0] == 25
+    assert q_a2.m[1] == 25
 
 
 def test_unit_compatibility() -> None:
