@@ -1355,3 +1355,95 @@ def test_complex_units() -> None:
     result_mw = Q_flow_RC(Q(2, "MW")).to("MW")
     result_kjs = Q_flow_RC(Q(2000, "kJ/s")).to("MW")  # 2000 kJ/s = 2 MW
     assert abs(result_mw.magnitude - result_kjs.magnitude) < 1e-10
+
+
+def test_magnitude_type_scalar_operations() -> None:
+    q = Q(pl.Series([1, 2, 3]), "kg/s")
+
+    assert_type(q, Q[MassFlow, pl.Series])
+    assert_type(q * 2, Q[MassFlow, pl.Series])
+    assert_type(2 * q, Q[MassFlow, pl.Series])
+    assert_type(q * Q(2), Q[MassFlow, pl.Series])
+    assert_type(Q(2) * q, Q[MassFlow, pl.Series])
+
+    assert_type(q / 2, Q[MassFlow, pl.Series])
+    assert_type(q / Q(2), Q[MassFlow, pl.Series])
+
+    q2 = Q([1, 2, 3], "kg/s")
+
+    assert_type(q2, Q[MassFlow, Numpy1DArray])
+    assert_type(q2 * 2, Q[MassFlow, Numpy1DArray])
+    assert_type(2 * q2, Q[MassFlow, Numpy1DArray])
+    assert_type(q2 * Q(2), Q[MassFlow, Numpy1DArray])
+    assert_type(Q(2) * q2, Q[MassFlow, Numpy1DArray])
+
+    assert_type(q2 / 2, Q[MassFlow, Numpy1DArray])
+    assert_type(q2 / Q(2), Q[MassFlow, Numpy1DArray])
+
+    q3 = Q(pl.col.test, "kg/s")
+
+    assert_type(q3, Q[MassFlow, pl.Expr])
+    assert_type(q3 * 2, Q[MassFlow, pl.Expr])
+    assert_type(2 * q3, Q[MassFlow, pl.Expr])
+    assert_type(q3 * Q(2), Q[MassFlow, pl.Expr])
+    assert_type(Q(2) * q3, Q[MassFlow, pl.Expr])
+
+    assert_type(q3 / 2, Q[MassFlow, pl.Expr])
+    assert_type(q3 / Q(2), Q[MassFlow, pl.Expr])
+
+    q4 = Q(123, "kg/s")
+
+    assert_type(q4, Q[MassFlow, float])
+    assert_type(q4 * 2, Q[MassFlow, float])
+    assert_type(2 * q4, Q[MassFlow, float])
+    assert_type(q4 * Q(2), Q[MassFlow, float])
+    assert_type(Q(2) * q4, Q[MassFlow, float])
+
+    assert_type(q4 / 2, Q[MassFlow, float])
+    assert_type(q4 / Q(2), Q[MassFlow, float])
+
+
+def test_magnitude_type_scalar_operations_explicit_type() -> None:
+    q = Q(pl.Series([1, 2, 3]), "kg/s")
+
+    assert type(q) is Q[MassFlow, pl.Series]
+    assert type(q * 2) is Q[MassFlow, pl.Series]
+    assert type(2 * q) is Q[MassFlow, pl.Series]
+    assert type(q * Q(2)) is Q[MassFlow, pl.Series]
+    assert type(Q(2) * q) is Q[MassFlow, pl.Series]
+
+    assert type(q / 2) is Q[MassFlow, pl.Series]
+    assert type(q / Q(2)) is Q[MassFlow, pl.Series]
+
+    q2 = Q([1, 2, 3], "kg/s")
+
+    assert type(q2) is Q[MassFlow, Numpy1DArray]
+    assert type(q2 * 2) is Q[MassFlow, Numpy1DArray]
+    assert type(2 * q2) is Q[MassFlow, Numpy1DArray]
+    assert type(q2 * Q(2)) is Q[MassFlow, Numpy1DArray]
+    assert type(Q(2) * q2) is Q[MassFlow, Numpy1DArray]
+
+    assert type(q2 / 2) is Q[MassFlow, Numpy1DArray]
+    assert type(q2 / Q(2)) is Q[MassFlow, Numpy1DArray]
+
+    q3 = Q(pl.col.test, "kg/s")
+
+    assert type(q3) is Q[MassFlow, pl.Expr]
+    assert type(q3 * 2) is Q[MassFlow, pl.Expr]
+    assert type(2 * q3) is Q[MassFlow, pl.Expr]
+    assert type(q3 * Q(2)) is Q[MassFlow, pl.Expr]
+    assert type(Q(2) * q3) is Q[MassFlow, pl.Expr]
+
+    assert type(q3 / 2) is Q[MassFlow, pl.Expr]
+    assert type(q3 / Q(2)) is Q[MassFlow, pl.Expr]
+
+    q4 = Q(123, "kg/s")
+
+    assert type(q4) is Q[MassFlow, float]
+    assert type(q4 * 2) is Q[MassFlow, float]
+    assert type(2 * q4) is Q[MassFlow, float]
+    assert type(q4 * Q(2)) is Q[MassFlow, float]
+    assert type(Q(2) * q4) is Q[MassFlow, float]
+
+    assert type(q4 / 2) is Q[MassFlow, float]
+    assert type(q4 / Q(2)) is Q[MassFlow, float]

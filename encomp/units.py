@@ -1745,6 +1745,8 @@ class Quantity(
             raise DimensionalityComparisonError(str(e)) from e
 
     @overload
+    def __mul__(self: Quantity[Dimensionless, float], other: Quantity[DT_, MT_]) -> Quantity[DT_, MT_]: ...
+    @overload
     def __mul__(
         self: Quantity[Dimensionless, Numpy1DArray], other: Quantity[Dimensionless, float]
     ) -> Quantity[Dimensionless, Numpy1DArray]: ...
@@ -1755,18 +1757,6 @@ class Quantity(
     @overload
     def __mul__(
         self: Quantity[Dimensionless, pl.Expr], other: Quantity[Dimensionless, float]
-    ) -> Quantity[Dimensionless, pl.Expr]: ...
-    @overload
-    def __mul__(
-        self: Quantity[Dimensionless, float], other: Quantity[Dimensionless, Numpy1DArray]
-    ) -> Quantity[Dimensionless, Numpy1DArray]: ...
-    @overload
-    def __mul__(
-        self: Quantity[Dimensionless, float], other: Quantity[Dimensionless, pl.Series]
-    ) -> Quantity[Dimensionless, pl.Series]: ...
-    @overload
-    def __mul__(
-        self: Quantity[Dimensionless, float], other: Quantity[Dimensionless, pl.Expr]
     ) -> Quantity[Dimensionless, pl.Expr]: ...
     @overload
     def __mul__(
@@ -2058,11 +2048,11 @@ class Quantity(
             subcls = self.get_subclass(other._dimensionality_type, type(ret.m))
             return subcls(ret)
 
-        return ret
+        return self._call_subclass(ret.m, ret.u)
 
     def __rmul__(self, other: float | int) -> Quantity[DT, MT]:
         ret = cast("Quantity[DT, MT]", super().__rmul__(other))  # pyright: ignore[reportUnknownMemberType]
-        return ret
+        return self._call_subclass(ret.m, ret.u)
 
     @overload
     def __truediv__(
@@ -2281,11 +2271,11 @@ class Quantity(
             subcls = self.get_subclass(other._dimensionality_type, type(ret.m))
             return subcls(ret)
 
-        return ret
+        return self._call_subclass(ret.m, ret.u)
 
     def __rtruediv__(self, other: float | int) -> Quantity[UnknownDimensionality, MT]:
-        ret = cast("Quantity[UnknownDimensionality, MT]", super().__rtruediv__(other))  # pyright: ignore[reportUnknownMemberType]
-        return ret
+        ret = super().__rtruediv__(other)  # pyright: ignore[reportUnknownMemberType]
+        return cast("Quantity[UnknownDimensionality, MT]", self._call_subclass(ret.m, ret.u))  # pyright: ignore[reportArgumentType]
 
     @overload
     def __floordiv__(
@@ -2311,7 +2301,9 @@ class Quantity(
         elif other.dimensionless:
             return self._call_subclass(self.m // other.to_base_units().m, self.u)
 
-        return super().__floordiv__(other)  # pyright: ignore[reportUnknownMemberType]
+        ret = super().__floordiv__(other)  # pyright: ignore[reportUnknownMemberType]
+
+        return self._call_subclass(ret.m, ret.u)
 
     def __abs__(self) -> Quantity[DT, MT]:
         ret = cast("Quantity[DT, MT]", super().__abs__())
