@@ -1052,6 +1052,12 @@ class Quantity(
         self,
         dimension: Quantity[Any, Any] | UnitsContainer | Unit[DT_] | Unit | str | Dimensionality | type[Dimensionality],
     ) -> bool:
+        if dimension == TemperatureDifference:
+            return self.check("delta_degC")
+
+        if dimension == Temperature:
+            return self.check("degC")
+
         if isinstance(dimension, Quantity):
             return self.dt == dimension._dimensionality_type
 
@@ -1404,15 +1410,25 @@ class Quantity(
 
     def _temperature_difference_add_sub(
         self,
-        other: Quantity[TemperatureDifference, Any],
+        other: Quantity[TemperatureDifference, Any] | Quantity[Temperature, Any],
         operator: Literal["add", "sub"],
     ) -> Quantity[Temperature, MT]:
-        v1 = self.to("degC").m
-        v2 = other.to("delta_degC").m
+        if self.check(Temperature):
+            assert other.check(TemperatureDifference)
+            v1 = self.to("degC").m
+            v2 = other.to("delta_degC").m
 
-        val = v1 + v2 if operator == "add" else v1 - v2
+            val = v1 + v2 if operator == "add" else v1 - v2
+        else:
+            assert self.check(TemperatureDifference)
+            assert other.check(Temperature)
 
-        return Quantity[Temperature, MT](val, "degC")
+            v1 = self.to("delta_degC").m
+            v2 = other.to("degC").m
+
+            val = v1 + v2 if operator == "add" else v1 - v2
+
+        return cast("Quantity[Temperature, MT]", Quantity(val, "degC"))
 
     def __round__(self, ndigits: int | None = None) -> Quantity[DT, MT]:
         if ndigits is None:
@@ -1518,7 +1534,27 @@ class Quantity(
     def __add__(self: Quantity[Dimensionless, MT], other: float | int) -> Quantity[Dimensionless, MT]: ...
     @overload
     def __add__(
+        self: Quantity[Temperature, float], other: Quantity[TemperatureDifference, MT_]
+    ) -> Quantity[Temperature, MT_]: ...
+    @overload
+    def __add__(
+        self: Quantity[Temperature, MT], other: Quantity[TemperatureDifference, float]
+    ) -> Quantity[Temperature, MT]: ...
+    @overload
+    def __add__(
         self: Quantity[Temperature, MT], other: Quantity[TemperatureDifference, MT]
+    ) -> Quantity[Temperature, MT]: ...
+    @overload
+    def __add__(
+        self: Quantity[TemperatureDifference, float], other: Quantity[Temperature, MT_]
+    ) -> Quantity[Temperature, MT_]: ...
+    @overload
+    def __add__(
+        self: Quantity[TemperatureDifference, MT], other: Quantity[Temperature, float]
+    ) -> Quantity[Temperature, MT]: ...
+    @overload
+    def __add__(
+        self: Quantity[TemperatureDifference, MT], other: Quantity[Temperature, MT]
     ) -> Quantity[Temperature, MT]: ...
     @overload
     def __add__(self, other: Quantity[DT, MT]) -> Quantity[DT, MT]: ...
@@ -1533,18 +1569,10 @@ class Quantity(
             if not isinstance(other, Quantity):
                 raise e
 
-            self_is_temp_or_diff_temp = isinstance_types(self, Quantity[Temperature, Any]) or isinstance_types(
-                self, Quantity[TemperatureDifference, Any]
-            )
-
-            other_is_temp_or_diff_temp = isinstance_types(other, Quantity[Temperature, Any]) or isinstance_types(
-                other, Quantity[TemperatureDifference, Any]
-            )
+            self_is_temp_or_diff_temp = self.check(Temperature) or self.check(TemperatureDifference)
+            other_is_temp_or_diff_temp = other.check(Temperature) or other.check(TemperatureDifference)
 
             if self_is_temp_or_diff_temp and other_is_temp_or_diff_temp:
-                if self.dt == TemperatureDifference:
-                    raise e
-
                 return self._temperature_difference_add_sub(other, "add")
 
             raise e
@@ -1557,7 +1585,27 @@ class Quantity(
     def __sub__(self: Quantity[Dimensionless, MT], other: float | int) -> Quantity[Dimensionless, MT]: ...
     @overload
     def __sub__(
+        self: Quantity[Temperature, float], other: Quantity[TemperatureDifference, MT_]
+    ) -> Quantity[Temperature, MT_]: ...
+    @overload
+    def __sub__(
+        self: Quantity[Temperature, MT], other: Quantity[TemperatureDifference, float]
+    ) -> Quantity[Temperature, MT]: ...
+    @overload
+    def __sub__(
         self: Quantity[Temperature, MT], other: Quantity[TemperatureDifference, MT]
+    ) -> Quantity[Temperature, MT]: ...
+    @overload
+    def __sub__(
+        self: Quantity[TemperatureDifference, float], other: Quantity[Temperature, MT_]
+    ) -> Quantity[Temperature, MT_]: ...
+    @overload
+    def __sub__(
+        self: Quantity[TemperatureDifference, MT], other: Quantity[Temperature, float]
+    ) -> Quantity[Temperature, MT]: ...
+    @overload
+    def __sub__(
+        self: Quantity[TemperatureDifference, MT], other: Quantity[Temperature, MT]
     ) -> Quantity[Temperature, MT]: ...
     @overload
     def __sub__(
@@ -1576,18 +1624,10 @@ class Quantity(
             if not isinstance(other, Quantity):
                 raise e
 
-            self_is_temp_or_diff_temp = isinstance_types(self, Quantity[Temperature, Any]) or isinstance_types(
-                self, Quantity[TemperatureDifference, Any]
-            )
-
-            other_is_temp_or_diff_temp = isinstance_types(other, Quantity[Temperature, Any]) or isinstance_types(
-                other, Quantity[TemperatureDifference, Any]
-            )
+            self_is_temp_or_diff_temp = self.check(Temperature) or self.check(TemperatureDifference)
+            other_is_temp_or_diff_temp = other.check(Temperature) or other.check(TemperatureDifference)
 
             if self_is_temp_or_diff_temp and other_is_temp_or_diff_temp:
-                if self.dt == TemperatureDifference:
-                    raise e
-
                 return self._temperature_difference_add_sub(other, "sub")
 
             raise e

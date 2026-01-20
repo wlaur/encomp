@@ -1198,9 +1198,7 @@ def test_temperature_difference() -> None:
     assert isinstance_types(dT2 + dT1, Q[TemperatureDifference])
 
     assert isinstance_types(T1 + dT1, Q[Temperature])
-
-    with pytest.raises(DimensionalityTypeError):
-        assert isinstance_types(dT1 + T1, Q[Temperature])
+    assert isinstance_types(dT1 + T1, Q[Temperature])
 
     with pytest.raises(DimensionalityTypeError):
         (T1 - T2).to("degC")
@@ -1243,9 +1241,9 @@ def test_temperature_unit_inputs() -> None:
     ]:
         qty = Q(1, unit)
 
-        # NOTE: qty.check(Temperature) and qty.check(TemperatureDifference)
-        # are equivalent since both dimensionalitites have the same unitscontainer
         assert isinstance_types(qty, Q[Temperature]) or isinstance_types(qty, Q[TemperatureDifference])
+        assert qty.check(Temperature) or qty.check(TemperatureDifference)
+        assert not (qty.check(Temperature) and qty.check(TemperatureDifference))
 
         # this will automatically be converted to delta_temperature per length,
         # even if the input is temperature (not delta_temperature)
@@ -1447,3 +1445,17 @@ def test_magnitude_type_scalar_operations_explicit_type() -> None:
 
     assert type(q4 / 2) is Q[MassFlow, float]
     assert type(q4 / Q(2)) is Q[MassFlow, float]
+
+
+def test_temperature_difference_add_sub() -> None:
+    assert_type(Q(2, "degC") + Q(2, "delta_degC"), Q[Temperature, float])
+    assert_type(Q([2, 3], "degC") + Q(2, "delta_degC"), Q[Temperature, Numpy1DArray])
+
+    assert_type(Q([2, 3], "degC").astype(pl.Series) + Q(2, "delta_degC"), Q[Temperature, pl.Series])
+    assert_type(Q(2, "delta_degC") + Q([2, 3], "degC").astype(pl.Series), Q[Temperature, pl.Series])
+
+    assert_type(Q(2, "degC") - Q(2, "delta_degC"), Q[Temperature, float])
+    assert_type(Q([2, 3], "degC") - Q(2, "delta_degC"), Q[Temperature, Numpy1DArray])
+
+    assert_type(Q([2, 3], "degC").astype(pl.Series) - Q(2, "delta_degC"), Q[Temperature, pl.Series])
+    assert_type(Q(2, "delta_degC") - Q([2, 3], "degC").astype(pl.Series), Q[Temperature, pl.Series])

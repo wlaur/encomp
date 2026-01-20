@@ -112,7 +112,7 @@ def heat_balance(
         ret = vals["Q_h"] / (cp * vals["m"])
         unit = units["dT"][0]
 
-        if not ret.check(TemperatureDifference):
+        if not (ret.check(Temperature) or ret.check(TemperatureDifference)):
             raise ValueError(f"Both units must be per unit time in case one of them is: {vals}")
 
     else:
