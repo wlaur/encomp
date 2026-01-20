@@ -659,20 +659,10 @@ def test_numpy_integration() -> None:
 
 
 def test_check() -> None:
-    pass
+    assert Q(25, "kg").check(Mass)
 
-    # TODO: the UNIT_REGISTRY.check decorator does not work since
-    # it uses nested Quantity inputs
-
-    # assert not Q(1, 'kg').check('[energy]')
-    # assert Q(1, 'kg').check(Mass)
-    # assert not Q(1, 'kg').check(Energy)
-
-    # @UNIT_REGISTRY.check('[length]', '[mass]')
-    # def func(a, b):
-    #     return a * b
-
-    # func(Q(1, 'yd'), Q(20, 'lbs'))
+    assert Q(25, "kg").check(Q(25, "g"))
+    assert Q(25, "kg").check(Q([25, 25], "g"))
 
 
 def test_typechecked() -> None:

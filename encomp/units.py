@@ -1052,10 +1052,10 @@ class Quantity(
         self,
         dimension: Quantity[Any, Any] | UnitsContainer | Unit[DT_] | Unit | str | Dimensionality | type[Dimensionality],
     ) -> bool:
-        if dimension == TemperatureDifference:
+        if isinstance(dimension, type) and dimension == TemperatureDifference:
             return self.check("delta_degC")
 
-        if dimension == Temperature:
+        if isinstance(dimension, type) and dimension == Temperature:
             return self.check("degC")
 
         if isinstance(dimension, Quantity):
