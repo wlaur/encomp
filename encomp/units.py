@@ -1114,6 +1114,13 @@ class Quantity(
             "℉": "degF",
             "%": "percent",
             "‰": "permille",
+            "r/min": "rpm",
+            # there are two different delta signs, we want the latter
+            "∆": "Δ",
+            # ΔK does not really make sense, it's not an offset scale
+            "ΔK": "K",
+            # Δ% should maybe be its own unit, but this is not implemented for now
+            "Δ%": "%",
             "Δ": "delta_",
         }
 
