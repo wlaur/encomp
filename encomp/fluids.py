@@ -870,7 +870,7 @@ class Fluid(CoolPropFluid[MT]):
             else:
                 return "Variable"
 
-        elif isinstance(phase_idx_val, int | float):
+        elif isinstance(phase_idx_val, float | int):
             return self.PHASES.get(float(phase_idx_val), "N/A")
 
         raise TypeError(f"Cannot determine phase of {type(self)} when {phase_idx=}")

@@ -1229,9 +1229,9 @@ class Quantity(
         ) -> dict[str, Any]:
             mag = qty.magnitude
 
-            val: int | float | list[float]
+            val: float | int | list[float]
 
-            if isinstance(mag, int | float):
+            if isinstance(mag, float | int):
                 val = mag
                 magnitude_type = "int" if isinstance(mag, int) else "float"
             elif isinstance(mag, np.ndarray):
@@ -1582,6 +1582,15 @@ class Quantity(
         return self._call_subclass(ret.m, ret.u)
 
     @overload
+    def __radd__(self: Quantity[Dimensionless, MT], other: float | int) -> Quantity[Dimensionless, MT]: ...
+    @overload
+    def __radd__(self, other: float | int) -> Quantity[Any, Any]: ...
+    def __radd__(self, other: float | int) -> Quantity[Any, Any]:
+        ret = cast("Quantity[DT, MT]", super().__radd__(other))  # pyright: ignore[reportUnknownMemberType]
+
+        return self._call_subclass(ret.m, ret.u)
+
+    @overload
     def __sub__(self: Quantity[Dimensionless, MT], other: float | int) -> Quantity[Dimensionless, MT]: ...
     @overload
     def __sub__(
@@ -1638,6 +1647,15 @@ class Quantity(
             _mt = type(ret.m)
             subcls = self._get_dimensional_subclass(TemperatureDifference, _mt)
             return subcls(ret.m, ret.u)
+
+        return self._call_subclass(ret.m, ret.u)
+
+    @overload
+    def __rsub__(self: Quantity[Dimensionless, MT], other: float | int) -> Quantity[Dimensionless, MT]: ...
+    @overload
+    def __rsub__(self, other: float | int) -> Quantity[Any, Any]: ...
+    def __rsub__(self, other: float | int) -> Quantity[Any, Any]:
+        ret = cast("Quantity[DT, MT]", super().__rsub__(other))  # pyright: ignore[reportUnknownMemberType]
 
         return self._call_subclass(ret.m, ret.u)
 

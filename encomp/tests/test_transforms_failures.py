@@ -94,8 +94,8 @@ def _incompatible_add_dag_time() -> Q[Time, float]:
 
 @typechecked
 def _incompatible_add_dag_add(mass: Q[Mass, float], time: Q[Time, float]) -> Q[Mass, float]:
-    result = mass + time  # pyright: ignore[reportUnknownVariableType]
-    return result  # pyright: ignore[reportUnknownVariableType, reportReturnType]
+    result = mass + time  # pyright: ignore[reportOperatorIssue, reportUnknownVariableType]
+    return result  # pyright: ignore[reportUnknownVariableType]
 
 
 def test_incompatible_addition_runtime_error() -> None:

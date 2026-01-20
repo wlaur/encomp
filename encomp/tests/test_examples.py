@@ -263,7 +263,7 @@ class TestUsageExamples:
         """Test handling unit-related errors"""
         # Adding incompatible units
         with pytest.raises(DimensionalityError):
-            _ = Q(25, "bar") + Q(25, "m")  # pyright: ignore[reportUnknownVariableType]
+            _ = Q(25, "bar") + Q(25, "m")  # pyright: ignore[reportUnknownVariableType, reportOperatorIssue]
 
         # Converting to incompatible unit
         with pytest.raises(DimensionalityError):

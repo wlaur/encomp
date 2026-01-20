@@ -977,10 +977,10 @@ def test_compatibility() -> None:
     assert str((Q(25, "MSEK/GWh") * Q(25, "kWh")).to_base_units()) == "625.0 currency"
 
     with pytest.raises(DimensionalityTypeError):
-        _ = Q(25, "kg") + Q(2, "m")  # pyright: ignore[reportUnknownVariableType]
+        _ = Q(25, "kg") + Q(2, "m")  # pyright: ignore[reportOperatorIssue, reportUnknownVariableType]
 
     with pytest.raises(DimensionalityTypeError):
-        _ = Q(25, "kg") - Q(2, "m")  # pyright: ignore[reportUnknownVariableType]
+        _ = Q(25, "kg") - Q(2, "m")  # pyright: ignore[reportOperatorIssue, reportUnknownVariableType]
 
     # if the _distinct class attribute is True, an unspecified
     # dimensionality will default to this
@@ -1449,3 +1449,22 @@ def test_temperature_difference_add_sub() -> None:
 
     assert_type(Q([2, 3], "degC").astype(pl.Series) - Q(2, "delta_degC"), Q[Temperature, pl.Series])
     assert_type(Q(2, "delta_degC") - Q([2, 3], "degC").astype(pl.Series), Q[Temperature, pl.Series])
+
+
+def test_dimensionless_add_sub() -> None:
+    assert_type(45 + Q(2), Q[Dimensionless, float])
+    assert_type(Q(2) + 45, Q[Dimensionless, float])
+    assert_type(Q(45) + Q(2), Q[Dimensionless, float])
+
+    assert_type(45 - Q(2), Q[Dimensionless, float])
+    assert_type(Q(2) - 45, Q[Dimensionless, float])
+    assert_type(Q(45) - Q(2), Q[Dimensionless, float])
+
+    with pytest.raises(DimensionalityError):
+        _ = 2 + Q(2, "kg")
+
+    with pytest.raises(DimensionalityError):
+        _ = 2 - Q(2, "kg")
+
+    with pytest.raises(TypeError):
+        _ = "asd" - Q(2, "kg")  # pyright: ignore[reportUnknownVariableType, reportOperatorIssue]

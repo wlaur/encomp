@@ -71,8 +71,8 @@ def test_Quantity_to_sympy_integration() -> None:
 
     _ = Q(25, "kg") * x
 
-    _ = x + Q(2)  # pyright: ignore[reportUnknownVariableType]
-    _ = x + Q(2, "m")  # pyright: ignore[reportUnknownVariableType]
+    _ = x + Q(2)
+    _ = x + Q(2, "m")
 
 
 def test_get_function() -> None:
