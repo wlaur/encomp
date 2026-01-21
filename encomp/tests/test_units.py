@@ -431,6 +431,18 @@ def test_Q() -> None:
     Q(1, "cSt")
     Q([])
 
+    units = [
+        "Δ%",
+        "ΔK",
+        "ΔdegC",
+        "Δ℃",
+        "℃",
+        "Δ°C",
+    ]
+
+    for unit in units:
+        Q(1, unit)
+
     assert Q(1, "meter/kilometer").to_reduced_units().m == 0.001
     assert Q(1, "km").to_base_units().m == 1000
 
