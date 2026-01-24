@@ -25,6 +25,7 @@ from typing import (
     Generic,
     Literal,
     TypeVar,
+    assert_never,
     cast,
     get_origin,
     overload,
@@ -414,6 +415,20 @@ class Quantity(
             return "pl.Expr"
         else:
             raise TypeError(f"Invalid magnitude type: {mt} (origin {origin})")
+
+    @staticmethod
+    def _get_magnitude_type_from_name(mt_name: MagnitudeTypeName) -> type:
+        match mt_name:
+            case "float":
+                return float
+            case "pl.Expr":
+                return pl.Expr
+            case "pl.Series":
+                return pl.Series
+            case "ndarray":
+                return Numpy1DArray
+            case _:
+                assert_never(mt_name)
 
     @staticmethod
     def get_unknown_dimensionality_subclass() -> type[Quantity[UnknownDimensionality, Any]]:
@@ -916,6 +931,10 @@ class Quantity(
     @property
     def mt(self) -> type[MT]:
         return self._magnitude_type
+
+    @property
+    def mt_name(self) -> MagnitudeTypeName:
+        return self._get_magnitude_type_name(self.mt)
 
     @property
     def units(self) -> Unit[DT]:
@@ -1489,7 +1508,25 @@ class Quantity(
     def unknown(self) -> Quantity[UnknownDimensionality, MT]:
         return self.asdim(UnknownDimensionality)
 
-    def astype(self, magnitude_type: type[MT_]) -> Quantity[DT, MT_]:
+    @overload
+    def astype(self, magnitude_type: Literal["float"]) -> Quantity[DT, float]: ...
+
+    @overload
+    def astype(self, magnitude_type: Literal["ndarray"]) -> Quantity[DT, Numpy1DArray]: ...
+
+    @overload
+    def astype(self, magnitude_type: Literal["pl.Expr"]) -> Quantity[DT, pl.Expr]: ...
+
+    @overload
+    def astype(self, magnitude_type: Literal["pl.Series"]) -> Quantity[DT, pl.Series]: ...
+
+    @overload
+    def astype(self, magnitude_type: type[MT_] | MagnitudeTypeName) -> Quantity[DT, MT_]: ...
+
+    def astype(self, magnitude_type: type[MT_] | MagnitudeTypeName) -> Quantity[DT, MT_]:
+        if isinstance(magnitude_type, str):
+            magnitude_type = self._get_magnitude_type_from_name(magnitude_type)
+
         magnitude_type_origin = get_origin(magnitude_type)
         m, u = self.m, self.u
 

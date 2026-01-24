@@ -1480,3 +1480,32 @@ def test_dimensionless_add_sub() -> None:
 
     with pytest.raises(TypeError):
         _ = "asd" - Q(2, "kg")  # pyright: ignore[reportUnknownVariableType, reportOperatorIssue]
+
+
+def test_magnitude_type_name() -> None:
+    assert Q(2).mt_name == "float"
+    assert Q([2]).mt_name == "ndarray"
+    assert Q(pl.lit(25)).mt_name == "pl.Expr"
+    assert Q(pl.Series([1, 2, 3])).mt_name == "pl.Series"
+
+    q = Q(25)
+    assert q.mt is float
+    assert q.mt_name == "float"
+    assert q._get_magnitude_type_name(q.mt) == q.mt_name  # pyright: ignore[reportPrivateUsage]
+
+
+def test_astype_inference() -> None:
+    assert_type(Q(25).astype("pl.Expr"), Q[Dimensionless, pl.Expr])
+    assert_type(Q(25).astype("pl.Series"), Q[Dimensionless, pl.Series])
+    assert_type(Q(25).astype("ndarray"), Q[Dimensionless, Numpy1DArray])
+    assert_type(Q(25).astype("float"), Q[Dimensionless, float])
+
+    assert_type(Q(25).astype(pl.Expr), Q[Dimensionless, pl.Expr])
+    assert_type(Q(25).astype(pl.Series), Q[Dimensionless, pl.Series])
+    assert_type(Q(25).astype(Numpy1DArray), Q[Dimensionless, Numpy1DArray])
+    assert_type(Q(25).astype(float), Q[Dimensionless, float])
+
+    assert_type(Q(25).astype(np.ndarray), Q[Dimensionless, Numpy1DArray])
+
+    with pytest.raises(AssertionError):
+        Q(25).astype("invalid")  # pyright: ignore[reportArgumentType, reportCallIssue]
