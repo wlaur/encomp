@@ -1529,3 +1529,11 @@ def test_unary_pos_neg() -> None:
     assert isinstance_types(+Q(25, "kg") * 1, Q[Mass, float])
     assert isinstance_types(+Q(25, "kg") * +1, Q[Mass, float])
     assert isinstance_types(+(1 * +Q(25, "kg")), Q[Mass, float])
+
+
+def test_dimensionless_division() -> None:
+    assert_type(1 / Q(1), Q[Dimensionless, float])
+    assert_type(1.0 / Q(1), Q[Dimensionless, float])
+    assert_type(1 / Q([1, 2, 3]), Q[Dimensionless, Numpy1DArray])
+    assert_type(1 / Q(pl.Series([1, 2, 3])), Q[Dimensionless, pl.Series])
+    assert_type(1 / Q(pl.col.test), Q[Dimensionless, pl.Expr])

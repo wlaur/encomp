@@ -610,7 +610,7 @@ def test_truediv_dimensionless_by_dimensional_expr() -> None:
 def test_rtruediv_float_by_quantity() -> None:
     assert_type(2 / Q(1.0, "s"), Q[ut.UnknownDimensionality, float])
     assert_type(2.0 / Q(1.0, "s"), Q[ut.UnknownDimensionality, float])
-    assert_type(2 / Q(1.0), Q[ut.UnknownDimensionality, float])
+    assert_type(2 / Q(1.0), Q[ut.Dimensionless, float])
 
 
 def test_rtruediv_float_by_array_quantity() -> None:

@@ -2375,7 +2375,13 @@ class Quantity(
 
         return self._call_subclass(ret.m, ret.u)
 
-    def __rtruediv__(self, other: float | int) -> Quantity[UnknownDimensionality, MT]:
+    @overload
+    def __rtruediv__(self: Quantity[Dimensionless, MT], other: float | int) -> Quantity[Dimensionless, MT]: ...
+
+    @overload
+    def __rtruediv__(self, other: float | int) -> Quantity[UnknownDimensionality, MT]: ...
+
+    def __rtruediv__(self, other: float | int) -> Quantity[Any, MT]:
         ret = super().__rtruediv__(other)  # pyright: ignore[reportUnknownMemberType]
         return cast("Quantity[UnknownDimensionality, MT]", self._call_subclass(ret.m, ret.u))  # pyright: ignore[reportArgumentType]
 
