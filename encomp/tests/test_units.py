@@ -1509,3 +1509,23 @@ def test_astype_inference() -> None:
 
     with pytest.raises(AssertionError):
         Q(25).astype("invalid")  # pyright: ignore[reportArgumentType, reportCallIssue]
+
+
+def test_unary_pos_neg() -> None:
+    assert -Q(-1) == 1
+
+    assert (-Q(25, "kg")).mt_name == "float"
+    assert isinstance_types(-Q(25, "kg"), Q[Mass, float])
+    assert isinstance_types(-1 * -Q(25, "kg"), Q[Mass, float])
+    assert isinstance_types(-Q(25, "kg") * 1, Q[Mass, float])
+    assert isinstance_types(-Q(25, "kg") * -1, Q[Mass, float])
+    assert isinstance_types(-(1 * -Q(25, "kg")), Q[Mass, float])
+
+    assert +Q(+1) == 1
+
+    assert (+Q(25, "kg")).mt_name == "float"
+    assert isinstance_types(+Q(25, "kg"), Q[Mass, float])
+    assert isinstance_types(+1 * +Q(25, "kg"), Q[Mass, float])
+    assert isinstance_types(+Q(25, "kg") * 1, Q[Mass, float])
+    assert isinstance_types(+Q(25, "kg") * +1, Q[Mass, float])
+    assert isinstance_types(+(1 * +Q(25, "kg")), Q[Mass, float])

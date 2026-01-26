@@ -2411,6 +2411,14 @@ class Quantity(
         ret = cast("Quantity[DT, MT]", super().__abs__())
         return self._call_subclass(ret.m, ret.u)
 
+    def __pos__(self) -> Quantity[DT, MT]:
+        ret = cast("Quantity[DT, MT]", super().__pos__())
+        return self._call_subclass(ret.m, ret.u)
+
+    def __neg__(self) -> Quantity[DT, MT]:
+        ret = cast("Quantity[DT, MT]", super().__neg__())
+        return self._call_subclass(ret.m, ret.u)
+
     @overload
     def __iter__(self: Quantity[DT, Numpy1DArray]) -> Iterator[Quantity[DT, float]]: ...
     @overload
