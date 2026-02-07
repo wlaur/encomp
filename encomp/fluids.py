@@ -10,10 +10,13 @@ Uses CoolProp as backend.
 
 """
 
+import hashlib
 import logging
 import warnings
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from collections.abc import Callable
+from threading import Lock
 from typing import Annotated, Any, ClassVar, Generic, Literal, cast
 
 import numpy as np
@@ -62,6 +65,56 @@ if SETTINGS.ignore_coolprop_warnings:
 CProperty = Annotated[str, "CoolProp property name"]
 CName = Annotated[str, "CoolProp fluid name"]
 UnitString = Annotated[str, "Unit string"]
+
+_EXPR_EVALUATION_CACHE_MAX_SIZE = 1024
+_EXPR_EVALUATION_CACHE: OrderedDict[tuple[Any, ...], pl.Expr] = OrderedDict()
+_EXPR_EVALUATION_CACHE_LOCK = Lock()
+
+
+def clear_expr_evaluation_cache() -> None:
+    with _EXPR_EVALUATION_CACHE_LOCK:
+        _EXPR_EVALUATION_CACHE.clear()
+
+
+def _expr_cache_digest(expr: pl.Expr) -> str:
+    serialized = expr.meta.undo_aliases().meta.serialize(format="json")
+    return hashlib.blake2s(serialized.encode(), digest_size=16).hexdigest()
+
+
+def _get_expr_evaluation_cache_key(
+    fluid: "CoolPropFluid[Any]",
+    output: CProperty,
+    points: tuple[tuple[CProperty, pl.Expr], ...],
+) -> tuple[Any, ...]:
+    fluid_any = cast(Any, fluid)
+
+    return (
+        type(fluid),
+        fluid.name,
+        output,
+        bool(fluid_any._append_name_to_cp_inputs),
+        bool(fluid_any._convert_pl_series_nan_null),
+        bool(fluid_any._evaluate_invalid_separately),
+        id(type(fluid).BACKEND["backend"]),
+        tuple((prop, _expr_cache_digest(expr)) for prop, expr in points),
+    )
+
+
+def _expr_evaluation_cache_get(key: tuple[Any, ...]) -> pl.Expr | None:
+    with _EXPR_EVALUATION_CACHE_LOCK:
+        expr = _EXPR_EVALUATION_CACHE.get(key)
+        if expr is None:
+            return None
+        _EXPR_EVALUATION_CACHE.move_to_end(key)
+        return expr
+
+
+def _expr_evaluation_cache_set(key: tuple[Any, ...], expr: pl.Expr) -> None:
+    with _EXPR_EVALUATION_CACHE_LOCK:
+        _EXPR_EVALUATION_CACHE[key] = expr
+        _EXPR_EVALUATION_CACHE.move_to_end(key)
+        if len(_EXPR_EVALUATION_CACHE) > _EXPR_EVALUATION_CACHE_MAX_SIZE:
+            _EXPR_EVALUATION_CACHE.popitem(last=False)
 
 
 class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
@@ -524,9 +577,15 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             return np.nan
 
     def evaluate_expression(self, output: CProperty, *points: tuple[CProperty, pl.Expr]) -> pl.Expr:
+        key = _get_expr_evaluation_cache_key(self, output, points)
+        cached_expr = _expr_evaluation_cache_get(key)
+
+        if cached_expr is not None:
+            return cached_expr
+
         def _evaluate(s: pl.Series) -> pl.Series:
-            materalized = tuple((n[0], s.struct.field(n[0]).to_numpy()) for n in points)
-            ret = self.evaluate_multiple(output, *materalized)
+            materialized = tuple((n[0], s.struct.field(n[0]).to_numpy()) for n in points)
+            ret = self.evaluate_multiple(output, *materialized)
 
             ret_series = pl.Series(ret)
 
@@ -537,7 +596,11 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
             return ret_series
 
-        return pl.struct(*[n[1].alias(n[0]) for n in points]).map_batches(_evaluate, pl.Float32).alias(output)
+        expr = pl.struct(*[n[1].alias(n[0]) for n in points]).map_batches(_evaluate, pl.Float32).alias(output)
+
+        _expr_evaluation_cache_set(key, expr)
+
+        return expr
 
     def evaluate_multiple_separately(
         self,
