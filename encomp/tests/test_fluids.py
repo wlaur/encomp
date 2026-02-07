@@ -1,7 +1,7 @@
 # ruff: noqa: B018
 # pyright: reportConstantRedefinition=false
 
-from typing import assert_type
+from typing import Any, assert_type, cast
 
 import numpy as np
 import polars as pl
@@ -9,7 +9,7 @@ import pytest
 from pytest import approx  # pyright: ignore[reportUnknownVariableType]
 
 from .. import utypes as ut
-from ..fluids import Fluid, HumidAir, Water
+from ..fluids import CoolPropFluid, Fluid, HumidAir, Water, clear_expr_evaluation_cache
 from ..units import Quantity as Q
 from ..utypes import DT, Density, SpecificEntropy
 
@@ -441,3 +441,63 @@ def test_polars_fluids() -> None:
 
     with pytest.raises(TypeError):
         Water(P=Q([1, 2, 3], "bar"), T=Q(pl.col.asd, "degC")).D  # pyright: ignore[reportArgumentType]
+
+
+def _count_water_h_evaluations(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    calls = [0]
+    original_evaluate_multiple = CoolPropFluid.evaluate_multiple
+
+    def counted_evaluate_multiple(
+        self: CoolPropFluid[pl.Expr], output: str, *points: tuple[str, np.ndarray]
+    ) -> np.ndarray:
+        if getattr(self, "name", "") == "IF97::Water" and output == "H":
+            calls[0] += 1
+
+        return cast(np.ndarray, cast(Any, original_evaluate_multiple)(self, output, *points))
+
+    monkeypatch.setattr(CoolPropFluid, "evaluate_multiple", counted_evaluate_multiple)
+
+    return calls
+
+
+def test_polars_fluids_expression_cache_col(monkeypatch: pytest.MonkeyPatch) -> None:
+    clear_expr_evaluation_cache()
+    calls = _count_water_h_evaluations(monkeypatch)
+
+    expressions = {
+        f"H_{idx}": Water(P=Q(pl.lit(1.0), "bar"), T=Q(pl.col("T"), "degC")).H.m * (idx + 1) for idx in range(100)
+    }
+
+    df = pl.LazyFrame({"T": [150.0, 200.0, 250.0]}).select(**expressions).collect()
+
+    assert len(df.columns) == 100
+    assert calls[0] == 1
+
+
+def test_polars_fluids_expression_cache_lit_series(monkeypatch: pytest.MonkeyPatch) -> None:
+    clear_expr_evaluation_cache()
+    calls = _count_water_h_evaluations(monkeypatch)
+
+    temperature_series = pl.Series("T", [150.0, 200.0, 250.0])
+
+    expressions = {
+        f"H_{idx}": Water(P=Q(pl.lit(1.0), "bar"), T=Q(pl.lit(temperature_series), "degC")).H.m * (idx + 1)
+        for idx in range(100)
+    }
+
+    df = pl.LazyFrame({"idx": [0, 1, 2]}).select(**expressions).collect()
+
+    assert len(df.columns) == 100
+    assert calls[0] == 1
+
+
+def test_polars_fluids_expression_cache_distinct_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
+    clear_expr_evaluation_cache()
+    calls = _count_water_h_evaluations(monkeypatch)
+
+    expressions = {f"H_{idx}": Water(P=Q(pl.lit(1.0), "bar"), T=Q(pl.col("T") + idx, "degC")).H.m for idx in range(12)}
+
+    df = pl.LazyFrame({"T": [150.0, 200.0, 250.0]}).select(**expressions).collect()
+
+    assert len(df.columns) == 12
+    assert calls[0] == 12
