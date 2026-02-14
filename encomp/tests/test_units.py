@@ -1010,16 +1010,14 @@ def test_compatibility() -> None:
     # prefer to use the asdim method
     q5_ = Q(25, "kJ/kg").asdim(SpecificEnthalpy)
 
-    # this is not allowed on the type level, but works at runtime
-    assert q5 == q5_  # pyright: ignore[reportOperatorIssue]
+    assert q5 == q5_
 
     q6 = Q[EnergyPerMass, float](25, "kJ/kg")
 
-    with pytest.raises(Exception):  # noqa: B017
-        _ = q4 - q5
-
-    with pytest.raises(Exception):  # noqa: B017
-        _ = q5 - q4
+    # NOTE: changed to not consider SpecificEnthalpy and EnergyPerMass distinct,
+    # this caused a lot of extra asdim() calls with no apparent advantage
+    _ = q4 - q5
+    _ = q5 - q4
 
     _ = q4 + q6
     _ = q6 - q4

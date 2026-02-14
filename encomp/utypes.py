@@ -969,6 +969,10 @@ class EnergyPerMass(Dimensionality):
     dimensions = _EnergyUC / _MassUC
 
 
+# don't consider SpecificEnthalpy separate from EnergyPerMass
+SpecificEnthalpy = EnergyPerMass
+
+
 class HeatingValue(Dimensionality):
     dimensions = _EnergyUC / _MassUC
 
@@ -978,10 +982,6 @@ class LowerHeatingValue(Dimensionality):
 
 
 class HigherHeatingValue(Dimensionality):
-    dimensions = _EnergyUC / _MassUC
-
-
-class SpecificEnthalpy(Dimensionality):
     dimensions = _EnergyUC / _MassUC
 
 
