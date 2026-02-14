@@ -43,6 +43,7 @@ from ..utypes import (
     NormalVolume,
     NormalVolumeFlow,
     Numpy1DArray,
+    Power,
     Pressure,
     SpecificEnthalpy,
     Temperature,
@@ -1535,3 +1536,67 @@ def test_dimensionless_division() -> None:
     assert_type(1 / Q([1, 2, 3]), Q[Dimensionless, Numpy1DArray])
     assert_type(1 / Q(pl.Series([1, 2, 3])), Q[Dimensionless, pl.Series])
     assert_type(1 / Q(pl.col.test), Q[Dimensionless, pl.Expr])
+
+
+def test_massflow_energypermass_power_mul() -> None:
+    mf = Q(10, "kg/s")
+    epm = Q(1000, "kJ/kg")
+
+    result = mf * epm
+    assert isinstance_types(result, Q[Power])
+    assert_type(mf * epm, Q[Power, float])
+
+    # commutative
+    result2 = epm * mf
+    assert isinstance_types(result2, Q[Power])
+    assert_type(epm * mf, Q[Power, float])
+
+    # array magnitude types
+    mf_arr = Q([10, 20], "kg/s")
+    assert isinstance_types(mf_arr * epm, Q[Power])
+    assert_type(mf_arr * epm, Q[Power, Numpy1DArray])
+
+    mf_series = Q(pl.Series([10, 20]), "kg/s")
+    assert isinstance_types(mf_series * epm, Q[Power])
+    assert_type(mf_series * epm, Q[Power, pl.Series])
+
+    mf_expr = Q(pl.col.test, "kg/s")
+    assert_type(mf_expr * epm, Q[Power, pl.Expr])
+
+    # commutative with array types
+    epm_arr = Q([1000, 2000], "kJ/kg")
+    assert isinstance_types(epm_arr * mf, Q[Power])
+    assert_type(epm_arr * mf, Q[Power, Numpy1DArray])
+
+
+def test_power_div_massflow_energypermass() -> None:
+    p = Q(10000, "kW")
+    mf = Q(10, "kg/s")
+    epm = Q(1000, "kJ/kg")
+
+    result1 = p / mf
+    assert isinstance_types(result1, Q[EnergyPerMass])
+    assert_type(p / mf, Q[EnergyPerMass, float])
+
+    result2 = p / epm
+    assert isinstance_types(result2, Q[MassFlow])
+    assert_type(p / epm, Q[MassFlow, float])
+
+    # array magnitude types
+    p_arr = Q([10000, 20000], "kW")
+    assert isinstance_types(p_arr / mf, Q[EnergyPerMass])
+    assert_type(p_arr / mf, Q[EnergyPerMass, Numpy1DArray])
+
+    assert isinstance_types(p_arr / epm, Q[MassFlow])
+    assert_type(p_arr / epm, Q[MassFlow, Numpy1DArray])
+
+    p_series = Q(pl.Series([10000, 20000]), "kW")
+    assert isinstance_types(p_series / mf, Q[EnergyPerMass])
+    assert_type(p_series / mf, Q[EnergyPerMass, pl.Series])
+
+    assert isinstance_types(p_series / epm, Q[MassFlow])
+    assert_type(p_series / epm, Q[MassFlow, pl.Series])
+
+    p_expr = Q(pl.col.test, "kW")
+    assert_type(p_expr / mf, Q[EnergyPerMass, pl.Expr])
+    assert_type(p_expr / epm, Q[MassFlow, pl.Expr])

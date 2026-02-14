@@ -2083,6 +2083,46 @@ class Quantity(
     @overload
     def __mul__(self: Quantity[Area, float], other: Quantity[Length, MT_]) -> Quantity[Volume, MT_]: ...
 
+    # MassFlow * EnergyPerMass = Power
+    @overload
+    def __mul__(
+        self: Quantity[MassFlow, Numpy1DArray], other: Quantity[EnergyPerMass, float]
+    ) -> Quantity[Power, Numpy1DArray]: ...
+    @overload
+    def __mul__(
+        self: Quantity[MassFlow, pl.Series], other: Quantity[EnergyPerMass, float]
+    ) -> Quantity[Power, pl.Series]: ...
+    @overload
+    def __mul__(
+        self: Quantity[MassFlow, pl.Expr], other: Quantity[EnergyPerMass, float]
+    ) -> Quantity[Power, pl.Expr]: ...
+    @overload
+    def __mul__(self: Quantity[MassFlow, MT], other: Quantity[EnergyPerMass, MT]) -> Quantity[Power, MT]: ...
+    @overload
+    def __mul__(self: Quantity[MassFlow, MT], other: Quantity[EnergyPerMass, float]) -> Quantity[Power, MT]: ...
+    @overload
+    def __mul__(self: Quantity[MassFlow, float], other: Quantity[EnergyPerMass, MT_]) -> Quantity[Power, MT_]: ...
+
+    # EnergyPerMass * MassFlow = Power
+    @overload
+    def __mul__(
+        self: Quantity[EnergyPerMass, Numpy1DArray], other: Quantity[MassFlow, float]
+    ) -> Quantity[Power, Numpy1DArray]: ...
+    @overload
+    def __mul__(
+        self: Quantity[EnergyPerMass, pl.Series], other: Quantity[MassFlow, float]
+    ) -> Quantity[Power, pl.Series]: ...
+    @overload
+    def __mul__(
+        self: Quantity[EnergyPerMass, pl.Expr], other: Quantity[MassFlow, float]
+    ) -> Quantity[Power, pl.Expr]: ...
+    @overload
+    def __mul__(self: Quantity[EnergyPerMass, MT], other: Quantity[MassFlow, MT]) -> Quantity[Power, MT]: ...
+    @overload
+    def __mul__(self: Quantity[EnergyPerMass, MT], other: Quantity[MassFlow, float]) -> Quantity[Power, MT]: ...
+    @overload
+    def __mul__(self: Quantity[EnergyPerMass, float], other: Quantity[MassFlow, MT_]) -> Quantity[Power, MT_]: ...
+
     # Unknown * Unknown = Unknown
     @overload
     def __mul__(
@@ -2321,6 +2361,46 @@ class Quantity(
     def __truediv__(self: Quantity[Mass, MT], other: Quantity[Volume, float]) -> Quantity[Density, MT]: ...
     @overload
     def __truediv__(self: Quantity[Mass, float], other: Quantity[Volume, MT_]) -> Quantity[Density, MT_]: ...
+
+    # Power / MassFlow = EnergyPerMass
+    @overload
+    def __truediv__(
+        self: Quantity[Power, Numpy1DArray], other: Quantity[MassFlow, float]
+    ) -> Quantity[EnergyPerMass, Numpy1DArray]: ...
+    @overload
+    def __truediv__(
+        self: Quantity[Power, pl.Series], other: Quantity[MassFlow, float]
+    ) -> Quantity[EnergyPerMass, pl.Series]: ...
+    @overload
+    def __truediv__(
+        self: Quantity[Power, pl.Expr], other: Quantity[MassFlow, float]
+    ) -> Quantity[EnergyPerMass, pl.Expr]: ...
+    @overload
+    def __truediv__(self: Quantity[Power, MT], other: Quantity[MassFlow, MT]) -> Quantity[EnergyPerMass, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Power, MT], other: Quantity[MassFlow, float]) -> Quantity[EnergyPerMass, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Power, float], other: Quantity[MassFlow, MT_]) -> Quantity[EnergyPerMass, MT_]: ...
+
+    # Power / EnergyPerMass = MassFlow
+    @overload
+    def __truediv__(
+        self: Quantity[Power, Numpy1DArray], other: Quantity[EnergyPerMass, float]
+    ) -> Quantity[MassFlow, Numpy1DArray]: ...
+    @overload
+    def __truediv__(
+        self: Quantity[Power, pl.Series], other: Quantity[EnergyPerMass, float]
+    ) -> Quantity[MassFlow, pl.Series]: ...
+    @overload
+    def __truediv__(
+        self: Quantity[Power, pl.Expr], other: Quantity[EnergyPerMass, float]
+    ) -> Quantity[MassFlow, pl.Expr]: ...
+    @overload
+    def __truediv__(self: Quantity[Power, MT], other: Quantity[EnergyPerMass, MT]) -> Quantity[MassFlow, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Power, MT], other: Quantity[EnergyPerMass, float]) -> Quantity[MassFlow, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Power, float], other: Quantity[EnergyPerMass, MT_]) -> Quantity[MassFlow, MT_]: ...
 
     @overload
     def __truediv__(
