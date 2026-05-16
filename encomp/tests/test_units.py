@@ -280,7 +280,6 @@ def test_dimensionality_type_hierarchy() -> None:
         EstimatedQuantity(25, "m")
 
         # these quantities are not compatible with normal Length/Mass
-        # (override the str literal unit overloads for mypy)
         s = Q[EstimatedLength, float](25, "m")
         m = Q[EstimatedMass, float](25, "kg")
 

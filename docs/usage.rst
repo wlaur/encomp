@@ -9,7 +9,7 @@ The Quantity class
 
 The purpose of the :py:class:`encomp.units.Quantity` class is to store information about the *magnitude*, *dimensionality* and *units* of a physical quantity.
 Each dimensionality is represented as a separate subclass.
-This means that static type checkers like ``mypy`` can be used to catch dimensionality-related errors before the code is executed..
+This means that static type checkers can be used to catch dimensionality-related errors before the code is executed.
 
 
 .. note::

@@ -48,7 +48,6 @@ extra = ["scipy", "fluids"]
 [dependency-groups]
 dev = [
     "pre-commit",
-    "mypy",
     "ruff",
     "pytest",
     "hypothesis",
@@ -132,7 +131,6 @@ exclude = [
     ".eggs",
     ".git",
     ".hg",
-    ".mypy_cache",
     ".nox",
     ".pants.d",
     ".pytype",
@@ -162,30 +160,10 @@ max-complexity = 10
 
 [tool.pytest.ini_options]
 filterwarnings = [
-    # ignore the mypy-testing marks when this plugin is disabled
-    "ignore::_pytest.warning_types.PytestUnknownMarkWarning",
-
     # ignore CoolProp warnings for NaN/out of bounds inputs
     "ignore:CoolProp could not calculate*:UserWarning",
-
     "ignore::pint.UnitStrippedWarning",
 ]
-
-[tool.mypy]
-ignore_missing_imports = false
-show_error_codes = true
-warn_unused_ignores = true
-warn_return_any = true
-warn_unused_configs = true
-explicit_package_bases = false
-namespace_packages = false
-check_untyped_defs = true
-plugins = ["pydantic.mypy"]
-
-[tool.pydantic-mypy]
-init_typed = true
-init_forbid_extra = true
-warn_required_dynamic_aliases = true
 
 [tool.pyright]
 include = ["encomp"]
