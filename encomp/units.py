@@ -782,6 +782,8 @@ class Quantity(
     @overload
     def __new__(cls, val: MT, unit: None) -> Quantity[Dimensionless, MT]: ...
     @overload
+    # overlaps the list-input overload above, which intentionally returns an
+    # ndarray magnitude (lists are converted to arrays) regardless of MT
     def __new__(cls, val: MT, unit: DimensionlessUnits) -> Quantity[Dimensionless, MT]: ...  # pyright: ignore[reportOverlappingOverload]
     @overload
     def __new__(cls, val: MT, unit: CurrencyUnits) -> Quantity[Currency, MT]: ...
@@ -1080,6 +1082,8 @@ class Quantity(
             else:
                 raise e
 
+    # check() intentionally accepts a wider set of dimension arguments than
+    # pint's PlainQuantity.check, so the override signature is incompatible
     def check(  # pyright: ignore[reportIncompatibleMethodOverride]
         self,
         dimension: Quantity[Any, Any] | UnitsContainer | Unit[DT_] | Unit | str | Dimensionality | type[Dimensionality],
@@ -1579,6 +1583,8 @@ class Quantity(
     @overload
     def __pow__(self: Quantity[Dimensionless, MT], other: float | int) -> Quantity[Dimensionless, MT]: ...
     @overload
+    # raising to the literal power 1 preserves the dimensionality; this
+    # intentionally overlaps the general float/int overload above
     def __pow__(self, other: Literal[1]) -> Quantity[DT, MT]: ...  # pyright: ignore[reportOverlappingOverload]
     @overload
     def __pow__(self, other: float | int) -> Quantity[UnknownDimensionality, MT]: ...
@@ -1761,6 +1767,8 @@ class Quantity(
     def __eq__(self: Quantity[DT, pl.Expr], other: Quantity[DT, pl.Expr]) -> pl.Expr: ...
     @overload
     def __eq__(self: Quantity[DT, pl.Expr], other: Quantity[DT, float]) -> pl.Expr: ...
+    # for vector magnitudes __eq__ returns an array/Series/Expr of element-wise
+    # results, intentionally widening object.__eq__'s bool return (as numpy does)
     def __eq__(self, other: object) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:  # pyright: ignore[reportIncompatibleMethodOverride]
         if not isinstance(other, (Quantity, float, int)):
             return bool(self._pint_super.__eq__(other))
@@ -1832,6 +1840,8 @@ class Quantity(
     def __ne__(self: Quantity[DT, pl.Expr], other: Quantity[DT, pl.Expr]) -> pl.Expr: ...
     @overload
     def __ne__(self: Quantity[DT, pl.Expr], other: Quantity[DT, float]) -> pl.Expr: ...
+    # for vector magnitudes __ne__ returns an array/Series/Expr of element-wise
+    # results, intentionally widening object.__ne__'s bool return (as numpy does)
     def __ne__(self, other: object) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:  # pyright: ignore[reportIncompatibleMethodOverride]
         if not isinstance(other, (Quantity, float, int)):
             return bool(self._pint_super.__ne__(other))

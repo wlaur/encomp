@@ -376,6 +376,8 @@ def test_type_eq() -> None:
     assert isinstance_types(q, Q[Length, float])
     assert isinstance_types(q, Q[Length, Any])
 
+    # the isinstance check is statically redundant (q is always a Quantity),
+    # but the narrowing it produces lets the else branch exercise assert_never
     if isinstance(q, Q):  # pyright: ignore[reportUnnecessaryIsInstance]
         assert_type(q, Q[Length, float])
     else:
