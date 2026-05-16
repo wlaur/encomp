@@ -20,7 +20,7 @@ assert_type.__code__ = _assert_type.__code__
 def test_inference_basic() -> None:
     assert_type(Q([1]), Q[ut.Dimensionless])
     assert_type(Q(1), Q[ut.Dimensionless, float])
-    assert_type(Q(np.array([1])), Q[ut.Dimensionless, np.ndarray])
+    assert_type(Q(np.array([1])), Q[ut.Dimensionless, ut.Numpy1DArray])
     assert_type(Q(np.array([1])), Q[ut.Dimensionless, ut.Numpy1DArray])
     assert_type(Q(pl.Series([1])), Q[ut.Dimensionless, pl.Series])
     assert_type(Q(pl.lit(1)), Q[ut.Dimensionless, pl.Expr])
@@ -28,7 +28,7 @@ def test_inference_basic() -> None:
     assert_type(Q(1) * 1, Q[ut.Dimensionless, float])
     assert_type(Q(1) * Q(1), Q[ut.Dimensionless, float])
     assert_type(Q(1), Q[ut.Dimensionless, float])
-    assert_type(Q([1]) * Q(1), Q[ut.Dimensionless, np.ndarray])
+    assert_type(Q([1]) * Q(1), Q[ut.Dimensionless, ut.Numpy1DArray])
 
     assert_type(Q(1) * Q(1, "kg"), Q[ut.Mass, float])
     assert_type(Q(1, "kg") * Q(1), Q[ut.Mass, float])
@@ -36,7 +36,7 @@ def test_inference_basic() -> None:
     assert_type(Q(1, "kg") * 1, Q[ut.Mass, float])
     assert_type(Q(1, "kg") / 1, Q[ut.Mass, float])
 
-    assert_type(Q([1]) * Q(1, "kg"), Q[ut.Mass, np.ndarray])
+    assert_type(Q([1]) * Q(1, "kg"), Q[ut.Mass, ut.Numpy1DArray])
 
 
 def test_inference_multiplication() -> None:
@@ -45,19 +45,19 @@ def test_inference_multiplication() -> None:
     assert_type(Q(1, "m") * Q(2, "m"), Q[ut.Area, float])
 
     # array * scalar
-    assert_type(Q([1, 2]) * Q(3), Q[ut.Dimensionless, np.ndarray])
-    assert_type(Q([1, 2], "m") * Q(3, "m"), Q[ut.Area, np.ndarray])
+    assert_type(Q([1, 2]) * Q(3), Q[ut.Dimensionless, ut.Numpy1DArray])
+    assert_type(Q([1, 2], "m") * Q(3, "m"), Q[ut.Area, ut.Numpy1DArray])
 
     # scalar * array (dimensionless)
-    assert_type(Q(3) * Q([1, 2]), Q[ut.Dimensionless, np.ndarray])
+    assert_type(Q(3) * Q([1, 2]), Q[ut.Dimensionless, ut.Numpy1DArray])
 
     # array * array
-    assert_type(Q([1, 2]) * Q([3, 4]), Q[ut.Dimensionless, np.ndarray])
-    assert_type(Q([1, 2], "m") * Q([3, 4], "m"), Q[ut.Area, np.ndarray])
+    assert_type(Q([1, 2]) * Q([3, 4]), Q[ut.Dimensionless, ut.Numpy1DArray])
+    assert_type(Q([1, 2], "m") * Q([3, 4], "m"), Q[ut.Area, ut.Numpy1DArray])
 
     # dimensionless * dimensional
     assert_type(Q(2) * Q(1, "kg"), Q[ut.Mass, float])
-    assert_type(Q([1, 2]) * Q(3, "kg"), Q[ut.Mass, np.ndarray])
+    assert_type(Q([1, 2]) * Q(3, "kg"), Q[ut.Mass, ut.Numpy1DArray])
 
     # dimensional * dimensionless (scalar only)
     assert_type(Q(1, "kg") * Q(2), Q[ut.Mass, float])
@@ -70,18 +70,18 @@ def test_inference_division() -> None:
     assert_type(Q(4, "m") / Q(2, "s"), Q[ut.Velocity, float])
 
     # array / scalar
-    assert_type(Q([4, 6]) / Q(2), Q[ut.Dimensionless, np.ndarray])
-    assert_type(Q([4, 6], "m") / Q(2, "s"), Q[ut.Velocity, np.ndarray])
+    assert_type(Q([4, 6]) / Q(2), Q[ut.Dimensionless, ut.Numpy1DArray])
+    assert_type(Q([4, 6], "m") / Q(2, "s"), Q[ut.Velocity, ut.Numpy1DArray])
 
     # scalar / array (dimensionless)
-    assert_type(Q(4) / Q([2, 4]), Q[ut.Dimensionless, np.ndarray])
+    assert_type(Q(4) / Q([2, 4]), Q[ut.Dimensionless, ut.Numpy1DArray])
 
     # array / array
-    assert_type(Q([4, 6]) / Q([2, 3]), Q[ut.Dimensionless, np.ndarray])
+    assert_type(Q([4, 6]) / Q([2, 3]), Q[ut.Dimensionless, ut.Numpy1DArray])
 
     # dimensionless / dimensional
     assert_type(Q(2) / Q(1, "s"), Q[ut.UnknownDimensionality, float])
-    assert_type(Q([2, 4]) / Q(1, "s"), Q[ut.UnknownDimensionality, np.ndarray])
+    assert_type(Q([2, 4]) / Q(1, "s"), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
 
     # dimensional / dimensionless (scalar only)
     assert_type(Q(4, "m") / Q(2), Q[ut.Length, float])
@@ -98,15 +98,15 @@ def test_inference_addition_subtraction() -> None:
     assert_type(Q(1, "m") + Q(2, "m"), Q[ut.Length, float])
 
     # array + scalar
-    assert_type(Q([1, 2]) + Q(3), Q[ut.Dimensionless, np.ndarray])
-    assert_type(Q([1, 2], "m") + Q(3, "m"), Q[ut.Length, np.ndarray])
+    assert_type(Q([1, 2]) + Q(3), Q[ut.Dimensionless, ut.Numpy1DArray])
+    assert_type(Q([1, 2], "m") + Q(3, "m"), Q[ut.Length, ut.Numpy1DArray])
 
     # array + array
-    assert_type(Q([1, 2]) + Q([3, 4]), Q[ut.Dimensionless, np.ndarray])
+    assert_type(Q([1, 2]) + Q([3, 4]), Q[ut.Dimensionless, ut.Numpy1DArray])
 
     # subtraction
     assert_type(Q(5) - Q(2), Q[ut.Dimensionless, float])
-    assert_type(Q([5, 6]) - Q(2), Q[ut.Dimensionless, np.ndarray])
+    assert_type(Q([5, 6]) - Q(2), Q[ut.Dimensionless, ut.Numpy1DArray])
     assert_type(Q(5, "m") - Q(2, "m"), Q[ut.Length, float])
 
 
@@ -144,7 +144,7 @@ def test_inference_polars() -> None:
 def test_inference_complex_units() -> None:
     # velocity = length / time
     assert_type(Q(10, "m") / Q(2, "s"), Q[ut.Velocity, float])
-    assert_type(Q([10, 20], "m") / Q(2, "s"), Q[ut.Velocity, np.ndarray])
+    assert_type(Q([10, 20], "m") / Q(2, "s"), Q[ut.Velocity, ut.Numpy1DArray])
 
     # energy = mass * velocity^2
     velocity = Q(5, "m/s")
@@ -163,12 +163,12 @@ def test_inference_complex_units() -> None:
 def test_inference_dimensional_multiplication() -> None:
     # Length * Length = Area
     assert_type(Q(5.0, "m") * Q(3.0, "m"), Q[ut.Area, float])
-    assert_type(Q([5.0], "m") * Q(3.0, "m"), Q[ut.Area, np.ndarray])
+    assert_type(Q([5.0], "m") * Q(3.0, "m"), Q[ut.Area, ut.Numpy1DArray])
     assert_type(Q(pl.Series([5.0]), "m") * Q(3.0, "m"), Q[ut.Area, pl.Series])
 
     # Length * Area = Volume
     assert_type(Q(2.0, "m") * Q(10.0, "m^2"), Q[ut.Volume, float])
-    assert_type(Q([2.0, 3.0], "m") * Q(10.0, "m^2"), Q[ut.Volume, np.ndarray])
+    assert_type(Q([2.0, 3.0], "m") * Q(10.0, "m^2"), Q[ut.Volume, ut.Numpy1DArray])
 
     # Area * Length = Volume (commutative)
     assert_type(Q(10.0, "m^2") * Q(2.0, "m"), Q[ut.Volume, float])
@@ -182,7 +182,7 @@ def test_inference_dimensional_multiplication() -> None:
 
     # Time * MassFlow = Mass
     assert_type(Q(10.0, "s") * Q(5.0, "kg/s"), Q[ut.Mass, float])
-    assert_type(Q([10.0, 20.0], "s") * Q(5.0, "kg/s"), Q[ut.Mass, np.ndarray])
+    assert_type(Q([10.0, 20.0], "s") * Q(5.0, "kg/s"), Q[ut.Mass, ut.Numpy1DArray])
 
     # Time * VolumeFlow = Volume
     assert_type(Q(60.0, "s") * Q(2.0, "m^3/s"), Q[ut.Volume, float])
@@ -196,13 +196,13 @@ def test_inference_dimensional_multiplication() -> None:
 
     # Velocity * Area = VolumeFlow
     assert_type(Q(5.0, "m/s") * Q(2.0, "m^2"), Q[ut.UnknownDimensionality, float])
-    assert_type(Q([5.0, 10.0], "m/s") * Q(2.0, "m^2"), Q[ut.UnknownDimensionality, np.ndarray])
+    assert_type(Q([5.0, 10.0], "m/s") * Q(2.0, "m^2"), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
 
 
 def test_inference_dimensional_division() -> None:
     # Mass / Time = MassFlow
     assert_type(Q(100.0, "kg") / Q(10.0, "s"), Q[ut.MassFlow, float])
-    assert_type(Q([100.0, 200.0], "kg") / Q(10.0, "s"), Q[ut.MassFlow, np.ndarray])
+    assert_type(Q([100.0, 200.0], "kg") / Q(10.0, "s"), Q[ut.MassFlow, ut.Numpy1DArray])
     assert_type(Q(pl.Series([100.0]), "kg") / Q(10.0, "s"), Q[ut.MassFlow, pl.Series])
 
     # Volume / Time = VolumeFlow
@@ -211,7 +211,7 @@ def test_inference_dimensional_division() -> None:
 
     # Mass / Volume = Density
     assert_type(Q(1000.0, "kg") / Q(1.0, "m^3"), Q[ut.Density, float])
-    assert_type(Q([1000.0, 2000.0], "kg") / Q(1.0, "m^3"), Q[ut.Density, np.ndarray])
+    assert_type(Q([1000.0, 2000.0], "kg") / Q(1.0, "m^3"), Q[ut.Density, ut.Numpy1DArray])
 
     # Length / Time = Velocity
     assert_type(Q(100.0, "m") / Q(10.0, "s"), Q[ut.Velocity, float])
@@ -221,7 +221,7 @@ def test_inference_dimensional_division() -> None:
 
     # Energy / Mass = EnergyPerMass (specific energy)
     assert_type(Q(1000.0, "J") / Q(1.0, "kg"), Q[ut.EnergyPerMass, float])
-    assert_type(Q([1000.0, 2000.0], "J") / Q(1.0, "kg"), Q[ut.EnergyPerMass, np.ndarray])
+    assert_type(Q([1000.0, 2000.0], "J") / Q(1.0, "kg"), Q[ut.EnergyPerMass, ut.Numpy1DArray])
 
     # Volume / Area = Length
     assert_type(Q(100.0, "m^3") / Q(10.0, "m^2"), Q[ut.UnknownDimensionality, float])
@@ -235,7 +235,7 @@ def test_inference_dimensional_division() -> None:
 
     # Power / Area = PowerPerArea (heat flux)
     assert_type(Q(1000.0, "W") / Q(1.0, "m^2"), Q[ut.UnknownDimensionality, float])
-    assert_type(Q([1000.0, 2000.0], "W") / Q(1.0, "m^2"), Q[ut.UnknownDimensionality, np.ndarray])
+    assert_type(Q([1000.0, 2000.0], "W") / Q(1.0, "m^2"), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
 
     # MassFlow / Density = VolumeFlow
     assert_type(Q(10.0, "kg/s") / Q(1000.0, "kg/m^3"), Q[ut.UnknownDimensionality, float])
@@ -249,48 +249,48 @@ def test_inference_dimensional_derived_units() -> None:
     assert_type(Q(1000.0, "N/m²"), Q[ut.Pressure, float])
 
     # Test with various magnitude types
-    assert_type(Q([1000.0], "N/m2"), Q[ut.Pressure, np.ndarray])
+    assert_type(Q([1000.0], "N/m2"), Q[ut.Pressure, ut.Numpy1DArray])
     assert_type(Q(pl.Series([1000.0]), "N/m**2"), Q[ut.Pressure, pl.Series])
     assert_type(Q(pl.lit(1000.0), "N/m²"), Q[ut.Pressure, pl.Expr])
 
     # Kinematic Viscosity = Length * Velocity (mul returns ut.UnknownDimensionality dimensionality)
     assert_type(Q(0.1, "m") * Q(0.5, "m/s"), Q[ut.UnknownDimensionality, float])
     assert_type(Q(pl.Series([0.1]), "m") * Q(0.5, "m/s"), Q[ut.UnknownDimensionality, pl.Series])
-    assert_type(Q([0.1], "m") * Q(0.5, "m/s"), Q[ut.UnknownDimensionality, np.ndarray])
+    assert_type(Q([0.1], "m") * Q(0.5, "m/s"), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
 
     # Dynamic Viscosity = Density * Kinematic Viscosity
     assert_type(Q(1000.0, "kg/m^3") * Q(0.001, "m^2/s"), Q[ut.UnknownDimensionality, float])
-    assert_type(Q([1000.0], "kg/m^3") * Q(0.001, "m^2/s"), Q[ut.UnknownDimensionality, np.ndarray])
+    assert_type(Q([1000.0], "kg/m^3") * Q(0.001, "m^2/s"), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
     assert_type(Q(pl.lit(1000.0), "kg/m3") * Q(0.001, "m2/s"), Q[ut.UnknownDimensionality, pl.Expr])
 
     # Specific Volume = Dimensionless / Density
     assert_type(Q(1.0) / Q(1000.0, "kg/m^3"), Q[ut.UnknownDimensionality, float])
-    assert_type(Q([1.0]) / Q(1000.0, "kg/m³"), Q[ut.UnknownDimensionality, np.ndarray])
+    assert_type(Q([1.0]) / Q(1000.0, "kg/m³"), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
     assert_type(Q(pl.Series([1.0])) / Q(1000.0, "kg/m3"), Q[ut.UnknownDimensionality, pl.Series])
 
     # Thermal Conductivity = Power / (Length * TemperatureDifference) = W/(m·K)
     assert_type(Q(0.6, "W/m/K"), Q[ut.ThermalConductivity, float])
-    assert_type(Q([0.6, 0.8], "W/m/K"), Q[ut.ThermalConductivity, np.ndarray])
+    assert_type(Q([0.6, 0.8], "W/m/K"), Q[ut.ThermalConductivity, ut.Numpy1DArray])
     assert_type(Q(pl.lit(0.6), "W/m/K"), Q[ut.ThermalConductivity, pl.Expr])
 
     # Heat Transfer Coefficient = PowerPerArea / TemperatureDifference = W/(m²·K)
     assert_type(Q(10.0, "W/m^2/K"), Q[ut.HeatTransferCoefficient, float])
-    assert_type(Q([10.0, 20.0], "W/m²/K"), Q[ut.HeatTransferCoefficient, np.ndarray])
+    assert_type(Q([10.0, 20.0], "W/m²/K"), Q[ut.HeatTransferCoefficient, ut.Numpy1DArray])
     assert_type(Q(pl.Series([10.0]), "W/m**2/K"), Q[ut.HeatTransferCoefficient, pl.Series])
 
     # Frequency = Dimensionless / Time (div returns ut.UnknownDimensionality dimensionality)
     assert_type(Q(1.0) / Q(0.5, "s"), Q[ut.UnknownDimensionality, float])
-    assert_type(Q([1.0, 2.0]) / Q(0.5, "s"), Q[ut.UnknownDimensionality, np.ndarray])
+    assert_type(Q([1.0, 2.0]) / Q(0.5, "s"), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
     assert_type(Q(pl.Series([1.0])) / Q(0.5, "s"), Q[ut.UnknownDimensionality, pl.Series])
 
     # MolarMass = Mass / Substance
     assert_type(Q(18.0, "g") / Q(1.0, "mol"), Q[ut.UnknownDimensionality, float])
-    assert_type(Q([18.0, 44.0], "g") / Q(1.0, "mol"), Q[ut.UnknownDimensionality, np.ndarray])
+    assert_type(Q([18.0, 44.0], "g") / Q(1.0, "mol"), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
     assert_type(Q(pl.lit(18.0), "g") / Q(1.0, "mol"), Q[ut.UnknownDimensionality, pl.Expr])
 
     # SubstancePerMass = Substance / Mass (reciprocal of MolarMass)
     assert_type(Q(1.0, "mol") / Q(18.0, "g"), Q[ut.UnknownDimensionality, float])
-    assert_type(Q([1.0, 2.0], "kmol") / Q(18.0, "kg"), Q[ut.UnknownDimensionality, np.ndarray])
+    assert_type(Q([1.0, 2.0], "kmol") / Q(18.0, "kg"), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
 
 
 def test_various() -> None:
@@ -299,7 +299,7 @@ def test_various() -> None:
 
     assert_type(Q(1, str("m")), Q)  # pyright: ignore[reportAssertTypeFailure] # noqa: UP018
 
-    assert_type(Q([1, 2, 3], "kg"), Q[ut.Mass, np.ndarray])
+    assert_type(Q([1, 2, 3], "kg"), Q[ut.Mass, ut.Numpy1DArray])
 
     assert_type(Q(pl.col.asd, "kg"), Q[ut.Mass, pl.Expr])
     assert_type(Q(pl.DataFrame({"test": []})["test"], "kg"), Q[ut.Mass, pl.Series])
@@ -358,16 +358,16 @@ def test_inference_mul_truediv() -> None:
     assert_type(result3, Q[ut.Dimensionless, ut.Numpy1DArray])
 
     result4 = Q([1]) * Q(1)
-    assert_type(result4, Q[ut.Dimensionless, np.ndarray])
+    assert_type(result4, Q[ut.Dimensionless, ut.Numpy1DArray])
 
     result5 = Q([1]) * Q([1])
-    assert_type(result5, Q[ut.Dimensionless, np.ndarray])
+    assert_type(result5, Q[ut.Dimensionless, ut.Numpy1DArray])
 
     result6 = Q([1]) / Q([1])
-    assert_type(result6, Q[ut.Dimensionless, np.ndarray])
+    assert_type(result6, Q[ut.Dimensionless, ut.Numpy1DArray])
 
     result7 = Q([1]) // Q([1])
-    assert_type(result7, Q[ut.Dimensionless, np.ndarray])
+    assert_type(result7, Q[ut.Dimensionless, ut.Numpy1DArray])
 
 
 def test_mul_dimensionless_float_float() -> None:
@@ -390,13 +390,13 @@ def test_mul_dimensionless_float_expr() -> None:
 
 
 def test_mul_dimensionless_array_float() -> None:
-    assert_type(Q([1.0]) * Q(2.0), Q[ut.Dimensionless, np.ndarray])
-    assert_type(Q(np.array([1.0])) * Q(2.0), Q[ut.Dimensionless, np.ndarray])
+    assert_type(Q([1.0]) * Q(2.0), Q[ut.Dimensionless, ut.Numpy1DArray])
+    assert_type(Q(np.array([1.0])) * Q(2.0), Q[ut.Dimensionless, ut.Numpy1DArray])
 
 
 def test_mul_dimensionless_array_array() -> None:
-    assert_type(Q([1.0]) * Q([2.0]), Q[ut.Dimensionless, np.ndarray])
-    assert_type(Q(np.array([1.0])) * Q(np.array([2.0])), Q[ut.Dimensionless, np.ndarray])
+    assert_type(Q([1.0]) * Q([2.0]), Q[ut.Dimensionless, ut.Numpy1DArray])
+    assert_type(Q(np.array([1.0])) * Q(np.array([2.0])), Q[ut.Dimensionless, ut.Numpy1DArray])
 
 
 def test_mul_dimensionless_series_float() -> None:
@@ -422,9 +422,9 @@ def test_mul_dimensionless_propagates_dimensionality_float() -> None:
 
 
 def test_mul_dimensionless_propagates_dimensionality_array() -> None:
-    assert_type(Q([2.0]) * Q(1.0, "kg"), Q[ut.Mass, np.ndarray])
-    assert_type(Q([2.0]) * Q(1.0, "m"), Q[ut.Length, np.ndarray])
-    assert_type(Q([2.0]) * Q(1.0, "s"), Q[ut.Time, np.ndarray])
+    assert_type(Q([2.0]) * Q(1.0, "kg"), Q[ut.Mass, ut.Numpy1DArray])
+    assert_type(Q([2.0]) * Q(1.0, "m"), Q[ut.Length, ut.Numpy1DArray])
+    assert_type(Q([2.0]) * Q(1.0, "s"), Q[ut.Time, ut.Numpy1DArray])
 
 
 def test_mul_dimensionless_propagates_dimensionality_series() -> None:
@@ -446,8 +446,8 @@ def test_mul_dimensional_by_dimensionless_float() -> None:
 
 
 def test_mul_dimensional_by_dimensionless_array() -> None:
-    assert_type(Q([1.0], "kg") * Q(2.0), Q[ut.Mass, np.ndarray])
-    assert_type(Q([1.0], "m") * Q(2.0), Q[ut.Length, np.ndarray])
+    assert_type(Q([1.0], "kg") * Q(2.0), Q[ut.Mass, ut.Numpy1DArray])
+    assert_type(Q([1.0], "m") * Q(2.0), Q[ut.Length, ut.Numpy1DArray])
 
 
 def test_mul_dimensional_by_dimensionless_series() -> None:
@@ -465,8 +465,8 @@ def test_mul_dimensional_by_dimensional_float() -> None:
 
 
 def test_mul_dimensional_by_dimensional_array() -> None:
-    assert_type(Q([1.0], "kg") * Q(2.0, "m"), Q[ut.UnknownDimensionality, np.ndarray])
-    assert_type(Q([1.0], "m") * Q(2.0, "m"), Q[ut.Area, np.ndarray])
+    assert_type(Q([1.0], "kg") * Q(2.0, "m"), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
+    assert_type(Q([1.0], "m") * Q(2.0, "m"), Q[ut.Area, ut.Numpy1DArray])
 
 
 def test_mul_dimensional_by_dimensional_series() -> None:
@@ -485,9 +485,9 @@ def test_rmul_float_by_quantity() -> None:
 
 
 def test_rmul_float_by_array_quantity() -> None:
-    assert_type(2 * Q([1.0], "kg"), Q[ut.Mass, np.ndarray])
-    assert_type(2.0 * Q([1.0], "kg"), Q[ut.Mass, np.ndarray])
-    assert_type(2 * Q([1.0]), Q[ut.Dimensionless, np.ndarray])
+    assert_type(2 * Q([1.0], "kg"), Q[ut.Mass, ut.Numpy1DArray])
+    assert_type(2.0 * Q([1.0], "kg"), Q[ut.Mass, ut.Numpy1DArray])
+    assert_type(2 * Q([1.0]), Q[ut.Dimensionless, ut.Numpy1DArray])
 
 
 def test_rmul_float_by_series_quantity() -> None:
@@ -519,11 +519,11 @@ def test_truediv_dimensionless_float_expr() -> None:
 
 
 def test_truediv_dimensionless_array_float() -> None:
-    assert_type(Q([4.0]) / Q(2.0), Q[ut.Dimensionless, np.ndarray])
+    assert_type(Q([4.0]) / Q(2.0), Q[ut.Dimensionless, ut.Numpy1DArray])
 
 
 def test_truediv_dimensionless_array_array() -> None:
-    assert_type(Q([4.0]) / Q([2.0]), Q[ut.Dimensionless, np.ndarray])
+    assert_type(Q([4.0]) / Q([2.0]), Q[ut.Dimensionless, ut.Numpy1DArray])
 
 
 def test_truediv_dimensionless_series_float() -> None:
@@ -542,8 +542,8 @@ def test_truediv_dimensional_by_dimensionless_float() -> None:
 
 
 def test_truediv_dimensional_by_dimensionless_array() -> None:
-    assert_type(Q([4.0], "kg") / Q(2.0), Q[ut.Mass, np.ndarray])
-    assert_type(Q([4.0], "m") / Q(2.0), Q[ut.Length, np.ndarray])
+    assert_type(Q([4.0], "kg") / Q(2.0), Q[ut.Mass, ut.Numpy1DArray])
+    assert_type(Q([4.0], "m") / Q(2.0), Q[ut.Length, ut.Numpy1DArray])
 
 
 def test_truediv_dimensional_by_dimensionless_series() -> None:
@@ -560,8 +560,8 @@ def test_truediv_same_dimensional_float() -> None:
 
 
 def test_truediv_same_dimensional_array() -> None:
-    assert_type(Q([4.0], "kg") / Q(2.0, "kg"), Q[ut.Dimensionless, np.ndarray])
-    assert_type(Q([4.0], "m") / Q(2.0, "m"), Q[ut.Dimensionless, np.ndarray])
+    assert_type(Q([4.0], "kg") / Q(2.0, "kg"), Q[ut.Dimensionless, ut.Numpy1DArray])
+    assert_type(Q([4.0], "m") / Q(2.0, "m"), Q[ut.Dimensionless, ut.Numpy1DArray])
 
 
 def test_truediv_same_dimensional_series() -> None:
@@ -578,8 +578,8 @@ def test_truediv_different_dimensional_float() -> None:
 
 
 def test_truediv_different_dimensional_array() -> None:
-    assert_type(Q([4.0], "kg") / Q(2.0, "s"), Q[ut.MassFlow, np.ndarray])
-    assert_type(Q([4.0], "m") / Q(2.0, "s"), Q[ut.Velocity, np.ndarray])
+    assert_type(Q([4.0], "kg") / Q(2.0, "s"), Q[ut.MassFlow, ut.Numpy1DArray])
+    assert_type(Q([4.0], "m") / Q(2.0, "s"), Q[ut.Velocity, ut.Numpy1DArray])
 
 
 def test_truediv_different_dimensional_series() -> None:
@@ -596,7 +596,7 @@ def test_truediv_dimensionless_by_dimensional_float() -> None:
 
 
 def test_truediv_dimensionless_by_dimensional_array() -> None:
-    assert_type(Q([4.0]) / Q(2.0, "s"), Q[ut.UnknownDimensionality, np.ndarray])
+    assert_type(Q([4.0]) / Q(2.0, "s"), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
 
 
 def test_truediv_dimensionless_by_dimensional_series() -> None:
@@ -614,8 +614,8 @@ def test_rtruediv_float_by_quantity() -> None:
 
 
 def test_rtruediv_float_by_array_quantity() -> None:
-    assert_type(2 / Q([1.0], "s"), Q[ut.UnknownDimensionality, np.ndarray])
-    assert_type(2.0 / Q([1.0], "s"), Q[ut.UnknownDimensionality, np.ndarray])
+    assert_type(2 / Q([1.0], "s"), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
+    assert_type(2.0 / Q([1.0], "s"), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
 
 
 def test_rtruediv_float_by_series_quantity() -> None:
@@ -638,8 +638,8 @@ def test_floordiv_same_dimensional() -> None:
 
 
 def test_floordiv_array() -> None:
-    assert_type(Q([10.0], "m") // Q(3.0), Q[ut.Length, np.ndarray])
-    assert_type(Q([10.0], "m") // Q(3.0, "m"), Q[ut.Dimensionless, np.ndarray])
+    assert_type(Q([10.0], "m") // Q(3.0), Q[ut.Length, ut.Numpy1DArray])
+    assert_type(Q([10.0], "m") // Q(3.0, "m"), Q[ut.Dimensionless, ut.Numpy1DArray])
 
 
 def test_add_same_dimensional_float() -> None:
@@ -648,8 +648,8 @@ def test_add_same_dimensional_float() -> None:
 
 
 def test_add_same_dimensional_array() -> None:
-    assert_type(Q([1.0], "kg") + Q(2.0, "kg"), Q[ut.Mass, np.ndarray])
-    assert_type(Q([1.0], "m") + Q(2.0, "m"), Q[ut.Length, np.ndarray])
+    assert_type(Q([1.0], "kg") + Q(2.0, "kg"), Q[ut.Mass, ut.Numpy1DArray])
+    assert_type(Q([1.0], "m") + Q(2.0, "m"), Q[ut.Length, ut.Numpy1DArray])
 
 
 def test_add_same_dimensional_series() -> None:
@@ -667,8 +667,8 @@ def test_add_dimensionless_float() -> None:
 
 
 def test_add_dimensionless_array() -> None:
-    assert_type(Q([1.0]) + Q(2.0), Q[ut.Dimensionless, np.ndarray])
-    assert_type(Q([1.0]) + Q([2.0]), Q[ut.Dimensionless, np.ndarray])
+    assert_type(Q([1.0]) + Q(2.0), Q[ut.Dimensionless, ut.Numpy1DArray])
+    assert_type(Q([1.0]) + Q([2.0]), Q[ut.Dimensionless, ut.Numpy1DArray])
 
 
 def test_sub_same_dimensional_float() -> None:
@@ -677,7 +677,7 @@ def test_sub_same_dimensional_float() -> None:
 
 
 def test_sub_same_dimensional_array() -> None:
-    assert_type(Q([3.0], "kg") - Q(1.0, "kg"), Q[ut.Mass, np.ndarray])
+    assert_type(Q([3.0], "kg") - Q(1.0, "kg"), Q[ut.Mass, ut.Numpy1DArray])
 
 
 def test_sub_same_dimensional_series() -> None:
@@ -714,19 +714,19 @@ def test_pow_general() -> None:
 
 
 def test_mul_float_scalar_by_array_dimensional() -> None:
-    assert_type(Q(2.0, "kg") * Q([1.0, 2.0], "m"), Q[ut.UnknownDimensionality, np.ndarray])
+    assert_type(Q(2.0, "kg") * Q([1.0, 2.0], "m"), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
 
 
 def test_truediv_float_scalar_by_array_dimensional() -> None:
-    assert_type(Q(4.0, "m") / Q([2.0, 4.0], "s"), Q[ut.Velocity, np.ndarray])
+    assert_type(Q(4.0, "m") / Q([2.0, 4.0], "s"), Q[ut.Velocity, ut.Numpy1DArray])
 
 
 def test_mul_array_dimensional_by_array_dimensional() -> None:
-    assert_type(Q([1.0, 2.0], "kg") * Q([3.0, 4.0], "m"), Q[ut.UnknownDimensionality, np.ndarray])
+    assert_type(Q([1.0, 2.0], "kg") * Q([3.0, 4.0], "m"), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
 
 
 def test_truediv_array_dimensional_by_array_dimensional() -> None:
-    assert_type(Q([4.0, 8.0], "m") / Q([2.0, 4.0], "s"), Q[ut.Velocity, np.ndarray])
+    assert_type(Q([4.0, 8.0], "m") / Q([2.0, 4.0], "s"), Q[ut.Velocity, ut.Numpy1DArray])
 
 
 def test_truediv_mass_time_to_massflow_float() -> None:
@@ -736,8 +736,8 @@ def test_truediv_mass_time_to_massflow_float() -> None:
 
 
 def test_truediv_mass_time_to_massflow_array() -> None:
-    assert_type(Q([10.0], "kg") / Q(2.0, "s"), Q[ut.MassFlow, np.ndarray])
-    assert_type(Q(np.array([10.0, 20.0]), "kg") / Q(2.0, "s"), Q[ut.MassFlow, np.ndarray])
+    assert_type(Q([10.0], "kg") / Q(2.0, "s"), Q[ut.MassFlow, ut.Numpy1DArray])
+    assert_type(Q(np.array([10.0, 20.0]), "kg") / Q(2.0, "s"), Q[ut.MassFlow, ut.Numpy1DArray])
 
 
 def test_truediv_mass_time_to_massflow_series() -> None:
@@ -755,7 +755,7 @@ def test_truediv_volume_time_to_volumeflow_float() -> None:
 
 
 def test_truediv_volume_time_to_volumeflow_array() -> None:
-    assert_type(Q([10.0], "m^3") / Q(2.0, "s"), Q[ut.VolumeFlow, np.ndarray])
+    assert_type(Q([10.0], "m^3") / Q(2.0, "s"), Q[ut.VolumeFlow, ut.Numpy1DArray])
 
 
 def test_truediv_volume_time_to_volumeflow_series() -> None:
@@ -772,7 +772,7 @@ def test_truediv_energy_time_to_power_float() -> None:
 
 
 def test_truediv_energy_time_to_power_array() -> None:
-    assert_type(Q([1000.0], "J") / Q(2.0, "s"), Q[ut.Power, np.ndarray])
+    assert_type(Q([1000.0], "J") / Q(2.0, "s"), Q[ut.Power, ut.Numpy1DArray])
 
 
 def test_truediv_energy_time_to_power_series() -> None:
@@ -789,7 +789,7 @@ def test_truediv_length_time_to_velocity_float() -> None:
 
 
 def test_truediv_length_time_to_velocity_array() -> None:
-    assert_type(Q([100.0], "m") / Q(10.0, "s"), Q[ut.Velocity, np.ndarray])
+    assert_type(Q([100.0], "m") / Q(10.0, "s"), Q[ut.Velocity, ut.Numpy1DArray])
 
 
 def test_truediv_length_time_to_velocity_series() -> None:
@@ -806,7 +806,7 @@ def test_truediv_energy_mass_to_energypermass_float() -> None:
 
 
 def test_truediv_energy_mass_to_energypermass_array() -> None:
-    assert_type(Q([1000.0], "J") / Q(1.0, "kg"), Q[ut.EnergyPerMass, np.ndarray])
+    assert_type(Q([1000.0], "J") / Q(1.0, "kg"), Q[ut.EnergyPerMass, ut.Numpy1DArray])
 
 
 def test_truediv_energy_mass_to_energypermass_series() -> None:
@@ -823,7 +823,7 @@ def test_truediv_mass_volume_to_density_float() -> None:
 
 
 def test_truediv_mass_volume_to_density_array() -> None:
-    assert_type(Q([1000.0], "kg") / Q(1.0, "m^3"), Q[ut.Density, np.ndarray])
+    assert_type(Q([1000.0], "kg") / Q(1.0, "m^3"), Q[ut.Density, ut.Numpy1DArray])
 
 
 def test_truediv_mass_volume_to_density_series() -> None:
@@ -840,7 +840,7 @@ def test_mul_massflow_time_to_mass_float() -> None:
 
 
 def test_mul_massflow_time_to_mass_array() -> None:
-    assert_type(Q([5.0], "kg/s") * Q(10.0, "s"), Q[ut.Mass, np.ndarray])
+    assert_type(Q([5.0], "kg/s") * Q(10.0, "s"), Q[ut.Mass, ut.Numpy1DArray])
 
 
 def test_mul_massflow_time_to_mass_series() -> None:
@@ -856,7 +856,7 @@ def test_mul_time_massflow_to_mass_float() -> None:
 
 
 def test_mul_time_massflow_to_mass_array() -> None:
-    assert_type(Q([10.0], "s") * Q(5.0, "kg/s"), Q[ut.Mass, np.ndarray])
+    assert_type(Q([10.0], "s") * Q(5.0, "kg/s"), Q[ut.Mass, ut.Numpy1DArray])
 
 
 def test_mul_time_massflow_to_mass_series() -> None:
@@ -872,7 +872,7 @@ def test_mul_volumeflow_time_to_volume_float() -> None:
 
 
 def test_mul_volumeflow_time_to_volume_array() -> None:
-    assert_type(Q([2.0], "m^3/s") * Q(30.0, "s"), Q[ut.Volume, np.ndarray])
+    assert_type(Q([2.0], "m^3/s") * Q(30.0, "s"), Q[ut.Volume, ut.Numpy1DArray])
 
 
 def test_mul_volumeflow_time_to_volume_series() -> None:
@@ -888,7 +888,7 @@ def test_mul_time_volumeflow_to_volume_float() -> None:
 
 
 def test_mul_time_volumeflow_to_volume_array() -> None:
-    assert_type(Q([30.0], "s") * Q(2.0, "m^3/s"), Q[ut.Volume, np.ndarray])
+    assert_type(Q([30.0], "s") * Q(2.0, "m^3/s"), Q[ut.Volume, ut.Numpy1DArray])
 
 
 def test_mul_power_time_to_energy_float() -> None:
@@ -897,7 +897,7 @@ def test_mul_power_time_to_energy_float() -> None:
 
 
 def test_mul_power_time_to_energy_array() -> None:
-    assert_type(Q([1000.0], "W") * Q(3600.0, "s"), Q[ut.Energy, np.ndarray])
+    assert_type(Q([1000.0], "W") * Q(3600.0, "s"), Q[ut.Energy, ut.Numpy1DArray])
 
 
 def test_mul_power_time_to_energy_series() -> None:
@@ -913,7 +913,7 @@ def test_mul_time_power_to_energy_float() -> None:
 
 
 def test_mul_time_power_to_energy_array() -> None:
-    assert_type(Q([3600.0], "s") * Q(1000.0, "W"), Q[ut.Energy, np.ndarray])
+    assert_type(Q([3600.0], "s") * Q(1000.0, "W"), Q[ut.Energy, ut.Numpy1DArray])
 
 
 def test_mul_velocity_time_to_length_float() -> None:
@@ -921,7 +921,7 @@ def test_mul_velocity_time_to_length_float() -> None:
 
 
 def test_mul_velocity_time_to_length_array() -> None:
-    assert_type(Q([10.0], "m/s") * Q(5.0, "s"), Q[ut.Length, np.ndarray])
+    assert_type(Q([10.0], "m/s") * Q(5.0, "s"), Q[ut.Length, ut.Numpy1DArray])
 
 
 def test_mul_velocity_time_to_length_series() -> None:
@@ -937,7 +937,7 @@ def test_mul_time_velocity_to_length_float() -> None:
 
 
 def test_mul_time_velocity_to_length_array() -> None:
-    assert_type(Q([5.0], "s") * Q(10.0, "m/s"), Q[ut.Length, np.ndarray])
+    assert_type(Q([5.0], "s") * Q(10.0, "m/s"), Q[ut.Length, ut.Numpy1DArray])
 
 
 def test_mul_density_volume_to_mass_float() -> None:
@@ -945,7 +945,7 @@ def test_mul_density_volume_to_mass_float() -> None:
 
 
 def test_mul_density_volume_to_mass_array() -> None:
-    assert_type(Q([1000.0], "kg/m^3") * Q(1.0, "m^3"), Q[ut.Mass, np.ndarray])
+    assert_type(Q([1000.0], "kg/m^3") * Q(1.0, "m^3"), Q[ut.Mass, ut.Numpy1DArray])
 
 
 def test_mul_density_volume_to_mass_series() -> None:
@@ -961,7 +961,7 @@ def test_mul_volume_density_to_mass_float() -> None:
 
 
 def test_mul_volume_density_to_mass_array() -> None:
-    assert_type(Q([1.0], "m^3") * Q(1000.0, "kg/m^3"), Q[ut.Mass, np.ndarray])
+    assert_type(Q([1.0], "m^3") * Q(1000.0, "kg/m^3"), Q[ut.Mass, ut.Numpy1DArray])
 
 
 def test_mul_length_length_to_area_float() -> None:
@@ -970,7 +970,7 @@ def test_mul_length_length_to_area_float() -> None:
 
 
 def test_mul_length_length_to_area_array() -> None:
-    assert_type(Q([5.0], "m") * Q(3.0, "m"), Q[ut.Area, np.ndarray])
+    assert_type(Q([5.0], "m") * Q(3.0, "m"), Q[ut.Area, ut.Numpy1DArray])
 
 
 def test_mul_length_length_to_area_series() -> None:
@@ -986,7 +986,7 @@ def test_mul_length_area_to_volume_float() -> None:
 
 
 def test_mul_length_area_to_volume_array() -> None:
-    assert_type(Q([2.0], "m") * Q(10.0, "m^2"), Q[ut.Volume, np.ndarray])
+    assert_type(Q([2.0], "m") * Q(10.0, "m^2"), Q[ut.Volume, ut.Numpy1DArray])
 
 
 def test_mul_length_area_to_volume_series() -> None:
@@ -1002,7 +1002,7 @@ def test_mul_area_length_to_volume_float() -> None:
 
 
 def test_mul_area_length_to_volume_array() -> None:
-    assert_type(Q([10.0], "m^2") * Q(2.0, "m"), Q[ut.Volume, np.ndarray])
+    assert_type(Q([10.0], "m^2") * Q(2.0, "m"), Q[ut.Volume, ut.Numpy1DArray])
 
 
 def test_mul_area_length_to_volume_series() -> None:
@@ -1036,4 +1036,4 @@ def test_pow_inference() -> None:
 def test_unknown() -> None:
     assert_type(Q(25, "kg").unknown(), Q[ut.UnknownDimensionality, float])
     assert_type(Q([1, 23], "kg").unknown(), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
-    assert_type(Q([1, 23], "kg").unknown(), Q[ut.UnknownDimensionality, np.ndarray])
+    assert_type(Q([1, 23], "kg").unknown(), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
