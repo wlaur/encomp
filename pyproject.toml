@@ -176,5 +176,21 @@ reportUnusedImport = false
 microsoft-python-type-stubs = { git = "https://github.com/microsoft/python-type-stubs.git" }
 
 [tool.pyrefly]
+# pyrefly has no strict preset; its default is the full analysis
 project-includes = ["encomp"]
 infer-with-first-use = false
+
+[tool.ty.src]
+include = ["encomp"]
+
+[tool.ty.environment]
+python-version = "3.13"
+
+[tool.ty.rules]
+# ty's default rule set is already effectively strict; these are the rules
+# that are not error-by-default, elevated here so `ty check` runs fully strict.
+# NOTE: for forward-compatibility (rules added in future ty versions), CI
+# should additionally pass `--error all`.
+redundant-cast = "error"
+possibly-missing-attribute = "error"
+unsupported-dynamic-base = "error"
