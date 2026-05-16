@@ -28,7 +28,7 @@ def isinstance_types[T](obj: Any, expected: TypeForm[T]) -> TypeIs[T]:  # noqa: 
         if expected is Quantity:
             return True
 
-        obj_q = cast("Quantity[Any, Any]", obj)
+        obj_q = cast("Quantity[Any, Any]", obj)  # pyrefly: ignore[redundant-cast]  # cast required by pyright
 
         expected_dt: type | None = getattr(expected, "_dimensionality_type", None)
         expected_mt: type | None = getattr(expected, "_magnitude_type", None)

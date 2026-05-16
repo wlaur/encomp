@@ -601,8 +601,10 @@ class Quantity(
         if isinstance(val, int):
             return float(val)
         elif isinstance(val, float):
-            # also convert np.float64 to Python float
-            return float(val)
+            # numpy float64 is a runtime subclass of float, so the type system
+            # cannot distinguish it; this normalization to a plain Python float
+            # is genuinely needed but unavoidably looks redundant to the checker
+            return float(val)  # pyrefly: ignore[unnecessary-type-conversion]
         elif isinstance(val, np.ndarray):
             if len(val.shape) != 1:
                 raise ValueError(f"Only 1-dimensional Numpy arrays can be used as magnitude, got shape {val.shape}")
@@ -1003,7 +1005,7 @@ class Quantity(
             return False
 
         return all(
-            abs(float(src_dim.get(key, 0)) - float(dst_dim.get(key, 0))) < 1e-10
+            abs(src_dim.get(key, 0.0) - dst_dim.get(key, 0.0)) < 1e-10
             for key in set(src_dim.keys()) | set(dst_dim.keys())
         )
 
@@ -1115,7 +1117,7 @@ class Quantity(
 
     @staticmethod
     def correct_unit(unit: str) -> str:
-        unit = str(unit).strip()
+        unit = unit.strip()
 
         if unit == "-":
             return "dimensionless"
@@ -1271,7 +1273,7 @@ class Quantity(
                 val = mag.to_list()
                 magnitude_type = f"pl.Series:{mag.dtype}"
             elif isinstance(mag, list):
-                val = [float(x) for x in cast("list[Any]", mag)]
+                val = [float(x) for x in cast("list[Any]", mag)]  # pyrefly: ignore[redundant-cast]  # cast required by pyright
                 magnitude_type = "list"
             else:
                 raise ValueError(f"Unknown magnitude type {type(mag)}: {mag}")

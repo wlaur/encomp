@@ -739,7 +739,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             if isinstance(x, np.ndarray):
                 return x
 
-            return np.repeat(float(x), n).astype(float).reshape(shape)
+            return np.repeat(x, n).astype(float).reshape(shape)
 
         points_arr = tuple((p, expand_scalars(cast(Any, v))) for p, v in points)
 

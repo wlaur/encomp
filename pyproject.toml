@@ -180,6 +180,15 @@ microsoft-python-type-stubs = { git = "https://github.com/microsoft/python-type-
 project-includes = ["encomp"]
 infer-with-first-use = false
 
+[tool.pyrefly.errors]
+# pyrefly has no global "warnings as errors" switch; these are the rules that
+# are warning-level by default, each elevated to error
+redundant-cast = "error"
+unnecessary-type-conversion = "error"
+unused-ignore = "error"
+reveal-type = "error"
+deprecated = "error"
+
 [tool.ty.src]
 include = ["encomp"]
 

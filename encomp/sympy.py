@@ -743,7 +743,7 @@ class Symbol(sp.Symbol):
             # don't deal with unbalanced braces
             existing_suffix = existing_suffix.removeprefix("{").removesuffix("}")
 
-            existing_suffix += str(s)
+            existing_suffix += s
 
             decorated_parts = [base_symbol_str, delimiter, "{" + existing_suffix + "}"]
 
