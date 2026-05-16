@@ -1,7 +1,7 @@
 import os
 import sys
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -9,7 +9,7 @@ from .units import UNIT_REGISTRY, set_quantity_format
 
 
 @contextmanager
-def working_dir(path: Path | str) -> Iterator[None]:
+def working_dir(path: Path | str) -> Generator[None]:
     """
     Context manager that changes the working directory.
     The working directory is changed back after the context
@@ -32,7 +32,7 @@ def working_dir(path: Path | str) -> Iterator[None]:
 
 
 @contextmanager
-def temp_dir() -> Iterator[None]:
+def temp_dir() -> Generator[None]:
     """
     Context manager that changes the current working directory
     to a temporary directory. The temporary directory is deleted
@@ -53,7 +53,7 @@ def temp_dir() -> Iterator[None]:
 
 
 @contextmanager
-def silence_stdout() -> Iterator[None]:
+def silence_stdout() -> Generator[None]:
     """
     Context manager that redirects ``stdout`` to ``os.devnull``.
     This is used suppress functions that print to ``stdout``.
@@ -70,7 +70,7 @@ def silence_stdout() -> Iterator[None]:
 
 
 @contextmanager
-def quantity_format(fmt: str = "compact") -> Iterator[None]:
+def quantity_format(fmt: str = "compact") -> Generator[None]:
     """
     Context manager version of :py:func:`encomp.units.set_quantity_format`
     that resets to the previous value afterwards.
