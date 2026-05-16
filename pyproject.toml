@@ -1,6 +1,6 @@
 [project]
 name = "encomp"
-version = "1.3.13"
+version = "1.4.0"
 description = "General-purpose library for engineering calculations"
 authors = [{ name = "William Laurén", email = "lauren.william.a@gmail.com" }]
 requires-python = ">=3.13"
@@ -42,9 +42,6 @@ dependencies = [
     "coolprop",
 ]
 
-[project.optional-dependencies]
-extra = ["scipy", "fluids"]
-
 [dependency-groups]
 dev = [
     "pre-commit",
@@ -62,7 +59,6 @@ dev = [
     "sphinx-autodoc-typehints",
     "sphinx-autobuild",
     "pyinstrument",
-    "scipy-stubs>=1.16.3.2",
     "ipykernel>=7.1.0",
     "ty",
     "pyright",

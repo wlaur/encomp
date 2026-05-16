@@ -4,25 +4,18 @@ Functions relating to thermodynamics.
 
 from typing import Any
 
-import numpy as np
-
-from .constants import CONSTANTS
 from .misc import isinstance_types
 from .units import Quantity
 from .utypes import (
     Energy,
-    HeatTransferCoefficient,
-    Length,
     Mass,
     MassFlow,
     Power,
     SpecificHeatCapacity,
     Temperature,
     TemperatureDifference,
-    ThermalConductivity,
 )
 
-SIGMA = CONSTANTS.SIGMA
 DEFAULT_CP = Quantity(4.18, "kJ/kg/K").asdim(SpecificHeatCapacity)
 
 
@@ -121,93 +114,3 @@ def heat_balance(
     ret = ret.to(unit)
 
     return ret  # pyright: ignore[reportReturnType]
-
-
-def intermediate_temperatures(
-    T_b: Quantity[Temperature, Any],
-    T_s: Quantity[Temperature, Any],
-    k: Quantity[ThermalConductivity, Any],
-    d: Quantity[Length, Any],
-    h_in: Quantity[HeatTransferCoefficient, Any],
-    h_out: Quantity[HeatTransferCoefficient, Any],
-    epsilon: float,
-    tol: float = 1e-6,
-) -> tuple[Quantity[Temperature, float], Quantity[Temperature, float]]:
-    """
-    Solves a nonlinear system of equations to find intermediate
-    temperatures of a barrier with the following modes of heat transfer:
-
-    * inner convection
-    * conduction through the barrier
-    * outer convection
-    * outer radiation
-
-    Parameters
-    ----------
-    T_b : Quantity[Temperature]
-        Bulk temperature inside the barrier
-    T_s : Quantity[Temperature]
-        Bulk temperature outside the barrier (surroundings)
-    k : Quantity[ThermalConductivity]
-        The thermal conductivity of the barrier material.
-        Supply the combined value in case there are multiple layers
-    d : Quantity[Length]
-        Total thickness of the barrier
-
-        .. note::
-            In case ``d`` is set to 0, it will be reset to ``tol`` to
-            avoid division by zero.
-
-    h_in : Quantity[HeatTransferCoefficient]
-        The convective heat transfer coefficient at the inner barrier wall
-    h_out : Quantity[HeatTransferCoefficient]
-        The convective heat transfer coefficient at the outer barrier wall
-    epsilon : float
-        The emissivity of the outside surface,
-        used to account for radiative heat transfer
-    tol : float, optional
-        Numerical accuracy for the conduction layer:
-        ``d`` is set to this if 0 is passed, by default 1e-6
-
-    Returns
-    -------
-    tuple[Quantity[Temperature, float], Quantity[Temperature, float]]
-        The intermediate temperatures :math:`T_1` and :math:`T_2`:
-        the surface temperatures of the inside and outside of the barrier
-    """
-
-    from scipy.optimize import fsolve
-
-    # convert input to numerical values with correct unit
-    T_s_val = T_s.to("K").m
-    T_b_val = T_b.to("K").m
-    k_val = k.to("W/m/K").m
-    d_val: float | np.ndarray = d.to("m").m
-    h_in_val = h_in.to("W/m²/K").m
-    h_out_val = h_out.to("W/m²/K").m
-
-    if abs(d_val - 0) < tol:
-        d_val = tol
-
-    # system of coupled equations: heat transfer rate through all layers is identical
-    # inner convection == conduction == (outer convection + radiation)
-
-    def fun(x: tuple[np.ndarray, np.ndarray]) -> list[np.ndarray]:
-        T1, T2 = x
-
-        eq1 = k_val / d_val * (T1 - T2) - h_out_val * (T2 - T_s_val) - epsilon * SIGMA.m * (T2**4 - T_s_val**4)
-
-        eq2 = k_val / d_val * (T1 - T2) - h_in_val * (T_b_val - T1)
-
-        return [eq1, eq2]
-
-    # use the boundary temperatures as initial guesses
-    _ret = fsolve(fun, [T_b_val, T_s_val])  # pyright: ignore[reportArgumentType]
-
-    T1_val: float = _ret[0]
-    T2_val: float = _ret[1]
-
-    T1 = Quantity(T1_val, "K").to("degC")
-    T2 = Quantity(T2_val, "K").to("degC")
-
-    return T1, T2
