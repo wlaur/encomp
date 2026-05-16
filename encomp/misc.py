@@ -4,6 +4,7 @@ from typing import Any, Protocol, TypeIs, cast, get_args, get_origin
 
 import asttokens
 from typeguard import check_type
+from typing_extensions import TypeForm
 
 
 def _is_quantity_subclass(expected: object) -> bool:
@@ -12,13 +13,14 @@ def _is_quantity_subclass(expected: object) -> bool:
     return isinstance(expected, type) and issubclass(expected, Quantity)
 
 
-def isinstance_types[T](obj: Any, expected: type[T]) -> TypeIs[T]:  # noqa: ANN401
+def isinstance_types[T](obj: Any, expected: TypeForm[T]) -> TypeIs[T]:  # noqa: ANN401
     from .units import Quantity
     from .utypes import UnknownDimensionality
 
     if get_origin(expected) is UnionType:
+        # narrowed to a UnionType by the check above, which isinstance accepts
         try:
-            return isinstance(obj, expected)
+            return isinstance(obj, cast(UnionType, expected))
         except TypeError:
             return any(isinstance_types(obj, n) for n in get_args(expected))
 
