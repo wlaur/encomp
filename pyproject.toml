@@ -67,6 +67,7 @@ dev = [
     "ipykernel>=7.1.0",
     "ty>=0.0.5",
     "pyright>=1.1.407",
+    "pyrefly",
     "hvplot>=0.12.2",
     "pyparsing>=3.3.1",
     "altair>=6.0.0",
