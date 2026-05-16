@@ -1527,7 +1527,7 @@ class Quantity(
     @overload
     def astype(self, magnitude_type: type[MT_] | MagnitudeTypeName) -> Quantity[DT, MT_]: ...
 
-    def astype(self, magnitude_type: type[MT_] | MagnitudeTypeName) -> Quantity[DT, MT_]:
+    def astype(self, magnitude_type: type[MT_] | MagnitudeTypeName) -> Quantity[Any, Any]:
         if isinstance(magnitude_type, str):
             magnitude_type = self._get_magnitude_type_from_name(magnitude_type)
 
@@ -2366,7 +2366,7 @@ class Quantity(
     def __getitem__(self: Quantity[DT, pl.Series], index: int) -> Quantity[DT, float]: ...
     @overload
     def __getitem__(self: Quantity[DT, Numpy1DArray], index: int) -> Quantity[DT, float]: ...
-    def __getitem__(self, index: int) -> Quantity[DT, float]:
+    def __getitem__(self, index: int) -> Quantity[Any, Any]:
         ret = cast("Quantity[DT, float]", self._pint_super.__getitem__(index))
 
         subcls = self._get_dimensional_subclass(self.dt, type(ret.m))
