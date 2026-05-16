@@ -152,15 +152,15 @@ def simplify_exponents(e: sp.Basic) -> sp.Basic:
     def rewrite(expr: sp.Basic, new_args: tuple[sp.Basic, ...]) -> sp.Basic:
         new_args_list = list(new_args)
         pow_val = new_args_list[1]
-        pow_val_int = int(new_args_list[1])
+        pow_val_int = int(cast(Any, new_args_list[1]))
 
-        if pow_val.epsilon_eq(pow_val_int):
+        if cast(Any, pow_val).epsilon_eq(pow_val_int):
             new_args_list[1] = sp.Integer(pow_val_int)
 
         return type(expr)(*new_args_list)
 
     def is_float_pow(expr: sp.Basic) -> bool:
-        return expr.is_Pow and expr.args[1].is_Float
+        return bool(cast(Any, expr).is_Pow and cast(Any, expr).args[1].is_Float)
 
     if not e.args:
         return e
@@ -369,7 +369,7 @@ def get_lambda_matrix(M: sp.MutableDenseMatrix) -> tuple[str, list[str]]:
 
     for i in range(nrows):
         for j in range(ncols):
-            fcn_str, n_args = get_lambda(M[i, j], to_str=True)
+            fcn_str, n_args = get_lambda(cast("sp.Basic", M[i, j]), to_str=True)
             args |= set(n_args)
 
             # remove the "lambda x, y, x:" part and extra parens,

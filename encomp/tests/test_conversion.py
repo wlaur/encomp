@@ -29,7 +29,7 @@ def test_convert_volume_mass() -> None:
     mf_list = Q([25.5, 25.34], "kg/s")
     assert isinstance_types(convert_volume_mass(mf_list), Q[VolumeFlow])
 
-    assert_type(convert_volume_mass(mf_list), Q[VolumeFlow, np.ndarray])
+    assert_type(convert_volume_mass(mf_list), Q[VolumeFlow, np.ndarray])  # pyrefly: ignore[assert-type]
 
     m = Q(25, "ton")
 

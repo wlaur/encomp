@@ -26,7 +26,7 @@ def _assert_type(val: object, typ: type) -> None:
 assert_type.__code__ = _assert_type.__code__
 
 
-def _approx_equal(q1: Q[DT, float], q2: Q[DT, float]) -> bool:
+def _approx_equal(q1: Q[DT, Any], q2: Q[DT, Any]) -> bool:
     if not q1.is_compatible_with(q2):
         return False
 
@@ -416,10 +416,10 @@ def test_magnitude_type() -> None:
 
 def test_polars_fluids() -> None:
     w_series = Water(P=Q(pl.Series([1, 2, 3]), "bar"), T=Q(pl.Series([150, 250, 350]), "degC"))
-    assert_type(w_series.D, Q[ut.Density, pl.Series])
+    assert_type(w_series.D, Q[ut.Density, pl.Series])  # pyrefly: ignore[assert-type]
 
     w_series_const_T = Water(P=Q(pl.Series([1, 2, 3]), "bar"), T=Q(150, "degC"))
-    assert_type(w_series_const_T.D, Q[ut.Density, pl.Series])
+    assert_type(w_series_const_T.D, Q[ut.Density, pl.Series])  # pyrefly: ignore[assert-type]
 
     assert pl.select(Water(P=Q(pl.lit(5), "bar"), T=Q(pl.lit(250), "degC")).D.m).item(0, 0) == approx(2.107798)
 

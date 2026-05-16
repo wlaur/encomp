@@ -6,39 +6,35 @@ from .utypes import MT, Density, Mass, MassFlow, Volume, VolumeFlow
 
 
 @overload
-def convert_volume_mass(
-    inp: Quantity[Mass, MT], rho: Quantity[Density, MT] | Quantity[Density, float] | None = None
-) -> Quantity[Volume, MT]: ...
+def convert_volume_mass(inp: Quantity[Mass, MT], rho: Quantity[Density, Any] | None = None) -> Quantity[Volume, MT]: ...
 
 
 @overload
 def convert_volume_mass(
-    inp: Quantity[MassFlow, MT], rho: Quantity[Density, MT] | Quantity[Density, float] | None = None
+    inp: Quantity[MassFlow, MT], rho: Quantity[Density, Any] | None = None
 ) -> Quantity[VolumeFlow, MT]: ...
 
 
 @overload
-def convert_volume_mass(
-    inp: Quantity[Volume, MT], rho: Quantity[Density, MT] | Quantity[Density, float] | None = None
-) -> Quantity[Mass, MT]: ...
+def convert_volume_mass(inp: Quantity[Volume, MT], rho: Quantity[Density, Any] | None = None) -> Quantity[Mass, MT]: ...
 
 
 @overload
 def convert_volume_mass(
-    inp: Quantity[VolumeFlow, MT], rho: Quantity[Density, MT] | Quantity[Density, float] | None = None
+    inp: Quantity[VolumeFlow, MT], rho: Quantity[Density, Any] | None = None
 ) -> Quantity[MassFlow, MT]: ...
 
 
 @overload
 def convert_volume_mass(
     inp: (Quantity[Mass, MT] | Quantity[MassFlow, MT] | Quantity[Volume, MT] | Quantity[VolumeFlow, MT]),
-    rho: Quantity[Density, MT] | Quantity[Density, float] | None = None,
+    rho: Quantity[Density, Any] | None = None,
 ) -> Quantity[Mass, MT] | Quantity[MassFlow, MT] | Quantity[Volume, MT] | Quantity[VolumeFlow, MT]: ...
 
 
 def convert_volume_mass(
     inp: (Quantity[Mass, MT] | Quantity[MassFlow, MT] | Quantity[Volume, MT] | Quantity[VolumeFlow, MT]),
-    rho: Quantity[Density, MT] | Quantity[Density, float] | None = None,
+    rho: Quantity[Density, Any] | None = None,
 ) -> Quantity[Mass, MT] | Quantity[MassFlow, MT] | Quantity[Volume, MT] | Quantity[VolumeFlow, MT]:
     """
     Converts mass to volume or vice versa.

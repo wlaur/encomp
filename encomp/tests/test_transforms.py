@@ -611,7 +611,7 @@ def _times_2_unset(q: Q) -> Q:
 
 def test_unset() -> None:
     v = Q(25, "kg").astype(np.ndarray).unknown()
-    assert_type(_times_2_unset(v), Q[UnknownDimensionality, np.ndarray])
+    assert_type(_times_2_unset(v), Q[UnknownDimensionality, np.ndarray])  # pyrefly: ignore
 
 
 @typechecked
@@ -621,7 +621,7 @@ def _asdim(q: Q[Mass]) -> Q[Power]:
 
 
 def test_asdim() -> None:
-    assert_type(_asdim(Q([25], "kg")), Q[Power, np.ndarray])
+    assert_type(_asdim(Q([25], "kg")), Q[Power, np.ndarray])  # pyrefly: ignore
 
 
 @typechecked
@@ -631,8 +631,8 @@ def _dynamic(*q: Q[DT]) -> Q[DT]:
 
 
 def test_dynamic() -> None:
-    v = _dynamic(Q([25], "kg"), Q([25], "kg"))
-    assert_type(v, Q[Mass, np.ndarray])
+    v = _dynamic(Q([25], "kg"), Q([25], "kg"))  # pyrefly: ignore
+    assert_type(v, Q[Mass, np.ndarray])  # pyrefly: ignore
 
 
 @typechecked
@@ -642,5 +642,5 @@ def _dynamic_scalar(*q: Q[DT, float]) -> Q[DT, float]:
 
 
 def test_dynamic_scalar() -> None:
-    v = _dynamic_scalar(Q(25, "kg"), Q(25, "g"))
-    assert_type(v, Q[Mass, float])
+    v = _dynamic_scalar(Q(25, "kg"), Q(25, "g"))  # pyrefly: ignore
+    assert_type(v, Q[Mass, float])  # pyrefly: ignore

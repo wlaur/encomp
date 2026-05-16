@@ -594,7 +594,7 @@ class Quantity(
             # compatibility with internal pint API
             return Unit(Quantity._validate_unit(str(unit)))
         else:
-            return Unit(Quantity._REGISTRY.parse_units(Quantity.correct_unit(unit)))
+            return cast("Unit[DT]", Unit(cast(Any, Quantity._REGISTRY.parse_units(Quantity.correct_unit(unit)))))
 
     @staticmethod
     def _validate_magnitude(val: MT | Sequence[float]) -> MT:
@@ -618,7 +618,7 @@ class Quantity(
 
     @classmethod
     def get_unit(cls, unit_name: AllUnits | str) -> Unit:
-        return Unit(cls._REGISTRY.parse_units(unit_name))
+        return Unit(cast(Any, cls._REGISTRY.parse_units(unit_name)))
 
     def get_subclass(self, dt: type[DT_], mt: type[MT_]) -> type[Quantity[DT_, MT_]]:
         subcls = self._get_dimensional_subclass(dt, mt)
@@ -635,7 +635,7 @@ class Quantity(
         mt = self._get_magnitude_type_safe(cast(type[MT], type(m)))
         subcls = self.get_subclass(dt, mt)
 
-        return subcls(cast(MT, m), u)
+        return cast("Quantity[Any, Any]", subcls(cast(MT, m), u))
 
     def __len__(self) -> int:
         # __len__() must return an integer
@@ -854,10 +854,10 @@ class Quantity(
     @overload
     def __new__(cls, val: MT, unit: str) -> Quantity[UnknownDimensionality, MT]: ...
     @overload
-    def __new__(
+    def __new__(  # fallback overload: matches anything not covered above
         cls,
-        val: MT | Sequence[float] | Quantity[Any, Any],
-        unit: Unit[DT] | Unit | UnitsContainer | str | dict[str, numbers.Number] | None = None,
+        val: Any,  # noqa: ANN401
+        unit: Any = None,  # noqa: ANN401
         _depth: int = 0,
     ) -> Quantity[Any, Any]: ...
     def __new__(
@@ -1031,7 +1031,7 @@ class Quantity(
                 raise e
 
         if self._is_temperature_difference_unit(valid_unit):
-            return Quantity(m, valid_unit)
+            return cast("Quantity[Any, Any]", Quantity(m, valid_unit))
 
         converted = self._call_subclass(m, valid_unit)
 
@@ -1070,7 +1070,7 @@ class Quantity(
 
     # check() intentionally accepts a wider set of dimension arguments than
     # pint's PlainQuantity.check, so the override signature is incompatible
-    def check(  # pyright: ignore[reportIncompatibleMethodOverride]
+    def check(  # pyright: ignore[reportIncompatibleMethodOverride]  # pyrefly: ignore[bad-override]
         self,
         dimension: Quantity[Any, Any] | UnitsContainer | Unit[DT_] | Unit | str | Dimensionality | type[Dimensionality],
     ) -> bool:
@@ -2363,7 +2363,7 @@ class Quantity(
         return (self._call_subclass(n.m, n.u) for n in super().__iter__())
 
     @overload
-    def __getitem__(self: Quantity[DT, pl.Series], index: int) -> Quantity[DT, float]: ...
+    def __getitem__(self: Quantity[DT, pl.Series], index: int) -> Quantity[DT, float]: ...  # pyrefly: ignore[bad-override]
     @overload
     def __getitem__(self: Quantity[DT, Numpy1DArray], index: int) -> Quantity[DT, float]: ...
     def __getitem__(self, index: int) -> Quantity[Any, Any]:

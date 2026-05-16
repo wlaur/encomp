@@ -12,11 +12,12 @@ from collections.abc import Callable
 from threading import Lock
 from typing import Annotated, Any, ClassVar, Generic, Literal, cast
 
-# CoolProp.CoolProp is a compiled extension module and exports both PropsSI and
-# HAPropsSI; importing the module (rather than the untyped pure-Python
-# CoolProp.HumidAirProp) avoids missing-stub diagnostics. The functions
-# themselves are untyped, so they are exposed as typed aliases below.
-import CoolProp.CoolProp as _CoolProp
+# CoolProp.CoolProp is a compiled extension module exporting both PropsSI and
+# HAPropsSI. pyright resolves it (and importing the module rather than the
+# untyped pure-Python CoolProp.HumidAirProp avoids its missing-stub warning),
+# but pyrefly cannot resolve the compiled module at all - hence the ignore.
+# The functions are untyped either way, so they are exposed as typed aliases below.
+import CoolProp.CoolProp as _CoolProp  # pyrefly: ignore[missing-import]
 import numpy as np
 import polars as pl
 
@@ -740,7 +741,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
             return np.repeat(float(x), n).astype(float).reshape(shape)
 
-        points_arr = tuple((p, expand_scalars(v)) for p, v in points)
+        points_arr = tuple((p, expand_scalars(cast(Any, v))) for p, v in points)
 
         return self.evaluate_multiple(output, *points_arr)
 
@@ -784,7 +785,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             if self._convert_pl_series_nan_null:
                 qty.m = qty.m.fill_nan(None)
 
-            qty.m = qty.m.cast(pl.Float32)
+            qty.m = cast(Any, qty.m).cast(pl.Float32)
 
         return cast("Quantity[Any, MT]", qty)
 

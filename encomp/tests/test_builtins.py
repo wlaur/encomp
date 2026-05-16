@@ -17,10 +17,10 @@ assert_type.__code__ = _assert_type.__code__
 
 
 def test_abs() -> None:
-    assert_type(abs(Q(2, "kg")), Q[Mass, float])
-    assert_type(abs(Q([1, 2], "kg")), Q[Mass, Numpy1DArray])
-    assert_type(abs(Q(pl.Series([1, 2]), "kg")), Q[Mass, pl.Series])
-    assert_type(abs(Q(pl.lit(-5), "kg")), Q[Mass, pl.Expr])
+    assert_type(abs(Q(2, "kg")), Q[Mass, float])  # pyrefly: ignore[assert-type]
+    assert_type(abs(Q([1, 2], "kg")), Q[Mass, Numpy1DArray])  # pyrefly: ignore[assert-type]
+    assert_type(abs(Q(pl.Series([1, 2]), "kg")), Q[Mass, pl.Series])  # pyrefly: ignore[assert-type]
+    assert_type(abs(Q(pl.lit(-5), "kg")), Q[Mass, pl.Expr])  # pyrefly: ignore[assert-type]
 
 
 def test_min_max() -> None:

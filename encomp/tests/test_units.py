@@ -195,7 +195,7 @@ def test_asdim() -> None:
             q1.asdim(Temperature)
 
         with pytest.raises(ExpectedDimensionalityError):
-            q1.asdim(Q(25, "kg"))
+            q1.asdim(cast(Any, Q(25, "kg")))
 
 
 def test_custom_dimensionality() -> None:
@@ -243,7 +243,7 @@ def test_function_annotations() -> None:
     def return_input(q: Q[DT, MT]) -> Q[DT, MT]:
         return q
 
-    a = return_input(Q(25, "m"))
+    a = return_input(cast(Any, Q(25, "m")))
 
     assert isinstance_types(a, Q[Length])
 
@@ -252,7 +252,7 @@ def test_function_annotations() -> None:
         return q / Q(1, "h")
 
     # this will be resolved to MassFlow at runtime
-    assert isinstance_types(divide_by_time(Q(25, "kg")), Q[MassFlow])
+    assert isinstance_types(divide_by_time(cast(Any, Q(25, "kg"))), Q[MassFlow])
 
 
 def test_dimensionality_type_hierarchy() -> None:
@@ -329,7 +329,7 @@ def test_dimensionality_type_hierarchy() -> None:
         s_arr = Q([25], "m")
         s_arr_first = s_arr[0]
 
-        assert_type(s_arr, Q[Length, np.ndarray])
+        assert_type(s_arr, Q[Length, np.ndarray])  # pyrefly: ignore[assert-type]
         assert_type(s_arr_first, Q[Length, float])
 
         s_series = Q(pl.Series([25]), "m")
@@ -341,7 +341,7 @@ def test_dimensionality_type_hierarchy() -> None:
         s_arr = Q([25], "m").asdim(EstimatedLength)
         s_arr_first = s_arr[0]
 
-        assert_type(s_arr, Q[EstimatedLength, np.ndarray])
+        assert_type(s_arr, Q[EstimatedLength, np.ndarray])  # pyrefly: ignore[assert-type]
         assert_type(s_arr_first, Q[EstimatedLength, float])
 
         s_series = Q(pl.Series([25]), "m").asdim(EstimatedLength)
@@ -353,19 +353,19 @@ def test_dimensionality_type_hierarchy() -> None:
         # these quantities are not compatible with normal Length/Mass
         # TODO: use a more specific exception here
         with pytest.raises(Exception):  # noqa: B017
-            _ = s + Q(25, "m")
+            _ = cast(Any, s) + Q(25, "m")
 
         with pytest.raises(Exception):  # noqa: B017
             _ = m + Q(25, "kg")
 
         # EstimatedDistance is a direct subclass of EstimatedLength, so this works
         _ = Q[EstimatedDistance, float](2, "m") + s
-        _ = s - Q[EstimatedDistance, float](2, "m")
+        _ = cast(Any, s) - Q[EstimatedDistance, float](2, "m")
 
         assert Q[EstimatedDistance](s.m, s.u) == s
 
         assert isinstance_types(Q[EstimatedDistance, float](2, "m") + s, Q[EstimatedDistance])
-        assert isinstance_types(s - Q[EstimatedDistance, float](2, "m"), Q[EstimatedLength])
+        assert isinstance_types(cast(Any, s) - Q[EstimatedDistance, float](2, "m"), Q[EstimatedLength])
 
 
 def test_type_eq() -> None:
@@ -379,17 +379,17 @@ def test_type_eq() -> None:
     # the isinstance check is statically redundant (q is always a Quantity),
     # but the narrowing it produces lets the else branch exercise assert_never
     if isinstance(q, Q):  # pyright: ignore[reportUnnecessaryIsInstance]
-        assert_type(q, Q[Length, float])
+        assert_type(q, Q[Length, float])  # pyrefly: ignore[assert-type]
     else:
         assert_never(q)
 
     if isinstance_types(q, Q[Length, Any]):
-        assert_type(q, Q[Length, float])
+        assert_type(q, Q[Length, float])  # pyrefly: ignore[assert-type]
     else:
         assert_never(q)
 
     if isinstance_types(q, Q[Length, Numpy1DArray]):
-        assert_never(q)
+        assert_never(q)  # pyrefly: ignore
 
     if isinstance_types(q_arr, Q[Length]):
         assert_type(q_arr, Q[Length])
@@ -397,7 +397,7 @@ def test_type_eq() -> None:
         assert_never(q_arr)
 
     if isinstance_types(q, Q[Length, float]):
-        assert_type(q, Q[Length, float])
+        assert_type(q, Q[Length, float])  # pyrefly: ignore[assert-type]
     else:
         assert_never(q)
 
@@ -480,10 +480,10 @@ def test_Q() -> None:
     # no unit input defaults to dimensionless
     assert Q(12).check("")
     assert Q(1) == Q(100, "%")
-    Q[Dimensionless, float](21)
-    assert isinstance_types(Q(21), Q[Dimensionless])
-    assert isinstance_types(Q(21), Q[Dimensionless, float])
-    assert isinstance_types(Q(21), Q[Dimensionless, Any])
+    Q[Dimensionless, float](21)  # pyrefly: ignore[bad-index]
+    assert isinstance_types(Q(21), Q[Dimensionless])  # pyrefly: ignore[bad-index]
+    assert isinstance_types(Q(21), Q[Dimensionless, float])  # pyrefly: ignore[bad-index]
+    assert isinstance_types(Q(21), Q[Dimensionless, Any])  # pyrefly: ignore[bad-index]
 
     assert Q(1) == Q(1.0)
 
@@ -499,10 +499,10 @@ def test_Q() -> None:
     Q(Q(2, "bar").to("kPa").m, "kPa")
 
     # check that the dimensionality constraints work
-    Q[Length, float](1, "m")
-    Q[Pressure, float](1, "kPa")
-    Q[Temperature, float](1, "°C")
-    Q[Temperature, Any](1, "°C")
+    Q[Length, float](1, "m")  # pyrefly: ignore[bad-index]
+    Q[Pressure, float](1, "kPa")  # pyrefly: ignore[bad-index]
+    Q[Temperature, float](1, "°C")  # pyrefly: ignore[bad-index]
+    Q[Temperature, Any](1, "°C")  # pyrefly: ignore[bad-index]
 
     P = Q(1, "bar")
     # this Quantity must have the same dimensionality as P
@@ -511,13 +511,13 @@ def test_Q() -> None:
     # TODO: not possible to raise on constructing inconsistent Quantity
     # if the complete subclass is pre-defined
 
-    Q[Temperature, float](1, "kg")
+    Q[Temperature, float](1, "kg")  # pyrefly: ignore[bad-index]
 
-    Q[Pressure, float](1, "meter")
+    Q[Pressure, float](1, "meter")  # pyrefly: ignore[bad-index]
 
-    Q[Mass, float](1, str(P.u))
+    Q[Mass, float](1, str(P.u))  # pyrefly: ignore[bad-index]
 
-    Q[Mass, float](P)
+    Q[Mass, float](P)  # pyrefly: ignore[bad-index]
 
     # in-place conversion
     # NOTE: don't use this for objects that are passed in by the user
@@ -550,12 +550,13 @@ def test_Q() -> None:
 
     # floating point math might make this off at the N:th decimal
     assert P2.m == approx(2, rel=1e-12)
-    assert isinstance_types(P2, Q[Pressure])
+    assert isinstance_types(P2, Q[Pressure])  # pyrefly: ignore[bad-index]
 
-    assert_type(Q(Q(2, "feet_water"), Q(2, "kPa").u), Q[Pressure, float])
+    assert_type(Q(Q(2, "feet_water"), Q(2, "kPa").u), Q[Pressure, float])  # pyrefly: ignore[bad-index]
 
     assert_type(
-        Q(Q(2, "feet_water"), Q(321321, "psi").u).to(Q(123123, "feet_water").asdim(Pressure)), Q[Pressure, float]
+        Q(Q(2, "feet_water"), Q(321321, "psi").u).to(Q(123123, "feet_water").asdim(Pressure)),
+        Q[Pressure, float],  # pyrefly: ignore[bad-index]
     )
 
     with pytest.raises(DimensionalityError):
@@ -567,7 +568,7 @@ def test_Q() -> None:
     class Custom(Dimensionality):
         dimensions = Length.dimensions * Length.dimensions * Length.dimensions / Temperature.dimensions
 
-    Q[Custom, float](1, "m³/K")
+    Q[Custom, float](1, "m³/K")  # pyrefly: ignore[bad-index]
 
     with pytest.raises(Exception):  # noqa: B017
         cast(Any, Q)[cast(Any, Pressure) / Area, float](1, "bar/m")
@@ -739,7 +740,7 @@ def test_generic_dimensionality() -> None:
         cast(Any, Q)[1]
 
     with pytest.raises(TypeError):
-        Q["Temperature"]
+        Q["Temperature"]  # pyrefly: ignore[not-a-type]
 
     with pytest.raises(TypeError):
         cast(Any, Q)["string"]
@@ -1105,19 +1106,19 @@ def test_unit_compatibility() -> None:
     # that can be multiplied and divided by a magnitude
     # to create Quantity instances
 
-    assert isinstance_types(UNIT_REGISTRY.m * 1, Q[Length])
-    assert isinstance_types(1 * UNIT_REGISTRY.m / UNIT_REGISTRY.s, Q[Velocity])
-    assert isinstance_types([1, 2, 3] * UNIT_REGISTRY.m / UNIT_REGISTRY.s, Q[Velocity])
-    assert isinstance_types((1, 2, 3) * UNIT_REGISTRY.m / UNIT_REGISTRY.s, Q[Velocity])
+    assert isinstance_types(cast(Any, UNIT_REGISTRY).m * 1, Q[Length])
+    assert isinstance_types(1 * cast(Any, UNIT_REGISTRY).m / cast(Any, UNIT_REGISTRY).s, Q[Velocity])
+    assert isinstance_types([1, 2, 3] * cast(Any, UNIT_REGISTRY).m / cast(Any, UNIT_REGISTRY).s, Q[Velocity])
+    assert isinstance_types((1, 2, 3) * cast(Any, UNIT_REGISTRY).m / cast(Any, UNIT_REGISTRY).s, Q[Velocity])
     # assert isinstance_types(np.array([1, 2, 3]) * UNIT_REGISTRY.m / UNIT_REGISTRY.s, Q[Velocity])
-    assert isinstance_types([1, 2, 3] * UNIT_REGISTRY.m / UNIT_REGISTRY.s, Q[Velocity])
+    assert isinstance_types([1, 2, 3] * cast(Any, UNIT_REGISTRY).m / cast(Any, UNIT_REGISTRY).s, Q[Velocity])
 
 
 def test_mul_rmul_initialization() -> None:
-    assert isinstance_types(UNIT_REGISTRY.m * np.array([1, 2]), Q[Length])
+    assert isinstance_types(cast(Any, UNIT_REGISTRY).m * np.array([1, 2]), Q[Length])
     # this returns array([<Quantity(1.0, 'meter')>, <Quantity(2.0, 'meter')>], dtype=object) instead
-    # assert isinstance_types(np.array([1, 2]) * UNIT_REGISTRY.m, Q[Length])
-    assert isinstance_types([1, 2] * UNIT_REGISTRY.m, Q[Length])
+    # assert isinstance_types(np.array([1, 2]) * cast(Any, UNIT_REGISTRY).m, Q[Length])
+    assert isinstance_types([1, 2] * cast(Any, UNIT_REGISTRY).m, Q[Length])
     assert isinstance_types(cast(Any, [1, 2]) * Q(1, "m"), Q[Length])
     assert isinstance_types(np.array([1, 2]) * Q(1, "m"), Q[Length])
 

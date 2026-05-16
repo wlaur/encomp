@@ -71,13 +71,13 @@ def test_sympy_to_Quantity_integration() -> None:
 def test_Quantity_to_sympy_integration() -> None:
     x = sp.Symbol("x")
 
-    _ = x * Q(25, "kg")
-    _ = x * Q(25, "kg")
+    _ = cast(Any, x) * Q(25, "kg")
+    _ = cast(Any, x) * Q(25, "kg")
 
-    _ = Q(25, "kg") * x
+    _ = Q(25, "kg") * cast(Any, x)
 
-    _ = x + Q(2)
-    _ = x + Q(2, "m")
+    _ = cast(Any, x) + Q(2)
+    _ = cast(Any, x) + Q(2, "m")
 
 
 def test_get_function() -> None:
