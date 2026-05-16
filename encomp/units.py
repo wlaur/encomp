@@ -862,8 +862,8 @@ class Quantity(
     ) -> Quantity[Any, Any]: ...
     def __new__(
         cls,
-        val: MT | Sequence[float] | Quantity[Any, Any],
-        unit: Unit[DT] | Unit | UnitsContainer | str | dict[str, numbers.Number] | None = None,
+        val: Any,
+        unit: Any = None,
         _depth: int = 0,
     ) -> Quantity[Any, Any]:
         unit = cast("Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | None", unit)
@@ -2308,7 +2308,7 @@ class Quantity(
     @overload
     def __rtruediv__(self, other: float | int) -> Quantity[UnknownDimensionality, MT]: ...
 
-    def __rtruediv__(self, other: float | int) -> Quantity[Any, MT]:
+    def __rtruediv__(self, other: Any) -> Quantity[Any, Any]:
         ret = self._pint_super.__rtruediv__(other)
         return cast("Quantity[UnknownDimensionality, MT]", self._call_subclass(ret.m, ret.u))
 
