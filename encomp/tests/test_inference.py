@@ -297,7 +297,7 @@ def test_various() -> None:
     assert_type(Q(1.0, "m"), Q[ut.Length, float])
     assert_type(Q(1, "m"), Q[ut.Length, float])
 
-    assert_type(Q(1, str("m")), Q)  # pyright: ignore[reportAssertTypeFailure] # noqa: UP018
+    assert_type(Q(1, str("m")), Q[ut.UnknownDimensionality, float])  # noqa: UP018
 
     assert_type(Q([1, 2, 3], "kg"), Q[ut.Mass, ut.Numpy1DArray])
 

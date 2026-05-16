@@ -1,6 +1,7 @@
+from typing import Any, cast
+
 import numpy as np
 import pytest
-from pytest import approx  # pyright: ignore[reportUnknownVariableType]
 
 from ..misc import isinstance_types
 from ..units import DimensionalityError, ExpectedDimensionalityError, define_dimensionality
@@ -17,6 +18,9 @@ from ..utypes import (
     TemperatureDifference,
     Volume,
 )
+
+# pytest.approx is loosely typed; expose it as an Any-typed alias
+approx = cast(Any, pytest).approx
 
 
 class TestREADMEExamples:
@@ -52,7 +56,7 @@ class TestREADMEExamples:
         assert isinstance_types(V, Q[Volume])
 
         # common / and * operations
-        m / V  # pyright: ignore[reportUnusedExpression]
+        _ = m / V
         # Quantity[Density]
 
         # the unit "kg/week" is not registered by default
@@ -62,7 +66,7 @@ class TestREADMEExamples:
         assert isinstance_types(m_, Q[MassFlow])
 
         # these operations (Mass**2 divided by Volume) are not explicitly defined
-        m**2 / V  # pyright: ignore[reportUnusedExpression]
+        _ = m**2 / V
 
         # the unit name "meter cubed" is not defined using an overload,
         # the type parameter Volume is used to infer the type
@@ -84,7 +88,7 @@ class TestREADMEExamples:
 
         # raises an exception with wrong dimensionality
         with pytest.raises(TypeCheckError, match="is not an instance"):
-            some_func(Q(26, "kW"))  # pyright: ignore[reportArgumentType] # Power, not TemperatureDifference
+            some_func(cast(Any, Q(26, "kW")))  # Power, not TemperatureDifference
 
     def test_custom_dimensionality(self) -> None:
         """Test creating custom dimensionalities"""
@@ -263,7 +267,7 @@ class TestUsageExamples:
         """Test handling unit-related errors"""
         # Adding incompatible units
         with pytest.raises(DimensionalityError):
-            _ = Q(25, "bar") + Q(25, "m")  # pyright: ignore[reportUnknownVariableType, reportOperatorIssue]
+            _ = cast(Any, Q(25, "bar")) + Q(25, "m")
 
         # Converting to incompatible unit
         with pytest.raises(DimensionalityError):
@@ -276,20 +280,20 @@ class TestUsageExamples:
         from ..units import ExpectedDimensionalityError
 
         class Model(BaseModel):
-            a: Q
-            m: Q[Mass]
-            s: Q[Length]
+            a: Q[Any, Any]
+            m: Q[Mass, float]
+            s: Q[Length, float]
             r: Q[Dimensionless, float] = Q(0.5)
 
         # Valid model creation
-        model = Model(a=Q(25, "cSt"), m=Q(25, "kg"), s=Q(25, "cm"))  # pyright: ignore[reportArgumentType]
+        model = Model(a=Q(25, "cSt"), m=Q(25, "kg"), s=Q(25, "cm"))
         assert isinstance_types(model.a, Q)
         assert isinstance_types(model.m, Q[Mass])
         assert isinstance_types(model.s, Q[Length])
 
         # Invalid dimensionality raises ExpectedDimensionalityError
         with pytest.raises(ExpectedDimensionalityError):
-            Model(a=Q(25, "kg"), m=Q(25, "m"), s=Q(25, "cm"))  # pyright: ignore[reportArgumentType]
+            Model(a=Q(25, "kg"), m=cast(Any, Q(25, "m")), s=Q(25, "cm"))
 
     def test_fluid_search_describe(self) -> None:
         """Test Fluid search and describe methods"""

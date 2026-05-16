@@ -1,4 +1,4 @@
-from typing import assert_type
+from typing import Any, assert_type, cast
 
 import numpy as np
 
@@ -39,7 +39,7 @@ def test_convert_gas_volume() -> None:
 def test_ideal_gas_density() -> None:
     assert_type(ideal_gas_density(Q(25, "degC"), Q(12, "bar"), Q(12, "g/mol")), Q[Density, float])
 
-    ret = ideal_gas_density(Q([25, 26], "degC"), Q(12, "bar"), Q(12, "g/mol"))  # pyright: ignore[reportArgumentType]
+    ret = ideal_gas_density(Q([25, 26], "degC"), cast(Any, Q(12, "bar")), cast(Any, Q(12, "g/mol")))
     assert_type(ret, Q[Density, np.ndarray])
 
 

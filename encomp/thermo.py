@@ -2,7 +2,7 @@
 Functions relating to thermodynamics.
 """
 
-from typing import Any
+from typing import Any, cast
 
 from .misc import isinstance_types
 from .units import Quantity
@@ -18,22 +18,19 @@ from .utypes import (
 
 DEFAULT_CP = Quantity(4.18, "kJ/kg/K").asdim(SpecificHeatCapacity)
 
-
-def heat_balance(
-    *args: Quantity[Mass, Any]
-    | Quantity[MassFlow, Any]
-    | Quantity[Energy, Any]
-    | Quantity[Power, Any]
-    | Quantity[TemperatureDifference, Any]
-    | Quantity[Temperature, Any],
-    cp: Quantity[SpecificHeatCapacity, float] = DEFAULT_CP,
-) -> (
+type HeatBalanceResult = (
     Quantity[Mass, Any]
     | Quantity[MassFlow, Any]
     | Quantity[Energy, Any]
     | Quantity[Power, Any]
     | Quantity[TemperatureDifference, Any]
-):
+)
+
+
+def heat_balance(
+    *args: HeatBalanceResult | Quantity[Temperature, Any],
+    cp: Quantity[SpecificHeatCapacity, float] = DEFAULT_CP,
+) -> HeatBalanceResult:
     """
     Solves the heat balance equation
 
@@ -78,7 +75,7 @@ def heat_balance(
     for a in args:
         for param_name, tp in params.items():
             if isinstance(a, tp[0]):
-                if param_name == "dT" and not a._ok_for_muldiv():  # pyright: ignore[reportPrivateUsage]
+                if param_name == "dT" and not cast(Any, a)._ok_for_muldiv():
                     raise ValueError(
                         f"Cannot pass temperature difference using degree unit {a.u}, convert to delta_deg"
                     )
@@ -113,4 +110,6 @@ def heat_balance(
 
     ret = ret.to(unit)
 
-    return ret  # pyright: ignore[reportReturnType]
+    # the resolved dimensionality depends on which inputs were supplied;
+    # this is validated at runtime above but cannot be expressed statically
+    return cast(HeatBalanceResult, ret)

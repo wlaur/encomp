@@ -3,7 +3,7 @@ Data structures and related functions.
 """
 
 from collections.abc import Iterable, Iterator, Sequence
-from typing import Any, overload
+from typing import Any, cast, overload
 
 import numpy as np
 import polars as pl
@@ -50,7 +50,7 @@ def flatten(container: Iterable[Any], max_depth: int | None = None, _depth: int 
 
         # check if this object can be flattened further
         if isinstance(obj, Iterable):
-            yield from flatten(obj, max_depth=max_depth, _depth=_depth + 1)  # pyright: ignore[reportUnknownArgumentType]
+            yield from flatten(cast("Iterable[Any]", obj), max_depth=max_depth, _depth=_depth + 1)
 
             continue
 

@@ -1,13 +1,6 @@
 """
 Classes and functions relating to fluid properties.
 Uses CoolProp as backend.
-
-.. note::
-    This module has the same name as the package `fluids <https://pypi.org/project/fluids/>`_,
-    which is also included when installing ``encomp``.
-    Avoid importing as a standalone module
-    (``from encomp import fluids``) to differentiate between these.
-
 """
 
 import hashlib
@@ -19,10 +12,13 @@ from collections.abc import Callable
 from threading import Lock
 from typing import Annotated, Any, ClassVar, Generic, Literal, cast
 
+# CoolProp.CoolProp is a compiled extension module and exports both PropsSI and
+# HAPropsSI; importing the module (rather than the untyped pure-Python
+# CoolProp.HumidAirProp) avoids missing-stub diagnostics. The functions
+# themselves are untyped, so they are exposed as typed aliases below.
+import CoolProp.CoolProp as _CoolProp
 import numpy as np
 import polars as pl
-from CoolProp.CoolProp import PropsSI  # pyright: ignore[reportUnknownVariableType]
-from CoolProp.HumidAirProp import HAPropsSI  # pyright: ignore[reportMissingTypeStubs, reportUnknownVariableType]
 
 from .settings import SETTINGS
 from .structures import flatten
@@ -57,6 +53,10 @@ from .utypes import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+_cp: Any = _CoolProp
+PropsSI: Callable[..., float | Numpy1DArray] = _cp.PropsSI
+HAPropsSI: Callable[..., float | Numpy1DArray] = _cp.HAPropsSI
 
 if SETTINGS.ignore_coolprop_warnings:
     warnings.filterwarnings("ignore", message="CoolProp could not calculate")

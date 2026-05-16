@@ -389,7 +389,7 @@ def get_lambda_matrix(M: sp.MutableDenseMatrix) -> tuple[str, list[str]]:
 
 
 @lru_cache
-def get_function(e: sp.Basic, *, units: bool = False) -> Callable:
+def get_function(e: sp.Basic, *, units: bool = False) -> Callable[[dict[Any, Any]], Any]:
     """
     Wrapper around :py:func:`encomp.sympy.get_lambda` that
     handles inputs and potential units.
@@ -412,7 +412,7 @@ def get_function(e: sp.Basic, *, units: bool = False) -> Callable:
 
     fcn, args = get_lambda(e)
 
-    def expr_func(params: dict) -> Any:  # noqa: ANN401
+    def expr_func(params: dict[Any, Any]) -> Any:  # noqa: ANN401
         return fcn(**get_lambda_kwargs(params, args, units=units))
 
     return expr_func

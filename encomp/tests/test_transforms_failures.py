@@ -1,4 +1,4 @@
-from typing import assert_type
+from typing import Any, assert_type, cast
 
 import numpy as np
 import pytest
@@ -53,7 +53,7 @@ def test_wrong_dimensionality_runtime_error() -> None:
     assert_type(time, Q[Time, float])
 
     with pytest.raises(TypeCheckError, match=r"is not an instance of.*Energy"):
-        _wrong_dim_dag_power_expects_energy(mass, time)  # pyright: ignore[reportArgumentType]
+        _wrong_dim_dag_power_expects_energy(cast(Any, mass), time)
 
 
 @typechecked
@@ -79,7 +79,7 @@ def test_wrong_magnitude_type_runtime_error() -> None:
     assert_type(time, Q[Time, float])
 
     with pytest.raises(TypeCheckError, match=r"is not an instance of.*float"):
-        _wrong_mt_dag_flow_expects_float(masses, time)  # pyright: ignore[reportArgumentType]
+        _wrong_mt_dag_flow_expects_float(cast(Any, masses), time)
 
 
 @typechecked
@@ -94,8 +94,8 @@ def _incompatible_add_dag_time() -> Q[Time, float]:
 
 @typechecked
 def _incompatible_add_dag_add(mass: Q[Mass, float], time: Q[Time, float]) -> Q[Mass, float]:
-    result = mass + time  # pyright: ignore[reportOperatorIssue, reportUnknownVariableType]
-    return result  # pyright: ignore[reportUnknownVariableType]
+    result = cast(Any, mass) + time
+    return result
 
 
 def test_incompatible_addition_runtime_error() -> None:
@@ -122,7 +122,7 @@ def _return_wrong_type_dag_time() -> Q[Time, float]:
 @typechecked
 def _return_wrong_type_dag_should_return_power(mass: Q[Mass, float], time: Q[Time, float]) -> Q[Power, float]:
     flow = mass / time
-    return flow  # pyright: ignore[reportReturnType]
+    return cast("Q[Power, float]", flow)
 
 
 def test_wrong_return_type_runtime_error() -> None:
@@ -150,7 +150,7 @@ def test_undecorated_wrong_arg_with_typechecked() -> None:
     time = _undecorated_wrong_arg_dag_time()
 
     with pytest.raises(TypeCheckError, match=r"is not an instance of.*Length"):
-        typechecked(_undecorated_wrong_arg_dag_expects_length)(energy, time)  # pyright: ignore[reportArgumentType]
+        typechecked(_undecorated_wrong_arg_dag_expects_length)(cast(Any, energy), time)
 
 
 @typechecked
@@ -176,7 +176,7 @@ def test_mixed_errors_dag() -> None:
     assert_type(volume_array, Q[Volume, Numpy1DArray])
 
     with pytest.raises(TypeCheckError, match=r"is not an instance of.*float"):
-        _mixed_errors_dag_density_expects_both_float(mass, volume_array)  # pyright: ignore[reportArgumentType]
+        _mixed_errors_dag_density_expects_both_float(mass, cast(Any, volume_array))
 
 
 @typechecked
@@ -217,7 +217,7 @@ def test_mostly_correct_dag_with_one_error() -> None:
     duration_wrong = _mostly_correct_dag_duration_wrong()
 
     with pytest.raises(TypeCheckError, match=r"is not an instance of.*Time"):
-        _mostly_correct_dag_mass_back(flows, duration_wrong)  # pyright: ignore[reportArgumentType]
+        _mostly_correct_dag_mass_back(flows, cast(Any, duration_wrong))
 
     duration_correct = Q(5.0, "s")
     mass_back = _mostly_correct_dag_mass_back(flows, duration_correct)
@@ -252,7 +252,7 @@ def test_scalar_array_mismatch() -> None:
     assert_type(array, Q[Mass, Numpy1DArray])
 
     with pytest.raises(TypeCheckError, match=r"is not an instance of.*ndarray"):
-        _scalar_array_mismatch_dag_expects_both_arrays(base, array)  # pyright: ignore[reportArgumentType]
+        _scalar_array_mismatch_dag_expects_both_arrays(cast(Any, base), array)
 
 
 def _dimensionless_error_dag_mass1() -> Q[Mass, float]:
@@ -274,4 +274,4 @@ def test_dimensionless_wrong_inputs() -> None:
     m2 = _dimensionless_error_dag_mass2()
 
     with pytest.raises(TypeCheckError, match=r"is not an instance of.*Energy"):
-        typechecked(_dimensionless_error_dag_ratio_expects_energy)(m1, m2)  # pyright: ignore[reportArgumentType]
+        typechecked(_dimensionless_error_dag_ratio_expects_energy)(cast(Any, m1), cast(Any, m2))

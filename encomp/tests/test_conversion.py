@@ -1,4 +1,4 @@
-from typing import assert_type
+from typing import Any, assert_type, cast
 
 import numpy as np
 import pytest
@@ -36,7 +36,7 @@ def test_convert_volume_mass() -> None:
     assert isinstance_types(convert_volume_mass(m), Q[Volume])
 
     with pytest.raises(AssertionError):
-        convert_volume_mass(mf, rho=Q(25, "bar"))  # pyright: ignore[reportCallIssue, reportArgumentType]
+        convert_volume_mass(mf, rho=cast(Any, Q(25, "bar")))
 
     with pytest.raises(AssertionError):
-        convert_volume_mass(Q(25, "m/s"))  # pyright: ignore[reportCallIssue, reportArgumentType]
+        convert_volume_mass(cast(Any, Q(25, "m/s")))
