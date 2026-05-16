@@ -178,3 +178,7 @@ reportUnusedImport = false
 
 [tool.uv.sources]
 microsoft-python-type-stubs = { git = "https://github.com/microsoft/python-type-stubs.git" }
+
+[tool.pyrefly]
+project-includes = ["encomp"]
+infer-with-first-use = false
