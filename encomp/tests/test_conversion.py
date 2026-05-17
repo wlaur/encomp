@@ -1,4 +1,4 @@
-from typing import assert_type
+from typing import Any, assert_type, cast
 
 import numpy as np
 import pytest
@@ -29,14 +29,14 @@ def test_convert_volume_mass() -> None:
     mf_list = Q([25.5, 25.34], "kg/s")
     assert isinstance_types(convert_volume_mass(mf_list), Q[VolumeFlow])
 
-    assert_type(convert_volume_mass(mf_list), Q[VolumeFlow, np.ndarray])
+    assert_type(convert_volume_mass(mf_list), Q[VolumeFlow, np.ndarray])  # pyrefly: ignore[assert-type]
 
     m = Q(25, "ton")
 
     assert isinstance_types(convert_volume_mass(m), Q[Volume])
 
     with pytest.raises(AssertionError):
-        convert_volume_mass(mf, rho=Q(25, "bar"))  # pyright: ignore[reportCallIssue, reportArgumentType]
+        convert_volume_mass(mf, rho=cast(Any, Q(25, "bar")))
 
     with pytest.raises(AssertionError):
-        convert_volume_mass(Q(25, "m/s"))  # pyright: ignore[reportCallIssue, reportArgumentType]
+        convert_volume_mass(cast(Any, Q(25, "m/s")))

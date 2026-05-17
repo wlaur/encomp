@@ -1,6 +1,6 @@
 [project]
 name = "encomp"
-version = "1.3.13"
+version = "1.4.0"
 description = "General-purpose library for engineering calculations"
 authors = [{ name = "William Laurén", email = "lauren.william.a@gmail.com" }]
 requires-python = ">=3.13"
@@ -42,13 +42,9 @@ dependencies = [
     "coolprop",
 ]
 
-[project.optional-dependencies]
-extra = ["scipy", "fluids"]
-
 [dependency-groups]
 dev = [
     "pre-commit",
-    "mypy",
     "ruff",
     "pytest",
     "hypothesis",
@@ -63,10 +59,10 @@ dev = [
     "sphinx-autodoc-typehints",
     "sphinx-autobuild",
     "pyinstrument",
-    "scipy-stubs>=1.16.3.2",
     "ipykernel>=7.1.0",
-    "ty>=0.0.5",
-    "pyright>=1.1.407",
+    "ty",
+    "pyright",
+    "pyrefly",
     "hvplot>=0.12.2",
     "pyparsing>=3.3.1",
     "altair>=6.0.0",
@@ -131,7 +127,6 @@ exclude = [
     ".eggs",
     ".git",
     ".hg",
-    ".mypy_cache",
     ".nox",
     ".pants.d",
     ".pytype",
@@ -161,30 +156,10 @@ max-complexity = 10
 
 [tool.pytest.ini_options]
 filterwarnings = [
-    # ignore the mypy-testing marks when this plugin is disabled
-    "ignore::_pytest.warning_types.PytestUnknownMarkWarning",
-
     # ignore CoolProp warnings for NaN/out of bounds inputs
     "ignore:CoolProp could not calculate*:UserWarning",
-
     "ignore::pint.UnitStrippedWarning",
 ]
-
-[tool.mypy]
-ignore_missing_imports = false
-show_error_codes = true
-warn_unused_ignores = true
-warn_return_any = true
-warn_unused_configs = true
-explicit_package_bases = false
-namespace_packages = false
-check_untyped_defs = true
-plugins = ["pydantic.mypy"]
-
-[tool.pydantic-mypy]
-init_typed = true
-init_forbid_extra = true
-warn_required_dynamic_aliases = true
 
 [tool.pyright]
 include = ["encomp"]
@@ -199,3 +174,32 @@ reportUnusedImport = false
 
 [tool.uv.sources]
 microsoft-python-type-stubs = { git = "https://github.com/microsoft/python-type-stubs.git" }
+
+[tool.pyrefly]
+# pyrefly has no strict preset; its default is the full analysis
+project-includes = ["encomp"]
+infer-with-first-use = false
+
+[tool.pyrefly.errors]
+# pyrefly has no global "warnings as errors" switch; these are the rules that
+# are warning-level by default, each elevated to error
+redundant-cast = "error"
+unnecessary-type-conversion = "error"
+unused-ignore = "error"
+reveal-type = "error"
+deprecated = "error"
+
+[tool.ty.src]
+include = ["encomp"]
+
+[tool.ty.environment]
+python-version = "3.13"
+
+[tool.ty.rules]
+# ty's default rule set is already effectively strict; these are the rules
+# that are not error-by-default, elevated here so `ty check` runs fully strict.
+# NOTE: for forward-compatibility (rules added in future ty versions), CI
+# should additionally pass `--error all`.
+redundant-cast = "error"
+possibly-missing-attribute = "error"
+unsupported-dynamic-base = "error"

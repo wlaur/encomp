@@ -6,12 +6,14 @@ from typing import Any, assert_type, cast
 import numpy as np
 import polars as pl
 import pytest
-from pytest import approx  # pyright: ignore[reportUnknownVariableType]
 
 from .. import utypes as ut
 from ..fluids import CoolPropFluid, Fluid, HumidAir, Water, clear_expr_evaluation_cache
 from ..units import Quantity as Q
 from ..utypes import DT, Density, SpecificEntropy
+
+# pytest.approx is loosely typed; expose it as an Any-typed alias
+approx = cast(Any, pytest).approx
 
 
 def _assert_type(val: object, typ: type) -> None:
@@ -24,7 +26,7 @@ def _assert_type(val: object, typ: type) -> None:
 assert_type.__code__ = _assert_type.__code__
 
 
-def _approx_equal(q1: Q[DT, float], q2: Q[DT, float]) -> bool:
+def _approx_equal(q1: Q[DT, Any], q2: Q[DT, Any]) -> bool:
     if not q1.is_compatible_with(q2):
         return False
 
@@ -163,22 +165,22 @@ def test_incorrect_inputs() -> None:
     t = np.zeros(5)
 
     with pytest.raises(ValueError):
-        Fluid("water", P=Q(p, "bar"), T=Q(t, "degC")).D  # pyright: ignore[reportArgumentType, reportCallIssue]
+        Fluid("water", P=Q(cast(Any, p), "bar"), T=Q(t, "degC")).D
 
     p = np.zeros((5, 5))
     t = np.zeros(5 * 5)
 
     with pytest.raises(ValueError):
-        Fluid("water", P=Q(p, "bar"), T=Q(t, "degC")).D  # pyright: ignore[reportArgumentType, reportCallIssue]
+        Fluid("water", P=Q(cast(Any, p), "bar"), T=Q(t, "degC")).D
 
     with pytest.raises(ValueError):
-        Fluid("water", P=Q(p, "bar"), T=Q(t, "degC"), H=Q(25, "kJ/kg"))  # pyright: ignore[reportArgumentType, reportCallIssue]
+        Fluid("water", P=Q(cast(Any, p), "bar"), T=Q(t, "degC"), H=Q(25, "kJ/kg"))
 
     with pytest.raises(ValueError):
-        Water(P=Q(p, "bar"), T=Q(t, "degC"), H=Q(25, "kJ/kg"))  # pyright: ignore[reportArgumentType, reportCallIssue]
+        Water(P=Q(cast(Any, p), "bar"), T=Q(t, "degC"), H=Q(25, "kJ/kg"))
 
     with pytest.raises(ValueError):
-        Water(P=Q(p, "bar"))  # pyright: ignore[reportArgumentType, reportCallIssue]
+        Water(P=Q(cast(Any, p), "bar"))
 
     with pytest.raises(AttributeError):
         Fluid("water", P=Q(2, "bar"), T=Q(25, "°C")).THIS_ATTRIBUTE_DOES_NOT_EXIST
@@ -342,7 +344,7 @@ def test_properties_Fluid() -> None:
 
     for fluid_name in fluid_names:
         for T, P in zip(Ts, Ps, strict=False):
-            fluid = Fluid(fluid_name, T=Q(T, "°C"), P=Q(P, "bar"))  # pyright: ignore[reportArgumentType, reportCallIssue]
+            fluid = Fluid(fluid_name, T=Q(cast(Any, T), "°C"), P=Q(cast(Any, P), "bar"))
             repr(fluid)
 
             for p in props:
@@ -401,7 +403,7 @@ def test_properties_HumidAir() -> None:
     ]
 
     for T, P, R in zip(Ts, Ps, Rs, strict=False):
-        ha = HumidAir(T=Q(T, "°C"), P=Q(P, "bar"), R=Q(R))  # pyright: ignore[reportCallIssue, reportArgumentType]
+        ha = HumidAir(T=Q(cast(Any, T), "°C"), P=Q(cast(Any, P), "bar"), R=Q(cast(Any, R)))
         repr(ha)
 
         for p in props:
@@ -414,10 +416,10 @@ def test_magnitude_type() -> None:
 
 def test_polars_fluids() -> None:
     w_series = Water(P=Q(pl.Series([1, 2, 3]), "bar"), T=Q(pl.Series([150, 250, 350]), "degC"))
-    assert_type(w_series.D, Q[ut.Density, pl.Series])
+    assert_type(w_series.D, Q[ut.Density, pl.Series])  # pyrefly: ignore[assert-type]
 
     w_series_const_T = Water(P=Q(pl.Series([1, 2, 3]), "bar"), T=Q(150, "degC"))
-    assert_type(w_series_const_T.D, Q[ut.Density, pl.Series])
+    assert_type(w_series_const_T.D, Q[ut.Density, pl.Series])  # pyrefly: ignore[assert-type]
 
     assert pl.select(Water(P=Q(pl.lit(5), "bar"), T=Q(pl.lit(250), "degC")).D.m).item(0, 0) == approx(2.107798)
 
@@ -437,10 +439,10 @@ def test_polars_fluids() -> None:
     repr(Water(P=Q(pl.lit(5), "bar"), T=Q(50, "degC")))
 
     with pytest.raises(TypeError):
-        Water(P=Q(pl.lit(5), "bar"), T=Q([1, 2, 3], "degC")).D  # pyright: ignore[reportArgumentType]
+        Water(P=Q(pl.lit(5), "bar"), T=cast(Any, Q([1, 2, 3], "degC"))).D
 
     with pytest.raises(TypeError):
-        Water(P=Q([1, 2, 3], "bar"), T=Q(pl.col.asd, "degC")).D  # pyright: ignore[reportArgumentType]
+        Water(P=cast(Any, Q([1, 2, 3], "bar")), T=Q(pl.col.asd, "degC")).D
 
 
 def _count_water_h_evaluations(monkeypatch: pytest.MonkeyPatch) -> list[int]:

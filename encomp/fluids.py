@@ -1,13 +1,6 @@
 """
 Classes and functions relating to fluid properties.
 Uses CoolProp as backend.
-
-.. note::
-    This module has the same name as the package `fluids <https://pypi.org/project/fluids/>`_,
-    which is also included when installing ``encomp``.
-    Avoid importing as a standalone module
-    (``from encomp import fluids``) to differentiate between these.
-
 """
 
 import hashlib
@@ -19,10 +12,14 @@ from collections.abc import Callable
 from threading import Lock
 from typing import Annotated, Any, ClassVar, Generic, Literal, cast
 
+# CoolProp.CoolProp is a compiled extension module exporting both PropsSI and
+# HAPropsSI. pyright resolves it (and importing the module rather than the
+# untyped pure-Python CoolProp.HumidAirProp avoids its missing-stub warning),
+# but pyrefly cannot resolve the compiled module at all - hence the ignore.
+# The functions are untyped either way, so they are exposed as typed aliases below.
+import CoolProp.CoolProp as _CoolProp  # pyrefly: ignore[missing-import]
 import numpy as np
 import polars as pl
-from CoolProp.CoolProp import PropsSI  # pyright: ignore[reportUnknownVariableType]
-from CoolProp.HumidAirProp import HAPropsSI  # pyright: ignore[reportMissingTypeStubs, reportUnknownVariableType]
 
 from .settings import SETTINGS
 from .structures import flatten
@@ -57,6 +54,10 @@ from .utypes import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+_cp: Any = _CoolProp
+PropsSI: Callable[..., float | Numpy1DArray] = _cp.PropsSI
+HAPropsSI: Callable[..., float | Numpy1DArray] = _cp.HAPropsSI
 
 if SETTINGS.ignore_coolprop_warnings:
     warnings.filterwarnings("ignore", message="CoolProp could not calculate")
@@ -738,9 +739,9 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             if isinstance(x, np.ndarray):
                 return x
 
-            return np.repeat(float(x), n).astype(float).reshape(shape)
+            return np.repeat(x, n).astype(float).reshape(shape)
 
-        points_arr = tuple((p, expand_scalars(v)) for p, v in points)
+        points_arr = tuple((p, expand_scalars(cast(Any, v))) for p, v in points)
 
         return self.evaluate_multiple(output, *points_arr)
 
@@ -784,7 +785,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             if self._convert_pl_series_nan_null:
                 qty.m = qty.m.fill_nan(None)
 
-            qty.m = qty.m.cast(pl.Float32)
+            qty.m = cast(Any, qty.m).cast(pl.Float32)
 
         return cast("Quantity[Any, MT]", qty)
 

@@ -152,15 +152,15 @@ def simplify_exponents(e: sp.Basic) -> sp.Basic:
     def rewrite(expr: sp.Basic, new_args: tuple[sp.Basic, ...]) -> sp.Basic:
         new_args_list = list(new_args)
         pow_val = new_args_list[1]
-        pow_val_int = int(new_args_list[1])
+        pow_val_int = int(cast(Any, new_args_list[1]))
 
-        if pow_val.epsilon_eq(pow_val_int):
+        if cast(Any, pow_val).epsilon_eq(pow_val_int):
             new_args_list[1] = sp.Integer(pow_val_int)
 
         return type(expr)(*new_args_list)
 
     def is_float_pow(expr: sp.Basic) -> bool:
-        return expr.is_Pow and expr.args[1].is_Float
+        return bool(cast(Any, expr).is_Pow and cast(Any, expr).args[1].is_Float)
 
     if not e.args:
         return e
@@ -369,7 +369,7 @@ def get_lambda_matrix(M: sp.MutableDenseMatrix) -> tuple[str, list[str]]:
 
     for i in range(nrows):
         for j in range(ncols):
-            fcn_str, n_args = get_lambda(M[i, j], to_str=True)
+            fcn_str, n_args = get_lambda(cast("sp.Basic", M[i, j]), to_str=True)
             args |= set(n_args)
 
             # remove the "lambda x, y, x:" part and extra parens,
@@ -389,7 +389,7 @@ def get_lambda_matrix(M: sp.MutableDenseMatrix) -> tuple[str, list[str]]:
 
 
 @lru_cache
-def get_function(e: sp.Basic, *, units: bool = False) -> Callable:
+def get_function(e: sp.Basic, *, units: bool = False) -> Callable[[dict[Any, Any]], Any]:
     """
     Wrapper around :py:func:`encomp.sympy.get_lambda` that
     handles inputs and potential units.
@@ -412,7 +412,7 @@ def get_function(e: sp.Basic, *, units: bool = False) -> Callable:
 
     fcn, args = get_lambda(e)
 
-    def expr_func(params: dict) -> Any:  # noqa: ANN401
+    def expr_func(params: dict[Any, Any]) -> Any:  # noqa: ANN401
         return fcn(**get_lambda_kwargs(params, args, units=units))
 
     return expr_func
@@ -743,7 +743,7 @@ class Symbol(sp.Symbol):
             # don't deal with unbalanced braces
             existing_suffix = existing_suffix.removeprefix("{").removesuffix("}")
 
-            existing_suffix += str(s)
+            existing_suffix += s
 
             decorated_parts = [base_symbol_str, delimiter, "{" + existing_suffix + "}"]
 

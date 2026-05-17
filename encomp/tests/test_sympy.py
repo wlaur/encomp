@@ -1,50 +1,55 @@
+from typing import Any, cast
+
 import numpy as np
 
-from ..sympy import get_args, get_function, sp, to_identifier  # pyright: ignore[reportUnknownVariableType]
+from ..sympy import Symbol, get_args, get_function, sp, symbols, to_identifier
 from ..units import Quantity as Q
 
 
 def test_sympy() -> None:
-    x = sp.Symbol("x", positive=True)
+    x = cast(Symbol, sp.Symbol("x", positive=True))
 
-    x._("n,text")  # pyright: ignore[reportUnknownMemberType]
-    x._("n,text,j")  # pyright: ignore[reportUnknownMemberType]
-    x.__("n,text")  # pyright: ignore[reportUnknownMemberType]
-    x.__("n,text,j")  # pyright: ignore[reportUnknownMemberType]
+    x._("n,text")
+    x._("n,text,j")
+    x.__("n,text")
+    x.__("n,text,j")
 
-    x._("n").append("text")  # pyright: ignore[reportUnknownMemberType]
-    x.__("n").append("text", where="sup")  # pyright: ignore[reportUnknownMemberType]
-    x.__("A").append("text", where="sub")  # pyright: ignore[reportUnknownMemberType]
+    x._("n").append("text")
+    x.__("n").append("text", where="sup")
+    x.__("A").append("text", where="sub")
 
 
 def test_to_identifier() -> None:
-    x = sp.Symbol("x", positive=True)
+    x = cast(Symbol, sp.Symbol("x", positive=True))
 
-    s = to_identifier(x._("subscript").__("superscript"))  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
+    s = to_identifier(x._("subscript").__("superscript"))
 
     assert s.isidentifier()
 
 
 def test_get_args() -> None:
-    x = sp.Symbol("x", positive=True)
-    y = sp.Symbol("y", positive=True)
+    x = cast(Symbol, sp.Symbol("x", positive=True))
+    y = cast(Symbol, sp.Symbol("y", positive=True))
 
-    e = x**2 + sp.sin(sp.sqrt(y))  # pyright: ignore[reportUnknownVariableType, reportOperatorIssue, reportUnknownMemberType]
+    # sympy is untyped, so its top-level functions resolve to unknown types
+    sp_any = cast(Any, sp)
+    e: sp.Basic = x**2 + sp_any.sin(sp_any.sqrt(y))
 
-    assert set(get_args(e)) == {"x", "y"}  # pyright: ignore[reportUnknownArgumentType]
+    assert set(get_args(e)) == {"x", "y"}
 
 
 def test_decorate() -> None:
-    n = sp.Symbol("n")
+    n = cast(Symbol, sp.Symbol("n"))
 
-    n.decorate(prefix=r"\sum", prefix_sub="2", suffix_sup="i", suffix=r"\ldots")  # pyright: ignore[reportUnknownMemberType]
-    n._("H_2O").__("out")  # pyright: ignore[reportUnknownMemberType]
+    n.decorate(prefix=r"\sum", prefix_sub="2", suffix_sup="i", suffix=r"\ldots")
+    n._("H_2O").__("out")
 
 
 def test_sympy_to_Quantity_integration() -> None:
-    x, y, z = sp.symbols("x, y, z")  # pyright: ignore[reportUnknownMemberType]
+    x, y, z = symbols("x, y, z")
 
-    expr = x * y / z
+    # sympy does not type its arithmetic operators
+    expr: Any = cast(Any, x) * y / z
 
     _subs = {x: Q(235, "yard"), y: Q(98, "K/m²"), z: Q(0.4, "minutes")}
 
@@ -54,9 +59,9 @@ def test_sympy_to_Quantity_integration() -> None:
 
     assert isinstance(Q.from_expr(result), type(_result))
 
-    a, b = sp.symbols("a, b", nonzero=True)  # pyright: ignore[reportUnknownMemberType]
+    a, b = symbols("a, b", nonzero=True)
 
-    expr = a / b
+    expr = cast(Any, a) / b
 
     result = expr.subs({a: Q(235, "m"), b: Q(98, "mile")})
 
@@ -66,21 +71,22 @@ def test_sympy_to_Quantity_integration() -> None:
 def test_Quantity_to_sympy_integration() -> None:
     x = sp.Symbol("x")
 
-    _ = x * Q(25, "kg")
-    _ = x * Q(25, "kg")
+    _ = cast(Any, x) * Q(25, "kg")
+    _ = cast(Any, x) * Q(25, "kg")
 
-    _ = Q(25, "kg") * x
+    _ = Q(25, "kg") * cast(Any, x)
 
-    _ = x + Q(2)
-    _ = x + Q(2, "m")
+    _ = cast(Any, x) + Q(2)
+    _ = cast(Any, x) + Q(2, "m")
 
 
 def test_get_function() -> None:
-    x, y, z = sp.symbols("x, y, z")  # pyright: ignore[reportUnknownMemberType]
+    x, y, z = symbols("x, y, z")
 
-    expr = 25 * x * y / z
+    # sympy does not type its arithmetic operators
+    expr: Any = 25 * cast(Any, x) * y / z
 
-    fcn = get_function(expr, units=True)  # pyright: ignore[reportUnknownVariableType]
+    fcn = get_function(expr, units=True)
 
     fcn(
         {

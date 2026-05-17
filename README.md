@@ -13,7 +13,7 @@ Main functionality of the `encomp` library:
   - Modules `encomp.units`, `encomp.utypes`
   - Extends the [pint](https://pypi.org/project/Pint) library
   - Uses Python's type system to validate dimensionalities
-  - Compatible with `mypy` and other type checkers
+  - Compatible with type checkers
   - Integrates with Numpy arrays and Polars series and expressions
   - JSON serialization and decoding via Pydantic
 
@@ -75,7 +75,7 @@ When a new dimensionality is created, the classname will be `Dimensionality[...]
 from encomp.units import Quantity as Q
 from encomp.utypes import Volume, MassFlow
 
-# the types are inferred by a static type checker like mypy
+# the types are inferred by a static type checker
 
 # the unit "kg" is registered as a Mass unit
 m = Q(12, 'kg')  # Quantity[Mass]

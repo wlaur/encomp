@@ -1,6 +1,4 @@
-from typing import assert_type
-
-import numpy as np
+from typing import Any, assert_type, cast
 
 from ..gases import (
     actual_volume_to_normal_volume,
@@ -12,7 +10,7 @@ from ..gases import (
 )
 from ..misc import isinstance_types
 from ..units import Quantity as Q
-from ..utypes import Density, Mass, Volume, VolumeFlow
+from ..utypes import Density, Mass, Numpy1DArray, Volume, VolumeFlow
 
 
 def _assert_type(val: object, typ: type) -> None:
@@ -37,10 +35,16 @@ def test_convert_gas_volume() -> None:
 
 
 def test_ideal_gas_density() -> None:
-    assert_type(ideal_gas_density(Q(25, "degC"), Q(12, "bar"), Q(12, "g/mol")), Q[Density, float])
+    # ideal_gas_density ties T/P/M to one magnitude TypeVar (its body does arithmetic
+    # across all three), so a mixed array/scalar call cannot be typed: the scalar P/M
+    # args are cast (needed for both checkers), and pyrefly additionally cannot solve
+    # the shared constrained TypeVar across multiple arguments at all
+    assert_type(  # pyrefly: ignore[assert-type]
+        ideal_gas_density(Q(25, "degC"), Q(12, "bar"), Q(12, "g/mol")), Q[Density, float]
+    )
 
-    ret = ideal_gas_density(Q([25, 26], "degC"), Q(12, "bar"), Q(12, "g/mol"))  # pyright: ignore[reportArgumentType]
-    assert_type(ret, Q[Density, np.ndarray])
+    ret = ideal_gas_density(Q([25, 26], "degC"), cast(Any, Q(12, "bar")), cast(Any, Q(12, "g/mol")))  # pyrefly: ignore
+    assert_type(ret, Q[Density, Numpy1DArray])  # pyrefly: ignore[assert-type]
 
 
 def test_gas_conversion() -> None:

@@ -149,8 +149,9 @@ def convert_gas_volume(
 
     V2 = V1 * (P1 / P2) * (T2.to("K") / T1.to("K")) * (Z2 / Z1)
 
-    # volume at P2, T2 in same units as V1
-    return V2.to(V1.u)  # pyright: ignore[reportArgumentType]
+    # volume at P2, T2 in same units as V1; V1 and V2 share dimensionality
+    # but the type checker cannot correlate the two union members
+    return V2.to(cast(Any, V1.u))
 
 
 @overload

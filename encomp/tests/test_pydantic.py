@@ -5,7 +5,7 @@ import polars as pl
 from pydantic import BaseModel
 
 from ..units import Quantity
-from ..utypes import Mass, Numpy1DArray, UnknownDimensionality
+from ..utypes import Mass, UnknownDimensionality
 
 
 def _assert_type(val: object, typ: type) -> None:
@@ -22,20 +22,26 @@ def test_model_serialize() -> None:
     class M(BaseModel):
         qty: Quantity[Mass, Any]
 
-    for m in [
-        2,
-        2.5,
-        [1, 2, 3],
-        [1.0, 2.0, 3.5],
-        pl.Series([2, 34, 5]),
-        pl.Series([2, 34, 5], dtype=pl.Int64),
-        pl.Series([2, 34, 5], dtype=pl.Int32),
-        pl.Series([2, 34, 5], dtype=pl.Int16),
-        pl.Series([2, 34, 5], dtype=pl.Float32),
-        pl.Series([2, 34, 5], dtype=pl.Float64),
-        cast(Numpy1DArray, np.array([[1, 2, 3], [3, 2, 1], [2, 2, 2]]).ravel()),
-    ]:
-        qty = cast("Quantity[Mass, Any]", Quantity(m, "kg"))  # pyright: ignore[reportCallIssue, reportArgumentType]
+    # heterogeneous magnitude inputs, typed as a list of Any
+    magnitudes = cast(
+        "list[Any]",
+        [
+            2,
+            2.5,
+            [1, 2, 3],
+            [1.0, 2.0, 3.5],
+            pl.Series([2, 34, 5]),
+            pl.Series([2, 34, 5], dtype=pl.Int64),
+            pl.Series([2, 34, 5], dtype=pl.Int32),
+            pl.Series([2, 34, 5], dtype=pl.Int16),
+            pl.Series([2, 34, 5], dtype=pl.Float32),
+            pl.Series([2, 34, 5], dtype=pl.Float64),
+            np.array([[1, 2, 3], [3, 2, 1], [2, 2, 2]]).ravel(),
+        ],
+    )
+
+    for m in magnitudes:
+        qty = cast("Quantity[Mass, Any]", Quantity(m, "kg"))
         serialized = M(qty=qty).model_dump_json()
 
         deserialized = M.model_validate_json(serialized)
@@ -50,11 +56,11 @@ def test_model_serialize() -> None:
             assert qty == deserialized.qty
 
         if isinstance(m, float | int):
-            assert deserialized.qty.m == m  # pyright: ignore[reportUnknownMemberType, reportGeneralTypeIssues]
+            assert cast(Any, deserialized.qty).m == m
         elif isinstance(m, list):
-            m = np.array(m)
+            m = cast(Any, np.array(cast(Any, m)))
         else:
-            assert type(deserialized.qty.m) is type(m)  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
+            assert type(cast(Any, deserialized.qty).m) is type(m)
 
     assert isinstance(M.model_json_schema(), dict)
 

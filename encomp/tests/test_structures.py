@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from hypothesis import given
@@ -69,7 +69,7 @@ def test_divide_chunks(lst: list[Any]) -> None:
 
 def test_divide_chunks_errors() -> None:
     with pytest.raises(TypeError):
-        divide_chunks([])  # pyright: ignore[reportCallIssue]
+        cast(Any, divide_chunks)([])
 
     with pytest.raises(ValueError):
         next(divide_chunks([1, 2, 3], 0))
@@ -78,4 +78,4 @@ def test_divide_chunks_errors() -> None:
         next(divide_chunks([1, 2, 3], -5))
 
     with pytest.raises(ValueError):
-        next(divide_chunks([], 2))  # pyright: ignore[reportUnknownArgumentType]
+        next(divide_chunks(cast("list[Any]", []), 2))
