@@ -43,7 +43,7 @@ def test_ideal_gas_density() -> None:
         ideal_gas_density(Q(25, "degC"), Q(12, "bar"), Q(12, "g/mol")), Q[Density, float]
     )
 
-    ret = ideal_gas_density(Q([25, 26], "degC"), cast(Any, Q(12, "bar")), cast(Any, Q(12, "g/mol")))  # pyrefly: ignore
+    ret = ideal_gas_density(Q([25, 26], "degC"), cast(Any, Q(12, "bar")), cast(Any, Q(12, "g/mol")))  # pyrefly: ignore[bad-argument-type, bad-specialization]
     assert_type(ret, Q[Density, Numpy1DArray])  # pyrefly: ignore[assert-type]
 
 

@@ -6,7 +6,7 @@ import pytest
 from ..conversion import convert_volume_mass
 from ..misc import isinstance_types
 from ..units import Quantity as Q
-from ..utypes import Volume, VolumeFlow
+from ..utypes import Numpy1DArray, Volume, VolumeFlow
 
 
 def _assert_type(val: object, typ: type) -> None:
@@ -29,7 +29,7 @@ def test_convert_volume_mass() -> None:
     mf_list = Q([25.5, 25.34], "kg/s")
     assert isinstance_types(convert_volume_mass(mf_list), Q[VolumeFlow])
 
-    assert_type(convert_volume_mass(mf_list), Q[VolumeFlow, np.ndarray])  # pyrefly: ignore[assert-type]
+    assert_type(convert_volume_mass(mf_list), Q[VolumeFlow, Numpy1DArray])
 
     m = Q(25, "ton")
 

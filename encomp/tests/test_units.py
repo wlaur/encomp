@@ -329,7 +329,7 @@ def test_dimensionality_type_hierarchy() -> None:
         s_arr = Q([25], "m")
         s_arr_first = s_arr[0]
 
-        assert_type(s_arr, Q[Length, np.ndarray])  # pyrefly: ignore[assert-type]
+        assert_type(s_arr, Q[Length, Numpy1DArray])
         assert_type(s_arr_first, Q[Length, float])
 
         s_series = Q(pl.Series([25]), "m")
@@ -341,7 +341,7 @@ def test_dimensionality_type_hierarchy() -> None:
         s_arr = Q([25], "m").asdim(EstimatedLength)
         s_arr_first = s_arr[0]
 
-        assert_type(s_arr, Q[EstimatedLength, np.ndarray])  # pyrefly: ignore[assert-type]
+        assert_type(s_arr, Q[EstimatedLength, Numpy1DArray])
         assert_type(s_arr_first, Q[EstimatedLength, float])
 
         s_series = Q(pl.Series([25]), "m").asdim(EstimatedLength)
@@ -389,7 +389,7 @@ def test_type_eq() -> None:
         assert_never(q)
 
     if isinstance_types(q, Q[Length, Numpy1DArray]):
-        assert_never(q)  # pyrefly: ignore
+        assert_never(q)  # pyrefly: ignore[bad-argument-type]
 
     if isinstance_types(q_arr, Q[Length]):
         assert_type(q_arr, Q[Length])
