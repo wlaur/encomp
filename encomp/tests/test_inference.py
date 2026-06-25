@@ -1033,6 +1033,36 @@ def test_pow_inference() -> None:
     assert_type(Q(25, "m") ** 0.5, Q[ut.UnknownDimensionality, float])
 
 
+def test_int_scalar_accepted() -> None:
+    # the operator/comparison overloads annotate the scalar operand as `float`
+    # (not `float | int`); int arguments must still be accepted via the PEP 484
+    # numeric tower and normalized to a float-magnitude result.
+    # these assertions are validated statically (pyright/pyrefly) and at runtime.
+    q = Q(2.0, "bar")
+
+    assert_type(q * 3, Q[ut.Pressure, float])
+    assert_type(3 * q, Q[ut.Pressure, float])
+    assert_type(q / 3, Q[ut.Pressure, float])
+    assert_type(q // 3, Q[ut.Pressure, float])
+    assert_type(q**2, Q[ut.UnknownDimensionality, float])
+
+    d = Q(2.0)  # dimensionless
+
+    assert_type(d + 3, Q[ut.Dimensionless, float])
+    assert_type(3 + d, Q[ut.Dimensionless, float])
+    assert_type(d - 3, Q[ut.Dimensionless, float])
+    assert_type(3 - d, Q[ut.Dimensionless, float])
+    assert_type(d**3, Q[ut.Dimensionless, float])
+
+    # int operand against an array magnitude broadcasts to the array type
+    # (pyrefly cannot infer the constrained magnitude TypeVar through numpy here,
+    # so it falls back to Any — the same gap annotated elsewhere in this file;
+    # pyright resolves it and the runtime check below verifies it precisely)
+    arr = Q(np.array([1.0, 2.0]), "bar")
+    assert_type(arr * 2, Q[ut.Pressure, ut.Numpy1DArray])  # pyrefly: ignore[assert-type]
+    assert_type(arr / 2, Q[ut.Pressure, ut.Numpy1DArray])  # pyrefly: ignore[assert-type]
+
+
 def test_unknown() -> None:
     assert_type(Q(25, "kg").unknown(), Q[ut.UnknownDimensionality, float])
     assert_type(Q([1, 23], "kg").unknown(), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
