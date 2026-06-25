@@ -480,11 +480,10 @@ def test_Q() -> None:
     # no unit input defaults to dimensionless
     assert Q(12).check("")
     assert Q(1) == Q(100, "%")
-    Q[Dimensionless, float](21)  # pyrefly: ignore[bad-index]
-    assert isinstance_types(Q(21), Q[Dimensionless])  # pyrefly: ignore[bad-index]
-    assert isinstance_types(Q(21), Q[Dimensionless, float])  # pyrefly: ignore[bad-index]
-    assert isinstance_types(Q(21), Q[Dimensionless, Any])  # pyrefly: ignore[bad-index]
-
+    Q[Dimensionless, float](21)
+    assert isinstance_types(Q(21), Q[Dimensionless])
+    assert isinstance_types(Q(21), Q[Dimensionless, float])
+    assert isinstance_types(Q(21), Q[Dimensionless, Any])
     assert Q(1) == Q(1.0)
 
     assert isinstance(Q(1, "meter").m, float)
@@ -499,11 +498,10 @@ def test_Q() -> None:
     Q(Q(2, "bar").to("kPa").m, "kPa")
 
     # check that the dimensionality constraints work
-    Q[Length, float](1, "m")  # pyrefly: ignore[bad-index]
-    Q[Pressure, float](1, "kPa")  # pyrefly: ignore[bad-index]
-    Q[Temperature, float](1, "°C")  # pyrefly: ignore[bad-index]
-    Q[Temperature, Any](1, "°C")  # pyrefly: ignore[bad-index]
-
+    Q[Length, float](1, "m")
+    Q[Pressure, float](1, "kPa")
+    Q[Temperature, float](1, "°C")
+    Q[Temperature, Any](1, "°C")
     P = Q(1, "bar")
     # this Quantity must have the same dimensionality as P
     Q(2, "kPa").check(P)
@@ -511,14 +509,10 @@ def test_Q() -> None:
     # TODO: not possible to raise on constructing inconsistent Quantity
     # if the complete subclass is pre-defined
 
-    Q[Temperature, float](1, "kg")  # pyrefly: ignore[bad-index]
-
-    Q[Pressure, float](1, "meter")  # pyrefly: ignore[bad-index]
-
-    Q[Mass, float](1, str(P.u))  # pyrefly: ignore[bad-index]
-
-    Q[Mass, float](P)  # pyrefly: ignore[bad-index]
-
+    Q[Temperature, float](1, "kg")
+    Q[Pressure, float](1, "meter")
+    Q[Mass, float](1, str(P.u))
+    Q[Mass, float](P)
     # in-place conversion
     # NOTE: don't use this for objects that are passed in by the user
     P3 = Q(1, "bar")
@@ -550,13 +544,11 @@ def test_Q() -> None:
 
     # floating point math might make this off at the N:th decimal
     assert P2.m == approx(2, rel=1e-12)
-    assert isinstance_types(P2, Q[Pressure])  # pyrefly: ignore[bad-index]
-
-    assert_type(Q(Q(2, "feet_water"), Q(2, "kPa").u), Q[Pressure, float])  # pyrefly: ignore[bad-index]
-
+    assert isinstance_types(P2, Q[Pressure])
+    assert_type(Q(Q(2, "feet_water"), Q(2, "kPa").u), Q[Pressure, float])
     assert_type(
         Q(Q(2, "feet_water"), Q(321321, "psi").u).to(Q(123123, "feet_water").asdim(Pressure)),
-        Q[Pressure, float],  # pyrefly: ignore[bad-index]
+        Q[Pressure, float],
     )
 
     with pytest.raises(DimensionalityError):
@@ -568,8 +560,7 @@ def test_Q() -> None:
     class Custom(Dimensionality):
         dimensions = Length.dimensions * Length.dimensions * Length.dimensions / Temperature.dimensions
 
-    Q[Custom, float](1, "m³/K")  # pyrefly: ignore[bad-index]
-
+    Q[Custom, float](1, "m³/K")
     with pytest.raises(Exception):  # noqa: B017
         cast(Any, Q)[cast(Any, Pressure) / Area, float](1, "bar/m")
 

@@ -599,12 +599,12 @@ class Quantity(
     @staticmethod
     def _validate_magnitude(val: MT | Sequence[float]) -> MT:
         if isinstance(val, int):
-            return float(val)
+            return cast("MT", float(val))
         elif isinstance(val, float):
             # numpy float64 is a runtime subclass of float, so the type system
             # cannot distinguish it; this normalization to a plain Python float
             # is genuinely needed but unavoidably looks redundant to the checker
-            return float(val)  # pyrefly: ignore[unnecessary-type-conversion]
+            return cast("MT", float(val))
         elif isinstance(val, np.ndarray):
             if len(val.shape) != 1:
                 raise ValueError(f"Only 1-dimensional Numpy arrays can be used as magnitude, got shape {val.shape}")
@@ -919,7 +919,7 @@ class Quantity(
 
         _m = qty._magnitude
         if isinstance(_m, np.ndarray) and _m.dtype != np.float64:
-            qty._magnitude = cls._cast_array_float(_m)
+            qty._magnitude = cast("MT", cls._cast_array_float(_m))
 
         return qty
 
@@ -1057,7 +1057,7 @@ class Quantity(
         # convert integer arrays to float(64) (creating a copy)
         _m = self._magnitude
         if isinstance(_m, np.ndarray) and issubclass(_m.dtype.type, numbers.Integral):
-            self._magnitude = _m.astype(np.float64)
+            self._magnitude = cast("MT", _m.astype(np.float64))
 
         try:
             self._pint_super.ito(valid_unit)
@@ -1469,7 +1469,7 @@ class Quantity(
         if isinstance(self.m, float):
             return cast("Quantity[DT, MT]", super().__round__(ndigits))
         elif isinstance(self.m, np.ndarray):
-            return self.__class__(np.round(self.m, ndigits), self.u)
+            return cast("Quantity[DT, MT]", self.__class__(np.round(self.m, ndigits), self.u))
         else:
             raise NotImplementedError(f"__round__ is not implemented for magnitude type {type(self.m)}")
 
@@ -1529,7 +1529,7 @@ class Quantity(
     @overload
     def astype(self, magnitude_type: type[MT_] | MagnitudeTypeName) -> Quantity[DT, MT_]: ...
 
-    def astype(self, magnitude_type: type[MT_] | MagnitudeTypeName) -> Quantity[Any, Any]:
+    def astype(self, magnitude_type: type[Any] | MagnitudeTypeName) -> Quantity[Any, Any]:
         if isinstance(magnitude_type, str):
             magnitude_type = self._get_magnitude_type_from_name(magnitude_type)
 
@@ -1539,10 +1539,10 @@ class Quantity(
         dt = self.dt
 
         if type(m) is magnitude_type or type(m) is magnitude_type_origin:
-            return cast("Quantity[DT, MT_]", self)
+            return cast("Quantity[DT, Any]", self)
         elif magnitude_type is pl.Expr:
             if isinstance(m, float):
-                return cast("Quantity[DT, MT_]", self.get_subclass(dt, pl.Expr)(pl.lit(m), u))
+                return cast("Quantity[DT, Any]", self.get_subclass(dt, pl.Expr)(pl.lit(m), u))
 
             raise TypeError(
                 f"Cannot convert magnitude with type {type(m)} to Polars expression, "
@@ -1550,17 +1550,17 @@ class Quantity(
             )
         elif magnitude_type is float:
             if isinstance(m, Iterable):
-                return cast("Quantity[DT, MT_]", self.get_subclass(dt, np.ndarray)([float(n) for n in m], u))
+                return cast("Quantity[DT, Any]", self.get_subclass(dt, np.ndarray)([float(n) for n in m], u))
             else:
-                return cast("Quantity[DT, MT_]", self.get_subclass(dt, float)(float(cast(Any, m)), u))
+                return cast("Quantity[DT, Any]", self.get_subclass(dt, float)(float(cast(Any, m)), u))
         elif magnitude_type is np.ndarray or magnitude_type_origin is np.ndarray:
             _m = [m] if not isinstance(m, Iterable) else m
             vals = np.array(_m)
-            return cast("Quantity[DT, MT_]", self.get_subclass(dt, np.ndarray)(vals, u))
+            return cast("Quantity[DT, Any]", self.get_subclass(dt, np.ndarray)(vals, u))
         elif magnitude_type is pl.Series:
             _m = [m] if not isinstance(m, Iterable) else m
             vals = pl.Series(values=_m)
-            return cast("Quantity[DT, MT_]", self.get_subclass(dt, pl.Series)(vals, u))
+            return cast("Quantity[DT, Any]", self.get_subclass(dt, pl.Series)(vals, u))
         else:
             raise TypeError(f"Cannot convert magnitude from type {type(m)} to {magnitude_type}")
 
@@ -2334,7 +2334,7 @@ class Quantity(
     def __floordiv__(self: Quantity[DT, MT], other: float | int) -> Quantity[DT, MT]: ...
     def __floordiv__(self, other: Quantity[Any, Any] | float | int) -> Quantity[Any, Any]:
         if isinstance(other, (float, int)):
-            return self._call_subclass(self.m // other, self.u)
+            return self._call_subclass(cast("MT", self.m // other), self.u)
         elif other.dimensionless:
             return self._call_subclass(self.m // other.to_base_units().m, self.u)
 

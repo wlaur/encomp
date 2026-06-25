@@ -20,8 +20,8 @@ assert_type.__code__ = _assert_type.__code__
 def test_inference_basic() -> None:
     assert_type(Q([1]), Q[ut.Dimensionless])
     assert_type(Q(1), Q[ut.Dimensionless, float])
-    assert_type(Q(np.array([1])), Q[ut.Dimensionless, ut.Numpy1DArray])
-    assert_type(Q(np.array([1])), Q[ut.Dimensionless, ut.Numpy1DArray])
+    assert_type(Q(np.array([1])), Q[ut.Dimensionless, ut.Numpy1DArray])  # pyrefly: ignore[assert-type]
+    assert_type(Q(np.array([1])), Q[ut.Dimensionless, ut.Numpy1DArray])  # pyrefly: ignore[assert-type]
     assert_type(Q(pl.Series([1])), Q[ut.Dimensionless, pl.Series])
     assert_type(Q(pl.lit(1)), Q[ut.Dimensionless, pl.Expr])
 
@@ -378,7 +378,7 @@ def test_mul_dimensionless_float_float() -> None:
 
 def test_mul_dimensionless_float_array() -> None:
     assert_type(Q(1.0) * Q([2.0]), Q[ut.Dimensionless, ut.Numpy1DArray])
-    assert_type(Q(1.0) * Q(np.array([2.0])), Q[ut.Dimensionless, ut.Numpy1DArray])
+    assert_type(Q(1.0) * Q(np.array([2.0])), Q[ut.Dimensionless, ut.Numpy1DArray])  # pyrefly: ignore[assert-type]
 
 
 def test_mul_dimensionless_float_series() -> None:
@@ -391,12 +391,12 @@ def test_mul_dimensionless_float_expr() -> None:
 
 def test_mul_dimensionless_array_float() -> None:
     assert_type(Q([1.0]) * Q(2.0), Q[ut.Dimensionless, ut.Numpy1DArray])
-    assert_type(Q(np.array([1.0])) * Q(2.0), Q[ut.Dimensionless, ut.Numpy1DArray])
+    assert_type(Q(np.array([1.0])) * Q(2.0), Q[ut.Dimensionless, ut.Numpy1DArray])  # pyrefly: ignore[assert-type]
 
 
 def test_mul_dimensionless_array_array() -> None:
     assert_type(Q([1.0]) * Q([2.0]), Q[ut.Dimensionless, ut.Numpy1DArray])
-    assert_type(Q(np.array([1.0])) * Q(np.array([2.0])), Q[ut.Dimensionless, ut.Numpy1DArray])
+    assert_type(Q(np.array([1.0])) * Q(np.array([2.0])), Q[ut.Dimensionless, ut.Numpy1DArray])  # pyrefly: ignore[assert-type]
 
 
 def test_mul_dimensionless_series_float() -> None:
@@ -737,7 +737,7 @@ def test_truediv_mass_time_to_massflow_float() -> None:
 
 def test_truediv_mass_time_to_massflow_array() -> None:
     assert_type(Q([10.0], "kg") / Q(2.0, "s"), Q[ut.MassFlow, ut.Numpy1DArray])
-    assert_type(Q(np.array([10.0, 20.0]), "kg") / Q(2.0, "s"), Q[ut.MassFlow, ut.Numpy1DArray])
+    assert_type(Q(np.array([10.0, 20.0]), "kg") / Q(2.0, "s"), Q[ut.MassFlow, ut.Numpy1DArray])  # pyrefly: ignore[assert-type]
 
 
 def test_truediv_mass_time_to_massflow_series() -> None:

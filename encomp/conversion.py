@@ -33,9 +33,9 @@ def convert_volume_mass(
 
 
 def convert_volume_mass(
-    inp: (Quantity[Mass, MT] | Quantity[MassFlow, MT] | Quantity[Volume, MT] | Quantity[VolumeFlow, MT]),
+    inp: (Quantity[Mass, Any] | Quantity[MassFlow, Any] | Quantity[Volume, Any] | Quantity[VolumeFlow, Any]),
     rho: Quantity[Density, Any] | None = None,
-) -> Quantity[Mass, MT] | Quantity[MassFlow, MT] | Quantity[Volume, MT] | Quantity[VolumeFlow, MT]:
+) -> Quantity[Mass, Any] | Quantity[MassFlow, Any] | Quantity[Volume, Any] | Quantity[VolumeFlow, Any]:
     """
     Converts mass to volume or vice versa.
 
