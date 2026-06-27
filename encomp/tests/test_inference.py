@@ -224,11 +224,11 @@ def test_inference_dimensional_division() -> None:
     assert_type(Q([1000.0, 2000.0], "J") / Q(1.0, "kg"), Q[ut.EnergyPerMass, ut.Numpy1DArray])
 
     # Volume / Area = Length
-    assert_type(Q(100.0, "m^3") / Q(10.0, "m^2"), Q[ut.UnknownDimensionality, float])
+    assert_type(Q(100.0, "m^3") / Q(10.0, "m^2"), Q[ut.Length, float])
 
     # Area / Length = Length
-    assert_type(Q(50.0, "m^2") / Q(5.0, "m"), Q[ut.UnknownDimensionality, float])
-    assert_type(Q(pl.Series([50.0]), "m^2") / Q(5.0, "m"), Q[ut.UnknownDimensionality, pl.Series])
+    assert_type(Q(50.0, "m^2") / Q(5.0, "m"), Q[ut.Length, float])
+    assert_type(Q(pl.Series([50.0]), "m^2") / Q(5.0, "m"), Q[ut.Length, pl.Series])
 
     # VolumeFlow / Area = Velocity
     assert_type(Q(10.0, "m^3/s") / Q(2.0, "m^2"), Q[ut.UnknownDimensionality, float])
@@ -239,6 +239,41 @@ def test_inference_dimensional_division() -> None:
 
     # MassFlow / Density = VolumeFlow
     assert_type(Q(10.0, "kg/s") / Q(1000.0, "kg/m^3"), Q[ut.UnknownDimensionality, float])
+
+
+def test_inference_inverse_closure() -> None:
+    # these are the inverses of the curated products; they are kept in sync with the
+    # forward operations by test_overload_conformance.test_curated_algebra_is_closed_under_inverse
+
+    # Mass / MassFlow = Time  (inverse of MassFlow * Time = Mass)
+    assert_type(Q(100.0, "kg") / Q(10.0, "kg/s"), Q[ut.Time, float])
+    assert_type(Q([100.0, 200.0], "kg") / Q(10.0, "kg/s"), Q[ut.Time, ut.Numpy1DArray])
+
+    # Volume / VolumeFlow = Time  (inverse of VolumeFlow * Time = Volume)
+    assert_type(Q(100.0, "m^3") / Q(10.0, "m^3/s"), Q[ut.Time, float])
+
+    # Energy / Power = Time  (inverse of Power * Time = Energy)
+    assert_type(Q(100.0, "J") / Q(10.0, "W"), Q[ut.Time, float])
+
+    # Length / Velocity = Time  (inverse of Velocity * Time = Length)
+    assert_type(Q(100.0, "m") / Q(10.0, "m/s"), Q[ut.Time, float])
+
+    # Mass / Density = Volume  (inverse of Density * Volume = Mass)
+    assert_type(Q(100.0, "kg") / Q(10.0, "kg/m^3"), Q[ut.Volume, float])
+    assert_type(Q(pl.Series([100.0]), "kg") / Q(10.0, "kg/m^3"), Q[ut.Volume, pl.Series])
+
+    # Volume / Length = Area, Volume / Area = Length, Area / Length = Length
+    # (inverses of Length * Area = Volume and Length * Length = Area)
+    assert_type(Q(100.0, "m^3") / Q(10.0, "m"), Q[ut.Area, float])
+    assert_type(Q(100.0, "m^3") / Q(10.0, "m^2"), Q[ut.Length, float])
+    assert_type(Q(50.0, "m^2") / Q(5.0, "m"), Q[ut.Length, float])
+
+    # Energy / EnergyPerMass = Mass, and Mass * EnergyPerMass = Energy (both orders)
+    # "J/kg" does not infer to EnergyPerMass via the constructor, so coerce with asdim
+    eg = Q(10.0, "J/kg").asdim(ut.EnergyPerMass)
+    assert_type(Q(100.0, "J") / eg, Q[ut.Mass, float])
+    assert_type(Q(2.0, "kg") * eg, Q[ut.Energy, float])
+    assert_type(eg * Q(2.0, "kg"), Q[ut.Energy, float])
 
 
 def test_inference_dimensional_derived_units() -> None:
