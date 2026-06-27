@@ -183,9 +183,35 @@ def test_dimensional_overloads_have_full_mt_triple() -> None:
     assert not irregular, "dimensional pairs with an irregular magnitude-type triple:\n" + "\n".join(irregular)
 
 
+def _runtime_dim(opname: str, left: str, right: str) -> str | None:
+    """Return the dimensionality name produced by ``left <op> right`` at runtime, or
+    ``None`` if the operands cannot be constructed or the operation is undefined
+    (e.g. an offset-unit error)."""
+
+    if left not in _UNIT or right not in _UNIT:
+        return None
+
+    try:
+        ql = Quantity(1.0, _UNIT[left])
+        qr = Quantity(1.0, _UNIT[right])
+        result = ql * qr if opname == "__mul__" else ql / qr
+    except Exception:
+        return None
+
+    return result.dt.__name__
+
+
 def test_curated_algebra_is_closed_under_inverse() -> None:
     """For every supported product ``A * B = C``, the multiplications ``A * B`` and
-    ``B * A`` and the inverse divisions ``C / A`` and ``C / B`` must all be covered."""
+    ``B * A`` and the inverse divisions ``C / A`` and ``C / B`` must all be covered.
+
+    An expected piece is only *required* when the dimensional algebra actually inverts
+    to the expected dimensionality at runtime. This skips inverses that are not cleanly
+    expressible because of non-distinct dimensionalities - e.g. ``EnergyPerMass /
+    SpecificHeatCapacity`` resolves to ``Temperature`` rather than ``TemperatureDifference``
+    since the two share the ``[temperature]`` dimension - rather than demanding an unsound
+    overload.
+    """
 
     # canonicalise every overload into a multiplication fact: operands {A, B} -> C
     facts: dict[frozenset[str], str] = {}
@@ -205,13 +231,14 @@ def test_curated_algebra_is_closed_under_inverse() -> None:
         # expected multiplications (commutative)
         expected_mul = {(a, b)} if a == b else {(a, b), (b, a)}
         for left, right in sorted(expected_mul):
-            if ("__mul__", left, right) not in _SUPPORTED:
+            if _runtime_dim("__mul__", left, right) == product and ("__mul__", left, right) not in _SUPPORTED:
                 missing.append(f"{left} * {right} = {product}")
 
         # expected inverse divisions
         expected_div = {(a, b)} if a == b else {(a, b), (b, a)}
         for denom, quotient in sorted(expected_div):
-            if ("__truediv__", product, denom) not in _SUPPORTED:
+            required = _runtime_dim("__truediv__", product, denom) == quotient
+            if required and ("__truediv__", product, denom) not in _SUPPORTED:
                 missing.append(f"{product} / {denom} = {quotient}")
 
     assert not missing, "curated dimensional algebra is not closed under inverse; missing overloads:\n" + "\n".join(
