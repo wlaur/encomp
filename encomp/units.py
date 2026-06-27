@@ -379,6 +379,28 @@ class Quantity(
 
         return hash((self.m, self.u))
 
+    def __getattr__(self, item: str) -> Any:  # noqa: ANN401
+        # private and dunder lookups (incl. the numpy __array_* protocol, and
+        # _magnitude before it is assigned during construction) are left to
+        # pint's NumpyQuantity.__getattr__
+        if item.startswith("_"):
+            return super().__getattr__(item)
+
+        # a pl.Expr magnitude is a deferred plan, not data. pint's numpy-data
+        # surface (the HANDLED_UFUNCS method bridge reached here, plus the
+        # silent magnitude fall-through) all assume the magnitude is an array
+        # and misfire on a plan -- .mean() becomes col / 1, .alias() drops the
+        # unit, etc. only unit algebra (arithmetic, comparison, .to, abs) is
+        # meaningful on a plan; everything else operates on the data and so
+        # belongs on the underlying expression, reached via the .m property
+        if isinstance(self._magnitude, pl.Expr):
+            raise AttributeError(
+                f'"{item}" is not supported for Quantity with pl.Expr magnitude, '
+                'use the ".m" property to operate on the underlying polars expression'
+            )
+
+        return super().__getattr__(item)
+
     @property
     def _pint_super(self) -> Any:  # noqa: ANN401
         """
@@ -392,8 +414,20 @@ class Quantity(
         """
         return super()
 
-    # NOTE: pint NumpyQuantity does not have copy and dtype as kwargs for __array__
+    # __array__ is numpy's coercion hook: np.asarray(qty) / np.array(qty) call
+    # it to obtain the raw magnitude as an ndarray (unit stripped), which is how
+    # a Quantity interops with numpy, matplotlib, pandas, etc. the override
+    # exists because numpy 2.x passes copy=/dtype= kwargs that pint's __array__
+    # does not accept. a pl.Expr magnitude is a deferred plan with no array
+    # form, so coercing it would silently yield a 0-d object array -- refuse it
+    # for the same reason the numpy-data surface is disabled in __getattr__
     def __array__(self, t: Any | None = None, copy: bool = False, dtype: str | None = None) -> np.ndarray:  # noqa: ANN401
+        if isinstance(self._magnitude, pl.Expr):
+            raise TypeError(
+                "Quantity with pl.Expr magnitude cannot be converted to a numpy array, "
+                'use the ".m" property to access the underlying polars expression'
+            )
+
         return self._pint_super.__array__(t)
 
     @staticmethod
