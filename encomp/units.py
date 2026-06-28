@@ -384,22 +384,23 @@ class Quantity(
         # _magnitude before it is assigned during construction) are left to
         # pint's NumpyQuantity.__getattr__
         if item.startswith("_"):
-            return super().__getattr__(item)
+            return self._pint_super.__getattr__(item)
 
-        # a pl.Expr magnitude is a deferred plan, not data. pint's numpy-data
-        # surface (the HANDLED_UFUNCS method bridge reached here, plus the
-        # silent magnitude fall-through) all assume the magnitude is an array
-        # and misfire on a plan -- .mean() becomes col / 1, .alias() drops the
-        # unit, etc. only unit algebra (arithmetic, comparison, .to, abs) is
-        # meaningful on a plan; everything else operates on the data and so
-        # belongs on the underlying expression, reached via the .m property
-        if isinstance(self._magnitude, pl.Expr):
+        # pl.Series and pl.Expr are the polars world. a pl.Expr is a deferred
+        # plan (no data); a pl.Series holds data, but pint's numpy bridge is
+        # flaky on it (half the reductions crash on the missing .size, and the
+        # rest lose magnitude metadata). for both, the numpy-data surface
+        # reached here misfires, so it is disabled -- only unit algebra
+        # (arithmetic, comparison, .to, abs) is meaningful, and column/array
+        # computation belongs on the underlying polars object, reached via .m
+        if isinstance(self._magnitude, (pl.Expr, pl.Series)):
             raise AttributeError(
-                f'"{item}" is not supported for Quantity with pl.Expr magnitude, '
-                'use the ".m" property to operate on the underlying polars expression'
+                f'"{item}" is not supported for Quantity with '
+                f"{self._get_magnitude_type_name(type(self._magnitude))} magnitude, "
+                'use the ".m" property to operate on the underlying polars object'
             )
 
-        return super().__getattr__(item)
+        return self._pint_super.__getattr__(item)
 
     @property
     def _pint_super(self) -> Any:  # noqa: ANN401
@@ -418,14 +419,13 @@ class Quantity(
     # it to obtain the raw magnitude as an ndarray (unit stripped), which is how
     # a Quantity interops with numpy, matplotlib, pandas, etc. the override
     # exists because numpy 2.x passes copy=/dtype= kwargs that pint's __array__
-    # does not accept. a pl.Expr magnitude is a deferred plan with no array
-    # form, so coercing it would silently yield a 0-d object array -- refuse it
-    # for the same reason the numpy-data surface is disabled in __getattr__
+    # does not accept. a polars magnitude belongs to the polars world (see
+    # __getattr__), so it is not coerced here -- use .m and np.asarray(qty.m)
     def __array__(self, t: Any | None = None, copy: bool = False, dtype: str | None = None) -> np.ndarray:  # noqa: ANN401
-        if isinstance(self._magnitude, pl.Expr):
+        if isinstance(self._magnitude, (pl.Expr, pl.Series)):
             raise TypeError(
-                "Quantity with pl.Expr magnitude cannot be converted to a numpy array, "
-                'use the ".m" property to access the underlying polars expression'
+                f"Quantity with {self._get_magnitude_type_name(type(self._magnitude))} magnitude "
+                'cannot be converted to a numpy array, use the ".m" property to access the polars object'
             )
 
         return self._pint_super.__array__(t)
@@ -968,7 +968,13 @@ class Quantity(
 
     @property
     def mt(self) -> type[MT]:
-        return self._magnitude_type
+        # _magnitude_type is set on the magnitude-specific subclass, but pint
+        # builds results via self.__class__(...), which resolves to the
+        # magnitude-agnostic dimension-only subclass (where it is None). that is
+        # intentional -- the result magnitude type may differ from the source.
+        # _get_magnitude_type_safe falls back to the live magnitude's type when
+        # given an invalid value (None included), so it recovers the real type
+        return self._get_magnitude_type_safe(self._magnitude_type)
 
     @property
     def mt_name(self) -> MagnitudeTypeName:

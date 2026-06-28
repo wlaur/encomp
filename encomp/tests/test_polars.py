@@ -56,14 +56,36 @@ def test_polars_expr_unit_algebra_works() -> None:
     assert df.select(qty.to("g").m)["asd"][0] == 1000.0
 
 
-def test_polars_series_magnitude_methods_unaffected() -> None:
-    # eager magnitudes (pl.Series, np.ndarray) are data, so the pint numpy
-    # bridge stays enabled and reduces them in place, keeping the unit attached
+def test_polars_series_behaves_like_expr() -> None:
+    # pl.Series is the polars world too: pint's numpy bridge is flaky on it
+    # (half the reductions crash, the rest lose metadata), so the numpy-data
+    # surface is disabled and column ops go through .m, exactly like pl.Expr
     qty = Q(pl.Series("asd", [1.0, 2.0, 3.0]), "kg")
-    mean = qty.mean()
-    assert mean.m == 2.0
-    assert mean.u == Q(1, "kg").u
-    assert np.asarray(qty).tolist() == [1.0, 2.0, 3.0]
+
+    for name in ("mean", "sum", "std", "var", "cumsum"):
+        with raises(AttributeError, match="is not supported for Quantity with pl"):
+            getattr(qty, name)
+
+    with raises(TypeError, match="cannot be converted to a numpy array"):
+        np.asarray(qty)
+
+    # unit algebra still works; column ops + native reductions go via .m
+    assert qty.to("g").m[0] == 1000.0
+    assert qty.m.mean() == 2.0
+    assert np.asarray(qty.m).tolist() == [1.0, 2.0, 3.0]
+
+
+def test_numpy_bridge_result_metadata() -> None:
+    # numpy-native magnitudes keep the numpy bridge; its results are built by
+    # pint at the magnitude-agnostic subclass level (_magnitude_type is None),
+    # so mt/mt_name must recover the type from the live magnitude
+    reduced = Q(np.array([1.0, 4.0, 9.0]), "kg").mean()
+    assert reduced.m == 14.0 / 3
+    assert reduced.mt_name == "float"
+    assert reduced.mt is float
+
+    cumulative = Q(np.array([1.0, 4.0, 9.0]), "kg").cumsum()
+    assert cumulative.mt_name == "ndarray"
 
 
 def test_polars_dataframe() -> None:
