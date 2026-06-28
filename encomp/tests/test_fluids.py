@@ -633,7 +633,7 @@ def test_composition_normalize_warning(caplog: pytest.LogCaptureFixture) -> None
             .D
         )
 
-    assert "deviate from 1" in caplog.text
+    assert "renormalized" in caplog.text
     # still correct: 0.3/0.3 normalises to 0.5/0.5
     ref = (
         Fluid("HEOS", composition={"CO2": 0.5, "O2": 0.5}, P=Q(50.0, "bar"), T=Q(350.0, "degC"))
@@ -641,3 +641,32 @@ def test_composition_normalize_warning(caplog: pytest.LogCaptureFixture) -> None
         .D
     )
     assert float(deviating.m) == approx(float(ref.m), rel=1e-9)
+
+
+def test_composition_length_validation() -> None:
+    # state vector longer than the composition vectors
+    with pytest.raises(ValueError, match="same shape"):
+        Fluid(
+            "HEOS",
+            composition={"CO2": Q(np.array([0.5, 0.5]), ""), "O2": Q(np.array([0.5, 0.5]), "")},
+            P=Q(np.array([50.0, 50.0, 50.0]), "bar"),
+            T=Q(np.array([350.0, 360.0, 370.0]), "degC"),
+        ).assume_phase("supercritical_gas").D
+
+    # two fraction vectors of differing length
+    with pytest.raises(ValueError, match="same shape"):
+        Fluid(
+            "HEOS",
+            composition={"CO2": Q(np.array([0.5, 0.5, 0.5]), ""), "O2": Q(np.array([0.5, 0.5]), "")},
+            P=Q(np.array([50.0, 50.0]), "bar"),
+            T=Q(np.array([350.0, 360.0]), "degC"),
+        ).assume_phase("supercritical_gas").D
+
+    # pl.Expr fractions are lazy: building the expression must not raise here
+    fe = Fluid(
+        "HEOS",
+        composition={"CO2": Q(pl.col("x_CO2"), ""), "O2": Q(pl.col("x_O2"), "")},
+        P=Q(pl.col("P"), "bar"),
+        T=Q(pl.col("T"), "degC"),
+    ).assume_phase("supercritical_gas")
+    assert isinstance(fe.D.m, pl.Expr)

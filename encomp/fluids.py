@@ -190,6 +190,11 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     _composition_basis: str = "mole"
     _composition_normalize: bool = True
 
+    # True when an assumed phase or a composition is configured, i.e. evaluation
+    # must use the low-level AbstractState path. A single flag so the normal
+    # PropsSI path pays one attribute read, not several is-not-None checks.
+    _lowlevel: bool = False
+
     # display only head of vector inputs in the __repr__ method
     _repr_cutoff: int = 3
 
@@ -613,63 +618,230 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         _LOGGER.warning(f'CoolProp could not calculate "{prop}" for fluid "{self.name}", output is NaN: {msg}')
 
-    def _assumed_phase_state(self) -> Any:  # noqa: ANN401 - CoolProp AbstractState is untyped
-        """Build a low-level ``AbstractState`` with the assumed phase applied."""
-        backend, fluid_str = _cp.extract_backend(self.name)
-        fluids, fractions = _cp.extract_fractions(fluid_str)
-        if backend == "?":
-            backend = "HEOS"
-        state = _cp.AbstractState(backend, "&".join(fluids))
-        if len(fluids) > 1:
-            state.set_mole_fractions(list(fractions))
-        state.specify_phase(_ASSUMED_PHASE_MAP[cast("str", self._assumed_phase)])
+    # ------------------------------------------------------------------ #
+    # Low-level AbstractState path. Used whenever an assumed phase and/or a
+    # ``composition=`` dict is set (PropsSI cannot do either). Two cases:
+    #   * constant composition (fixed in the name, or scalar floats) -- the
+    #     common case: the state is built once and the loop only flashes.
+    #   * variable composition (array / pl.Expr fractions) -- a separate loop
+    #     that sets the per-row fractions before each flash.
+    # ------------------------------------------------------------------ #
+
+    def _lowlevel_backend(self) -> str:
+        backend = _cp.extract_backend(self.name)[0]
+        return "HEOS" if backend == "?" else backend
+
+    def _constant_state(self) -> Any:  # noqa: ANN401 - CoolProp AbstractState is untyped
+        """AbstractState with a fixed composition + assumed phase, set once."""
+        comp = self._composition
+        backend = self._lowlevel_backend()
+        if comp is not None:
+            state = _cp.AbstractState(backend, "&".join(comp))
+            fractions = [cast("float", v) for v in comp.values()]
+            if self._composition_normalize:
+                total = sum(fractions)
+                if abs(total - 1.0) > _COMPOSITION_SUM_TOLERANCE:
+                    _LOGGER.warning(
+                        f"composition fractions sum to {total:.3g}, not 1 "
+                        f"(basis={self._composition_basis!r}); they are renormalized. Pass "
+                        "normalize=False to treat a non-unit sum as an error instead."
+                    )
+                if total:
+                    fractions = [x / total for x in fractions]
+            set_fractions = state.set_mass_fractions if self._composition_basis == "mass" else state.set_mole_fractions
+            set_fractions(fractions)
+        else:
+            _, fluid_str = _cp.extract_backend(self.name)
+            fluids, fractions_from_name = _cp.extract_fractions(fluid_str)
+            state = _cp.AbstractState(backend, "&".join(fluids))
+            if len(fluids) > 1:
+                state.set_mole_fractions(list(fractions_from_name))
+        if self._assumed_phase is not None:
+            state.specify_phase(_ASSUMED_PHASE_MAP[self._assumed_phase])
         return state
 
-    def _evaluate_single_assumed(self, output: CProperty, *points: tuple[CProperty, float]) -> float:
-        state = self._assumed_phase_state()
-        k1 = _cp.get_parameter_index(points[0][0])
-        k2 = _cp.get_parameter_index(points[1][0])
+    def _lowlevel_loop_constant(
+        self, output: CProperty, p1_name: CProperty, p1_arr: Numpy1DArray, p2_name: CProperty, p2_arr: Numpy1DArray
+    ) -> Numpy1DArray:
+        state = self._constant_state()
+        k1 = _cp.get_parameter_index(p1_name)
+        k2 = _cp.get_parameter_index(p2_name)
         out_idx = _cp.get_parameter_index(output)
-        try:
-            pair, v1, v2 = _cp.generate_update_pair(k1, points[0][1], k2, points[1][1])
-            state.update(pair, v1, v2)
-            val = float(state.keyed_output(out_idx))
-        except ValueError as e:
-            self.check_exception(output, e)
-            return np.nan
-        if not np.isfinite(val):
-            return np.nan
-        return val
-
-    def _evaluate_multiple_assumed(self, output: CProperty, *points: tuple[CProperty, Numpy1DArray]) -> Numpy1DArray:
-        shape = points[0][1].shape
-        a = np.asarray(points[0][1], dtype=float).flatten()
-        b = np.asarray(points[1][1], dtype=float).flatten()
-
-        state = self._assumed_phase_state()
-        k1 = _cp.get_parameter_index(points[0][0])
-        k2 = _cp.get_parameter_index(points[1][0])
-        out_idx = _cp.get_parameter_index(output)
-
         generate_update_pair = _cp.generate_update_pair
         update = state.update
         keyed_output = state.keyed_output
 
-        out = np.full(a.size, np.nan)
-        for i in range(a.size):
-            ai = a[i]
-            bi = b[i]
-            if not (np.isfinite(ai) and np.isfinite(bi)):
+        out = np.full(p1_arr.size, np.nan)
+        for i in range(p1_arr.size):
+            v1 = p1_arr[i]
+            v2 = p2_arr[i]
+            if not (np.isfinite(v1) and np.isfinite(v2)):
                 continue
             try:
-                pair, v1, v2 = generate_update_pair(k1, ai, k2, bi)
-                update(pair, v1, v2)
+                pair, a, b = generate_update_pair(k1, v1, k2, v2)
+                update(pair, a, b)
                 out[i] = keyed_output(out_idx)
             except ValueError as e:
                 self.check_exception(output, e)
 
         out[~np.isfinite(out)] = np.nan
+        return out
+
+    def _lowlevel_loop_variable(
+        self,
+        output: CProperty,
+        p1_name: CProperty,
+        p1_arr: Numpy1DArray,
+        p2_name: CProperty,
+        p2_arr: Numpy1DArray,
+        species: list[str],
+        frac_arrs: list[Numpy1DArray],
+    ) -> Numpy1DArray:
+        state = _cp.AbstractState(self._lowlevel_backend(), "&".join(species))
+        set_fractions = state.set_mass_fractions if self._composition_basis == "mass" else state.set_mole_fractions
+        assumed_phase_idx = None if self._assumed_phase is None else _ASSUMED_PHASE_MAP[self._assumed_phase]
+        normalize = self._composition_normalize
+        k1 = _cp.get_parameter_index(p1_name)
+        k2 = _cp.get_parameter_index(p2_name)
+        out_idx = _cp.get_parameter_index(output)
+        generate_update_pair = _cp.generate_update_pair
+        update = state.update
+        keyed_output = state.keyed_output
+
+        if normalize and frac_arrs:
+            row_sums = np.sum(np.asarray(frac_arrs), axis=0)
+            finite = np.isfinite(row_sums)
+            if finite.any():
+                max_dev = float(np.max(np.abs(row_sums[finite] - 1.0)))
+                if max_dev > _COMPOSITION_SUM_TOLERANCE:
+                    _LOGGER.warning(
+                        f"composition fractions deviate from 1 by up to {max_dev:.3g} before "
+                        f"normalization (basis={self._composition_basis!r}); they are renormalized "
+                        "per row. Pass normalize=False to treat a non-unit sum as an error instead."
+                    )
+
+        n_species = len(species)
+        out = np.full(p1_arr.size, np.nan)
+        for i in range(p1_arr.size):
+            v1 = p1_arr[i]
+            v2 = p2_arr[i]
+            fractions = [frac_arrs[j][i] for j in range(n_species)]
+            if not (np.isfinite(v1) and np.isfinite(v2) and all(np.isfinite(x) for x in fractions)):
+                continue
+            if normalize:
+                total = sum(fractions)
+                if total == 0:
+                    continue
+                fractions = [x / total for x in fractions]
+            try:
+                set_fractions(fractions)
+                if assumed_phase_idx is not None:
+                    state.specify_phase(assumed_phase_idx)
+                pair, a, b = generate_update_pair(k1, v1, k2, v2)
+                update(pair, a, b)
+                out[i] = keyed_output(out_idx)
+            except ValueError as e:
+                self.check_exception(output, e)
+
+        out[~np.isfinite(out)] = np.nan
+        return out
+
+    def _evaluate_lowlevel(
+        self, output: CProperty, points: tuple[tuple[CProperty, float | Numpy1DArray | pl.Expr], ...]
+    ) -> float | Numpy1DArray | pl.Expr:
+        p1_name = points[0][0]
+        p2_name = points[1][0]
+        comp = self._composition
+
+        if comp is not None and any(isinstance(v, (np.ndarray, pl.Expr)) for v in comp.values()):
+            species = list(comp)
+            extra = [(f"__x_{sp}", comp[sp]) for sp in species]
+
+            def compute_variable(p1: Numpy1DArray, p2: Numpy1DArray, fracs: list[Numpy1DArray]) -> Numpy1DArray:
+                return self._lowlevel_loop_variable(output, p1_name, p1, p2_name, p2, species, fracs)
+
+            return self._lowlevel_dispatch(output, points, extra, compute_variable)
+
+        def compute_constant(p1: Numpy1DArray, p2: Numpy1DArray, _fracs: list[Numpy1DArray]) -> Numpy1DArray:
+            return self._lowlevel_loop_constant(output, p1_name, p1, p2_name, p2)
+
+        return self._lowlevel_dispatch(output, points, [], compute_constant)
+
+    def _lowlevel_dispatch(
+        self,
+        output: CProperty,
+        points: tuple[tuple[CProperty, float | Numpy1DArray | pl.Expr], ...],
+        extra: list[tuple[str, float | Numpy1DArray | pl.Expr]],
+        compute: Callable[[Numpy1DArray, Numpy1DArray, list[Numpy1DArray]], Numpy1DArray],
+    ) -> float | Numpy1DArray | pl.Expr:
+        points = tuple((name, self._reduce_single_element(mag)) for name, mag in points)
+        extra = [(name, self._reduce_single_element(v)) for name, v in extra]
+        p1 = points[0][1]
+        p2 = points[1][1]
+        all_vals: list[float | Numpy1DArray | pl.Expr] = [p1, p2, *(v for _, v in extra)]
+
+        if any(isinstance(m, pl.Expr) for m in all_vals):
+            if any(isinstance(m, np.ndarray) for m in all_vals):
+                raise TypeError("cannot mix numpy array and pl.Expr inputs")
+            return self._lowlevel_expr(output, points, extra, compute)
+
+        if all(isinstance(m, float) for m in all_vals):
+            out = compute(
+                np.array([cast("float", p1)]),
+                np.array([cast("float", p2)]),
+                [np.array([cast("float", v)]) for _, v in extra],
+            )
+            return float(out[0])
+
+        arrays = [m for m in all_vals if isinstance(m, np.ndarray)]
+        shape = arrays[0].shape
+        n = arrays[0].size
+        if any(a.shape != shape for a in arrays):
+            raise ValueError("all array inputs must share the same shape")
+
+        def to_arr(m: float | Numpy1DArray | pl.Expr) -> Numpy1DArray:
+            if isinstance(m, np.ndarray):
+                return m.flatten().astype(float)
+            return np.full(n, cast("float", m))
+
+        out = compute(to_arr(p1), to_arr(p2), [to_arr(v) for _, v in extra])
         return out.reshape(shape)
+
+    def _lowlevel_expr(
+        self,
+        output: CProperty,
+        points: tuple[tuple[CProperty, float | Numpy1DArray | pl.Expr], ...],
+        extra: list[tuple[str, float | Numpy1DArray | pl.Expr]],
+        compute: Callable[[Numpy1DArray, Numpy1DArray, list[Numpy1DArray]], Numpy1DArray],
+    ) -> pl.Expr:
+        expr_points = tuple((name, v if isinstance(v, pl.Expr) else pl.lit(v)) for name, v in points)
+        key = _get_expr_evaluation_cache_key(self, output, expr_points)
+        cached = _expr_evaluation_cache_get(key)
+        if cached is not None:
+            return cached
+
+        p1_name = points[0][0]
+        p2_name = points[1][0]
+        extra_fields = [(name, v if isinstance(v, pl.Expr) else pl.lit(v)) for name, v in extra]
+
+        def _evaluate(s: pl.Series) -> pl.Series:
+            p1_np = cast(Numpy1DArray, s.struct.field(p1_name).to_numpy())
+            p2_np = cast(Numpy1DArray, s.struct.field(p2_name).to_numpy())
+            frac_np = [cast(Numpy1DArray, s.struct.field(name).to_numpy()) for name, _ in extra]
+            ret = compute(p1_np, p2_np, frac_np)
+            ret_series = pl.Series(ret)
+            if self._convert_pl_series_nan_null:
+                ret_series = ret_series.fill_nan(None)
+            return ret_series.cast(pl.Float32)
+
+        fields = [
+            expr_points[0][1].alias(p1_name),
+            expr_points[1][1].alias(p2_name),
+            *[field.alias(name) for name, field in extra_fields],
+        ]
+        expr = pl.struct(*fields).map_batches(_evaluate, pl.Float32).alias(output)
+        _expr_evaluation_cache_set(key, expr)
+        return expr
 
     @staticmethod
     def _reduce_single_element(x: float | Numpy1DArray | pl.Expr) -> float | Numpy1DArray | pl.Expr:
@@ -679,9 +851,6 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         return x
 
     def evaluate_single(self, output: CProperty, *points: tuple[CProperty, float]) -> float:
-        if self._assumed_phase is not None:
-            return self._evaluate_single_assumed(output, *points)
-
         inputs = list(flatten(points))
 
         if self._append_name_to_cp_inputs:
@@ -760,9 +929,6 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         return np.array(vals)
 
     def evaluate_multiple(self, output: CProperty, *points: tuple[CProperty, Numpy1DArray]) -> Numpy1DArray:
-        if self._assumed_phase is not None:
-            return self._evaluate_multiple_assumed(output, *points)
-
         props = [pt[0] for pt in points]
         arrs = [pt[1] for pt in points]
         shape = arrs[0].shape
@@ -814,164 +980,11 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         return validate_output(val)
 
-    def _composition_state(self) -> Any:  # noqa: ANN401 - CoolProp AbstractState is untyped
-        backend, fluids = self.name.split("::", 1)
-        return _cp.AbstractState(backend, fluids)
-
-    def _composition_loop(
-        self,
-        output: CProperty,
-        p1_name: CProperty,
-        p1_arr: Numpy1DArray,
-        p2_name: CProperty,
-        p2_arr: Numpy1DArray,
-        species: list[str],
-        frac_arrs: list[Numpy1DArray],
-    ) -> Numpy1DArray:
-        state = self._composition_state()
-        set_fractions = state.set_mass_fractions if self._composition_basis == "mass" else state.set_mole_fractions
-        assumed_phase_idx = None if self._assumed_phase is None else _ASSUMED_PHASE_MAP[self._assumed_phase]
-        normalize = self._composition_normalize
-        k1 = _cp.get_parameter_index(p1_name)
-        k2 = _cp.get_parameter_index(p2_name)
-        out_idx = _cp.get_parameter_index(output)
-        generate_update_pair = _cp.generate_update_pair
-        update = state.update
-        keyed_output = state.keyed_output
-
-        if normalize and frac_arrs:
-            row_sums = np.sum(np.asarray(frac_arrs), axis=0)
-            finite = np.isfinite(row_sums)
-            if finite.any():
-                max_dev = float(np.max(np.abs(row_sums[finite] - 1.0)))
-                if max_dev > _COMPOSITION_SUM_TOLERANCE:
-                    _LOGGER.warning(
-                        f"composition fractions deviate from 1 by up to {max_dev:.3g} before "
-                        f"normalization (basis={self._composition_basis!r}); they are renormalized "
-                        "per row. Pass normalize=False to treat a non-unit sum as an error instead."
-                    )
-
-        n_species = len(species)
-        out = np.full(p1_arr.size, np.nan)
-        for i in range(p1_arr.size):
-            v1 = p1_arr[i]
-            v2 = p2_arr[i]
-            fractions = [frac_arrs[j][i] for j in range(n_species)]
-            if not (np.isfinite(v1) and np.isfinite(v2) and all(np.isfinite(x) for x in fractions)):
-                continue
-            if normalize:
-                total = sum(fractions)
-                if total == 0:
-                    continue
-                fractions = [x / total for x in fractions]
-            try:
-                set_fractions(fractions)
-                if assumed_phase_idx is not None:
-                    state.specify_phase(assumed_phase_idx)
-                pair, a, b = generate_update_pair(k1, v1, k2, v2)
-                update(pair, a, b)
-                out[i] = keyed_output(out_idx)
-            except ValueError as e:
-                self.check_exception(output, e)
-
-        out[~np.isfinite(out)] = np.nan
-        return out
-
-    def _evaluate_composition(
-        self,
-        output: CProperty,
-        points: tuple[tuple[CProperty, float | Numpy1DArray | pl.Expr], ...],
-        composition: dict[str, float | Numpy1DArray | pl.Expr],
-    ) -> float | Numpy1DArray | pl.Expr:
-        points = tuple((name, self._reduce_single_element(mag)) for name, mag in points)
-        frac_items = [(sp, self._reduce_single_element(v)) for sp, v in composition.items()]
-        species = [sp for sp, _ in frac_items]
-        frac_vals = [v for _, v in frac_items]
-        point_mags = [pt[1] for pt in points]
-        all_mags: list[float | Numpy1DArray | pl.Expr] = [*point_mags, *frac_vals]
-
-        if any(isinstance(m, pl.Expr) for m in all_mags):
-            if any(isinstance(m, np.ndarray) for m in all_mags):
-                raise TypeError("cannot mix numpy array and pl.Expr inputs for a composition fluid")
-            return self._evaluate_composition_expr(output, points, frac_items)
-
-        if all(isinstance(m, float) for m in all_mags):
-            out = self._composition_loop(
-                output,
-                points[0][0],
-                np.array([cast(float, points[0][1])]),
-                points[1][0],
-                np.array([cast(float, points[1][1])]),
-                species,
-                [np.array([cast(float, v)]) for v in frac_vals],
-            )
-            return float(out[0])
-
-        arrays = [m for m in all_mags if isinstance(m, np.ndarray)]
-        shape = arrays[0].shape
-        n = arrays[0].size
-        if any(a.shape != shape for a in arrays):
-            raise ValueError("all array inputs for a composition fluid must share the same shape")
-
-        def to_arr(m: float | Numpy1DArray | pl.Expr) -> Numpy1DArray:
-            if isinstance(m, np.ndarray):
-                return m.flatten().astype(float)
-            return np.full(n, cast("float", m))
-
-        out = self._composition_loop(
-            output,
-            points[0][0],
-            to_arr(point_mags[0]),
-            points[1][0],
-            to_arr(point_mags[1]),
-            species,
-            [to_arr(v) for v in frac_vals],
-        )
-        return out.reshape(shape)
-
-    def _evaluate_composition_expr(
-        self,
-        output: CProperty,
-        points: tuple[tuple[CProperty, float | Numpy1DArray | pl.Expr], ...],
-        frac_items: list[tuple[str, float | Numpy1DArray | pl.Expr]],
-    ) -> pl.Expr:
-        expr_points = tuple((name, value if isinstance(value, pl.Expr) else pl.lit(value)) for name, value in points)
-        key = _get_expr_evaluation_cache_key(self, output, expr_points)
-        cached = _expr_evaluation_cache_get(key)
-        if cached is not None:
-            return cached
-
-        species = [sp for sp, _ in frac_items]
-        p1_name = points[0][0]
-        p2_name = points[1][0]
-
-        def _frac_field(value: float | Numpy1DArray | pl.Expr) -> pl.Expr:
-            return value if isinstance(value, pl.Expr) else pl.lit(value)
-
-        def _evaluate(s: pl.Series) -> pl.Series:
-            p1_np = cast(Numpy1DArray, s.struct.field(p1_name).to_numpy())
-            p2_np = cast(Numpy1DArray, s.struct.field(p2_name).to_numpy())
-            frac_np = [cast(Numpy1DArray, s.struct.field(f"__x_{sp}").to_numpy()) for sp in species]
-            ret = self._composition_loop(output, p1_name, p1_np, p2_name, p2_np, species, frac_np)
-            ret_series = pl.Series(ret)
-            if self._convert_pl_series_nan_null:
-                ret_series = ret_series.fill_nan(None)
-            return ret_series.cast(pl.Float32)
-
-        fields = [
-            expr_points[0][1].alias(p1_name),
-            expr_points[1][1].alias(p2_name),
-            *[_frac_field(value).alias(f"__x_{sp}") for sp, value in frac_items],
-        ]
-        expr = pl.struct(*fields).map_batches(_evaluate, pl.Float32).alias(output)
-        _expr_evaluation_cache_set(key, expr)
-        return expr
-
     def evaluate(
         self, output: CProperty, *points: tuple[CProperty, float | Numpy1DArray | pl.Expr]
     ) -> float | Numpy1DArray | pl.Expr:
-        if self._composition is not None:
-            return self._evaluate_composition(output, points, self._composition)
+        if self._lowlevel:
+            return self._evaluate_lowlevel(output, points)
 
         if all(isinstance(pt[1], float) for pt in points):
             scalar_points = [cast("tuple[CProperty, float]", n) for n in points]
@@ -1259,6 +1272,7 @@ class Fluid(CoolPropFluid[MT]):
         self._composition = {sp: self._coerce_fraction(composition[sp]) for sp in species}
         self._composition_basis = basis
         self._composition_normalize = normalize
+        self._lowlevel = True
 
     def assume_phase(self, phase: AssumedPhase | None) -> Self:
         """Force the equation of state to assume ``phase``, skipping CoolProp's
@@ -1309,6 +1323,7 @@ class Fluid(CoolPropFluid[MT]):
             return self
 
         self._assumed_phase = phase
+        self._lowlevel = phase is not None or self._composition is not None
         return self
 
     @property
