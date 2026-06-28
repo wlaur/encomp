@@ -562,6 +562,16 @@ def test_composition() -> None:
     ).assume_phase("supercritical_gas")
     assert float(fa.D.m[1]) == approx(float(ref.m), rel=1e-9)
 
+    # a 1-element (scalar-like) fraction broadcasts against an N-element state
+    fb = Fluid(
+        "HEOS",
+        composition={"CO2": 0.5, "O2": 0.5},
+        P=Q(np.full(3, 50.0), "bar"),
+        T=Q(np.full(3, 350.0), "degC"),
+    ).assume_phase("supercritical_gas")
+    assert isinstance(fb.D.m, np.ndarray) and fb.D.m.size == 3
+    assert float(fb.D.m[0]) == approx(float(ref.m), rel=1e-9)
+
     # per-row varying composition (pl.Expr / DAG)
     fe = Fluid(
         "HEOS",

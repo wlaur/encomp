@@ -66,7 +66,6 @@ CProperty = Annotated[str, "CoolProp property name"]
 CName = Annotated[str, "CoolProp fluid name"]
 UnitString = Annotated[str, "Unit string"]
 
-# user-facing phase names accepted by Fluid.assume_phase
 AssumedPhase = Literal[
     "gas",
     "liquid",
@@ -76,8 +75,7 @@ AssumedPhase = Literal[
     "twophase",
 ]
 
-# map the user-facing names to the CoolProp phase index used by
-# AbstractState.specify_phase (imported lazily-safe from the compiled module)
+# user-facing phase name -> CoolProp phase index (for AbstractState.specify_phase)
 _ASSUMED_PHASE_MAP: dict[str, Any] = {
     "gas": _cp.iphase_gas,
     "liquid": _cp.iphase_liquid,
@@ -89,10 +87,7 @@ _ASSUMED_PHASE_MAP: dict[str, Any] = {
 
 CompositionBasis = Literal["mole", "mass"]
 
-# a single mole/mass fraction value: scalar (fixed) or vectorized (per-row varying)
 FractionValue = Quantity[Any, Any] | float | int | Numpy1DArray | pl.Series | pl.Expr
-
-# mixture composition passed to Fluid(..., composition=...): species name -> fraction
 Composition = dict[CName, FractionValue]
 
 # backends that ignore AbstractState.specify_phase (region-explicit), so assuming a
@@ -631,8 +626,6 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         return state
 
     def _evaluate_single_assumed(self, output: CProperty, *points: tuple[CProperty, float]) -> float:
-        if len(points) != 2:
-            raise ValueError(f"imposing a phase requires exactly two state points, got {len(points)}")
         state = self._assumed_phase_state()
         k1 = _cp.get_parameter_index(points[0][0])
         k2 = _cp.get_parameter_index(points[1][0])
@@ -649,8 +642,6 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         return val
 
     def _evaluate_multiple_assumed(self, output: CProperty, *points: tuple[CProperty, Numpy1DArray]) -> Numpy1DArray:
-        if len(points) != 2:
-            raise ValueError(f"imposing a phase requires exactly two state points, got {len(points)}")
         shape = points[0][1].shape
         a = np.asarray(points[0][1], dtype=float).flatten()
         b = np.asarray(points[1][1], dtype=float).flatten()
@@ -660,7 +651,6 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         k2 = _cp.get_parameter_index(points[1][0])
         out_idx = _cp.get_parameter_index(output)
 
-        # bind hot-loop attributes locally to cut attribute lookups
         generate_update_pair = _cp.generate_update_pair
         update = state.update
         keyed_output = state.keyed_output
@@ -680,6 +670,13 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         out[~np.isfinite(out)] = np.nan
         return out.reshape(shape)
+
+    @staticmethod
+    def _reduce_single_element(x: float | Numpy1DArray | pl.Expr) -> float | Numpy1DArray | pl.Expr:
+        """Treat a 1-element array as a scalar (so single-row inputs return a float)."""
+        if isinstance(x, np.ndarray) and x.size == 1:
+            return float(x[0])
+        return x
 
     def evaluate_single(self, output: CProperty, *points: tuple[CProperty, float]) -> float:
         if self._assumed_phase is not None:
@@ -886,10 +883,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         points: tuple[tuple[CProperty, float | Numpy1DArray | pl.Expr], ...],
         composition: dict[str, float | Numpy1DArray | pl.Expr],
     ) -> float | Numpy1DArray | pl.Expr:
-        if len(points) != 2:
-            raise ValueError(f"a composition fluid requires exactly two state points, got {len(points)}")
-
-        frac_items = list(composition.items())
+        points = tuple((name, self._reduce_single_element(mag)) for name, mag in points)
+        frac_items = [(sp, self._reduce_single_element(v)) for sp, v in composition.items()]
         species = [sp for sp, _ in frac_items]
         frac_vals = [v for _, v in frac_items]
         point_mags = [pt[1] for pt in points]
@@ -951,11 +946,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         p2_name = points[1][0]
 
         def _frac_field(value: float | Numpy1DArray | pl.Expr) -> pl.Expr:
-            if isinstance(value, pl.Expr):
-                return value
-            if isinstance(value, np.ndarray):
-                raise TypeError("cannot mix array fractions with pl.Expr inputs")
-            return pl.lit(value)
+            return value if isinstance(value, pl.Expr) else pl.lit(value)
 
         def _evaluate(s: pl.Series) -> pl.Series:
             p1_np = cast(Numpy1DArray, s.struct.field(p1_name).to_numpy())
@@ -996,17 +987,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             expr_points = [(n[0], n[1] if isinstance(n[1], pl.Expr) else pl.lit(n[1])) for n in points]
             return self.evaluate_expression(output, *expr_points)
 
-        def single_element_vector_to_float(x: float | Numpy1DArray) -> float | Numpy1DArray:
-            if isinstance(x, float):
-                return x
-
-            if isinstance(x, np.ndarray) and x.size == 1:
-                return float(x[0])
-
-            return x
-
         points = tuple(
-            (p, single_element_vector_to_float(v))
+            (p, self._reduce_single_element(v))
             for p, v in cast("tuple[tuple[CProperty, float | Numpy1DArray]]", points)
         )
 
@@ -1284,7 +1266,7 @@ class Fluid(CoolPropFluid[MT]):
 
         With ``P, T`` inputs CoolProp normally runs a phase-stability search to
         decide whether the state is single- or two-phase. For HEOS/GERG mixtures
-        that search dominates the cost (~5 ms/point); imposing a phase you
+        that search dominates the cost (~5 ms/point); assuming a phase you
         already know skips it and switches evaluation to the low-level
         ``AbstractState`` API -- on the order of 100-1000x faster.
 
