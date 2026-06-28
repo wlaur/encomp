@@ -1,6 +1,7 @@
 # ruff: noqa: B018
 # pyright: reportConstantRedefinition=false
 
+import logging
 from typing import Any, assert_type, cast
 
 import numpy as np
@@ -505,48 +506,48 @@ def test_polars_fluids_expression_cache_distinct_inputs(monkeypatch: pytest.Monk
     assert calls[0] == 12
 
 
-def test_impose_phase() -> None:
+def test_assume_phase() -> None:
     mix = "HEOS::CO2[0.5]&O2[0.5]"
 
     # chaining returns self
     f = Fluid(mix, P=Q(50.0, "bar"), T=Q(350.0, "degC"))
-    assert f.impose_phase("gas") is f
+    assert f.assume_phase("gas") is f
 
-    # in a genuinely single-phase region the imposed result matches auto-phase
+    # in a genuinely single-phase region the assumed result matches auto-phase
     auto = Fluid(mix, P=Q(50.0, "bar"), T=Q(350.0, "degC")).D
-    imposed = Fluid(mix, P=Q(50.0, "bar"), T=Q(350.0, "degC")).impose_phase("supercritical_gas").D
-    assert imposed.u == auto.u
-    assert float(imposed.m) == approx(float(auto.m), rel=1e-9)
+    assumed = Fluid(mix, P=Q(50.0, "bar"), T=Q(350.0, "degC")).assume_phase("supercritical_gas").D
+    assert assumed.u == auto.u
+    assert float(assumed.m) == approx(float(auto.m), rel=1e-9)
 
     # array input
     T_arr = Q(np.linspace(300.0, 600.0, 5), "K")
     P_arr = Q(np.full(5, 50e5), "Pa")
-    imposed_arr = Fluid(mix, P=P_arr, T=T_arr).impose_phase("supercritical_gas").D.m
+    assumed_arr = Fluid(mix, P=P_arr, T=T_arr).assume_phase("supercritical_gas").D.m
     auto_arr = Fluid(mix, P=P_arr, T=T_arr).D.m
-    assert np.allclose(imposed_arr, auto_arr, rtol=1e-9)
+    assert np.allclose(assumed_arr, auto_arr, rtol=1e-9)
 
     # pl.Expr input flows through the low-level path (the .m expr is auto-named "D")
-    fe = Fluid(mix, P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K")).impose_phase("supercritical_gas")
+    fe = Fluid(mix, P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K")).assume_phase("supercritical_gas")
     res = pl.DataFrame({"P": [50e5], "T": [623.15]}).select(fe.D.m)  # 623.15 K = 350 degC
     assert res["D"][0] == approx(float(auto.m), rel=1e-4)
 
     # clearing restores automatic determination (checked behaviourally)
-    f.impose_phase(None)
+    f.assume_phase(None)
     assert float(f.D.m) == approx(float(auto.m), rel=1e-9)
 
     # unknown phase name is rejected (cast to Any to exercise the runtime guard)
     with pytest.raises(ValueError, match="unknown phase"):
-        Fluid(mix, P=Q(50.0, "bar"), T=Q(350.0, "degC")).impose_phase(cast(Any, "plasma"))
+        Fluid(mix, P=Q(50.0, "bar"), T=Q(350.0, "degC")).assume_phase(cast(Any, "plasma"))
 
 
 def test_composition() -> None:
     # reference: same mixture/state with fractions baked into the name string
-    ref = Fluid("HEOS::CO2[0.5]&O2[0.5]", P=Q(50.0, "bar"), T=Q(350.0, "degC")).impose_phase("supercritical_gas").D
+    ref = Fluid("HEOS::CO2[0.5]&O2[0.5]", P=Q(50.0, "bar"), T=Q(350.0, "degC")).assume_phase("supercritical_gas").D
 
     # scalar composition= matches the fixed-name reference exactly
     comp = (
         Fluid("HEOS", composition={"CO2": 0.5, "O2": 0.5}, P=Q(50.0, "bar"), T=Q(350.0, "degC"))
-        .impose_phase("supercritical_gas")
+        .assume_phase("supercritical_gas")
         .D
     )
     assert comp.u == ref.u
@@ -558,7 +559,7 @@ def test_composition() -> None:
         composition={"CO2": Q(np.array([0.3, 0.5, 0.7]), ""), "O2": Q(np.array([0.7, 0.5, 0.3]), "")},
         P=Q(np.full(3, 50.0), "bar"),
         T=Q(np.full(3, 350.0), "degC"),
-    ).impose_phase("supercritical_gas")
+    ).assume_phase("supercritical_gas")
     assert float(fa.D.m[1]) == approx(float(ref.m), rel=1e-9)
 
     # per-row varying composition (pl.Expr / DAG)
@@ -567,12 +568,12 @@ def test_composition() -> None:
         composition={"CO2": Q(pl.col("x_CO2"), ""), "O2": Q(pl.col("x_O2"), "")},
         P=Q(pl.col("P"), "bar"),
         T=Q(pl.col("T"), "degC"),
-    ).impose_phase("supercritical_gas")
+    ).assume_phase("supercritical_gas")
     res = pl.DataFrame({"P": [50.0], "T": [350.0], "x_CO2": [0.5], "x_O2": [0.5]}).select(fe.D.m)
     assert res["D"][0] == approx(float(ref.m), rel=1e-4)
 
     # normalize=True accepts unnormalised input (50/50 -> 0.5/0.5)
-    fn = Fluid("HEOS", composition={"CO2": 50.0, "O2": 50.0}, P=Q(50.0, "bar"), T=Q(350.0, "degC")).impose_phase(
+    fn = Fluid("HEOS", composition={"CO2": 50.0, "O2": 50.0}, P=Q(50.0, "bar"), T=Q(350.0, "degC")).assume_phase(
         "supercritical_gas"
     )
     assert float(fn.D.m) == approx(float(ref.m), rel=1e-9)
@@ -580,7 +581,7 @@ def test_composition() -> None:
     # mass basis differs from mole basis
     fm = Fluid(
         "HEOS", composition={"CO2": 0.5, "O2": 0.5}, basis="mass", P=Q(50.0, "bar"), T=Q(350.0, "degC")
-    ).impose_phase("supercritical_gas")
+    ).assume_phase("supercritical_gas")
     assert abs(float(fm.D.m) - float(ref.m)) > 1e-3
 
     # cannot set composition both in the name and via composition=
@@ -598,3 +599,35 @@ def test_composition() -> None:
     # at least two species are required
     with pytest.raises(ValueError, match="at least two species"):
         Fluid("HEOS", composition={"CO2": 1.0}, P=Q(50.0, "bar"), T=Q(350.0, "degC"))
+
+
+def test_assume_phase_if97_noop(caplog: pytest.LogCaptureFixture) -> None:
+    # Water uses IF97, which is region-explicit and ignores an assumed phase:
+    # assume_phase must be a no-op (warn + keep the fast vectorized path), not a
+    # pessimisation. The returned value must equal the auto-phase value.
+    auto = Water(P=Q(50.0, "bar"), T=Q(150.0, "degC")).D
+    w = Water(P=Q(50.0, "bar"), T=Q(150.0, "degC"))
+    with caplog.at_level(logging.WARNING):
+        assert w.assume_phase("gas") is w  # still chainable
+
+    assert "ignores an assumed phase" in caplog.text
+    assert float(w.D.m) == approx(float(auto.m), rel=1e-9)
+
+
+def test_composition_normalize_warning(caplog: pytest.LogCaptureFixture) -> None:
+    # fractions far from summing to 1 are renormalised, but a warning is emitted
+    with caplog.at_level(logging.WARNING):
+        deviating = (
+            Fluid("HEOS", composition={"CO2": 0.3, "O2": 0.3}, P=Q(50.0, "bar"), T=Q(350.0, "degC"))
+            .assume_phase("supercritical_gas")
+            .D
+        )
+
+    assert "deviate from 1" in caplog.text
+    # still correct: 0.3/0.3 normalises to 0.5/0.5
+    ref = (
+        Fluid("HEOS", composition={"CO2": 0.5, "O2": 0.5}, P=Q(50.0, "bar"), T=Q(350.0, "degC"))
+        .assume_phase("supercritical_gas")
+        .D
+    )
+    assert float(deviating.m) == approx(float(ref.m), rel=1e-9)

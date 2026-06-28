@@ -66,8 +66,8 @@ CProperty = Annotated[str, "CoolProp property name"]
 CName = Annotated[str, "CoolProp fluid name"]
 UnitString = Annotated[str, "Unit string"]
 
-# user-facing phase names accepted by Fluid.impose_phase
-ImposedPhase = Literal[
+# user-facing phase names accepted by Fluid.assume_phase
+AssumedPhase = Literal[
     "gas",
     "liquid",
     "supercritical",
@@ -78,7 +78,7 @@ ImposedPhase = Literal[
 
 # map the user-facing names to the CoolProp phase index used by
 # AbstractState.specify_phase (imported lazily-safe from the compiled module)
-_IMPOSED_PHASE_MAP: dict[str, Any] = {
+_ASSUMED_PHASE_MAP: dict[str, Any] = {
     "gas": _cp.iphase_gas,
     "liquid": _cp.iphase_liquid,
     "supercritical": _cp.iphase_supercritical,
@@ -94,6 +94,13 @@ FractionValue = Quantity[Any, Any] | float | int | Numpy1DArray | pl.Series | pl
 
 # mixture composition passed to Fluid(..., composition=...): species name -> fraction
 Composition = dict[CName, FractionValue]
+
+# backends that ignore AbstractState.specify_phase (region-explicit), so assuming a
+# phase has no effect and should not switch evaluation to the slower low-level loop
+_PHASE_IGNORING_BACKENDS = frozenset({"IF97"})
+
+# warn (when normalize=True) if a row's mole/mass fractions sum this far from 1
+_COMPOSITION_SUM_TOLERANCE = 0.01
 
 _EXPR_EVALUATION_CACHE_MAX_SIZE = 1024
 _EXPR_EVALUATION_CACHE: OrderedDict[tuple[Any, ...], pl.Expr] = OrderedDict()
@@ -131,7 +138,7 @@ def _get_expr_evaluation_cache_key(
     return (
         type(fluid),
         fluid.name,
-        fluid_any._imposed_phase,
+        fluid_any._assumed_phase,
         comp_key,
         output,
         bool(fluid_any._append_name_to_cp_inputs),
@@ -174,11 +181,11 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     # PropsSI returns NaN for invalid inputs in case valid inputs are also present
     _evaluate_invalid_separately: bool = False
 
-    # imposed phase (set via Fluid.impose_phase). When not None, property
+    # assumed phase (set via Fluid.assume_phase). When not None, property
     # evaluation switches from the high-level PropsSI backend to the low-level
     # AbstractState API with specify_phase, which skips the (for mixtures very
     # expensive) phase-stability search. None means CoolProp determines the phase.
-    _imposed_phase: str | None = None
+    _assumed_phase: str | None = None
 
     # per-row mixture composition (set via Fluid(..., composition=...)). When not
     # None, evaluation uses the low-level AbstractState loop with set_mole/mass
@@ -611,8 +618,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         _LOGGER.warning(f'CoolProp could not calculate "{prop}" for fluid "{self.name}", output is NaN: {msg}')
 
-    def _imposed_phase_state(self) -> Any:  # noqa: ANN401 - CoolProp AbstractState is untyped
-        """Build a low-level ``AbstractState`` with the imposed phase applied."""
+    def _assumed_phase_state(self) -> Any:  # noqa: ANN401 - CoolProp AbstractState is untyped
+        """Build a low-level ``AbstractState`` with the assumed phase applied."""
         backend, fluid_str = _cp.extract_backend(self.name)
         fluids, fractions = _cp.extract_fractions(fluid_str)
         if backend == "?":
@@ -620,13 +627,13 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         state = _cp.AbstractState(backend, "&".join(fluids))
         if len(fluids) > 1:
             state.set_mole_fractions(list(fractions))
-        state.specify_phase(_IMPOSED_PHASE_MAP[cast("str", self._imposed_phase)])
+        state.specify_phase(_ASSUMED_PHASE_MAP[cast("str", self._assumed_phase)])
         return state
 
-    def _evaluate_single_imposed(self, output: CProperty, *points: tuple[CProperty, float]) -> float:
+    def _evaluate_single_assumed(self, output: CProperty, *points: tuple[CProperty, float]) -> float:
         if len(points) != 2:
             raise ValueError(f"imposing a phase requires exactly two state points, got {len(points)}")
-        state = self._imposed_phase_state()
+        state = self._assumed_phase_state()
         k1 = _cp.get_parameter_index(points[0][0])
         k2 = _cp.get_parameter_index(points[1][0])
         out_idx = _cp.get_parameter_index(output)
@@ -641,14 +648,14 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             return np.nan
         return val
 
-    def _evaluate_multiple_imposed(self, output: CProperty, *points: tuple[CProperty, Numpy1DArray]) -> Numpy1DArray:
+    def _evaluate_multiple_assumed(self, output: CProperty, *points: tuple[CProperty, Numpy1DArray]) -> Numpy1DArray:
         if len(points) != 2:
             raise ValueError(f"imposing a phase requires exactly two state points, got {len(points)}")
         shape = points[0][1].shape
         a = np.asarray(points[0][1], dtype=float).flatten()
         b = np.asarray(points[1][1], dtype=float).flatten()
 
-        state = self._imposed_phase_state()
+        state = self._assumed_phase_state()
         k1 = _cp.get_parameter_index(points[0][0])
         k2 = _cp.get_parameter_index(points[1][0])
         out_idx = _cp.get_parameter_index(output)
@@ -675,8 +682,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         return out.reshape(shape)
 
     def evaluate_single(self, output: CProperty, *points: tuple[CProperty, float]) -> float:
-        if self._imposed_phase is not None:
-            return self._evaluate_single_imposed(output, *points)
+        if self._assumed_phase is not None:
+            return self._evaluate_single_assumed(output, *points)
 
         inputs = list(flatten(points))
 
@@ -756,8 +763,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         return np.array(vals)
 
     def evaluate_multiple(self, output: CProperty, *points: tuple[CProperty, Numpy1DArray]) -> Numpy1DArray:
-        if self._imposed_phase is not None:
-            return self._evaluate_multiple_imposed(output, *points)
+        if self._assumed_phase is not None:
+            return self._evaluate_multiple_assumed(output, *points)
 
         props = [pt[0] for pt in points]
         arrs = [pt[1] for pt in points]
@@ -826,7 +833,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     ) -> Numpy1DArray:
         state = self._composition_state()
         set_fractions = state.set_mass_fractions if self._composition_basis == "mass" else state.set_mole_fractions
-        impose = None if self._imposed_phase is None else _IMPOSED_PHASE_MAP[self._imposed_phase]
+        assumed_phase_idx = None if self._assumed_phase is None else _ASSUMED_PHASE_MAP[self._assumed_phase]
         normalize = self._composition_normalize
         k1 = _cp.get_parameter_index(p1_name)
         k2 = _cp.get_parameter_index(p2_name)
@@ -834,6 +841,18 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         generate_update_pair = _cp.generate_update_pair
         update = state.update
         keyed_output = state.keyed_output
+
+        if normalize and frac_arrs:
+            row_sums = np.sum(np.asarray(frac_arrs), axis=0)
+            finite = np.isfinite(row_sums)
+            if finite.any():
+                max_dev = float(np.max(np.abs(row_sums[finite] - 1.0)))
+                if max_dev > _COMPOSITION_SUM_TOLERANCE:
+                    _LOGGER.warning(
+                        f"composition fractions deviate from 1 by up to {max_dev:.3g} before "
+                        f"normalization (basis={self._composition_basis!r}); they are renormalized "
+                        "per row. Pass normalize=False to treat a non-unit sum as an error instead."
+                    )
 
         n_species = len(species)
         out = np.full(p1_arr.size, np.nan)
@@ -850,8 +869,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 fractions = [x / total for x in fractions]
             try:
                 set_fractions(fractions)
-                if impose is not None:
-                    state.specify_phase(impose)
+                if assumed_phase_idx is not None:
+                    state.specify_phase(assumed_phase_idx)
                 pair, a, b = generate_update_pair(k1, v1, k2, v2)
                 update(pair, a, b)
                 out[i] = keyed_output(out_idx)
@@ -1187,7 +1206,7 @@ class Fluid(CoolPropFluid[MT]):
             Per-row mixture composition, ``{species: mole/mass fraction}``. Each
             fraction may be scalar (fixed) or vectorised (ndarray / pl.Series /
             pl.Expr). Cannot be combined with fractions in ``name``. Requires a
-            mixture backend (e.g. HEOS). Pair with :meth:`impose_phase` for speed.
+            mixture backend (e.g. HEOS). Pair with :meth:`assume_phase` for speed.
         basis : {"mole", "mass"}
             Whether ``composition`` values are mole or mass fractions.
         normalize : bool
@@ -1259,7 +1278,7 @@ class Fluid(CoolPropFluid[MT]):
         self._composition_basis = basis
         self._composition_normalize = normalize
 
-    def impose_phase(self, phase: ImposedPhase | None) -> Self:
+    def assume_phase(self, phase: AssumedPhase | None) -> Self:
         """Force the equation of state to assume ``phase``, skipping CoolProp's
         own phase determination. This is a *speed* tool, not a validation tool.
 
@@ -1272,11 +1291,11 @@ class Fluid(CoolPropFluid[MT]):
         Important caveats:
 
         * **Only the HEOS/GERG backends honour it.** ``IF97`` (the default for
-          :class:`Water`) is region-explicit and *ignores* the imposed phase --
-          you get the correct auto-phase value but no speed-up (and the slower
-          per-point loop). Use ``Fluid("HEOS::Water", ...)`` if you need an
-          imposed phase for water.
-        * **The imposed phase must be correct for the operating domain.** Forcing
+          :class:`Water`) is region-explicit and ignores an assumed phase, so
+          this call is a no-op there: it emits a warning and keeps the fast
+          vectorized path (rather than switching to the slower per-point loop).
+          Use ``Fluid("HEOS::Water", ...)`` if you need an assumed phase for water.
+        * **The assumed phase must be correct for the operating domain.** Forcing
           a phase the fluid is not actually in does NOT raise -- on HEOS you get
           either ``NaN`` (deep in the wrong phase) or a finite but non-physical
           metastable root (near the saturation line). So it cannot be used to
@@ -1286,18 +1305,28 @@ class Fluid(CoolPropFluid[MT]):
         Pass ``None`` to clear it and restore automatic determination. Mutates
         ``self`` and returns it, so it can be chained::
 
-            Fluid("HEOS::CO2[0.5]&O2[0.5]", P=P, T=T).impose_phase("gas").D
+            Fluid("HEOS::CO2[0.5]&O2[0.5]", P=P, T=T).assume_phase("gas").D
 
         Parameters
         ----------
-        phase : ImposedPhase | None
+        phase : AssumedPhase | None
             One of ``"gas"``, ``"liquid"``, ``"supercritical"``,
             ``"supercritical_gas"``, ``"supercritical_liquid"``, ``"twophase"``,
             or ``None`` to clear.
         """
-        if phase is not None and phase not in _IMPOSED_PHASE_MAP:
-            raise ValueError(f"unknown phase {phase!r}, expected one of {sorted(_IMPOSED_PHASE_MAP)} or None")
-        self._imposed_phase = phase
+        if phase is not None and phase not in _ASSUMED_PHASE_MAP:
+            raise ValueError(f"unknown phase {phase!r}, expected one of {sorted(_ASSUMED_PHASE_MAP)} or None")
+
+        backend = self.name.split("::", 1)[0] if "::" in self.name else self.name
+        if phase is not None and backend.upper() in _PHASE_IGNORING_BACKENDS:
+            _LOGGER.warning(
+                f"the {backend} backend is region-explicit and ignores an assumed phase; "
+                f"assume_phase({phase!r}) is a no-op here (the fast vectorized path is kept). "
+                "Use a HEOS-backed fluid (e.g. Fluid('HEOS::Water', ...)) to assume a phase."
+            )
+            return self
+
+        self._assumed_phase = phase
         return self
 
     @property
