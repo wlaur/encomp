@@ -39,7 +39,7 @@ dependencies = [
     "polars",
     "sympy",
     "uncertainties",
-    "coolprop",
+    "coolprop>=8.0",
 ]
 
 [dependency-groups]
