@@ -10,14 +10,13 @@ from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable
 from threading import Lock
-from typing import Annotated, Any, ClassVar, Generic, Literal, cast
+from typing import Annotated, Any, ClassVar, Generic, Literal, Self, cast
 
 # CoolProp.CoolProp is a compiled extension module exporting both PropsSI and
-# HAPropsSI. pyright resolves it (and importing the module rather than the
-# untyped pure-Python CoolProp.HumidAirProp avoids its missing-stub warning),
-# but pyrefly cannot resolve the compiled module at all - hence the ignore.
-# The functions are untyped either way, so they are exposed as typed aliases below.
-import CoolProp.CoolProp as _CoolProp  # pyrefly: ignore[missing-import]
+# HAPropsSI. Importing the module (rather than the untyped pure-Python
+# CoolProp.HumidAirProp) avoids a missing-stub warning. The functions are
+# untyped, so they are exposed as typed aliases below.
+import CoolProp.CoolProp as _CoolProp
 import numpy as np
 import polars as pl
 
@@ -67,6 +66,27 @@ CProperty = Annotated[str, "CoolProp property name"]
 CName = Annotated[str, "CoolProp fluid name"]
 UnitString = Annotated[str, "Unit string"]
 
+# user-facing phase names accepted by Fluid.impose_phase
+ImposedPhase = Literal[
+    "gas",
+    "liquid",
+    "supercritical",
+    "supercritical_gas",
+    "supercritical_liquid",
+    "twophase",
+]
+
+# map the user-facing names to the CoolProp phase index used by
+# AbstractState.specify_phase (imported lazily-safe from the compiled module)
+_IMPOSED_PHASE_MAP: dict[str, Any] = {
+    "gas": _cp.iphase_gas,
+    "liquid": _cp.iphase_liquid,
+    "supercritical": _cp.iphase_supercritical,
+    "supercritical_gas": _cp.iphase_supercritical_gas,
+    "supercritical_liquid": _cp.iphase_supercritical_liquid,
+    "twophase": _cp.iphase_twophase,
+}
+
 _EXPR_EVALUATION_CACHE_MAX_SIZE = 1024
 _EXPR_EVALUATION_CACHE: OrderedDict[tuple[Any, ...], pl.Expr] = OrderedDict()
 _EXPR_EVALUATION_CACHE_LOCK = Lock()
@@ -92,6 +112,7 @@ def _get_expr_evaluation_cache_key(
     return (
         type(fluid),
         fluid.name,
+        fluid_any._imposed_phase,
         output,
         bool(fluid_any._append_name_to_cp_inputs),
         bool(fluid_any._convert_pl_series_nan_null),
@@ -132,6 +153,12 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     # HAPropsSI fails if one or more inputs are incorrect,
     # PropsSI returns NaN for invalid inputs in case valid inputs are also present
     _evaluate_invalid_separately: bool = False
+
+    # imposed phase (set via Fluid.impose_phase). When not None, property
+    # evaluation switches from the high-level PropsSI backend to the low-level
+    # AbstractState API with specify_phase, which skips the (for mixtures very
+    # expensive) phase-stability search. None means CoolProp determines the phase.
+    _imposed_phase: str | None = None
 
     # display only head of vector inputs in the __repr__ method
     _repr_cutoff: int = 3
@@ -556,7 +583,73 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         _LOGGER.warning(f'CoolProp could not calculate "{prop}" for fluid "{self.name}", output is NaN: {msg}')
 
+    def _imposed_phase_state(self) -> Any:  # noqa: ANN401 - CoolProp AbstractState is untyped
+        """Build a low-level ``AbstractState`` with the imposed phase applied."""
+        backend, fluid_str = _cp.extract_backend(self.name)
+        fluids, fractions = _cp.extract_fractions(fluid_str)
+        if backend == "?":
+            backend = "HEOS"
+        state = _cp.AbstractState(backend, "&".join(fluids))
+        if len(fluids) > 1:
+            state.set_mole_fractions(list(fractions))
+        state.specify_phase(_IMPOSED_PHASE_MAP[cast("str", self._imposed_phase)])
+        return state
+
+    def _evaluate_single_imposed(self, output: CProperty, *points: tuple[CProperty, float]) -> float:
+        if len(points) != 2:
+            raise ValueError(f"imposing a phase requires exactly two state points, got {len(points)}")
+        state = self._imposed_phase_state()
+        k1 = _cp.get_parameter_index(points[0][0])
+        k2 = _cp.get_parameter_index(points[1][0])
+        out_idx = _cp.get_parameter_index(output)
+        try:
+            pair, v1, v2 = _cp.generate_update_pair(k1, points[0][1], k2, points[1][1])
+            state.update(pair, v1, v2)
+            val = float(state.keyed_output(out_idx))
+        except ValueError as e:
+            self.check_exception(output, e)
+            return np.nan
+        if not np.isfinite(val):
+            return np.nan
+        return val
+
+    def _evaluate_multiple_imposed(self, output: CProperty, *points: tuple[CProperty, Numpy1DArray]) -> Numpy1DArray:
+        if len(points) != 2:
+            raise ValueError(f"imposing a phase requires exactly two state points, got {len(points)}")
+        shape = points[0][1].shape
+        a = np.asarray(points[0][1], dtype=float).flatten()
+        b = np.asarray(points[1][1], dtype=float).flatten()
+
+        state = self._imposed_phase_state()
+        k1 = _cp.get_parameter_index(points[0][0])
+        k2 = _cp.get_parameter_index(points[1][0])
+        out_idx = _cp.get_parameter_index(output)
+
+        # bind hot-loop attributes locally to cut attribute lookups
+        generate_update_pair = _cp.generate_update_pair
+        update = state.update
+        keyed_output = state.keyed_output
+
+        out = np.full(a.size, np.nan)
+        for i in range(a.size):
+            ai = a[i]
+            bi = b[i]
+            if not (np.isfinite(ai) and np.isfinite(bi)):
+                continue
+            try:
+                pair, v1, v2 = generate_update_pair(k1, ai, k2, bi)
+                update(pair, v1, v2)
+                out[i] = keyed_output(out_idx)
+            except ValueError as e:
+                self.check_exception(output, e)
+
+        out[~np.isfinite(out)] = np.nan
+        return out.reshape(shape)
+
     def evaluate_single(self, output: CProperty, *points: tuple[CProperty, float]) -> float:
+        if self._imposed_phase is not None:
+            return self._evaluate_single_imposed(output, *points)
+
         inputs = list(flatten(points))
 
         if self._append_name_to_cp_inputs:
@@ -635,6 +728,9 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         return np.array(vals)
 
     def evaluate_multiple(self, output: CProperty, *points: tuple[CProperty, Numpy1DArray]) -> Numpy1DArray:
+        if self._imposed_phase is not None:
+            return self._evaluate_multiple_imposed(output, *points)
+
         props = [pt[0] for pt in points]
         arrs = [pt[1] for pt in points]
         shape = arrs[0].shape
@@ -917,6 +1013,47 @@ class Fluid(CoolPropFluid[MT]):
         self.point_2: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = kwargs_list[1]
 
         self.points = [self.point_1, self.point_2]
+
+    def impose_phase(self, phase: ImposedPhase | None) -> Self:
+        """Force the equation of state to assume ``phase``, skipping CoolProp's
+        own phase determination. This is a *speed* tool, not a validation tool.
+
+        With ``P, T`` inputs CoolProp normally runs a phase-stability search to
+        decide whether the state is single- or two-phase. For HEOS/GERG mixtures
+        that search dominates the cost (~5 ms/point); imposing a phase you
+        already know skips it and switches evaluation to the low-level
+        ``AbstractState`` API -- on the order of 100-1000x faster.
+
+        Important caveats:
+
+        * **Only the HEOS/GERG backends honour it.** ``IF97`` (the default for
+          :class:`Water`) is region-explicit and *ignores* the imposed phase --
+          you get the correct auto-phase value but no speed-up (and the slower
+          per-point loop). Use ``Fluid("HEOS::Water", ...)`` if you need an
+          imposed phase for water.
+        * **The imposed phase must be correct for the operating domain.** Forcing
+          a phase the fluid is not actually in does NOT raise -- on HEOS you get
+          either ``NaN`` (deep in the wrong phase) or a finite but non-physical
+          metastable root (near the saturation line). So it cannot be used to
+          *detect* a wrong phase; for that, evaluate with auto-phase and check
+          :attr:`phase` (or quality ``Q``) instead.
+
+        Pass ``None`` to clear it and restore automatic determination. Mutates
+        ``self`` and returns it, so it can be chained::
+
+            Fluid("HEOS::CO2[0.5]&O2[0.5]", P=P, T=T).impose_phase("gas").D
+
+        Parameters
+        ----------
+        phase : ImposedPhase | None
+            One of ``"gas"``, ``"liquid"``, ``"supercritical"``,
+            ``"supercritical_gas"``, ``"supercritical_liquid"``, ``"twophase"``,
+            or ``None`` to clear.
+        """
+        if phase is not None and phase not in _IMPOSED_PHASE_MAP:
+            raise ValueError(f"unknown phase {phase!r}, expected one of {sorted(_IMPOSED_PHASE_MAP)} or None")
+        self._imposed_phase = phase
+        return self
 
     @property
     def phase(self) -> str:

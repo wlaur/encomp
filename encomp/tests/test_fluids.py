@@ -503,3 +503,37 @@ def test_polars_fluids_expression_cache_distinct_inputs(monkeypatch: pytest.Monk
 
     assert len(df.columns) == 12
     assert calls[0] == 12
+
+
+def test_impose_phase() -> None:
+    mix = "HEOS::CO2[0.5]&O2[0.5]"
+
+    # chaining returns self
+    f = Fluid(mix, P=Q(50.0, "bar"), T=Q(350.0, "degC"))
+    assert f.impose_phase("gas") is f
+
+    # in a genuinely single-phase region the imposed result matches auto-phase
+    auto = Fluid(mix, P=Q(50.0, "bar"), T=Q(350.0, "degC")).D
+    imposed = Fluid(mix, P=Q(50.0, "bar"), T=Q(350.0, "degC")).impose_phase("supercritical_gas").D
+    assert imposed.u == auto.u
+    assert float(imposed.m) == approx(float(auto.m), rel=1e-9)
+
+    # array input
+    T_arr = Q(np.linspace(300.0, 600.0, 5), "K")
+    P_arr = Q(np.full(5, 50e5), "Pa")
+    imposed_arr = Fluid(mix, P=P_arr, T=T_arr).impose_phase("supercritical_gas").D.m
+    auto_arr = Fluid(mix, P=P_arr, T=T_arr).D.m
+    assert np.allclose(imposed_arr, auto_arr, rtol=1e-9)
+
+    # pl.Expr input flows through the low-level path (the .m expr is auto-named "D")
+    fe = Fluid(mix, P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K")).impose_phase("supercritical_gas")
+    res = pl.DataFrame({"P": [50e5], "T": [623.15]}).select(fe.D.m)  # 623.15 K = 350 degC
+    assert res["D"][0] == approx(float(auto.m), rel=1e-4)
+
+    # clearing restores automatic determination (checked behaviourally)
+    f.impose_phase(None)
+    assert float(f.D.m) == approx(float(auto.m), rel=1e-9)
+
+    # unknown phase name is rejected (cast to Any to exercise the runtime guard)
+    with pytest.raises(ValueError, match="unknown phase"):
+        Fluid(mix, P=Q(50.0, "bar"), T=Q(350.0, "degC")).impose_phase(cast(Any, "plasma"))
