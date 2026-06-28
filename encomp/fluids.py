@@ -87,6 +87,14 @@ _IMPOSED_PHASE_MAP: dict[str, Any] = {
     "twophase": _cp.iphase_twophase,
 }
 
+CompositionBasis = Literal["mole", "mass"]
+
+# a single mole/mass fraction value: scalar (fixed) or vectorized (per-row varying)
+FractionValue = Quantity[Any, Any] | float | int | Numpy1DArray | pl.Series | pl.Expr
+
+# mixture composition passed to Fluid(..., composition=...): species name -> fraction
+Composition = dict[CName, FractionValue]
+
 _EXPR_EVALUATION_CACHE_MAX_SIZE = 1024
 _EXPR_EVALUATION_CACHE: OrderedDict[tuple[Any, ...], pl.Expr] = OrderedDict()
 _EXPR_EVALUATION_CACHE_LOCK = Lock()
@@ -109,10 +117,22 @@ def _get_expr_evaluation_cache_key(
 ) -> tuple[Any, ...]:
     fluid_any = cast(Any, fluid)
 
+    comp = fluid_any._composition
+    comp_key = (
+        None
+        if comp is None
+        else (
+            fluid_any._composition_basis,
+            bool(fluid_any._composition_normalize),
+            tuple((sp, _expr_cache_digest(v) if isinstance(v, pl.Expr) else repr(v)) for sp, v in comp.items()),
+        )
+    )
+
     return (
         type(fluid),
         fluid.name,
         fluid_any._imposed_phase,
+        comp_key,
         output,
         bool(fluid_any._append_name_to_cp_inputs),
         bool(fluid_any._convert_pl_series_nan_null),
@@ -159,6 +179,14 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     # AbstractState API with specify_phase, which skips the (for mixtures very
     # expensive) phase-stability search. None means CoolProp determines the phase.
     _imposed_phase: str | None = None
+
+    # per-row mixture composition (set via Fluid(..., composition=...)). When not
+    # None, evaluation uses the low-level AbstractState loop with set_mole/mass
+    # fractions per row, so the composition may vary across rows. None means the
+    # composition is fixed (encoded in the fluid name) or the fluid is pure.
+    _composition: dict[str, float | Numpy1DArray | pl.Expr] | None = None
+    _composition_basis: str = "mole"
+    _composition_normalize: bool = True
 
     # display only head of vector inputs in the __repr__ method
     _repr_cutoff: int = 3
@@ -782,9 +810,159 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         return validate_output(val)
 
+    def _composition_state(self) -> Any:  # noqa: ANN401 - CoolProp AbstractState is untyped
+        backend, fluids = self.name.split("::", 1)
+        return _cp.AbstractState(backend, fluids)
+
+    def _composition_loop(
+        self,
+        output: CProperty,
+        p1_name: CProperty,
+        p1_arr: Numpy1DArray,
+        p2_name: CProperty,
+        p2_arr: Numpy1DArray,
+        species: list[str],
+        frac_arrs: list[Numpy1DArray],
+    ) -> Numpy1DArray:
+        state = self._composition_state()
+        set_fractions = state.set_mass_fractions if self._composition_basis == "mass" else state.set_mole_fractions
+        impose = None if self._imposed_phase is None else _IMPOSED_PHASE_MAP[self._imposed_phase]
+        normalize = self._composition_normalize
+        k1 = _cp.get_parameter_index(p1_name)
+        k2 = _cp.get_parameter_index(p2_name)
+        out_idx = _cp.get_parameter_index(output)
+        generate_update_pair = _cp.generate_update_pair
+        update = state.update
+        keyed_output = state.keyed_output
+
+        n_species = len(species)
+        out = np.full(p1_arr.size, np.nan)
+        for i in range(p1_arr.size):
+            v1 = p1_arr[i]
+            v2 = p2_arr[i]
+            fractions = [frac_arrs[j][i] for j in range(n_species)]
+            if not (np.isfinite(v1) and np.isfinite(v2) and all(np.isfinite(x) for x in fractions)):
+                continue
+            if normalize:
+                total = sum(fractions)
+                if total == 0:
+                    continue
+                fractions = [x / total for x in fractions]
+            try:
+                set_fractions(fractions)
+                if impose is not None:
+                    state.specify_phase(impose)
+                pair, a, b = generate_update_pair(k1, v1, k2, v2)
+                update(pair, a, b)
+                out[i] = keyed_output(out_idx)
+            except ValueError as e:
+                self.check_exception(output, e)
+
+        out[~np.isfinite(out)] = np.nan
+        return out
+
+    def _evaluate_composition(
+        self,
+        output: CProperty,
+        points: tuple[tuple[CProperty, float | Numpy1DArray | pl.Expr], ...],
+        composition: dict[str, float | Numpy1DArray | pl.Expr],
+    ) -> float | Numpy1DArray | pl.Expr:
+        if len(points) != 2:
+            raise ValueError(f"a composition fluid requires exactly two state points, got {len(points)}")
+
+        frac_items = list(composition.items())
+        species = [sp for sp, _ in frac_items]
+        frac_vals = [v for _, v in frac_items]
+        point_mags = [pt[1] for pt in points]
+        all_mags: list[float | Numpy1DArray | pl.Expr] = [*point_mags, *frac_vals]
+
+        if any(isinstance(m, pl.Expr) for m in all_mags):
+            if any(isinstance(m, np.ndarray) for m in all_mags):
+                raise TypeError("cannot mix numpy array and pl.Expr inputs for a composition fluid")
+            return self._evaluate_composition_expr(output, points, frac_items)
+
+        if all(isinstance(m, float) for m in all_mags):
+            out = self._composition_loop(
+                output,
+                points[0][0],
+                np.array([cast(float, points[0][1])]),
+                points[1][0],
+                np.array([cast(float, points[1][1])]),
+                species,
+                [np.array([cast(float, v)]) for v in frac_vals],
+            )
+            return float(out[0])
+
+        arrays = [m for m in all_mags if isinstance(m, np.ndarray)]
+        shape = arrays[0].shape
+        n = arrays[0].size
+        if any(a.shape != shape for a in arrays):
+            raise ValueError("all array inputs for a composition fluid must share the same shape")
+
+        def to_arr(m: float | Numpy1DArray | pl.Expr) -> Numpy1DArray:
+            if isinstance(m, np.ndarray):
+                return m.flatten().astype(float)
+            return np.full(n, cast("float", m))
+
+        out = self._composition_loop(
+            output,
+            points[0][0],
+            to_arr(point_mags[0]),
+            points[1][0],
+            to_arr(point_mags[1]),
+            species,
+            [to_arr(v) for v in frac_vals],
+        )
+        return out.reshape(shape)
+
+    def _evaluate_composition_expr(
+        self,
+        output: CProperty,
+        points: tuple[tuple[CProperty, float | Numpy1DArray | pl.Expr], ...],
+        frac_items: list[tuple[str, float | Numpy1DArray | pl.Expr]],
+    ) -> pl.Expr:
+        expr_points = tuple((name, value if isinstance(value, pl.Expr) else pl.lit(value)) for name, value in points)
+        key = _get_expr_evaluation_cache_key(self, output, expr_points)
+        cached = _expr_evaluation_cache_get(key)
+        if cached is not None:
+            return cached
+
+        species = [sp for sp, _ in frac_items]
+        p1_name = points[0][0]
+        p2_name = points[1][0]
+
+        def _frac_field(value: float | Numpy1DArray | pl.Expr) -> pl.Expr:
+            if isinstance(value, pl.Expr):
+                return value
+            if isinstance(value, np.ndarray):
+                raise TypeError("cannot mix array fractions with pl.Expr inputs")
+            return pl.lit(value)
+
+        def _evaluate(s: pl.Series) -> pl.Series:
+            p1_np = cast(Numpy1DArray, s.struct.field(p1_name).to_numpy())
+            p2_np = cast(Numpy1DArray, s.struct.field(p2_name).to_numpy())
+            frac_np = [cast(Numpy1DArray, s.struct.field(f"__x_{sp}").to_numpy()) for sp in species]
+            ret = self._composition_loop(output, p1_name, p1_np, p2_name, p2_np, species, frac_np)
+            ret_series = pl.Series(ret)
+            if self._convert_pl_series_nan_null:
+                ret_series = ret_series.fill_nan(None)
+            return ret_series.cast(pl.Float32)
+
+        fields = [
+            expr_points[0][1].alias(p1_name),
+            expr_points[1][1].alias(p2_name),
+            *[_frac_field(value).alias(f"__x_{sp}") for sp, value in frac_items],
+        ]
+        expr = pl.struct(*fields).map_batches(_evaluate, pl.Float32).alias(output)
+        _expr_evaluation_cache_set(key, expr)
+        return expr
+
     def evaluate(
         self, output: CProperty, *points: tuple[CProperty, float | Numpy1DArray | pl.Expr]
     ) -> float | Numpy1DArray | pl.Expr:
+        if self._composition is not None:
+            return self._evaluate_composition(output, points, self._composition)
+
         if all(isinstance(pt[1], float) for pt in points):
             scalar_points = [cast("tuple[CProperty, float]", n) for n in points]
             return self.evaluate_single(output, *scalar_points)
@@ -986,7 +1164,15 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
 
 class Fluid(CoolPropFluid[MT]):
-    def __init__(self, name: CName, **kwargs: Quantity[Any, MT] | Quantity[Any, float]) -> None:
+    def __init__(
+        self,
+        name: CName,
+        *,
+        composition: Composition | None = None,
+        basis: CompositionBasis = "mole",
+        normalize: bool = True,
+        **kwargs: Quantity[Any, MT] | Quantity[Any, float],
+    ) -> None:
         """
         Represents a fluid at a fixed state, for example at a
         specific temperature and pressure.
@@ -994,18 +1180,33 @@ class Fluid(CoolPropFluid[MT]):
         Parameters
         ----------
         name : CName
-            Name of the fluid
+            Name of the fluid. With ``composition`` this is the backend only
+            (e.g. ``"HEOS"``); otherwise the full CoolProp name, optionally with
+            fixed fractions (e.g. ``"HEOS::CO2[0.5]&O2[0.5]"``).
+        composition : Composition | None
+            Per-row mixture composition, ``{species: mole/mass fraction}``. Each
+            fraction may be scalar (fixed) or vectorised (ndarray / pl.Series /
+            pl.Expr). Cannot be combined with fractions in ``name``. Requires a
+            mixture backend (e.g. HEOS). Pair with :meth:`impose_phase` for speed.
+        basis : {"mole", "mass"}
+            Whether ``composition`` values are mole or mass fractions.
+        normalize : bool
+            If True, normalise each row's fractions to sum to 1; if False, pass
+            them through as-is (CoolProp errors if a row does not sum to ~1).
         kwargs: Quantity[Any, MT]
             Values for the two fixed points. The name of the keyword argument is the
             CoolProp property name.
         """
 
-        self.name = name
-
         self.check_inputs(kwargs)
 
         if len(kwargs) != 2:
             raise ValueError(f"Exactly two fixed points are required, passed {list(kwargs)}")
+
+        if composition is not None:
+            self._init_composition(name, composition, basis, normalize)
+        else:
+            self.name = name
 
         kwargs_list = list(kwargs.items())
 
@@ -1013,6 +1214,50 @@ class Fluid(CoolPropFluid[MT]):
         self.point_2: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = kwargs_list[1]
 
         self.points = [self.point_1, self.point_2]
+
+    @staticmethod
+    def _coerce_fraction(value: FractionValue) -> float | Numpy1DArray | pl.Expr:
+        if isinstance(value, Quantity):
+            if not value.dimensionless:
+                raise ValueError(f"mole/mass fractions must be dimensionless, got unit {value.u}")
+            value = cast(FractionValue, value.m)
+        if isinstance(value, pl.Series):
+            return cast(Numpy1DArray, value.to_numpy())
+        if isinstance(value, (list, tuple)):
+            return np.asarray(value, dtype=float)
+        if isinstance(value, bool):
+            raise TypeError("a mole/mass fraction cannot be a bool")
+        if isinstance(value, int):
+            return float(value)
+        if isinstance(value, (float, np.ndarray, pl.Expr)):
+            return value
+        raise TypeError(f"unsupported fraction value type: {type(value)}")
+
+    def _init_composition(
+        self, name: CName, composition: Composition, basis: CompositionBasis, normalize: bool
+    ) -> None:
+        if len(composition) < 2:
+            raise ValueError(f"composition requires at least two species, got {list(composition)}")
+        if "[" in name:
+            raise ValueError(
+                "cannot set the composition both via the fluid name (e.g. 'HEOS::CO2[0.5]&O2[0.5]') "
+                "and the composition= argument; pass only the backend as name (e.g. 'HEOS')"
+            )
+
+        backend = name.split("::", 1)[0] if "::" in name else name
+        if backend.upper() == "IF97":
+            raise ValueError("composition= requires a mixture backend such as 'HEOS', not 'IF97'")
+
+        species = list(composition)
+        if "::" in name:
+            name_species = name.split("::", 1)[1].split("&")
+            if set(name_species) != set(species):
+                raise ValueError(f"species in name ({name_species}) do not match composition keys ({species})")
+
+        self.name = f"{backend}::{'&'.join(species)}"
+        self._composition = {sp: self._coerce_fraction(composition[sp]) for sp in species}
+        self._composition_basis = basis
+        self._composition_normalize = normalize
 
     def impose_phase(self, phase: ImposedPhase | None) -> Self:
         """Force the equation of state to assume ``phase``, skipping CoolProp's

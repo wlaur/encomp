@@ -537,3 +537,64 @@ def test_impose_phase() -> None:
     # unknown phase name is rejected (cast to Any to exercise the runtime guard)
     with pytest.raises(ValueError, match="unknown phase"):
         Fluid(mix, P=Q(50.0, "bar"), T=Q(350.0, "degC")).impose_phase(cast(Any, "plasma"))
+
+
+def test_composition() -> None:
+    # reference: same mixture/state with fractions baked into the name string
+    ref = Fluid("HEOS::CO2[0.5]&O2[0.5]", P=Q(50.0, "bar"), T=Q(350.0, "degC")).impose_phase("supercritical_gas").D
+
+    # scalar composition= matches the fixed-name reference exactly
+    comp = (
+        Fluid("HEOS", composition={"CO2": 0.5, "O2": 0.5}, P=Q(50.0, "bar"), T=Q(350.0, "degC"))
+        .impose_phase("supercritical_gas")
+        .D
+    )
+    assert comp.u == ref.u
+    assert float(comp.m) == approx(float(ref.m), rel=1e-9)
+
+    # per-row varying composition (array); the 0.5/0.5 row equals the reference
+    fa = Fluid(
+        "HEOS",
+        composition={"CO2": Q(np.array([0.3, 0.5, 0.7]), ""), "O2": Q(np.array([0.7, 0.5, 0.3]), "")},
+        P=Q(np.full(3, 50.0), "bar"),
+        T=Q(np.full(3, 350.0), "degC"),
+    ).impose_phase("supercritical_gas")
+    assert float(fa.D.m[1]) == approx(float(ref.m), rel=1e-9)
+
+    # per-row varying composition (pl.Expr / DAG)
+    fe = Fluid(
+        "HEOS",
+        composition={"CO2": Q(pl.col("x_CO2"), ""), "O2": Q(pl.col("x_O2"), "")},
+        P=Q(pl.col("P"), "bar"),
+        T=Q(pl.col("T"), "degC"),
+    ).impose_phase("supercritical_gas")
+    res = pl.DataFrame({"P": [50.0], "T": [350.0], "x_CO2": [0.5], "x_O2": [0.5]}).select(fe.D.m)
+    assert res["D"][0] == approx(float(ref.m), rel=1e-4)
+
+    # normalize=True accepts unnormalised input (50/50 -> 0.5/0.5)
+    fn = Fluid("HEOS", composition={"CO2": 50.0, "O2": 50.0}, P=Q(50.0, "bar"), T=Q(350.0, "degC")).impose_phase(
+        "supercritical_gas"
+    )
+    assert float(fn.D.m) == approx(float(ref.m), rel=1e-9)
+
+    # mass basis differs from mole basis
+    fm = Fluid(
+        "HEOS", composition={"CO2": 0.5, "O2": 0.5}, basis="mass", P=Q(50.0, "bar"), T=Q(350.0, "degC")
+    ).impose_phase("supercritical_gas")
+    assert abs(float(fm.D.m) - float(ref.m)) > 1e-3
+
+    # cannot set composition both in the name and via composition=
+    with pytest.raises(ValueError, match="both"):
+        Fluid("HEOS::CO2[0.5]&O2[0.5]", composition={"CO2": 0.5, "O2": 0.5}, P=Q(50.0, "bar"), T=Q(350.0, "degC"))
+
+    # species listed in the name must match the composition keys
+    with pytest.raises(ValueError, match="do not match"):
+        Fluid("HEOS::CO2&O2", composition={"CO2": 0.5, "N2": 0.5}, P=Q(50.0, "bar"), T=Q(350.0, "degC"))
+
+    # composition requires a mixture backend, not IF97
+    with pytest.raises(ValueError, match="mixture backend"):
+        Fluid("IF97", composition={"CO2": 0.5, "O2": 0.5}, P=Q(50.0, "bar"), T=Q(350.0, "degC"))
+
+    # at least two species are required
+    with pytest.raises(ValueError, match="at least two species"):
+        Fluid("HEOS", composition={"CO2": 1.0}, P=Q(50.0, "bar"), T=Q(350.0, "degC"))
