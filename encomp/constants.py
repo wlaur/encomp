@@ -1,7 +1,3 @@
-"""
-Contains constants used elsewhere in the library.
-"""
-
 from dataclasses import dataclass
 
 from .units import Quantity as Q
@@ -9,11 +5,6 @@ from .units import Quantity as Q
 
 @dataclass
 class Constants:
-    """
-    Collection of constants.
-    Use a single instance of this class to refer to these constants.
-    """
-
     R = Q(8.3144598, "kg*m²/K/mol/s²")
     SIGMA = Q(5.670374419e-8, "W/m**2/K**4")
 

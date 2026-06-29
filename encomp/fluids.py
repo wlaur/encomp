@@ -845,7 +845,6 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
     @staticmethod
     def _reduce_single_element(x: float | Numpy1DArray | pl.Expr) -> float | Numpy1DArray | pl.Expr:
-        """Treat a 1-element array as a scalar (so single-row inputs return a float)."""
         if isinstance(x, np.ndarray) and x.size == 1:
             return float(x[0])
         return x

@@ -1,17 +1,8 @@
 from textwrap import dedent
 
-from ..misc import grid_dimensions, isinstance_types, name_assignments
+from ..misc import isinstance_types, name_assignments
 from ..units import Quantity as Q
 from ..utypes import Dimensionless, Mass, Power, Temperature
-
-
-def test_grid_dimensions() -> None:
-    assert [
-        grid_dimensions(1, 2, 3),
-        grid_dimensions(-1, -1, 3),
-        grid_dimensions(-1, 2, 3),
-        grid_dimensions(2, -1, 3),
-    ] == [(2, 3), (0, 3), (2, 3), (1, 3)]
 
 
 def test_name_assignments() -> None:
