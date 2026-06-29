@@ -83,21 +83,38 @@ much slower per call (iterative solver). Still better than the Python path.
 
 ## Build / install
 
-Dev (one-time `libCoolProp` build, then editable install):
+`libCoolProp` is built from source once and bundled into the wheel, so every build
+starts with `scripts/build_libcoolprop.py`.
+
+Dev (editable install):
 
 ```bash
 python scripts/build_libcoolprop.py   # builds CoolProp's shared lib + bundles it
 maturin develop --release             # builds + installs the plugin
+# or, from the encomp repo root: uv sync --extra rust  (after build_libcoolprop.py)
 ```
 
-From the encomp repo root, `uv sync --extra rust` builds and installs the plugin
-via the uv workspace (run `build_libcoolprop.py` first so the lib is bundled).
+Local single-platform wheel:
 
-Distribution: per-platform binary wheels (the plugin + bundled `libCoolProp` are
-native; `abi3` → one wheel per platform covers CPython >=3.13). Built in CI by
-`.github/workflows/encomp-coolprop-wheels.yml` via `cibuildwheel`, which builds
-`libCoolProp` per OS, bundles it, and emits PyPI-compatible macOS/Linux/Windows
-wheels. `encomp` stays pure-Python and depends on this only through `encomp[rust]`.
+```bash
+python scripts/build_libcoolprop.py
+uv build --wheel        # NOT plain `uv build`: the sdist excludes the (gitignored)
+                        # libCoolProp, so an sdist->wheel build ships it unbundled
+```
+
+Cross-platform distribution wheels (the plugin + bundled `libCoolProp` are native;
+`abi3` → one wheel per platform covers CPython >=3.13) are built with `cibuildwheel`:
+
+| target  | on this macOS host        | in CI (`.github/workflows/encomp-coolprop-wheels.yml`) |
+|---------|---------------------------|--------------------------------------------------------|
+| macOS   | yes (native)              | macos-13 (x86_64), macos-14 (arm64)                    |
+| Linux   | yes, via Docker (manylinux)| ubuntu (x86_64) + ubuntu-arm (aarch64)                |
+| Windows | no — needs Windows         | windows-latest (amd64)                                 |
+
+`cibuildwheel` runs `build_libcoolprop.py` per platform (its `before-all`), bundles
+the lib, and emits PyPI-compatible tags. Publish the collected wheels with
+`uv publish` (or twine). `encomp` stays pure-Python and depends on this only via
+`encomp[rust]`.
 
 Lint/format: `cargo fmt`, `cargo clippy --all-targets -- -D warnings` (wired into
 the repo's pre-commit).
