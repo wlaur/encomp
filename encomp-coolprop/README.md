@@ -81,19 +81,30 @@ much slower per call (iterative solver). Still better than the Python path.
   `coolprop==8.0.0` to match the bundled Rust lib. The plugin resolves parameter
   indices via CoolProp at runtime, never hardcoded.
 
-## Build
+## Build / install
+
+Dev (one-time `libCoolProp` build, then editable install):
 
 ```bash
-maturin develop --release          # build + install into the active venv
-# then place the platform libCoolProp next to the built _internal.* in the package
+python scripts/build_libcoolprop.py   # builds CoolProp's shared lib + bundles it
+maturin develop --release             # builds + installs the plugin
 ```
 
-Production packaging = maturin + cibuildwheel, bundling `libCoolProp` 8.0 per
-platform (`[tool.maturin] include`). Lint/format: `cargo fmt`, `cargo clippy
---all-targets -- -D warnings` (also wired into the repo's pre-commit).
+From the encomp repo root, `uv sync --extra rust` builds and installs the plugin
+via the uv workspace (run `build_libcoolprop.py` first so the lib is bundled).
+
+Distribution: per-platform binary wheels (the plugin + bundled `libCoolProp` are
+native; `abi3` → one wheel per platform covers CPython >=3.13). Built in CI by
+`.github/workflows/encomp-coolprop-wheels.yml` via `cibuildwheel`, which builds
+`libCoolProp` per OS, bundles it, and emits PyPI-compatible macOS/Linux/Windows
+wheels. `encomp` stays pure-Python and depends on this only through `encomp[rust]`.
+
+Lint/format: `cargo fmt`, `cargo clippy --all-targets -- -D warnings` (wired into
+the repo's pre-commit).
 
 ## Files
 
 - `python/encomp_coolprop/__init__.py` — public Python API (`fluid`, `humid_air`).
 - `src/lib.rs` — the `cp_evaluate` / `ha_evaluate` plugin expressions.
 - `src/coolprop.rs` — the CoolProp C-API bindings + thread-safety model (all `unsafe`).
+- `scripts/build_libcoolprop.py` — builds + bundles CoolProp's shared library.

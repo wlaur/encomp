@@ -10,6 +10,12 @@ resolution-markers = [
     "python_full_version < '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
+[manifest]
+members = [
+    "encomp",
+    "encomp-coolprop",
+]
+
 [[package]]
 name = "accessible-pygments"
 version = "0.0.5"
@@ -513,6 +519,11 @@ dependencies = [
     { name = "uncertainties" },
 ]
 
+[package.optional-dependencies]
+rust = [
+    { name = "encomp-coolprop" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "altair" },
@@ -544,7 +555,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "asttokens" },
-    { name = "coolprop", specifier = ">=8.0" },
+    { name = "coolprop", specifier = "==8.0.0" },
+    { name = "encomp-coolprop", marker = "extra == 'rust'", editable = "encomp-coolprop" },
     { name = "fire" },
     { name = "numpy" },
     { name = "pint", specifier = ">=0.25.2" },
@@ -557,6 +569,7 @@ requires-dist = [
     { name = "typing-extensions" },
     { name = "uncertainties" },
 ]
+provides-extras = ["rust"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -584,6 +597,21 @@ dev = [
     { name = "sphinx-gallery" },
     { name = "sphinx-inline-tabs" },
     { name = "ty" },
+]
+
+[[package]]
+name = "encomp-coolprop"
+version = "0.1.0"
+source = { editable = "encomp-coolprop" }
+dependencies = [
+    { name = "coolprop" },
+    { name = "polars" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "coolprop", specifier = "==8.0.0" },
+    { name = "polars", specifier = ">=1.42" },
 ]
 
 [[package]]

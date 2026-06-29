@@ -15,3 +15,21 @@ module-name = "encomp_coolprop._internal"
 # bundle the per-platform CoolProp dynamic library into the wheel (built/copied
 # into python/encomp_coolprop/ before `maturin build`); the plugin dlopens it.
 include = [{ path = "python/encomp_coolprop/libCoolProp.*", format = "wheel" }]
+
+# Per-platform binary wheels (the plugin + bundled libCoolProp are native). abi3
+# means one wheel per platform covers CPython >=3.13. The GitHub Actions workflow
+# (.github/workflows/encomp-coolprop-wheels.yml) runs this on macOS/Linux/Windows.
+[tool.cibuildwheel]
+build = "cp313-*"                                  # abi3 -> usable on 3.13+
+skip = ["*-musllinux*", "*_i686", "*-win32"]
+# build libCoolProp from source and copy it next to the plugin before maturin runs
+before-all = "pip install cmake && python {project}/scripts/build_libcoolprop.py"
+# the bundled libCoolProp.* is a data file the plugin dlopens (not a linked dep),
+# so the default repair (delocate/auditwheel/delvewheel) just normalises the
+# platform tag (e.g. linux_x86_64 -> manylinux_*) that PyPI requires.
+test-command = 'python -c "import encomp_coolprop as cp; assert cp.self_check()"'
+
+[tool.cibuildwheel.linux]
+# the manylinux image lacks Rust (needed by maturin); install it + cmake, then build
+before-all = "curl -sSf https://sh.rustup.rs | sh -s -- -y && pip install cmake && python {project}/scripts/build_libcoolprop.py"
+environment = { PATH = "$HOME/.cargo/bin:$PATH" }
