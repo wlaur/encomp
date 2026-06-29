@@ -1,0 +1,17 @@
+[build-system]
+requires = ["maturin>=1.5,<2"]
+build-backend = "maturin"
+
+[project]
+name = "encomp-coolprop"
+version = "0.1.0"
+description = "Parallel CoolProp property evaluation as Polars expression plugins"
+requires-python = ">=3.13"
+dependencies = ["polars>=1.42", "coolprop==8.0.0"]
+
+[tool.maturin]
+python-source = "python"
+module-name = "encomp_coolprop._internal"
+# bundle the per-platform CoolProp dynamic library into the wheel (built/copied
+# into python/encomp_coolprop/ before `maturin build`); the plugin dlopens it.
+include = [{ path = "python/encomp_coolprop/libCoolProp.*", format = "wheel" }]

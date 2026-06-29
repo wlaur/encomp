@@ -39,7 +39,10 @@ dependencies = [
     "polars",
     "sympy",
     "uncertainties",
-    "coolprop>=8.0",
+    # Pinned exactly: the Rust plugin backend bundles a specific CoolProp build
+    # and the two must match (enum integers + EOS data differ across versions).
+    # Loosen to ~=8.0.0 only if the Rust side tracks patch releases.
+    "coolprop==8.0.0",
 ]
 
 [dependency-groups]

@@ -573,6 +573,50 @@ All inputs must have the same length (or a single scalar value).
 
 
 
+Parallel evaluation with Polars
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+:py:class:`encomp.fluids.Fluid` properties also accept ``Quantity``-wrapped Polars
+expressions (``pl.Expr``) and return a ``pl.Expr``. Independent property nodes in a
+one ``select`` / ``with_columns`` / ``collect()`` (eager or lazy) are evaluated
+*in parallel* by the ``encomp-coolprop`` plugin --
+a native Rust extension over the CoolProp C-API that runs without holding the GIL.
+The backend is selected by ``settings.coolprop_backend`` (``"rust"`` by default,
+falling back to a pure-Python path if the plugin is unavailable).
+
+.. code-block:: python
+
+    import polars as pl
+    from encomp.units import Quantity as Q
+    from encomp.fluids import Water
+
+    df = pl.DataFrame({'P': [50e5, 60e5], 'T': [400.0, 450.0]})  # Pa, K
+    w = Water(P=Q(pl.col('P'), 'Pa'), T=Q(pl.col('T'), 'K'))
+
+    # independent CoolProp properties evaluated in parallel across cores
+    df.select(w.D.m.alias('rho'), w.H.m.alias('h'), w.S.m.alias('s'))
+
+The plugin is also usable directly on any Polars expression, independent of the
+:py:class:`encomp.fluids.Fluid` class (the ``encomp_coolprop`` package):
+
+.. code-block:: python
+
+    import polars as pl
+    import encomp_coolprop as cp
+
+    df = pl.DataFrame({'P': [50e5, 60e5], 'T': [400.0, 450.0]})
+
+    df.select(
+        cp.fluid('DMASS', 'P', 'T').alias('rho'),   # defaults: backend IF97, fluid Water
+        cp.fluid('HMASS', 'P', 'T').alias('h'),
+        cp.humid_air('W', 'P', 'T', 'R').alias('humidity_ratio'),
+    )
+
+Any CoolProp input pair is supported (in any order) via ``name1``/``name2``,
+mixtures via ``backend``/``fluids`` and ``mole_fractions``, and an assumed phase
+via ``phase=``.
+
+
 Sympy functionality
 -------------------
 

@@ -234,6 +234,46 @@ HumidAir(P=Q(1, 'bar'), T=Q(100, 'degC'), R=Q(0.5))
 # <HumidAir, P=100 kPa, T=100.0 °C, R=0.50, Vda=2.2 m³/kg, Vha=1.3 m³/kg, M=0.017 cP>
 ```
 
+### Parallel CoolProp evaluation with Polars
+
+`Fluid` properties accept `Quantity`-wrapped Polars expressions and return a
+`pl.Expr`. Independent property nodes in one `select` / `with_columns` /
+`collect()` (eager or lazy alike) are evaluated **in parallel** by the
+`encomp-coolprop` plugin — a native Rust extension over the CoolProp C-API that
+runs GIL-free on the Polars thread pool. The backend is
+controlled by `settings.coolprop_backend` (`"rust"` by default, with automatic
+fallback to the pure-Python path if the plugin is unavailable):
+
+```python
+import polars as pl
+from encomp.units import Quantity as Q
+from encomp.fluids import Water
+
+df = pl.DataFrame({'P': [50e5, 60e5], 'T': [400.0, 450.0]})  # Pa, K
+w = Water(P=Q(pl.col('P'), 'Pa'), T=Q(pl.col('T'), 'K'))
+
+# these independent CoolProp properties run in parallel across cores
+df.select(w.D.m.alias('rho'), w.H.m.alias('h'), w.S.m.alias('s'))
+```
+
+The plugin is also usable directly on any Polars expression, independent of the
+`Fluid` class (`encomp_coolprop`):
+
+```python
+import polars as pl
+import encomp_coolprop as cp
+
+df = pl.DataFrame({'P': [50e5, 60e5], 'T': [400.0, 450.0]})
+
+df.select(
+    cp.fluid('DMASS', 'P', 'T').alias('rho'),   # defaults: backend IF97, fluid Water
+    cp.fluid('HMASS', 'P', 'T').alias('h'),
+    cp.humid_air('W', 'P', 'T', 'R').alias('humidity_ratio'),
+)
+# any CoolProp input pair (in any order) via name1/name2, mixtures via
+# backend/fluids + mole_fractions, and assume_phase via phase=
+```
+
 ## Tests
 
 First, make sure the development dependencies are installed with `uv sync --all-extras --all-groups`.

@@ -85,7 +85,6 @@ _ASSUMED_PHASE_MAP: dict[str, Any] = {
     "twophase": _cp.iphase_twophase,
 }
 
-CompositionBasis = Literal["mole", "mass"]
 
 FractionValue = Quantity[Any, Any] | float | int | Numpy1DArray | pl.Series | pl.Expr
 Composition = dict[CName, FractionValue]
@@ -94,7 +93,7 @@ Composition = dict[CName, FractionValue]
 # phase has no effect and should not switch evaluation to the slower low-level loop
 _PHASE_IGNORING_BACKENDS = frozenset({"IF97"})
 
-# warn (when normalize=True) if a row's mole/mass fractions sum this far from 1
+# warn (when normalize=True) if a row's mole fractions sum this far from 1
 _COMPOSITION_SUM_TOLERANCE = 0.01
 
 _EXPR_EVALUATION_CACHE_MAX_SIZE = 1024
@@ -124,7 +123,6 @@ def _get_expr_evaluation_cache_key(
         None
         if comp is None
         else (
-            fluid_any._composition_basis,
             bool(fluid_any._composition_normalize),
             tuple((sp, _expr_cache_digest(v) if isinstance(v, pl.Expr) else repr(v)) for sp, v in comp.items()),
         )
@@ -136,6 +134,7 @@ def _get_expr_evaluation_cache_key(
         fluid_any._assumed_phase,
         comp_key,
         output,
+        SETTINGS.coolprop_backend,
         bool(fluid_any._append_name_to_cp_inputs),
         bool(fluid_any._convert_pl_series_nan_null),
         bool(fluid_any._evaluate_invalid_separately),
@@ -182,12 +181,11 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     # expensive) phase-stability search. None means CoolProp determines the phase.
     _assumed_phase: str | None = None
 
-    # per-row mixture composition (set via Fluid(..., composition=...)). When not
-    # None, evaluation uses the low-level AbstractState loop with set_mole/mass
-    # fractions per row, so the composition may vary across rows. None means the
-    # composition is fixed (encoded in the fluid name) or the fluid is pure.
+    # per-row mixture composition (set via Fluid(..., composition=...)) as MOLE
+    # fractions. When not None, evaluation uses the low-level AbstractState loop
+    # with set_mole_fractions per row, so the composition may vary across rows.
+    # None means the composition is fixed (encoded in the fluid name) or pure.
     _composition: dict[str, float | Numpy1DArray | pl.Expr] | None = None
-    _composition_basis: str = "mole"
     _composition_normalize: bool = True
 
     # True when an assumed phase or a composition is configured, i.e. evaluation
@@ -642,14 +640,12 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 total = sum(fractions)
                 if abs(total - 1.0) > _COMPOSITION_SUM_TOLERANCE:
                     _LOGGER.warning(
-                        f"composition fractions sum to {total:.3g}, not 1 "
-                        f"(basis={self._composition_basis!r}); they are renormalized. Pass "
-                        "normalize=False to treat a non-unit sum as an error instead."
+                        f"composition fractions sum to {total:.3g}, not 1; they are renormalized. "
+                        "Pass normalize=False to treat a non-unit sum as an error instead."
                     )
                 if total:
                     fractions = [x / total for x in fractions]
-            set_fractions = state.set_mass_fractions if self._composition_basis == "mass" else state.set_mole_fractions
-            set_fractions(fractions)
+            state.set_mole_fractions(fractions)
         else:
             _, fluid_str = _cp.extract_backend(self.name)
             fluids, fractions_from_name = _cp.extract_fractions(fluid_str)
@@ -698,7 +694,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         frac_arrs: list[Numpy1DArray],
     ) -> Numpy1DArray:
         state = _cp.AbstractState(self._lowlevel_backend(), "&".join(species))
-        set_fractions = state.set_mass_fractions if self._composition_basis == "mass" else state.set_mole_fractions
+        set_fractions = state.set_mole_fractions
         assumed_phase_idx = None if self._assumed_phase is None else _ASSUMED_PHASE_MAP[self._assumed_phase]
         normalize = self._composition_normalize
         k1 = _cp.get_parameter_index(p1_name)
@@ -716,8 +712,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 if max_dev > _COMPOSITION_SUM_TOLERANCE:
                     _LOGGER.warning(
                         f"composition fractions deviate from 1 by up to {max_dev:.3g} before "
-                        f"normalization (basis={self._composition_basis!r}); they are renormalized "
-                        "per row. Pass normalize=False to treat a non-unit sum as an error instead."
+                        "normalization; they are renormalized per row. Pass normalize=False to "
+                        "treat a non-unit sum as an error instead."
                     )
 
         n_species = len(species)
@@ -807,6 +803,71 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         out = compute(to_arr(p1), to_arr(p2), [to_arr(v) for _, v in extra])
         return out.reshape(shape)
 
+    def _rust_spec(self) -> tuple[str, str, list[float] | None, str | None] | None:
+        """Plugin spec ``(backend, fluids, mole_fractions, phase)``, or None to fall back to Python."""
+        comp = self._composition
+        if comp is not None:
+            if any(isinstance(v, (np.ndarray, pl.Expr)) for v in comp.values()):
+                return None  # per-row composition -> Python path
+            backend = self._lowlevel_backend()
+            fluids = "&".join(comp)
+            fractions: list[float] | None = [float(cast("float", v)) for v in comp.values()]
+        else:
+            backend_raw, fluid_str = _cp.extract_backend(self.name)
+            backend = "HEOS" if backend_raw == "?" else backend_raw
+            species, fracs = _cp.extract_fractions(fluid_str)
+            fluids = "&".join(species)
+            fractions = [float(x) for x in fracs] if len(species) > 1 else None
+        if fractions is not None and self._composition_normalize:
+            total = sum(fractions)
+            if total:
+                fractions = [x / total for x in fractions]
+        phase = None if self._assumed_phase is None else f"phase_{self._assumed_phase}"
+        return backend, fluids, fractions, phase
+
+    def _rust_expr(self, output: CProperty, points: tuple[tuple[CProperty, pl.Expr], ...]) -> pl.Expr | None:
+        """The encomp_coolprop plugin expr for these points, or None to fall back to map_batches."""
+        if SETTINGS.coolprop_backend != "rust":
+            return None
+        try:
+            import encomp_coolprop as _cprust
+        except Exception:
+            return None
+        if not _cprust.self_check():
+            return None
+        names = [p[0] for p in points]
+        exprs = [p[1] for p in points]
+        try:
+            if self.BACKEND["backend"] is HAPropsSI:
+                if len(points) != 3:
+                    return None
+                expr = _cprust.humid_air(
+                    output, exprs[0], exprs[1], exprs[2], name1=names[0], name2=names[1], name3=names[2]
+                )
+            else:
+                if len(points) != 2:
+                    return None
+                spec = self._rust_spec()
+                if spec is None:
+                    return None
+                backend, fluids, fractions, phase = spec
+                expr = _cprust.fluid(
+                    output,
+                    exprs[0],
+                    exprs[1],
+                    name1=names[0],
+                    name2=names[1],
+                    backend=backend,
+                    fluid=fluids,
+                    phase=phase,
+                    mole_fractions=fractions,
+                )
+        except Exception:
+            return None
+        if self._convert_pl_series_nan_null:
+            expr = expr.fill_nan(None)
+        return expr.cast(pl.Float32).alias(output)
+
     def _lowlevel_expr(
         self,
         output: CProperty,
@@ -819,6 +880,12 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         cached = _expr_evaluation_cache_get(key)
         if cached is not None:
             return cached
+
+        if not extra:  # constant composition: try the parallel rust plugin
+            rust = self._rust_expr(output, expr_points)
+            if rust is not None:
+                _expr_evaluation_cache_set(key, rust)
+                return rust
 
         p1_name = points[0][0]
         p2_name = points[1][0]
@@ -876,6 +943,11 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         if cached_expr is not None:
             return cached_expr
+
+        rust = self._rust_expr(output, points)
+        if rust is not None:
+            _expr_evaluation_cache_set(key, rust)
+            return rust
 
         def _evaluate(s: pl.Series) -> pl.Series:
             materialized = tuple((n[0], s.struct.field(n[0]).to_numpy()) for n in points)
@@ -1182,7 +1254,6 @@ class Fluid(CoolPropFluid[MT]):
         name: CName,
         *,
         composition: Composition | None = None,
-        basis: CompositionBasis = "mole",
         normalize: bool = True,
         **kwargs: Quantity[Any, MT] | Quantity[Any, float],
     ) -> None:
@@ -1197,12 +1268,11 @@ class Fluid(CoolPropFluid[MT]):
             (e.g. ``"HEOS"``); otherwise the full CoolProp name, optionally with
             fixed fractions (e.g. ``"HEOS::CO2[0.5]&O2[0.5]"``).
         composition : Composition | None
-            Per-row mixture composition, ``{species: mole/mass fraction}``. Each
+            Per-row mixture composition as ``{species: mole fraction}``. Each
             fraction may be scalar (fixed) or vectorised (ndarray / pl.Series /
             pl.Expr). Cannot be combined with fractions in ``name``. Requires a
             mixture backend (e.g. HEOS). Pair with :meth:`assume_phase` for speed.
-        basis : {"mole", "mass"}
-            Whether ``composition`` values are mole or mass fractions.
+            (Mass fractions are not supported; convert to mole fractions first.)
         normalize : bool
             If True, normalise each row's fractions to sum to 1; if False, pass
             them through as-is (CoolProp errors if a row does not sum to ~1).
@@ -1217,7 +1287,7 @@ class Fluid(CoolPropFluid[MT]):
             raise ValueError(f"Exactly two fixed points are required, passed {list(kwargs)}")
 
         if composition is not None:
-            self._init_composition(name, composition, basis, normalize)
+            self._init_composition(name, composition, normalize)
         else:
             self.name = name
 
@@ -1232,23 +1302,21 @@ class Fluid(CoolPropFluid[MT]):
     def _coerce_fraction(value: FractionValue) -> float | Numpy1DArray | pl.Expr:
         if isinstance(value, Quantity):
             if not value.dimensionless:
-                raise ValueError(f"mole/mass fractions must be dimensionless, got unit {value.u}")
+                raise ValueError(f"mole fractions must be dimensionless, got unit {value.u}")
             value = cast(FractionValue, value.m)
         if isinstance(value, pl.Series):
             return cast(Numpy1DArray, value.to_numpy())
         if isinstance(value, (list, tuple)):
             return np.asarray(value, dtype=float)
         if isinstance(value, bool):
-            raise TypeError("a mole/mass fraction cannot be a bool")
+            raise TypeError("a mole fraction cannot be a bool")
         if isinstance(value, int):
             return float(value)
         if isinstance(value, (float, np.ndarray, pl.Expr)):
             return value
         raise TypeError(f"unsupported fraction value type: {type(value)}")
 
-    def _init_composition(
-        self, name: CName, composition: Composition, basis: CompositionBasis, normalize: bool
-    ) -> None:
+    def _init_composition(self, name: CName, composition: Composition, normalize: bool) -> None:
         if len(composition) < 2:
             raise ValueError(f"composition requires at least two species, got {list(composition)}")
         if "[" in name:
@@ -1269,7 +1337,6 @@ class Fluid(CoolPropFluid[MT]):
 
         self.name = f"{backend}::{'&'.join(species)}"
         self._composition = {sp: self._coerce_fraction(composition[sp]) for sp in species}
-        self._composition_basis = basis
         self._composition_normalize = normalize
         self._lowlevel = True
 

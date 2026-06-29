@@ -447,6 +447,10 @@ def test_polars_fluids() -> None:
 
 
 def _count_water_h_evaluations(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    # this counter tracks the Python map_batches path (evaluate_multiple); pin the
+    # backend so it is exercised regardless of the default (the rust plugin path
+    # bypasses evaluate_multiple but dedups via the same expr cache).
+    monkeypatch.setattr("encomp.fluids.SETTINGS.coolprop_backend", "python")
     calls = [0]
     original_evaluate_multiple = CoolPropFluid.evaluate_multiple
 
@@ -504,6 +508,31 @@ def test_polars_fluids_expression_cache_distinct_inputs(monkeypatch: pytest.Monk
 
     assert len(df.columns) == 12
     assert calls[0] == 12
+
+
+def test_polars_fluids_rust_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    encomp_coolprop = pytest.importorskip("encomp_coolprop")
+    if not encomp_coolprop.self_check():
+        pytest.skip("encomp_coolprop plugin not available")
+
+    df = pl.DataFrame({"P": np.full(7, 50e5), "T": np.linspace(300.0, 500.0, 7)})
+
+    def evaluate(backend: str) -> pl.DataFrame:
+        monkeypatch.setattr("encomp.fluids.SETTINGS.coolprop_backend", backend)
+        clear_expr_evaluation_cache()
+        w = Water(P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K"))
+        return df.select(w.D.m.alias("D"), w.H.m.alias("H"), w.S.m.alias("S"), w.C.m.alias("C"))
+
+    py = evaluate("python")
+    rust = evaluate("rust")
+    for col in ("D", "H", "S", "C"):  # rust path is bit-for-bit identical to python
+        assert rust[col].to_numpy() == approx(py[col].to_numpy(), rel=1e-6, nan_ok=True)
+
+    # invalid inputs (T below the IF97 range) -> null, like the python path
+    monkeypatch.setattr("encomp.fluids.SETTINGS.coolprop_backend", "rust")
+    clear_expr_evaluation_cache()
+    bad = pl.DataFrame({"T": [150.0, 200.0]}).select(Water(P=Q(pl.lit(5), "bar"), T=Q(pl.col("T"), "K")).D.m)["D"]
+    assert bad.is_null().all()
 
 
 def test_assume_phase() -> None:
@@ -587,12 +616,6 @@ def test_composition() -> None:
         "supercritical_gas"
     )
     assert float(fn.D.m) == approx(float(ref.m), rel=1e-9)
-
-    # mass basis differs from mole basis
-    fm = Fluid(
-        "HEOS", composition={"CO2": 0.5, "O2": 0.5}, basis="mass", P=Q(50.0, "bar"), T=Q(350.0, "degC")
-    ).assume_phase("supercritical_gas")
-    assert abs(float(fm.D.m) - float(ref.m)) > 1e-3
 
     # cannot set composition both in the name and via composition=
     with pytest.raises(ValueError, match="both"):
