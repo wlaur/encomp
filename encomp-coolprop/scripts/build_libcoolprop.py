@@ -36,6 +36,11 @@ def main() -> None:
             "https://github.com/CoolProp/CoolProp.git", str(src),
         )  # fmt: skip
 
+    # CoolProp hardcodes `-m${BITNESS}` (= -m64), which gcc rejects on aarch64. All
+    # our targets are 64-bit (the compiler default), so strip the flag for portability.
+    cml = src / "CMakeLists.txt"
+    cml.write_text(cml.read_text().replace("-m${BITNESS}", ""))
+
     build = src / "build"
     build.mkdir(exist_ok=True)
     cmake_args = ["cmake", "..", "-DCOOLPROP_SHARED_LIBRARY=ON", "-DCMAKE_BUILD_TYPE=Release"]
@@ -53,6 +58,8 @@ def main() -> None:
     if found is None:
         sys.exit(f"libCoolProp not found under {build}")
     PKG.mkdir(parents=True, exist_ok=True)
+    for stale in candidates:  # drop any other-platform lib so the wheel ships only this one
+        (PKG / stale).unlink(missing_ok=True)
     dest = PKG / found.name
     shutil.copy2(found, dest)
     print(f"bundled {found} -> {dest}", flush=True)

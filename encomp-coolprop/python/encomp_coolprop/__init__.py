@@ -16,6 +16,7 @@ Usable directly on any Polars expression -- independent of encomp:
 
 from __future__ import annotations
 
+import sys
 from functools import cache, lru_cache
 from pathlib import Path
 from typing import Any, Literal, get_args
@@ -162,14 +163,21 @@ HUMID_AIR_PARAMS: frozenset[HumidAirParam] = frozenset(get_args(HumidAirParam))
 _HERE = Path(__file__).parent
 
 
+# platform -> bundled CoolProp library name(s), in preference order
+_LIB_NAMES = {
+    "darwin": ("libCoolProp.dylib",),
+    "win32": ("CoolProp.dll", "libCoolProp.dll"),
+}.get(sys.platform, ("libCoolProp.so",))
+
+
 @lru_cache(maxsize=1)
 def lib_path() -> str:
-    """Absolute path to the bundled CoolProp dynamic library."""
-    for name in ("libCoolProp.dylib", "libCoolProp.so", "CoolProp.dll", "libCoolProp.dll"):
+    """Absolute path to the bundled CoolProp dynamic library for this platform."""
+    for name in _LIB_NAMES:
         p = _HERE / name
         if p.exists():
             return str(p)
-    raise RuntimeError(f"bundled CoolProp library not found in {_HERE}")
+    raise RuntimeError(f"bundled CoolProp library ({', '.join(_LIB_NAMES)}) not found in {_HERE}")
 
 
 @cache
