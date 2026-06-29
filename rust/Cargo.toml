@@ -26,3 +26,10 @@ unsafe_op_in_unsafe_fn = "warn"
 # every `unsafe {}` block must carry a `// SAFETY:` comment (rationale + error
 # modes). All unsafe lives in coolprop.rs; this keeps it documented and auditable.
 undocumented_unsafe_blocks = "warn"
+
+# Size-optimized release: the .so statically links polars, so LTO prunes a lot of
+# unused code and strip drops debug symbols (the wheel is mostly this .so).
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
