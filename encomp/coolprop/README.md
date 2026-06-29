@@ -1,4 +1,4 @@
-# encomp-coolprop
+# encomp.coolprop
 
 Parallel CoolProp property evaluation as **native Polars expression plugins**
 (Rust, `pyo3-polars`). Independent property nodes in one `collect()` run in
@@ -10,7 +10,7 @@ backend of `encomp.fluids` (`settings.coolprop_backend`).
 
 ```python
 import polars as pl
-import encomp_coolprop as cp
+from encomp import coolprop as cp
 
 df = pl.DataFrame({"P": [50e5, 60e5], "T": [400.0, 450.0]})  # Pa, K
 
@@ -86,45 +86,34 @@ much slower per call (iterative solver). Still better than the Python path.
 
 ## Build / install
 
-`libCoolProp` is built from source once and bundled into the wheel, so every build
-starts with `scripts/build_libcoolprop.py`.
+This is part of `encomp`: the whole package (Python + this compiled plugin +
+bundled `libCoolProp`) ships in ONE per-platform wheel. `libCoolProp` is built from
+source once and bundled, so every build starts with `scripts/build_libcoolprop.py`.
 
-Dev (editable install):
-
-```bash
-python scripts/build_libcoolprop.py   # builds CoolProp's shared lib + bundles it
-maturin develop --release             # builds + installs the plugin
-# or, from the encomp repo root: uv sync  (after build_libcoolprop.py; it is a hard dep)
-```
-
-Local single-platform wheel:
+Dev (from the repo root, editable):
 
 ```bash
-python scripts/build_libcoolprop.py
-uv build --wheel        # NOT plain `uv build`: the sdist excludes the (gitignored)
-                        # libCoolProp, so an sdist->wheel build ships it unbundled
+python scripts/build_libcoolprop.py   # builds CoolProp's shared lib into encomp/coolprop/
+maturin develop --release             # builds the plugin + installs encomp editable
 ```
 
 Cross-platform distribution wheels (the plugin + bundled `libCoolProp` are native;
-`abi3` → one wheel per platform covers CPython >=3.13) are built with `cibuildwheel`:
+`abi3` → one wheel per platform covers CPython >=3.13) are built with `cibuildwheel`
+via `.github/workflows/release.yml`:
 
-| target  | on this macOS host        | in CI (`.github/workflows/encomp-coolprop-release.yml`) |
-|---------|---------------------------|--------------------------------------------------------|
-| macOS   | yes (native)              | macos-13 (x86_64), macos-14 (arm64)                    |
-| Linux   | yes, via Docker (manylinux)| ubuntu (x86_64) + ubuntu-arm (aarch64)                |
-| Windows | no — needs Windows         | windows-latest (amd64)                                 |
+| target  | on this macOS host         | in CI                                  |
+|---------|----------------------------|----------------------------------------|
+| macOS   | yes (native)               | macos-13 (x86_64), macos-14 (arm64)    |
+| Linux   | yes, via Docker (manylinux)| ubuntu (x86_64) + ubuntu-arm (aarch64) |
+| Windows | no — needs Windows         | windows-latest (amd64)                 |
 
 `cibuildwheel` runs `build_libcoolprop.py` per platform (its `before-all`), bundles
-the lib, and emits PyPI-compatible tags. Publish the collected wheels with
-`uv publish` (or twine). `encomp` stays pure-Python and depends on this as a hard
-dependency (the pure-Python CoolProp path remains a runtime fallback).
-
-Lint/format: `cargo fmt`, `cargo clippy --all-targets -- -D warnings` (wired into
-the repo's pre-commit).
+the lib, and emits PyPI-compatible tags. Lint/format: `cargo fmt`, `cargo clippy
+--all-targets -- -D warnings` (wired into the repo's pre-commit).
 
 ## Files
 
-- `python/encomp_coolprop/__init__.py` — public Python API (`fluid`, `humid_air`).
-- `src/lib.rs` — the `cp_evaluate` / `ha_evaluate` plugin expressions.
+- `encomp/coolprop/__init__.py` — public Python API (`fluid`, `humid_air`).
+- `src/lib.rs` — the `cp_evaluate` / `ha_evaluate` plugin expressions (crate at repo root).
 - `src/coolprop.rs` — the CoolProp C-API bindings + thread-safety model (all `unsafe`).
 - `scripts/build_libcoolprop.py` — builds + bundles CoolProp's shared library.

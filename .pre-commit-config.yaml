@@ -12,19 +12,20 @@ repos:
         types_or: [ python, pyi, jupyter ]
       - id: ruff-format
         types_or: [python, pyi, jupyter]
-  # Rust lint/format for the encomp-coolprop plugin crate. `language: system` uses
-  # the developer's installed toolchain (rustfmt + clippy ship with stable Rust).
+  # Rust lint/format for the CoolProp plugin crate (encomp/coolprop, src/ at root).
+  # `language: system` uses the developer's installed toolchain (rustfmt + clippy
+  # ship with stable Rust).
   - repo: local
     hooks:
       - id: cargo-fmt
-        name: cargo fmt (encomp-coolprop)
-        entry: cargo fmt --manifest-path encomp-coolprop/Cargo.toml -- --check
+        name: cargo fmt
+        entry: cargo fmt --manifest-path Cargo.toml -- --check
         language: system
-        files: ^encomp-coolprop/.*\.rs$
+        files: ^src/.*\.rs$
         pass_filenames: false
       - id: cargo-clippy
-        name: cargo clippy -D warnings (encomp-coolprop)
-        entry: cargo clippy --manifest-path encomp-coolprop/Cargo.toml --all-targets -- -D warnings
+        name: cargo clippy -D warnings
+        entry: cargo clippy --manifest-path Cargo.toml --all-targets -- -D warnings
         language: system
-        files: ^encomp-coolprop/.*\.rs$
+        files: ^src/.*\.rs$
         pass_filenames: false

@@ -39,14 +39,10 @@ dependencies = [
     "polars",
     "sympy",
     "uncertainties",
-    # Pinned exactly: the Rust plugin backend bundles a specific CoolProp build
-    # and the two must match (enum integers + EOS data differ across versions).
-    # Loosen to ~=8.0.0 only if the Rust side tracks patch releases.
+    # Pinned exactly: the bundled Rust CoolProp plugin and the Python coolprop must
+    # match (enum integers + EOS data differ across versions). Loosen to ~=8.0.0
+    # only if the Rust side tracks patch releases.
     "coolprop==8.0.0",
-    # The rust Polars plugin backend is a hard dependency (per-platform binary
-    # wheel). The pure-Python CoolProp path remains as an automatic runtime
-    # fallback (settings.coolprop_backend) if the plugin fails to load.
-    "encomp-coolprop",
 ]
 
 [dependency-groups]
@@ -83,15 +79,34 @@ Documentation = "https://encomp.readthedocs.io"
 Repository = "https://github.com/wlaur/encomp"
 Issues = "https://github.com/wlaur/encomp/issues"
 
-[tool.hatch.build.targets.sdist]
-include = ["encomp", "encomp/defs"]
-
-[tool.hatch.build.targets.wheel]
-include = ["encomp", "encomp/defs"]
-
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.5,<2"]
+build-backend = "maturin"
+
+[tool.maturin]
+# encomp is a mixed Python + Rust project: the CoolProp Polars plugin (Rust crate at
+# the repo root) and the bundled libCoolProp are placed in encomp/coolprop/ and
+# shipped in ONE per-platform wheel together with the pure-Python modules.
+python-source = "."
+module-name = "encomp.coolprop._internal"
+include = [
+    "encomp/defs/**/*",
+    { path = "encomp/coolprop/libCoolProp.*", format = "wheel" },
+    "encomp/coolprop/py.typed",
+]
+
+# Per-platform binary wheels (the plugin + bundled libCoolProp are native). abi3 ->
+# one wheel per platform covers CPython >=3.13. Built by .github/workflows/release.yml.
+[tool.cibuildwheel]
+build = "cp313-*"
+skip = ["*-musllinux*", "*_i686", "*-win32"]
+before-all = "pip install cmake && python {project}/scripts/build_libcoolprop.py"
+test-command = 'python -c "import encomp.coolprop as cp; assert cp.self_check()"'
+
+[tool.cibuildwheel.linux]
+# the manylinux image lacks Rust (needed by maturin); install it + cmake, then build
+before-all = "curl -sSf https://sh.rustup.rs | sh -s -- -y && pip install cmake && python {project}/scripts/build_libcoolprop.py"
+environment = { PATH = "$HOME/.cargo/bin:$PATH" }
 
 [tool.ruff]
 lint.select = [
@@ -181,12 +196,6 @@ reportUnusedImport = false
 
 [tool.uv.sources]
 microsoft-python-type-stubs = { git = "https://github.com/microsoft/python-type-stubs.git" }
-# during development, build/install the plugin from the in-repo workspace member;
-# on PyPI the `rust` extra resolves to the published encomp-coolprop wheel
-encomp-coolprop = { workspace = true }
-
-[tool.uv.workspace]
-members = ["encomp-coolprop"]
 
 [tool.pyrefly]
 # pyrefly has no strict preset; its default is the full analysis

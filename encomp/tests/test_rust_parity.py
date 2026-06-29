@@ -13,11 +13,11 @@ from __future__ import annotations
 from typing import Any
 
 import CoolProp.CoolProp as _CP
-import encomp_coolprop
 import numpy as np
 import polars as pl
 import pytest
 
+from encomp import coolprop as encomp_coolprop
 from encomp.fluids import Fluid, clear_expr_evaluation_cache
 from encomp.units import Quantity as Q
 

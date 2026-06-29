@@ -1,9 +1,9 @@
 """Parallel CoolProp property evaluation as Polars expression plugins.
 
-Usable directly on any Polars expression -- independent of encomp:
+Usable directly on any Polars expression:
 
     import polars as pl
-    import encomp_coolprop as cp
+    from encomp import coolprop as cp
 
     df.select(
         cp.fluid("DMASS", "P", "T").alias("rho"),   # defaults: backend IF97, fluid Water

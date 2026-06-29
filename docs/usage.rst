@@ -579,7 +579,7 @@ Parallel evaluation with Polars
 :py:class:`encomp.fluids.Fluid` properties also accept ``Quantity``-wrapped Polars
 expressions (``pl.Expr``) and return a ``pl.Expr``. Independent property nodes in a
 one ``select`` / ``with_columns`` / ``collect()`` (eager or lazy) are evaluated
-*in parallel* by the ``encomp-coolprop`` plugin --
+*in parallel* by the ``encomp.coolprop`` plugin --
 a native Rust extension over the CoolProp C-API that runs without holding the GIL.
 The backend is selected by ``settings.coolprop_backend`` (``"rust"`` by default,
 falling back to a pure-Python path if the plugin is unavailable).
@@ -597,12 +597,12 @@ falling back to a pure-Python path if the plugin is unavailable).
     df.select(w.D.m.alias('rho'), w.H.m.alias('h'), w.S.m.alias('s'))
 
 The plugin is also usable directly on any Polars expression, independent of the
-:py:class:`encomp.fluids.Fluid` class (the ``encomp_coolprop`` package):
+:py:class:`encomp.fluids.Fluid` class (the ``encomp.coolprop`` package):
 
 .. code-block:: python
 
     import polars as pl
-    import encomp_coolprop as cp
+    from encomp import coolprop as cp
 
     df = pl.DataFrame({'P': [50e5, 60e5], 'T': [400.0, 450.0]})
 

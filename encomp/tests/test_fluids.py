@@ -4,10 +4,11 @@
 import logging
 from typing import Any, assert_type, cast
 
-import encomp_coolprop
 import numpy as np
 import polars as pl
 import pytest
+
+from encomp import coolprop as encomp_coolprop
 
 from .. import utypes as ut
 from ..fluids import CoolPropFluid, Fluid, FluidState, HumidAir, HumidAirState, Water, clear_expr_evaluation_cache

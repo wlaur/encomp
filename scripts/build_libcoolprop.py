@@ -16,8 +16,8 @@ import sys
 from pathlib import Path
 
 COOLPROP_VERSION = "v8.0.0"  # must match the pinned Python `coolprop`
-PROJECT = Path(__file__).resolve().parent.parent  # encomp-coolprop/
-PKG = PROJECT / "python" / "encomp_coolprop"
+PROJECT = Path(__file__).resolve().parent.parent  # repo root
+PKG = PROJECT / "encomp" / "coolprop"
 
 
 def run(*cmd: str, cwd: Path | None = None) -> None:

@@ -1,8 +1,8 @@
-"""Tests for the standalone encomp_coolprop Polars plugin API.
+"""Tests for the encomp.coolprop Polars plugin API.
 
 These exercise ``cp.fluid`` / ``cp.humid_air`` directly on Polars expressions,
-WITHOUT going through encomp's ``Fluid`` class -- the package is meant to be usable
-on its own. Reference values come from CoolProp's PropsSI / HAPropsSI / AbstractState.
+WITHOUT going through encomp's ``Fluid`` class. Reference values come from
+CoolProp's PropsSI / HAPropsSI / AbstractState.
 """
 
 from __future__ import annotations
@@ -10,10 +10,11 @@ from __future__ import annotations
 from typing import Any
 
 import CoolProp.CoolProp as _CP
-import encomp_coolprop as cp
 import numpy as np
 import polars as pl
 import pytest
+
+from encomp import coolprop as cp
 
 CP: Any = _CP
 

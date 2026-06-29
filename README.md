@@ -239,7 +239,7 @@ HumidAir(P=Q(1, 'bar'), T=Q(100, 'degC'), R=Q(0.5))
 `Fluid` properties accept `Quantity`-wrapped Polars expressions and return a
 `pl.Expr`. Independent property nodes in one `select` / `with_columns` /
 `collect()` (eager or lazy alike) are evaluated **in parallel** by the
-`encomp-coolprop` plugin — a native Rust extension over the CoolProp C-API that
+`encomp.coolprop` plugin — a native Rust extension over the CoolProp C-API that
 runs GIL-free on the Polars thread pool. The backend is
 controlled by `settings.coolprop_backend` (`"rust"` by default, with automatic
 fallback to the pure-Python path if the plugin is unavailable):
@@ -257,11 +257,11 @@ df.select(w.D.m.alias('rho'), w.H.m.alias('h'), w.S.m.alias('s'))
 ```
 
 The plugin is also usable directly on any Polars expression, independent of the
-`Fluid` class (`encomp_coolprop`):
+`Fluid` class (`encomp.coolprop`):
 
 ```python
 import polars as pl
-import encomp_coolprop as cp
+from encomp import coolprop as cp
 
 df = pl.DataFrame({'P': [50e5, 60e5], 'T': [400.0, 450.0]})
 

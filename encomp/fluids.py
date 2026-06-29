@@ -19,7 +19,8 @@ from typing import Annotated, Any, ClassVar, Generic, Literal, Self, TypedDict, 
 import CoolProp.CoolProp as _CoolProp
 import numpy as np
 import polars as pl
-from encomp_coolprop import (
+
+from .coolprop import (
     Backend,
     FluidParam,
     HumidAirParam,
@@ -29,7 +30,6 @@ from encomp_coolprop import (
     is_humid_air_param,
     is_phase,
 )
-
 from .settings import SETTINGS
 from .structures import flatten
 from .units import DimensionalityError, ExpectedDimensionalityError, Quantity, Unit
@@ -73,7 +73,7 @@ if SETTINGS.ignore_coolprop_warnings:
 
 
 # Strict Literals for CoolProp property names, single source of truth in the
-# encomp_coolprop plugin (fluid + humid-air namespaces).
+# encomp.coolprop plugin (fluid + humid-air namespaces).
 CProperty = FluidParam | HumidAirParam
 CName = Annotated[str, "CoolProp fluid name"]
 UnitString = Annotated[str, "Unit string"]
@@ -116,7 +116,7 @@ class FluidState(TypedDict, Generic[MT], total=False):  # noqa: UP046
 class HumidAirState(TypedDict, Generic[MT], total=False):  # noqa: UP046
     """Valid CoolProp humid-air (``HAPropsSI``) STATE-INPUT parameter names for
     ``HumidAir`` -- the subset that can fix a state (matches
-    ``encomp_coolprop.HUMID_AIR_INPUTS``; output-only properties like ``Visc`` /
+    ``encomp.coolprop.HUMID_AIR_INPUTS``; output-only properties like ``Visc`` /
     ``Conductivity`` / heat capacities are excluded). Used with ``Unpack`` to
     statically check the ``**kwargs`` keys at the call site.
     """
@@ -942,13 +942,11 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         return backend, fluids, fractions, phase
 
     def _rust_expr(self, output: CProperty, points: tuple[tuple[CProperty, pl.Expr], ...]) -> pl.Expr | None:
-        """The encomp_coolprop plugin expr for these points, or None to fall back to map_batches."""
+        """The encomp.coolprop plugin expr for these points, or None to fall back to map_batches."""
         if SETTINGS.coolprop_backend != "rust":
             return None
-        try:
-            import encomp_coolprop as _cprust
-        except Exception:
-            return None
+        from . import coolprop as _cprust
+
         if not _cprust.self_check():
             return None
         names = [p[0] for p in points]

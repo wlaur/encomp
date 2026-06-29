@@ -1,19 +1,19 @@
-name: encomp-coolprop release
+name: encomp release
 
-# Build the native encomp-coolprop wheels (compiled plugin + bundled libCoolProp)
-# for macOS / Linux / Windows, run the FULL encomp test suite against each wheel on
-# Python 3.13 and 3.14, and publish to PyPI on a version tag.
+# Build the encomp wheels (pure-Python modules + the compiled CoolProp Polars plugin
+# + bundled libCoolProp, all in one wheel) for macOS / Linux / Windows, run the full
+# test suite against each wheel on Python 3.13 and 3.14, and publish to PyPI on a tag.
 #
 #   build-wheels  -> one wheel per OS/arch (abi3 cp313 => runs on 3.13+)
-#   test          -> install each wheel + encomp + run pytest, every OS x py
-#   publish       -> only on a `encomp-coolprop-v*` tag, after all tests pass,
-#                    via PyPI Trusted Publishing (OIDC -- no token stored anywhere)
+#   test          -> install each prebuilt wheel + run pytest, every OS x py
+#   publish       -> only on a `v*` tag, after all tests pass, via PyPI Trusted
+#                    Publishing (OIDC -- no token/secret stored anywhere)
 on:
   workflow_dispatch:
   pull_request:
-    paths: ["encomp-coolprop/**", ".github/workflows/encomp-coolprop-release.yml"]
+    paths: ["encomp/**", "src/**", "Cargo.*", "build.rs", "pyproject.toml", ".github/workflows/release.yml"]
   push:
-    tags: ["encomp-coolprop-v*"]
+    tags: ["v*"]
 
 jobs:
   build-wheels:
@@ -33,7 +33,7 @@ jobs:
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.21.3
         with:
-          package-dir: encomp-coolprop
+          package-dir: .
           output-dir: wheelhouse
       - uses: actions/upload-artifact@v4
         with:
@@ -51,7 +51,6 @@ jobs:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-13, macos-14, windows-latest]
         python: ["3.13", "3.14"]
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
@@ -60,20 +59,20 @@ jobs:
           path: wheelhouse
           pattern: wheels-*
           merge-multiple: true
-      - name: Install + run the full encomp suite
+      - name: Install the prebuilt wheel + run the full suite
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          # encomp + its deps (incl. the hard dep encomp-coolprop, resolved from the
-          # just-built wheelhouse; abi3 -> the cp313 wheel installs on 3.14 too) + test deps
-          pip install --find-links wheelhouse . pytest hypothesis pytest-asyncio
-          python -c "import encomp_coolprop as cp; assert cp.self_check(), 'plugin self_check failed'"
-          python -m pytest encomp/tests/ -q
+          # install the PREBUILT encomp wheel (abi3 cp313 installs on 3.14 too) by
+          # name so it is not rebuilt from source; deps + test deps come from PyPI
+          pip install --find-links wheelhouse encomp pytest hypothesis pytest-asyncio
+          python -c "from encomp import coolprop as cp; assert cp.self_check(), 'plugin self_check failed'"
+          python -m pytest --pyargs encomp.tests -q
 
   publish:
     name: publish to PyPI
     needs: [build-wheels, test]
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/encomp-coolprop-v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment: pypi               # configure the Trusted Publisher against this env
     permissions:
