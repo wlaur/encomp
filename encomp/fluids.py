@@ -25,7 +25,9 @@ from encomp_coolprop import (
     HumidAirParam,
     Phase,
     is_backend,
+    is_fluid_input,
     is_fluid_param,
+    is_humid_air_input,
     is_humid_air_param,
     is_phase,
 )
@@ -114,19 +116,14 @@ class FluidState(TypedDict, Generic[MT], total=False):  # noqa: UP046
 
 
 class HumidAirState(TypedDict, Generic[MT], total=False):  # noqa: UP046
-    """Valid CoolProp humid-air (``HAPropsSI``) parameter names for ``HumidAir``.
-
-    Mirrors ``encomp_coolprop.HumidAirParam``; ``HAPropsSI`` accepts most of
-    these as state inputs. Used with ``Unpack`` to statically check the
-    ``**kwargs`` keys at the call site.
+    """Valid CoolProp humid-air (``HAPropsSI``) STATE-INPUT parameter names for
+    ``HumidAir`` -- the subset that can fix a state (matches
+    ``encomp_coolprop.HUMID_AIR_INPUTS``; output-only properties like ``Visc`` /
+    ``Conductivity`` / heat capacities are excluded). Used with ``Unpack`` to
+    statically check the ``**kwargs`` keys at the call site.
     """
 
     B: Quantity[Any, MT] | Quantity[Any, float]
-    C: Quantity[Any, MT] | Quantity[Any, float]
-    CV: Quantity[Any, MT] | Quantity[Any, float]
-    CVha: Quantity[Any, MT] | Quantity[Any, float]
-    Cha: Quantity[Any, MT] | Quantity[Any, float]
-    Conductivity: Quantity[Any, MT] | Quantity[Any, float]
     D: Quantity[Any, MT] | Quantity[Any, float]
     DewPoint: Quantity[Any, MT] | Quantity[Any, float]
     Enthalpy: Quantity[Any, MT] | Quantity[Any, float]
@@ -135,8 +132,6 @@ class HumidAirState(TypedDict, Generic[MT], total=False):  # noqa: UP046
     Hda: Quantity[Any, MT] | Quantity[Any, float]
     Hha: Quantity[Any, MT] | Quantity[Any, float]
     HumRat: Quantity[Any, MT] | Quantity[Any, float]
-    K: Quantity[Any, MT] | Quantity[Any, float]
-    M: Quantity[Any, MT] | Quantity[Any, float]
     Omega: Quantity[Any, MT] | Quantity[Any, float]
     P: Quantity[Any, MT] | Quantity[Any, float]
     P_w: Quantity[Any, MT] | Quantity[Any, float]
@@ -156,16 +151,9 @@ class HumidAirState(TypedDict, Generic[MT], total=False):  # noqa: UP046
     V: Quantity[Any, MT] | Quantity[Any, float]
     Vda: Quantity[Any, MT] | Quantity[Any, float]
     Vha: Quantity[Any, MT] | Quantity[Any, float]
-    Visc: Quantity[Any, MT] | Quantity[Any, float]
     W: Quantity[Any, MT] | Quantity[Any, float]
     WetBulb: Quantity[Any, MT] | Quantity[Any, float]
     Y: Quantity[Any, MT] | Quantity[Any, float]
-    Z: Quantity[Any, MT] | Quantity[Any, float]
-    cp: Quantity[Any, MT] | Quantity[Any, float]
-    cp_ha: Quantity[Any, MT] | Quantity[Any, float]
-    cv_ha: Quantity[Any, MT] | Quantity[Any, float]
-    k: Quantity[Any, MT] | Quantity[Any, float]
-    mu: Quantity[Any, MT] | Quantity[Any, float]
     psi_w: Quantity[Any, MT] | Quantity[Any, float]
 
 
@@ -974,9 +962,9 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 n1, n2, n3 = names
                 if not (
                     is_humid_air_param(output)
-                    and is_humid_air_param(n1)
-                    and is_humid_air_param(n2)
-                    and is_humid_air_param(n3)
+                    and is_humid_air_input(n1)
+                    and is_humid_air_input(n2)
+                    and is_humid_air_input(n3)
                 ):
                     return None
                 expr = _cprust.humid_air(
@@ -996,7 +984,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                     return None
                 backend, fluids, fractions, phase = spec
                 n1, n2 = names
-                if not (is_fluid_param(output) and is_fluid_param(n1) and is_fluid_param(n2)):
+                if not (is_fluid_param(output) and is_fluid_input(n1) and is_fluid_input(n2)):
                     return None
                 expr = _cprust.fluid(
                     output,

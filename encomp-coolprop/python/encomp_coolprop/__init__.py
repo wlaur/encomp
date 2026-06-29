@@ -30,17 +30,23 @@ _cp: Any = _CoolProp
 
 __all__ = [
     "BACKENDS",
+    "FLUID_INPUTS",
     "FLUID_PARAMS",
+    "HUMID_AIR_INPUTS",
     "HUMID_AIR_PARAMS",
     "PHASES",
     "Backend",
+    "FluidInput",
     "FluidParam",
+    "HumidAirInput",
     "HumidAirParam",
     "Phase",
     "fluid",
     "humid_air",
     "is_backend",
+    "is_fluid_input",
     "is_fluid_param",
+    "is_humid_air_input",
     "is_humid_air_param",
     "is_phase",
     "lib_path",
@@ -214,6 +220,19 @@ FluidParam = Literal[
 ]
 FLUID_PARAMS: frozenset[FluidParam] = frozenset(get_args(FluidParam))
 
+# CoolProp fluid STATE-INPUT properties: the subset of FluidParam valid as the two
+# inputs that fix a state -- pressure/temperature/quality + density/enthalpy/entropy/
+# internal-energy (mass + molar + aliases). `output` can be any FluidParam, but the
+# two inputs (and their `name1`/`name2`) must come from this set.
+FluidInput = Literal[
+    "P", "T", "Q",
+    "D", "DMASS", "DMOLAR", "Dmass", "Dmolar",
+    "H", "HMASS", "HMOLAR", "Hmass", "Hmolar",
+    "S", "SMASS", "SMOLAR", "Smass", "Smolar",
+    "U", "UMASS", "UMOLAR", "Umass", "Umolar",
+]  # fmt: skip
+FLUID_INPUTS: frozenset[FluidInput] = frozenset(get_args(FluidInput))
+
 # Common HumidAir (HAPropsSI) parameters.
 HumidAirParam = Literal[
     "B",
@@ -265,6 +284,15 @@ HumidAirParam = Literal[
 ]
 HUMID_AIR_PARAMS: frozenset[HumidAirParam] = frozenset(get_args(HumidAirParam))
 
+# HumidAir (HAPropsSI) STATE-INPUT properties: the subset valid as the three inputs.
+HumidAirInput = Literal[
+    "T", "Tdb", "T_db", "B", "Twb", "T_wb", "WetBulb",
+    "D", "Tdp", "T_dp", "DewPoint", "W", "Omega", "HumRat", "psi_w",
+    "R", "RH", "RelHum", "H", "Hda", "Hha", "Enthalpy",
+    "S", "Sda", "Sha", "Entropy", "V", "Vda", "Vha", "P", "P_w", "Y",
+]  # fmt: skip
+HUMID_AIR_INPUTS: frozenset[HumidAirInput] = frozenset(get_args(HumidAirInput))
+
 
 # TypeGuards: narrow a runtime ``str`` to the corresponding strict Literal without a
 # cast (and reject unknown names). Use these wherever a property/backend/phase name
@@ -283,6 +311,14 @@ def is_backend(name: str) -> TypeGuard[Backend]:
 
 def is_phase(name: str) -> TypeGuard[Phase]:
     return name in PHASES
+
+
+def is_fluid_input(name: str) -> TypeGuard[FluidInput]:
+    return name in FLUID_INPUTS
+
+
+def is_humid_air_input(name: str) -> TypeGuard[HumidAirInput]:
+    return name in HUMID_AIR_INPUTS
 
 
 _HERE = Path(__file__).parent
@@ -319,11 +355,11 @@ def _as_expr(x: str | pl.Expr) -> pl.Expr:
 
 def fluid(
     output: FluidParam,
-    input1: str | pl.Expr,
-    input2: str | pl.Expr,
+    input1: FluidInput | pl.Expr,
+    input2: FluidInput | pl.Expr,
     *,
-    name1: FluidParam = "P",
-    name2: FluidParam = "T",
+    name1: FluidInput = "P",
+    name2: FluidInput = "T",
     backend: Backend = "IF97",
     fluid: str = "Water",
     phase: Phase | None = None,
@@ -357,13 +393,13 @@ def fluid(
 
 def humid_air(
     output: HumidAirParam,
-    input1: str | pl.Expr,
-    input2: str | pl.Expr,
-    input3: str | pl.Expr,
+    input1: HumidAirInput | pl.Expr,
+    input2: HumidAirInput | pl.Expr,
+    input3: HumidAirInput | pl.Expr,
     *,
-    name1: HumidAirParam = "P",
-    name2: HumidAirParam = "T",
-    name3: HumidAirParam = "R",
+    name1: HumidAirInput = "P",
+    name2: HumidAirInput = "T",
+    name3: HumidAirInput = "R",
 ) -> pl.Expr:
     """A humid-air (HAPropsSI) property as a Polars expression."""
     return register_plugin_function(

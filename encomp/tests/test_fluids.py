@@ -10,7 +10,7 @@ import polars as pl
 import pytest
 
 from .. import utypes as ut
-from ..fluids import CoolPropFluid, Fluid, HumidAir, Water, clear_expr_evaluation_cache
+from ..fluids import CoolPropFluid, Fluid, FluidState, HumidAir, HumidAirState, Water, clear_expr_evaluation_cache
 from ..units import Quantity as Q
 from ..utypes import DT, Density, SpecificEntropy
 
@@ -510,6 +510,13 @@ def test_polars_fluids_expression_cache_distinct_inputs(monkeypatch: pytest.Monk
 
     assert len(df.columns) == 12
     assert calls[0] == 12
+
+
+def test_state_typeddicts_match_plugin_inputs() -> None:
+    # the constructor Unpack[TypedDict] key sets must stay in sync with the plugin's
+    # canonical state-input property sets (single source of truth)
+    assert frozenset(FluidState.__annotations__) == encomp_coolprop.FLUID_INPUTS
+    assert frozenset(HumidAirState.__annotations__) == encomp_coolprop.HUMID_AIR_INPUTS
 
 
 def test_polars_fluids_rust_backend(monkeypatch: pytest.MonkeyPatch) -> None:
