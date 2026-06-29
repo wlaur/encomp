@@ -25,9 +25,7 @@ from encomp_coolprop import (
     HumidAirParam,
     Phase,
     is_backend,
-    is_fluid_input,
     is_fluid_param,
-    is_humid_air_input,
     is_humid_air_param,
     is_phase,
 )
@@ -959,22 +957,15 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             if self.BACKEND["backend"] is HAPropsSI:
                 if len(points) != 3:
                     return None
-                n1, n2, n3 = names
-                if not (
-                    is_humid_air_param(output)
-                    and is_humid_air_input(n1)
-                    and is_humid_air_input(n2)
-                    and is_humid_air_input(n3)
-                ):
+                if not is_humid_air_param(output):
                     return None
+                n1, n2, n3 = names
+                # the plugin reads each input's property from its (aliased) name
                 expr = _cprust.humid_air(
                     output,
-                    exprs[0],
-                    exprs[1],
-                    exprs[2],
-                    name1=n1,
-                    name2=n2,
-                    name3=n3,
+                    exprs[0].alias(n1),
+                    exprs[1].alias(n2),
+                    exprs[2].alias(n3),
                 )
             else:
                 if len(points) != 2:
@@ -983,15 +974,13 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 if spec is None:
                     return None
                 backend, fluids, fractions, phase = spec
-                n1, n2 = names
-                if not (is_fluid_param(output) and is_fluid_input(n1) and is_fluid_input(n2)):
+                if not is_fluid_param(output):
                     return None
+                n1, n2 = names
                 expr = _cprust.fluid(
                     output,
-                    exprs[0],
-                    exprs[1],
-                    name1=n1,
-                    name2=n2,
+                    exprs[0].alias(n1),
+                    exprs[1].alias(n2),
                     backend=backend,
                     fluid=fluids,
                     phase=phase,

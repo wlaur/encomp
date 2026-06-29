@@ -13,6 +13,7 @@ import CoolProp.CoolProp as _CP
 import encomp_coolprop as cp
 import numpy as np
 import polars as pl
+import pytest
 
 CP: Any = _CP
 
@@ -51,7 +52,7 @@ def test_fluid_non_pt_input_pair() -> None:
     t = np.linspace(320.0, 500.0, 5)
     h = CP.PropsSI("HMASS", "P", p, "T", t, "HEOS::Water")
     df = pl.DataFrame({"P": p, "H": h})
-    out = df.select(d=cp.fluid("DMASS", "P", "H", name2="HMASS", backend="HEOS", fluid="Water"))
+    out = df.select(d=cp.fluid("DMASS", "P", "H", backend="HEOS", fluid="Water"))
     ref = CP.PropsSI("DMASS", "P", p, "HMASS", h, "HEOS::Water")
     assert np.allclose(out["d"].to_numpy(), ref, rtol=RTOL)
 
@@ -95,6 +96,23 @@ def test_eager_and_lazy_agree() -> None:
     eager = df.select(**expr)
     lazy = df.lazy().select(**expr).collect()
     assert eager.equals(lazy)
+
+
+def test_inputs_named_by_property() -> None:
+    # the property of each input is its name: a string, or an expression's output
+    # name. Differently-named columns must be aliased to the CoolProp input name.
+    df = pl.DataFrame({"pressure": [50e5], "temp": [400.0]})
+    out = df.select(rho=cp.fluid("DMASS", pl.col("pressure").alias("P"), pl.col("temp").alias("T")))
+    ref = CP.PropsSI("DMASS", "P", 50e5, "T", 400.0, "IF97::Water")
+    assert np.isclose(out["rho"][0], ref, rtol=RTOL)
+
+
+def test_input_not_named_after_state_input_raises() -> None:
+    # an input whose name is not a CoolProp state input is rejected at build time
+    with pytest.raises(ValueError, match="state input"):
+        cp.fluid("DMASS", pl.col("pressure"), "T")
+    with pytest.raises(ValueError, match="state input"):
+        cp.humid_air("W", pl.col("rel_hum"), "T", "P")
 
 
 def test_typeguards() -> None:

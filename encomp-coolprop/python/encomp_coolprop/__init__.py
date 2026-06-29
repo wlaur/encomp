@@ -10,8 +10,9 @@ Usable directly on any Polars expression -- independent of encomp:
         cp.fluid("HMASS", "P", "T").alias("h"),
     )                       # independent properties run in PARALLEL (no GIL)
 
-    df.select(cp.fluid("DMASS", "P", "H", name2="HMASS", backend="HEOS"))  # any input pair
-    df.select(cp.humid_air("W", "P", "T", "R"))                             # humid air
+    df.select(cp.fluid("DMASS", "P", "H", backend="HEOS"))   # any input pair (named by inputs)
+    df.select(cp.humid_air("W", "P", "T", "R"))              # humid air
+    # for differently-named columns, alias them: cp.fluid("DMASS", pl.col("p").alias("P"), "T")
 """
 
 from __future__ import annotations
@@ -354,13 +355,17 @@ def _as_expr(x: str | pl.Expr) -> pl.Expr:
     return pl.col(x) if isinstance(x, str) else x
 
 
+def _input_name(x: str | pl.Expr) -> str:
+    # a state input identifies its property by NAME: the string itself, or the
+    # output name of the expression (e.g. pl.col("P") or pl.col("p").alias("P")).
+    return x if isinstance(x, str) else x.meta.output_name()
+
+
 def fluid(
     output: FluidParam,
     input1: FluidInput | pl.Expr,
     input2: FluidInput | pl.Expr,
     *,
-    name1: FluidInput = "P",
-    name2: FluidInput = "T",
     backend: Backend = "IF97",
     fluid: str = "Water",
     phase: Phase | None = None,
@@ -368,10 +373,20 @@ def fluid(
 ) -> pl.Expr:
     """A CoolProp fluid property (``output``) as a parallel Polars expression.
 
-    Defaults to IF97 water; for other fluids/mixtures pass ``backend="HEOS"`` (and
-    ``fluid="CO2&O2"`` + ``mole_fractions``). ``input1``/``input2`` may be in any
-    order -- name them with ``name1``/``name2`` (any CoolProp pair: PT, PH, PQ, ...).
+    Each input identifies its property by NAME -- a string is the property and the
+    column read from it; an expression by its output name (``pl.col("P")`` or
+    ``pl.col("p").alias("P")``). Both must be CoolProp state inputs (P/T/Q/D/H/S/U,
+    any pair: PT, PH, PQ, ...). Defaults to IF97 water; for other fluids/mixtures
+    pass ``backend="HEOS"`` (and ``fluid="CO2&O2"`` + ``mole_fractions``).
     """
+    name1, name2 = _input_name(input1), _input_name(input2)
+    for name in (name1, name2):
+        if not is_fluid_input(name):
+            raise ValueError(
+                f"fluid input must be named after a CoolProp state input "
+                f"(P, T, Q, D, H, S, U, ...); got {name!r}. Alias the column, e.g. "
+                f'pl.col("pressure").alias("P").'
+            )
     pair_idx, swap = _resolve_pair(name1, name2)
     a, b = (input2, input1) if swap else (input1, input2)  # canonical order
     return register_plugin_function(
@@ -397,12 +412,20 @@ def humid_air(
     input1: HumidAirInput | pl.Expr,
     input2: HumidAirInput | pl.Expr,
     input3: HumidAirInput | pl.Expr,
-    *,
-    name1: HumidAirInput = "P",
-    name2: HumidAirInput = "T",
-    name3: HumidAirInput = "R",
 ) -> pl.Expr:
-    """A humid-air (HAPropsSI) property as a Polars expression."""
+    """A humid-air (HAPropsSI) property as a Polars expression.
+
+    Each input identifies its property by name (the string, or the expression's
+    output name); all three must be HAPropsSI state inputs (T, P, R, W, B, ...).
+    """
+    name1, name2, name3 = _input_name(input1), _input_name(input2), _input_name(input3)
+    for name in (name1, name2, name3):
+        if not is_humid_air_input(name):
+            raise ValueError(
+                f"humid-air input must be named after a HAPropsSI state input "
+                f"(T, P, R, W, B, ...); got {name!r}. Alias the column, e.g. "
+                f'pl.col("rel_hum").alias("R").'
+            )
     return register_plugin_function(
         plugin_path=_HERE,
         function_name="ha_evaluate",
