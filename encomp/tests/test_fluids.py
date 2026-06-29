@@ -520,7 +520,7 @@ def test_polars_fluids_rust_backend(monkeypatch: pytest.MonkeyPatch) -> None:
     def evaluate(backend: str) -> pl.DataFrame:
         monkeypatch.setattr("encomp.fluids.SETTINGS.coolprop_backend", backend)
         clear_expr_evaluation_cache()
-        w = Water(P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K"))
+        w = Water[pl.Expr](P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K"))
         return df.select(w.D.m.alias("D"), w.H.m.alias("H"), w.S.m.alias("S"), w.C.m.alias("C"))
 
     py = evaluate("python")

@@ -10,13 +10,19 @@ pairs. The finite overlap is compared with a relative tolerance.
 
 from __future__ import annotations
 
-import CoolProp.CoolProp as CP
+from typing import Any
+
+import CoolProp.CoolProp as _CP
 import numpy as np
 import polars as pl
 import pytest
 
 from encomp.fluids import Fluid, clear_expr_evaluation_cache
 from encomp.units import Quantity as Q
+
+# CoolProp.CoolProp is a compiled, untyped extension module; alias it as Any so
+# its dynamic functions (PropsSI, ...) do not surface unknown-type errors.
+CP: Any = _CP
 
 # both backends produce Float32; this comfortably allows any float-precision diff
 RTOL = 1e-4
@@ -27,14 +33,14 @@ PURE = [
 ]  # fmt: skip
 PROPS = ["D", "H", "S", "U", "C"]
 
-_CONFIGS: list[tuple[str, str, dict]] = (
-    [("IF97::Water", "IF97::Water", {})]
-    + [(f"HEOS::{f}", f"HEOS::{f}", {}) for f in PURE]
-    + [("HEOS CO2&O2 (0.7/0.3)", "HEOS", {"composition": {"CarbonDioxide": 0.7, "Oxygen": 0.3}})]
-)
+_CONFIGS: list[tuple[str, str, dict[str, Any]]] = [
+    ("IF97::Water", "IF97::Water", {}),
+    *((f"HEOS::{f}", f"HEOS::{f}", {}) for f in PURE),
+    ("HEOS CO2&O2 (0.7/0.3)", "HEOS", {"composition": {"CarbonDioxide": 0.7, "Oxygen": 0.3}}),
+]
 
 
-def _grid(name: str, kwargs: dict) -> pl.DataFrame:
+def _grid(name: str, kwargs: dict[str, Any]) -> pl.DataFrame:
     base = name.split("::")[-1].split("&")[0] if "::" in name else next(iter(kwargs["composition"]))
     try:
         tc = CP.PropsSI("Tcrit", base)
@@ -48,7 +54,7 @@ def _grid(name: str, kwargs: dict) -> pl.DataFrame:
 
 
 def _evaluate(
-    name: str, kwargs: dict, prop: str, backend: str, df: pl.DataFrame, monkeypatch: pytest.MonkeyPatch
+    name: str, kwargs: dict[str, Any], prop: str, backend: str, df: pl.DataFrame, monkeypatch: pytest.MonkeyPatch
 ) -> np.ndarray:
     monkeypatch.setattr("encomp.fluids.SETTINGS.coolprop_backend", backend)
     clear_expr_evaluation_cache()
@@ -58,7 +64,7 @@ def _evaluate(
 
 
 @pytest.mark.parametrize(("label", "name", "kwargs"), _CONFIGS, ids=[c[0] for c in _CONFIGS])
-def test_rust_python_parity(label: str, name: str, kwargs: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rust_python_parity(label: str, name: str, kwargs: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
     encomp_coolprop = pytest.importorskip("encomp_coolprop")
     if not encomp_coolprop.self_check():
         pytest.skip("encomp_coolprop plugin unavailable")
@@ -96,7 +102,8 @@ def test_rust_python_parity_input_pairs(monkeypatch: pytest.MonkeyPatch) -> None
         def density(backend: str, second: str = second, unit: str = unit, df: pl.DataFrame = df) -> np.ndarray:
             monkeypatch.setattr("encomp.fluids.SETTINGS.coolprop_backend", backend)
             clear_expr_evaluation_cache()
-            fluid = Fluid("HEOS::Water", P=Q(pl.col("P"), "Pa"), **{second: Q(pl.col(second), unit)})
+            second_point: dict[str, Any] = {second: Q(pl.col(second), unit)}
+            fluid = Fluid("HEOS::Water", P=Q(pl.col("P"), "Pa"), **second_point)
             return df.select(fluid.D.m.alias("d"))["d"].to_numpy().astype(float)
 
         py = density("python")

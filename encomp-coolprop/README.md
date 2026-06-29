@@ -91,7 +91,7 @@ Dev (editable install):
 ```bash
 python scripts/build_libcoolprop.py   # builds CoolProp's shared lib + bundles it
 maturin develop --release             # builds + installs the plugin
-# or, from the encomp repo root: uv sync --extra rust  (after build_libcoolprop.py)
+# or, from the encomp repo root: uv sync  (after build_libcoolprop.py; it is a hard dep)
 ```
 
 Local single-platform wheel:
@@ -105,7 +105,7 @@ uv build --wheel        # NOT plain `uv build`: the sdist excludes the (gitignor
 Cross-platform distribution wheels (the plugin + bundled `libCoolProp` are native;
 `abi3` → one wheel per platform covers CPython >=3.13) are built with `cibuildwheel`:
 
-| target  | on this macOS host        | in CI (`.github/workflows/encomp-coolprop-wheels.yml`) |
+| target  | on this macOS host        | in CI (`.github/workflows/encomp-coolprop-release.yml`) |
 |---------|---------------------------|--------------------------------------------------------|
 | macOS   | yes (native)              | macos-13 (x86_64), macos-14 (arm64)                    |
 | Linux   | yes, via Docker (manylinux)| ubuntu (x86_64) + ubuntu-arm (aarch64)                |
@@ -113,8 +113,8 @@ Cross-platform distribution wheels (the plugin + bundled `libCoolProp` are nativ
 
 `cibuildwheel` runs `build_libcoolprop.py` per platform (its `before-all`), bundles
 the lib, and emits PyPI-compatible tags. Publish the collected wheels with
-`uv publish` (or twine). `encomp` stays pure-Python and depends on this only via
-`encomp[rust]`.
+`uv publish` (or twine). `encomp` stays pure-Python and depends on this as a hard
+dependency (the pure-Python CoolProp path remains a runtime fallback).
 
 Lint/format: `cargo fmt`, `cargo clippy --all-targets -- -D warnings` (wired into
 the repo's pre-commit).

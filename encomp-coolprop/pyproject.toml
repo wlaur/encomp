@@ -14,7 +14,10 @@ python-source = "python"
 module-name = "encomp_coolprop._internal"
 # bundle the per-platform CoolProp dynamic library into the wheel (built/copied
 # into python/encomp_coolprop/ before `maturin build`); the plugin dlopens it.
-include = [{ path = "python/encomp_coolprop/libCoolProp.*", format = "wheel" }]
+include = [
+    { path = "python/encomp_coolprop/libCoolProp.*", format = "wheel" },
+    "python/encomp_coolprop/py.typed", # PEP 561: ship inline types to consumers
+]
 
 # Per-platform binary wheels (the plugin + bundled libCoolProp are native). abi3
 # means one wheel per platform covers CPython >=3.13. The GitHub Actions workflow

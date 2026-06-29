@@ -506,6 +506,7 @@ source = { editable = "." }
 dependencies = [
     { name = "asttokens" },
     { name = "coolprop" },
+    { name = "encomp-coolprop" },
     { name = "fire" },
     { name = "numpy" },
     { name = "pint" },
@@ -517,11 +518,6 @@ dependencies = [
     { name = "typeguard" },
     { name = "typing-extensions" },
     { name = "uncertainties" },
-]
-
-[package.optional-dependencies]
-rust = [
-    { name = "encomp-coolprop" },
 ]
 
 [package.dev-dependencies]
@@ -556,7 +552,7 @@ dev = [
 requires-dist = [
     { name = "asttokens" },
     { name = "coolprop", specifier = "==8.0.0" },
-    { name = "encomp-coolprop", marker = "extra == 'rust'", editable = "encomp-coolprop" },
+    { name = "encomp-coolprop", editable = "encomp-coolprop" },
     { name = "fire" },
     { name = "numpy" },
     { name = "pint", specifier = ">=0.25.2" },
@@ -569,7 +565,6 @@ requires-dist = [
     { name = "typing-extensions" },
     { name = "uncertainties" },
 ]
-provides-extras = ["rust"]
 
 [package.metadata.requires-dev]
 dev = [

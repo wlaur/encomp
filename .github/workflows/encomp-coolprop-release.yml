@@ -64,10 +64,9 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          # encomp (pure-python) + its deps + test deps
-          pip install . pytest hypothesis pytest-asyncio
-          # the matching platform wheel (abi3 -> the cp313 wheel installs on 3.14 too)
-          pip install --find-links wheelhouse --no-deps encomp-coolprop
+          # encomp + its deps (incl. the hard dep encomp-coolprop, resolved from the
+          # just-built wheelhouse; abi3 -> the cp313 wheel installs on 3.14 too) + test deps
+          pip install --find-links wheelhouse . pytest hypothesis pytest-asyncio
           python -c "import encomp_coolprop as cp; assert cp.self_check(), 'plugin self_check failed'"
           python -m pytest encomp/tests/ -q
 

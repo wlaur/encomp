@@ -43,12 +43,11 @@ dependencies = [
     # and the two must match (enum integers + EOS data differ across versions).
     # Loosen to ~=8.0.0 only if the Rust side tracks patch releases.
     "coolprop==8.0.0",
+    # The rust Polars plugin backend is a hard dependency (per-platform binary
+    # wheel). The pure-Python CoolProp path remains as an automatic runtime
+    # fallback (settings.coolprop_backend) if the plugin fails to load.
+    "encomp-coolprop",
 ]
-
-[project.optional-dependencies]
-# `encomp[rust]` adds the parallel, GIL-free CoolProp Polars plugin backend.
-# Without it, encomp falls back to the pure-Python CoolProp path automatically.
-rust = ["encomp-coolprop"]
 
 [dependency-groups]
 dev = [
