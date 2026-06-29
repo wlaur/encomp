@@ -1,7 +1,3 @@
-"""
-Data structures and related functions.
-"""
-
 from collections.abc import Iterable, Iterator, Sequence
 from typing import Any, cast, overload
 
