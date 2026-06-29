@@ -8,9 +8,9 @@ import logging
 import warnings
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from threading import Lock
-from typing import Annotated, Any, ClassVar, Generic, Literal, Self, cast
+from typing import Annotated, Any, ClassVar, Generic, Literal, Self, TypedDict, Unpack, cast
 
 # CoolProp.CoolProp is a compiled extension module exporting both PropsSI and
 # HAPropsSI. Importing the module (rather than the untyped pure-Python
@@ -77,6 +77,97 @@ if SETTINGS.ignore_coolprop_warnings:
 CProperty = FluidParam | HumidAirParam
 CName = Annotated[str, "CoolProp fluid name"]
 UnitString = Annotated[str, "Unit string"]
+
+
+class FluidState(TypedDict, Generic[MT], total=False):  # noqa: UP046
+    """Valid CoolProp fluid state-input property names for ``Fluid``/``Water``.
+
+    Used with ``Unpack`` to statically check the ``**kwargs`` keys at the call
+    site. The ``Quantity[Any, float]`` arm of each value type lets one fixed
+    point be a plain scalar while another is vectorised, so a mixed
+    ``float`` + ``MT`` call still infers the magnitude type correctly.
+    """
+
+    P: Quantity[Any, MT] | Quantity[Any, float]
+    T: Quantity[Any, MT] | Quantity[Any, float]
+    Q: Quantity[Any, MT] | Quantity[Any, float]
+    D: Quantity[Any, MT] | Quantity[Any, float]
+    DMASS: Quantity[Any, MT] | Quantity[Any, float]
+    DMOLAR: Quantity[Any, MT] | Quantity[Any, float]
+    Dmass: Quantity[Any, MT] | Quantity[Any, float]
+    Dmolar: Quantity[Any, MT] | Quantity[Any, float]
+    H: Quantity[Any, MT] | Quantity[Any, float]
+    HMASS: Quantity[Any, MT] | Quantity[Any, float]
+    HMOLAR: Quantity[Any, MT] | Quantity[Any, float]
+    Hmass: Quantity[Any, MT] | Quantity[Any, float]
+    Hmolar: Quantity[Any, MT] | Quantity[Any, float]
+    S: Quantity[Any, MT] | Quantity[Any, float]
+    SMASS: Quantity[Any, MT] | Quantity[Any, float]
+    SMOLAR: Quantity[Any, MT] | Quantity[Any, float]
+    Smass: Quantity[Any, MT] | Quantity[Any, float]
+    Smolar: Quantity[Any, MT] | Quantity[Any, float]
+    U: Quantity[Any, MT] | Quantity[Any, float]
+    UMASS: Quantity[Any, MT] | Quantity[Any, float]
+    UMOLAR: Quantity[Any, MT] | Quantity[Any, float]
+    Umass: Quantity[Any, MT] | Quantity[Any, float]
+    Umolar: Quantity[Any, MT] | Quantity[Any, float]
+
+
+class HumidAirState(TypedDict, Generic[MT], total=False):  # noqa: UP046
+    """Valid CoolProp humid-air (``HAPropsSI``) parameter names for ``HumidAir``.
+
+    Mirrors ``encomp_coolprop.HumidAirParam``; ``HAPropsSI`` accepts most of
+    these as state inputs. Used with ``Unpack`` to statically check the
+    ``**kwargs`` keys at the call site.
+    """
+
+    B: Quantity[Any, MT] | Quantity[Any, float]
+    C: Quantity[Any, MT] | Quantity[Any, float]
+    CV: Quantity[Any, MT] | Quantity[Any, float]
+    CVha: Quantity[Any, MT] | Quantity[Any, float]
+    Cha: Quantity[Any, MT] | Quantity[Any, float]
+    Conductivity: Quantity[Any, MT] | Quantity[Any, float]
+    D: Quantity[Any, MT] | Quantity[Any, float]
+    DewPoint: Quantity[Any, MT] | Quantity[Any, float]
+    Enthalpy: Quantity[Any, MT] | Quantity[Any, float]
+    Entropy: Quantity[Any, MT] | Quantity[Any, float]
+    H: Quantity[Any, MT] | Quantity[Any, float]
+    Hda: Quantity[Any, MT] | Quantity[Any, float]
+    Hha: Quantity[Any, MT] | Quantity[Any, float]
+    HumRat: Quantity[Any, MT] | Quantity[Any, float]
+    K: Quantity[Any, MT] | Quantity[Any, float]
+    M: Quantity[Any, MT] | Quantity[Any, float]
+    Omega: Quantity[Any, MT] | Quantity[Any, float]
+    P: Quantity[Any, MT] | Quantity[Any, float]
+    P_w: Quantity[Any, MT] | Quantity[Any, float]
+    R: Quantity[Any, MT] | Quantity[Any, float]
+    RH: Quantity[Any, MT] | Quantity[Any, float]
+    RelHum: Quantity[Any, MT] | Quantity[Any, float]
+    S: Quantity[Any, MT] | Quantity[Any, float]
+    Sda: Quantity[Any, MT] | Quantity[Any, float]
+    Sha: Quantity[Any, MT] | Quantity[Any, float]
+    T: Quantity[Any, MT] | Quantity[Any, float]
+    T_db: Quantity[Any, MT] | Quantity[Any, float]
+    T_dp: Quantity[Any, MT] | Quantity[Any, float]
+    T_wb: Quantity[Any, MT] | Quantity[Any, float]
+    Tdb: Quantity[Any, MT] | Quantity[Any, float]
+    Tdp: Quantity[Any, MT] | Quantity[Any, float]
+    Twb: Quantity[Any, MT] | Quantity[Any, float]
+    V: Quantity[Any, MT] | Quantity[Any, float]
+    Vda: Quantity[Any, MT] | Quantity[Any, float]
+    Vha: Quantity[Any, MT] | Quantity[Any, float]
+    Visc: Quantity[Any, MT] | Quantity[Any, float]
+    W: Quantity[Any, MT] | Quantity[Any, float]
+    WetBulb: Quantity[Any, MT] | Quantity[Any, float]
+    Y: Quantity[Any, MT] | Quantity[Any, float]
+    Z: Quantity[Any, MT] | Quantity[Any, float]
+    cp: Quantity[Any, MT] | Quantity[Any, float]
+    cp_ha: Quantity[Any, MT] | Quantity[Any, float]
+    cv_ha: Quantity[Any, MT] | Quantity[Any, float]
+    k: Quantity[Any, MT] | Quantity[Any, float]
+    mu: Quantity[Any, MT] | Quantity[Any, float]
+    psi_w: Quantity[Any, MT] | Quantity[Any, float]
+
 
 AssumedPhase = Literal[
     "gas",
@@ -568,7 +659,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             return False
 
     @classmethod
-    def check_inputs(cls, kwargs: dict[str, Quantity[Any, Any]]) -> None:
+    def check_inputs(cls, kwargs: Mapping[str, object]) -> None:
         invalid = [key for key in kwargs if not cls.is_valid_prop(key)]
 
         if len(invalid):
@@ -579,14 +670,18 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             )
 
     def _build_points(
-        self, kwargs: dict[str, Quantity[Any, MT] | Quantity[Any, float]]
+        self, kwargs: Mapping[str, object]
     ) -> list[tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]]]:
         """Validate raw ``**kwargs`` keys and narrow each to the strict ``CProperty``
-        Literal union, producing the typed ``points`` list."""
+        Literal union, producing the typed ``points`` list.
+
+        The ``Unpack[TypedDict]`` ``**kwargs`` degrades its values to ``object``
+        when iterated, so the property *name* is narrowed via the ``TypeGuard``
+        (no cast) while the *value* is cast back to the ``Quantity`` union."""
         points: list[tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]]] = []
         for name, qty in kwargs.items():
             if is_fluid_param(name) or is_humid_air_param(name):
-                points.append((name, qty))
+                points.append((name, cast("Quantity[Any, MT] | Quantity[Any, float]", qty)))
             else:
                 raise ValueError(f'Invalid CoolProp property name: "{name}"')
         return points
@@ -1320,7 +1415,7 @@ class Fluid(CoolPropFluid[MT]):
         *,
         composition: Composition | None = None,
         normalize: bool = True,
-        **kwargs: Quantity[Any, MT] | Quantity[Any, float],
+        **kwargs: Unpack[FluidState[MT]],
     ) -> None:
         """
         Represents a fluid at a fixed state, for example at a
@@ -1635,7 +1730,7 @@ class Water(Fluid[MT]):
         ("V", ".1f"),
     )
 
-    def __init__(self, **kwargs: Quantity[Any, MT] | Quantity[Any, float]) -> None:
+    def __init__(self, **kwargs: Unpack[FluidState[MT]]) -> None:
         """
         Convenience class to access water and steam properties via CoolProp.
 
@@ -1738,7 +1833,7 @@ class HumidAir(CoolPropFluid[MT]):
         ("M", ".2g"),
     )
 
-    def __init__(self, **kwargs: Quantity[Any, MT] | Quantity[Any, float]) -> None:
+    def __init__(self, **kwargs: Unpack[HumidAirState[MT]]) -> None:
         """
         Interface to the CoolProp function for humid air,
         ``CoolProp.CoolProp.HAPropsSI``.

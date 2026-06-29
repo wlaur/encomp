@@ -74,8 +74,9 @@ def test_Fluid() -> None:
         Water(P=Q(1, "bar"), T=Q(150, "degC"), Q=Q(0.4, ""))
 
     with pytest.raises(ValueError):
-        # incorrect argument name
-        Water(T=Q(1, "bar"), p=Q(9, "degC"))
+        # incorrect argument name (built dynamically so the static
+        # Unpack[TypedDict] key check does not flag the intentional typo)
+        Water(**{"T": Q(1, "bar"), "p": Q(9, "degC")})
 
     Fluid("water", T=Q([25, 95], "°C"), P=Q([1, 2], "bar")).H
     Fluid("water", T=Q([25, np.nan], "°C"), P=Q([1, 2], "bar")).H
