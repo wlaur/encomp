@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 import CoolProp.CoolProp as _CP
+import encomp_coolprop
 import numpy as np
 import polars as pl
 import pytest
@@ -65,9 +66,7 @@ def _evaluate(
 
 @pytest.mark.parametrize(("label", "name", "kwargs"), _CONFIGS, ids=[c[0] for c in _CONFIGS])
 def test_rust_python_parity(label: str, name: str, kwargs: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
-    encomp_coolprop = pytest.importorskip("encomp_coolprop")
-    if not encomp_coolprop.self_check():
-        pytest.skip("encomp_coolprop plugin unavailable")
+    assert encomp_coolprop.self_check()
 
     df = _grid(name, kwargs)
     for prop in PROPS:
@@ -87,9 +86,7 @@ def test_rust_python_parity(label: str, name: str, kwargs: dict[str, Any], monke
 def test_rust_python_parity_input_pairs(monkeypatch: pytest.MonkeyPatch) -> None:
     """Parity for non-PT input pairs (P,H and P,S) -- the rust path resolves the
     canonical pair + column order, the python path uses PropsSI."""
-    encomp_coolprop = pytest.importorskip("encomp_coolprop")
-    if not encomp_coolprop.self_check():
-        pytest.skip("encomp_coolprop plugin unavailable")
+    assert encomp_coolprop.self_check()
 
     p = np.geomspace(2e5, 200e5, 25)
     t = np.linspace(300.0, 620.0, 25)

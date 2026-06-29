@@ -4,6 +4,7 @@
 import logging
 from typing import Any, assert_type, cast
 
+import encomp_coolprop
 import numpy as np
 import polars as pl
 import pytest
@@ -512,9 +513,7 @@ def test_polars_fluids_expression_cache_distinct_inputs(monkeypatch: pytest.Monk
 
 
 def test_polars_fluids_rust_backend(monkeypatch: pytest.MonkeyPatch) -> None:
-    encomp_coolprop = pytest.importorskip("encomp_coolprop")
-    if not encomp_coolprop.self_check():
-        pytest.skip("encomp_coolprop plugin not available")
+    assert encomp_coolprop.self_check()
 
     df = pl.DataFrame({"P": np.full(7, 50e5), "T": np.linspace(300.0, 500.0, 7)})
 

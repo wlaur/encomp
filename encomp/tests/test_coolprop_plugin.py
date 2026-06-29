@@ -9,13 +9,10 @@ from __future__ import annotations
 
 from typing import Any
 
+import CoolProp.CoolProp as _CP
+import encomp_coolprop as cp
 import numpy as np
 import polars as pl
-import pytest
-
-cp = pytest.importorskip("encomp_coolprop")
-
-import CoolProp.CoolProp as _CP  # noqa: E402
 
 CP: Any = _CP
 
