@@ -19,7 +19,7 @@ from __future__ import annotations
 import sys
 from functools import cache, lru_cache
 from pathlib import Path
-from typing import Any, Literal, TypeGuard, get_args
+from typing import Any, Literal, TypeIs, get_args
 
 import CoolProp.CoolProp as _CoolProp
 import polars as pl
@@ -294,30 +294,31 @@ HumidAirInput = Literal[
 HUMID_AIR_INPUTS: frozenset[HumidAirInput] = frozenset(get_args(HumidAirInput))
 
 
-# TypeGuards: narrow a runtime ``str`` to the corresponding strict Literal without a
-# cast (and reject unknown names). Use these wherever a property/backend/phase name
-# arrives as ``str`` (e.g. from **kwargs, whose keys are always ``str``).
-def is_fluid_param(name: str) -> TypeGuard[FluidParam]:
+# TypeIs predicates (PEP 742): narrow a runtime ``str`` to the corresponding strict
+# Literal without a cast, in both branches (and reject unknown names). Use these
+# wherever a property/backend/phase name arrives as ``str`` (e.g. from **kwargs,
+# whose keys are always ``str``).
+def is_fluid_param(name: str) -> TypeIs[FluidParam]:
     return name in FLUID_PARAMS
 
 
-def is_humid_air_param(name: str) -> TypeGuard[HumidAirParam]:
+def is_humid_air_param(name: str) -> TypeIs[HumidAirParam]:
     return name in HUMID_AIR_PARAMS
 
 
-def is_backend(name: str) -> TypeGuard[Backend]:
+def is_backend(name: str) -> TypeIs[Backend]:
     return name in BACKENDS
 
 
-def is_phase(name: str) -> TypeGuard[Phase]:
+def is_phase(name: str) -> TypeIs[Phase]:
     return name in PHASES
 
 
-def is_fluid_input(name: str) -> TypeGuard[FluidInput]:
+def is_fluid_input(name: str) -> TypeIs[FluidInput]:
     return name in FLUID_INPUTS
 
 
-def is_humid_air_input(name: str) -> TypeGuard[HumidAirInput]:
+def is_humid_air_input(name: str) -> TypeIs[HumidAirInput]:
     return name in HUMID_AIR_INPUTS
 
 
