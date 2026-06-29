@@ -84,9 +84,10 @@ requires = ["maturin>=1.5,<2"]
 build-backend = "maturin"
 
 [tool.maturin]
-# encomp is a mixed Python + Rust project: the CoolProp Polars plugin (Rust crate at
-# the repo root) and the bundled libCoolProp are placed in encomp/coolprop/ and
-# shipped in ONE per-platform wheel together with the pure-Python modules.
+# encomp is a mixed Python + Rust project: the CoolProp Polars plugin (Rust crate in
+# rust/) and the bundled libCoolProp are placed in encomp/coolprop/ and shipped in
+# ONE per-platform wheel together with the pure-Python modules.
+manifest-path = "rust/Cargo.toml"
 python-source = "."
 module-name = "encomp.coolprop._internal"
 include = [

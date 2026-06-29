@@ -64,7 +64,7 @@ one shared structure — `coolprop.rs` guards `factory`/`free` with a narrow mut
 never the hot path), and (c) global config isn't mutated during evaluation. Results
 are bit-identical across 1/2/4/8 threads.
 
-All `unsafe` is confined to `src/coolprop.rs` (the FFI boundary); `lib.rs` has none.
+All `unsafe` is confined to `rust/src/coolprop.rs` (the FFI boundary); `lib.rs` has none.
 Every `unsafe` block carries a `// SAFETY:` comment (rationale + error modes),
 enforced by `clippy::undocumented_unsafe_blocks`. The safe wrapper uses an RAII
 `State` (frees its handle on drop), length-checked slices, and stack-local error
@@ -114,6 +114,6 @@ the lib, and emits PyPI-compatible tags. Lint/format: `cargo fmt`, `cargo clippy
 ## Files
 
 - `encomp/coolprop/__init__.py` — public Python API (`fluid`, `humid_air`).
-- `src/lib.rs` — the `cp_evaluate` / `ha_evaluate` plugin expressions (crate at repo root).
-- `src/coolprop.rs` — the CoolProp C-API bindings + thread-safety model (all `unsafe`).
+- `rust/src/lib.rs` — the `cp_evaluate` / `ha_evaluate` plugin expressions (crate at repo root).
+- `rust/src/coolprop.rs` — the CoolProp C-API bindings + thread-safety model (all `unsafe`).
 - `scripts/build_libcoolprop.py` — builds + bundles CoolProp's shared library.
