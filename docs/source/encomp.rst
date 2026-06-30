@@ -76,14 +76,6 @@ encomp.sympy module
    :undoc-members:
    :show-inheritance:
 
-encomp.thermo module
---------------------
-
-.. automodule:: encomp.thermo
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 encomp.units module
 -------------------
 

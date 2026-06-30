@@ -577,15 +577,15 @@ Parallel evaluation with Polars
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 :py:class:`encomp.fluids.Fluid` properties also accept ``Quantity``-wrapped Polars
-expressions (``pl.Expr``) and return a ``pl.Expr``. Independent property nodes in a
+expressions (``pl.Expr``) and return a ``pl.Expr``. Independent property nodes in
 one ``select`` / ``with_columns`` / ``collect()`` (eager or lazy) are evaluated
 *in parallel* by the ``encomp.coolprop`` plugin --
 a native Rust extension over the CoolProp C-API that runs without holding the GIL.
 ``pl.Expr`` (lazy) inputs are evaluated exclusively through this plugin (there is no
 map_batches fallback). Eager ``float`` / numpy / ``pl.Series`` inputs use the Python
 CoolProp path, except arrays of at least ``EAGER_PLUGIN_MIN_SIZE`` (1000) elements,
-which also route through the plugin (faster and lower peak memory, bit-identical
-results).
+which also route through the plugin (faster and lower peak memory; results are
+bit-identical when the installed ``coolprop`` matches the bundled build, 8.0.0).
 
 .. code-block:: python
 

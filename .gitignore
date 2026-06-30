@@ -149,5 +149,6 @@ generated
 *.dylib
 *.dll
 *.pyd
+*.so
 /_coolprop_build/
 /wheelhouse*/

@@ -244,7 +244,8 @@ runs GIL-free on the Polars thread pool. `pl.Expr` (lazy) inputs are evaluated
 exclusively through this plugin (there is no map_batches fallback). Eager `float` /
 numpy / `pl.Series` inputs use the Python CoolProp path, except arrays of at least
 `EAGER_PLUGIN_MIN_SIZE` (1000) elements, which also route through the plugin (≈2×
-faster and lower peak memory than vectorized `PropsSI`; bit-identical results):
+faster and lower peak memory than vectorized `PropsSI`; results are bit-identical
+when the installed `coolprop` matches the bundled build, 8.0.0):
 
 ```python
 import polars as pl
