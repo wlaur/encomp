@@ -538,6 +538,11 @@ def humid_air(
     Each input identifies its property by name (the string, or the expression's
     output name); all three must be HAPropsSI state inputs (T, P, R, W, B, ...).
     """
+    # Unlike the fluid path (validated by CoolProp's param_index in the plugin), HAPropsSI
+    # returns _HUGE -> null for an unknown output, so a typo'd output would silently yield
+    # an all-null column. Validate it here against the known HAPropsSI parameter set.
+    if not is_humid_air_param(output):
+        raise ValueError(f"humid-air output must be a HAPropsSI parameter (W, H, Twb, RH, ...); got {output!r}.")
     name1, name2, name3 = _input_name(input1), _input_name(input2), _input_name(input3)
     for name in (name1, name2, name3):
         if not is_humid_air_input(name):

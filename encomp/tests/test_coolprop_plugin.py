@@ -155,6 +155,13 @@ def test_input_not_named_after_state_input_raises() -> None:
         cp.humid_air("W", pl.col("rel_hum"), "T", "P")
 
 
+def test_humid_air_invalid_output_raises() -> None:
+    # HAPropsSI returns _HUGE -> null for an unknown output, so a typo would otherwise
+    # yield a silent all-null column; humid_air validates the output up front
+    with pytest.raises(ValueError, match="HAPropsSI"):
+        cp.humid_air("NOTAPROP", "P", "T", "R")
+
+
 def test_typeguards() -> None:
     assert cp.is_fluid_param("DMASS")
     assert not cp.is_fluid_param("DEFINITELY_NOT_A_PROP")
