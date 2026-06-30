@@ -493,9 +493,10 @@ def resolve_fluid_spec(
             if set(name_species) != set(species):
                 raise ValueError(f"species in name ({name_species}) do not match composition keys ({species})")
         fluids = "&".join(species)
-        fractions: list[float] | None = [_coerce_fraction(sp, composition[sp]) for sp in species]
-        if sum(fractions) <= 0.0:
-            raise ValueError(f"composition fractions must sum to a positive value, got {fractions}")
+        mole_fractions = [_coerce_fraction(sp, composition[sp]) for sp in species]
+        if sum(mole_fractions) <= 0.0:
+            raise ValueError(f"composition fractions must sum to a positive value, got {mole_fractions}")
+        fractions: list[float] | None = mole_fractions
     else:
         backend_raw, fluid_str = _cp.extract_backend(name)
         backend = "HEOS" if backend_raw == "?" else backend_raw

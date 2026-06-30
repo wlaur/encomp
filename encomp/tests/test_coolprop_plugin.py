@@ -8,7 +8,7 @@ CoolProp's PropsSI / HAPropsSI / AbstractState.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 import CoolProp.CoolProp as _CP
 import numpy as np
@@ -182,7 +182,7 @@ def test_humid_air_invalid_output_raises() -> None:
     # HAPropsSI returns _HUGE -> null for an unknown output, so a typo would otherwise
     # yield a silent all-null column; humid_air validates the output up front
     with pytest.raises(ValueError, match="HAPropsSI"):
-        cp.humid_air("NOTAPROP", "P", "T", "R")
+        cp.humid_air(cast(Any, "NOTAPROP"), "P", "T", "R")
 
 
 def test_typeguards() -> None:
