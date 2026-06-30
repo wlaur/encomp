@@ -21,6 +21,7 @@ by a ``composition`` dict, and a fixed phase by ``assume_phase``.
 
 from __future__ import annotations
 
+import math
 import sys
 from functools import cache, lru_cache
 from pathlib import Path
@@ -433,6 +434,19 @@ def _phase_from_assumed(assume_phase: AssumedPhase) -> Phase:
     return phase
 
 
+def _coerce_fraction(species: str, value: object) -> float:
+    # only fixed float fractions are valid (bool is an int subclass -- reject it);
+    # mirrors encomp.fluids.Fluid._coerce_fraction so both layers validate identically.
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError(f"mole fraction for {species!r} must be a float; got {type(value).__name__}.")
+    fraction = float(value)
+    if not math.isfinite(fraction):
+        raise ValueError(f"mole fraction for {species!r} must be finite, got {fraction}")
+    if fraction < 0.0:
+        raise ValueError(f"mole fraction for {species!r} must be non-negative, got {fraction}")
+    return fraction
+
+
 def resolve_fluid_spec(
     name: CName,
     composition: Composition | None = None,
@@ -451,10 +465,29 @@ def resolve_fluid_spec(
     ``mole_fractions`` is ``None`` for a pure fluid.
     """
     if composition is not None:
+        # validate + reconcile name with composition exactly like Fluid._init_composition
+        # (the Fluid path validates there before delegating here; the bare cp.fluid path
+        # relies on this block, so the two stay consistent -- e.g. a name and dict that
+        # name different species is an error, not a silent use of the dict).
+        if len(composition) < 2:
+            raise ValueError(f"composition requires at least two species, got {list(composition)}")
+        if "[" in name:
+            raise ValueError(
+                "cannot set the composition both via the fluid name (e.g. 'HEOS::CO2[0.5]&O2[0.5]') "
+                "and the composition= argument; pass only the backend as name (e.g. 'HEOS')"
+            )
         backend = name.split("::", 1)[0] if "::" in name else name
+        if backend.upper() == "IF97":
+            raise ValueError("composition= requires a mixture backend such as 'HEOS', not 'IF97'")
         species = list(composition)
+        if "::" in name:
+            name_species = name.split("::", 1)[1].split("&")
+            if set(name_species) != set(species):
+                raise ValueError(f"species in name ({name_species}) do not match composition keys ({species})")
         fluids = "&".join(species)
-        fractions: list[float] | None = [float(v) for v in composition.values()]
+        fractions: list[float] | None = [_coerce_fraction(sp, composition[sp]) for sp in species]
+        if sum(fractions) <= 0.0:
+            raise ValueError(f"composition fractions must sum to a positive value, got {fractions}")
     else:
         backend_raw, fluid_str = _cp.extract_backend(name)
         backend = "HEOS" if backend_raw == "?" else backend_raw

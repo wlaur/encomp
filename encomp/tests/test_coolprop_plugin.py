@@ -155,6 +155,20 @@ def test_input_not_named_after_state_input_raises() -> None:
         cp.humid_air("W", pl.col("rel_hum"), "T", "P")
 
 
+def test_fluid_composition_validation_matches_fluids() -> None:
+    # bare cp.fluid reconciles name + composition the same way encomp.fluids.Fluid does
+    with pytest.raises(ValueError, match="do not match"):  # name species != dict keys
+        cp.fluid("DMASS", "P", "T", name="HEOS::CarbonDioxide&Oxygen", composition={"CH4": 0.7, "N2": 0.3})
+    with pytest.raises(ValueError, match="both"):  # fractions in name AND dict
+        cp.fluid("DMASS", "P", "T", name="HEOS::CO2[0.5]&O2[0.5]", composition={"CO2": 0.5, "O2": 0.5})
+    with pytest.raises(ValueError, match="IF97"):  # IF97 is not a mixture backend
+        cp.fluid("DMASS", "P", "T", name="IF97::Water", composition={"Water": 0.5, "Ethanol": 0.5})
+    with pytest.raises(ValueError, match="two species"):  # a composition is a mixture
+        cp.fluid("DMASS", "P", "T", name="HEOS", composition={"Water": 1.0})
+    with pytest.raises(ValueError, match="non-negative"):  # invalid fraction
+        cp.fluid("DMASS", "P", "T", name="HEOS", composition={"CO2": -0.7, "O2": 0.3})
+
+
 def test_humid_air_invalid_output_raises() -> None:
     # HAPropsSI returns _HUGE -> null for an unknown output, so a typo would otherwise
     # yield a silent all-null column; humid_air validates the output up front
