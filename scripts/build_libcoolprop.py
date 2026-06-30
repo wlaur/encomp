@@ -63,6 +63,13 @@ def main() -> None:
     build = src / "build"
     build.mkdir(exist_ok=True)
     cmake_args = ["cmake", "..", "-DCOOLPROP_SHARED_LIBRARY=ON", "-DCMAKE_BUILD_TYPE=Release"]
+    # The bundled lib is dlopen'd at runtime (package data), so it is never a NEEDED of
+    # the extension module and auditwheel never inspects it -- its libstdc++/libgcc deps
+    # are not vendored or checked against the manylinux baseline. Static-link them so the
+    # lib carries no host GLIBCXX/CXXABI requirement (clang/libc++ on macOS is ABI-stable,
+    # and the MSVC runtime is handled separately, so this is Linux/gcc only).
+    if sys.platform.startswith("linux"):
+        cmake_args.append("-DCMAKE_SHARED_LINKER_FLAGS=-static-libstdc++ -static-libgcc")
     # match the wheel's target arch(es); cibuildwheel sets ARCHFLAGS on macOS
     archflags = os.environ.get("ARCHFLAGS", "")
     if sys.platform == "darwin":
