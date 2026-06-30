@@ -524,7 +524,7 @@ def fluid(
         },
         is_elementwise=True,
         use_abs_path=True,
-    )
+    ).alias(output)  # name the result after the computed property, not the first input
 
 
 def humid_air(
@@ -561,7 +561,7 @@ def humid_air(
         },
         is_elementwise=True,
         use_abs_path=True,
-    )
+    ).alias(output)  # name the result after the computed property, not the first input
 
 
 def lib_version() -> str:
