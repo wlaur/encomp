@@ -243,7 +243,7 @@ impl State<'_> {
     /// errors already surfaced from `state()`.
     pub fn update_and_1_out(
         &mut self,
-        input_pair: c_long,
+        input_pair: i64, // cast to c_long at the FFI call: c_long is i32 on Windows (LLP64)
         v1: &[f64],
         v2: &[f64],
         out_key: c_long,
@@ -262,7 +262,7 @@ impl State<'_> {
         unsafe {
             (self.cp.batch1)(
                 self.handle,
-                input_pair,
+                input_pair as c_long,
                 v1.as_ptr(),
                 v2.as_ptr(),
                 n as c_long,

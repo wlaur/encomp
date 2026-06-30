@@ -104,7 +104,9 @@ python-source = "."
 module-name = "encomp.coolprop._internal"
 include = [
     "encomp/defs/**/*",
-    { path = "encomp/coolprop/libCoolProp.*", format = "wheel" },
+    # the bundled CoolProp lib: libCoolProp.{dylib,so} on macOS/Linux, but MSVC names
+    # the Windows DLL CoolProp.dll (no "lib" prefix) -- match both spellings.
+    { path = "encomp/coolprop/*CoolProp.*", format = "wheel" },
     "encomp/coolprop/py.typed",
 ]
 
