@@ -21,6 +21,7 @@ import numpy as np
 import polars as pl
 
 from .coolprop import (
+    COMPOSITION_SUM_TOLERANCE,
     AssumedPhase,
     Backend,
     CName,
@@ -175,9 +176,6 @@ _ASSUMED_PHASE_MAP: dict[str, Any] = {
 # backends that ignore AbstractState.specify_phase (region-explicit), so assuming a
 # phase has no effect and should not switch evaluation to the slower low-level loop
 _PHASE_IGNORING_BACKENDS = frozenset({"IF97"})
-
-# warn (when normalize=True) if a row's mole fractions sum this far from 1
-_COMPOSITION_SUM_TOLERANCE = 0.01
 
 # Eager numpy / pl.Series inputs with at least this many elements are evaluated
 # through the GIL-free rust plugin (faster and lower peak memory than CoolProp's
@@ -464,8 +462,10 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     # numerical accuracy, determines if return values are zero
     _EPS: float = 1e-9
 
-    # skip checking for zero for these properties
-    _SKIP_ZERO_CHECK: tuple[CProperty, ...] = ("PHASE",)
+    # skip the dimensionless near-zero -> NaN scrub for properties where ~0 is a valid
+    # value, not CoolProp's missing-data sentinel: PHASE (0 is a real phase index) and
+    # Q (mass vapor quality; Q=0 is saturated liquid)
+    _SKIP_ZERO_CHECK: tuple[CProperty, ...] = ("PHASE", "Q")
 
     @property
     def _mt(self) -> type[MT]:
@@ -740,7 +740,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             fractions = list(comp.values())
             if self._composition_normalize:
                 total = sum(fractions)
-                if abs(total - 1.0) > _COMPOSITION_SUM_TOLERANCE:
+                if abs(total - 1.0) > COMPOSITION_SUM_TOLERANCE:
                     _LOGGER.warning(
                         f"composition fractions sum to {total:.3g}, not 1; they are renormalized. "
                         "Pass normalize=False to treat a non-unit sum as an error instead."

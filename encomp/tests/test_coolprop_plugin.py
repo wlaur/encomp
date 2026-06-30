@@ -7,6 +7,7 @@ CoolProp's PropsSI / HAPropsSI / AbstractState.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import CoolProp.CoolProp as _CP
@@ -167,6 +168,14 @@ def test_fluid_composition_validation_matches_fluids() -> None:
         cp.fluid("DMASS", "P", "T", name="HEOS", composition={"Water": 1.0})
     with pytest.raises(ValueError, match="non-negative"):  # invalid fraction
         cp.fluid("DMASS", "P", "T", name="HEOS", composition={"CO2": -0.7, "O2": 0.3})
+
+
+def test_composition_renormalize_warning(caplog: pytest.LogCaptureFixture) -> None:
+    # the shared resolver (rust / lazy path) warns on a non-unit composition sum, like
+    # the Fluid scalar path -- the warning no longer depends on which path evaluates
+    with caplog.at_level(logging.WARNING):
+        cp.fluid("DMASS", "P", "T", name="HEOS", composition={"CO2": 0.3, "O2": 0.3})
+    assert "renormalized" in caplog.text
 
 
 def test_humid_air_invalid_output_raises() -> None:

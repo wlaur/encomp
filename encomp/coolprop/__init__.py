@@ -21,6 +21,7 @@ by a ``composition`` dict, and a fixed phase by ``assume_phase``.
 
 from __future__ import annotations
 
+import logging
 import math
 import sys
 from functools import cache, lru_cache
@@ -33,6 +34,13 @@ from polars.plugins import register_plugin_function
 
 # CoolProp ships incomplete type stubs; treat the module as Any (mirrors encomp).
 _cp: Any = _CoolProp
+
+_LOGGER = logging.getLogger(__name__)
+
+# warn (when normalize=True) if mole fractions sum this far from 1 before renormalizing.
+# Single source for both renorm sites: resolve_fluid_spec (rust path) here and
+# encomp.fluids.Fluid._constant_state (python scalar/small-array path), which imports it.
+COMPOSITION_SUM_TOLERANCE = 0.01
 
 __all__ = [
     "ASSUMED_PHASES",
@@ -497,6 +505,11 @@ def resolve_fluid_spec(
     if fractions is not None and normalize:
         total = sum(fractions)
         if total:
+            if abs(total - 1.0) > COMPOSITION_SUM_TOLERANCE:
+                _LOGGER.warning(
+                    f"composition fractions sum to {total:.3g}, not 1; they are renormalized. "
+                    "Pass normalize=False to treat a non-unit sum as an error instead."
+                )
             fractions = [x / total for x in fractions]
     return backend, fluids, fractions
 
