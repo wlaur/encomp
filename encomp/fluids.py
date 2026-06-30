@@ -21,7 +21,10 @@ import numpy as np
 import polars as pl
 
 from .coolprop import (
+    AssumedPhase,
     Backend,
+    CName,
+    Composition,
     FluidParam,
     HumidAirParam,
     Phase,
@@ -29,6 +32,7 @@ from .coolprop import (
     is_fluid_param,
     is_humid_air_param,
     is_phase,
+    resolve_fluid_spec,
 )
 from .settings import SETTINGS
 from .structures import flatten
@@ -73,29 +77,10 @@ if SETTINGS.ignore_coolprop_warnings:
 
 
 # Strict Literals for CoolProp property names, single source of truth in the
-# encomp.coolprop plugin (fluid + humid-air namespaces).
+# encomp.coolprop plugin (fluid + humid-air namespaces). The fluid-name / composition /
+# assumed-phase types (CName, CommonFluidName, Composition, FractionValue, AssumedPhase)
+# live there too; the ones used here are imported above.
 CProperty = FluidParam | HumidAirParam
-
-# A few common CoolProp fluid names surfaced as Literals so editors can suggest them;
-# ANY CoolProp name string is still accepted (the union widens to ``str``). "Water"
-# resolves to IF97 in the :class:`Water` helper; pass ``"HEOS::Water"`` for the HEOS
-# EOS, or a bare backend like ``"HEOS"`` together with ``composition=``.
-CommonFluidName = Literal[
-    "Water",
-    "IF97::Water",
-    "HEOS::Water",
-    "HEOS",
-    "Air",
-    "Nitrogen",
-    "Oxygen",
-    "CarbonDioxide",
-    "Hydrogen",
-    "Methane",
-    "Ammonia",
-    "Argon",
-    "R134a",
-]
-CName = CommonFluidName | str
 UnitString = Annotated[str, "Unit string"]
 
 
@@ -175,16 +160,9 @@ class HumidAirState(TypedDict, Generic[MT], total=False):  # noqa: UP046
     psi_w: Quantity[Any, MT] | Quantity[Any, float]
 
 
-AssumedPhase = Literal[
-    "gas",
-    "liquid",
-    "supercritical",
-    "supercritical_gas",
-    "supercritical_liquid",
-    "twophase",
-]
-
-# user-facing phase name -> CoolProp phase index (for AbstractState.specify_phase)
+# user-facing phase name (AssumedPhase, imported from encomp.coolprop) -> CoolProp phase
+# index for the low-level AbstractState.specify_phase path. (The rust plugin path instead
+# uses the ``phase_*`` string, resolved by encomp.coolprop._phase_from_assumed.)
 _ASSUMED_PHASE_MAP: dict[str, Any] = {
     "gas": _cp.iphase_gas,
     "liquid": _cp.iphase_liquid,
@@ -193,10 +171,6 @@ _ASSUMED_PHASE_MAP: dict[str, Any] = {
     "supercritical_liquid": _cp.iphase_supercritical_liquid,
     "twophase": _cp.iphase_twophase,
 }
-
-
-FractionValue = float | int
-Composition = dict[CName, FractionValue]
 
 # backends that ignore AbstractState.specify_phase (region-explicit), so assuming a
 # phase has no effect and should not switch evaluation to the slower low-level loop
@@ -865,22 +839,10 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
     def _rust_spec(self) -> tuple[Backend, str, list[float] | None, Phase | None] | None:
         """Plugin spec ``(backend, fluids, mole_fractions, phase)``, or None if the
-        rust plugin cannot represent it (an unsupported backend)."""
-        comp = self._composition
-        if comp is not None:
-            backend = self._lowlevel_backend()
-            fluids = "&".join(comp)
-            fractions: list[float] | None = list(comp.values())
-        else:
-            backend_raw, fluid_str = _cp.extract_backend(self.name)
-            backend = "HEOS" if backend_raw == "?" else backend_raw
-            species, fracs = _cp.extract_fractions(fluid_str)
-            fluids = "&".join(species)
-            fractions = [float(x) for x in fracs] if len(species) > 1 else None
-        if fractions is not None and self._composition_normalize:
-            total = sum(fractions)
-            if total:
-                fractions = [x / total for x in fractions]
+        rust plugin cannot represent it (an unsupported backend). Name/composition
+        resolution is delegated to :func:`encomp.coolprop.resolve_fluid_spec` -- the same
+        function the plugin's :func:`~encomp.coolprop.fluid` uses -- so both agree."""
+        backend, fluids, fractions = resolve_fluid_spec(self.name, self._composition, self._composition_normalize)
         if not is_backend(backend):
             return None
         phase: Phase | None
@@ -937,22 +899,22 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 exprs[2].alias(n3),
             )
         else:
-            spec = self._rust_spec()
-            if spec is None:
+            if self._rust_spec() is None:
                 raise TypeError(
                     f"the encomp.coolprop rust plugin cannot represent this evaluation for "
                     f"fluid {self.name!r} (an unsupported backend)."
                 )
-            backend, fluids, fractions, phase = spec
             n1, n2 = names
+            # pass the high-level spec straight through; coolprop.fluid resolves the
+            # name + composition the same way _rust_spec does (both via resolve_fluid_spec)
             expr = _cprust.fluid(
                 cast("FluidParam", output),
                 exprs[0].alias(n1),
                 exprs[1].alias(n2),
-                backend=backend,
-                fluid=fluids,
-                phase=phase,
-                mole_fractions=fractions,
+                name=self.name,
+                assume_phase=cast("AssumedPhase | None", self._assumed_phase),
+                composition=cast("Composition | None", self._composition),
+                normalize=self._composition_normalize,
             )
         return expr.alias(output)
 

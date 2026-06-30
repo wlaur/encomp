@@ -38,9 +38,9 @@ def test_fluid_heos_multiple_properties_one_select() -> None:
     # independent properties in a single select run in parallel (GIL-free)
     df = pl.DataFrame({"P": np.full(6, 40e5), "T": np.linspace(300.0, 500.0, 6)})
     out = df.select(
-        d=cp.fluid("DMASS", "P", "T", backend="HEOS", fluid="CarbonDioxide"),
-        h=cp.fluid("HMASS", "P", "T", backend="HEOS", fluid="CarbonDioxide"),
-        s=cp.fluid("SMASS", "P", "T", backend="HEOS", fluid="CarbonDioxide"),
+        d=cp.fluid("DMASS", "P", "T", name="HEOS::CarbonDioxide"),
+        h=cp.fluid("HMASS", "P", "T", name="HEOS::CarbonDioxide"),
+        s=cp.fluid("SMASS", "P", "T", name="HEOS::CarbonDioxide"),
     )
     for prop, col in [("DMASS", "d"), ("HMASS", "h"), ("SMASS", "s")]:
         ref = CP.PropsSI(prop, "P", df["P"].to_numpy(), "T", df["T"].to_numpy(), "HEOS::CarbonDioxide")
@@ -53,18 +53,42 @@ def test_fluid_non_pt_input_pair() -> None:
     t = np.linspace(320.0, 500.0, 5)
     h = CP.PropsSI("HMASS", "P", p, "T", t, "HEOS::Water")
     df = pl.DataFrame({"P": p, "H": h})
-    out = df.select(d=cp.fluid("DMASS", "P", "H", backend="HEOS", fluid="Water"))
+    out = df.select(d=cp.fluid("DMASS", "P", "H", name="HEOS::Water"))
     ref = CP.PropsSI("DMASS", "P", p, "HMASS", h, "HEOS::Water")
     assert np.allclose(out["d"].to_numpy(), ref, rtol=RTOL)
 
 
-def test_fluid_mixture_mole_fractions() -> None:
+def test_fluid_mixture_composition() -> None:
+    # composition is a {species: mole fraction} dict, like encomp.fluids
     df = pl.DataFrame({"P": np.full(4, 60e5), "T": np.linspace(320.0, 460.0, 4)})
     out = df.select(
-        d=cp.fluid("DMASS", "P", "T", backend="HEOS", fluid="CarbonDioxide&Oxygen", mole_fractions=[0.7, 0.3])
+        d=cp.fluid(
+            "DMASS", "P", "T", name="HEOS::CarbonDioxide&Oxygen", composition={"CarbonDioxide": 0.7, "Oxygen": 0.3}
+        )
     )
     state = CP.AbstractState("HEOS", "CarbonDioxide&Oxygen")
     state.set_mole_fractions([0.7, 0.3])
+    ref: list[float] = []
+    for pressure, temperature in zip(df["P"].to_list(), df["T"].to_list(), strict=True):
+        state.update(CP.PT_INPUTS, pressure, temperature)
+        ref.append(float(state.rhomass()))
+    assert np.allclose(out["d"].to_numpy(), ref, rtol=RTOL)
+
+    # fractions can also be folded into the name; a non-unit composition is renormalised
+    # by default. All three spellings agree.
+    by_name = df.select(d=cp.fluid("DMASS", "P", "T", name="HEOS::CarbonDioxide[0.7]&Oxygen[0.3]"))
+    assert np.allclose(by_name["d"].to_numpy(), ref, rtol=RTOL)
+    normed = df.select(d=cp.fluid("DMASS", "P", "T", name="HEOS", composition={"CarbonDioxide": 7.0, "Oxygen": 3.0}))
+    assert np.allclose(normed["d"].to_numpy(), ref, rtol=RTOL)
+
+
+def test_fluid_assume_phase() -> None:
+    # assume_phase takes the encomp.fluids phase names ("gas"/"liquid"/...), pinning the
+    # phase (here a HEOS subcritical liquid) so it matches an explicit specify_phase
+    df = pl.DataFrame({"P": np.full(3, 5e5), "T": np.linspace(290.0, 320.0, 3)})
+    out = df.select(d=cp.fluid("DMASS", "P", "T", name="HEOS::Water", assume_phase="liquid"))
+    state = CP.AbstractState("HEOS", "Water")
+    state.specify_phase(CP.iphase_liquid)
     ref: list[float] = []
     for pressure, temperature in zip(df["P"].to_list(), df["T"].to_list(), strict=True):
         state.update(CP.PT_INPUTS, pressure, temperature)
@@ -126,6 +150,8 @@ def test_typeguards() -> None:
     assert not cp.is_backend("NOPE")
     assert cp.is_phase("phase_liquid")
     assert not cp.is_phase("phase_nonsense")
+    assert cp.is_assumed_phase("gas")
+    assert not cp.is_assumed_phase("phase_gas")  # the CoolProp string is not an AssumedPhase
 
 
 def test_plugin_output_dtype_preserves_input_precision() -> None:

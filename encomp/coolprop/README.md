@@ -16,22 +16,27 @@ from encomp import coolprop as cp
 df = pl.DataFrame({"P": [50e5, 60e5], "T": [400.0, 450.0]})  # Pa, K
 
 df.select(
-    cp.fluid("DMASS", "P", "T", fluid="Water").alias("rho"),
-    cp.fluid("HMASS", "P", "T", fluid="Water").alias("h"),   # runs in parallel
+    cp.fluid("DMASS", "P", "T").alias("rho"),   # default: IF97 water
+    cp.fluid("HMASS", "P", "T").alias("h"),     # runs in parallel
     cp.humid_air("W", "P", "T", "R").alias("humidity_ratio"),
 )
 ```
 
-- `fluid(output, in1, in2, *, backend="IF97", fluid="Water", phase=None,
-  mole_fractions=None)` — each input names its property (a string, or an
+The API mirrors `encomp.fluids.Fluid`:
+
+- `fluid(output, in1, in2, *, name="IF97::Water", assume_phase=None,
+  composition=None, normalize=True)` — each input names its property (a string, or an
   expression's output name, e.g. `pl.col("p").alias("P")`); both must be CoolProp
-  state inputs (any pair: PT, PH, PQ, ...). `output` may be any property. Supports
-  mixtures (`fluid="CO2&O2"` + `mole_fractions`) and an assumed phase
-  (`phase="phase_gas"`, skips the phase flash).
+  state inputs (any pair: PT, PH, PQ, ...). `output` may be any property. The fluid is
+  `name` with the backend folded in (`name="HEOS::CarbonDioxide"`); a mixture is given
+  by fractions in the name (`"HEOS::CO2[0.5]&O2[0.5]"`) or a
+  `composition={species: mole fraction}` dict, and an assumed phase by
+  `assume_phase="gas"` (skips the phase flash, HEOS/GERG only).
 - `humid_air(output, in1, in2, in3)` — same naming rule for the three HAPropsSI inputs.
 - `FluidInput` / `HumidAirInput` (state inputs), `FluidParam` / `HumidAirParam` /
-  `Backend` / `Phase` are `Literal`s; the matching `frozenset`s and `is_*` `TypeIs`
-  predicates are exported too.
+  `Backend` / `Phase` / `AssumedPhase` are `Literal`s; `CName` / `Composition` mirror
+  `encomp.fluids`. The matching `frozenset`s and `is_*` `TypeIs` predicates are exported
+  too, along with `resolve_fluid_spec` (name → backend/fluids/mole-fractions).
 
 ## Performance (CoolProp 8.0, 14-thread pool)
 

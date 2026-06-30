@@ -610,14 +610,16 @@ The plugin is also usable directly on any Polars expression, independent of the
     df = pl.DataFrame({'P': [50e5, 60e5], 'T': [400.0, 450.0]})
 
     df.select(
-        cp.fluid('DMASS', 'P', 'T').alias('rho'),   # defaults: backend IF97, fluid Water
+        cp.fluid('DMASS', 'P', 'T').alias('rho'),   # default: IF97 water
         cp.fluid('HMASS', 'P', 'T').alias('h'),
         cp.humid_air('W', 'P', 'T', 'R').alias('humidity_ratio'),
     )
 
-Any CoolProp input pair is supported (in any order) via ``name1``/``name2``,
-mixtures via ``backend``/``fluids`` and ``mole_fractions``, and an assumed phase
-via ``phase=``.
+The API mirrors :py:class:`encomp.fluids.Fluid`: any CoolProp input pair is
+supported (in any order), the fluid is given by ``name`` (with the backend folded
+in, e.g. ``name='HEOS::CarbonDioxide'``), mixtures via a
+``composition={species: mole fraction}`` dict, and a fixed phase via
+``assume_phase='gas'``.
 
 
 Sympy functionality
