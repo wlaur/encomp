@@ -78,10 +78,16 @@ much slower per call (iterative solver). Still better than the Python path.
 
 ## Caveats
 
-- **Locked to a polars minor version** (`polars-ffi` ABI; built against Rust polars
-  0.54.4 = py-polars 1.42.x). A polars upgrade needs a plugin rebuild: there is no
-  Python fallback, so until the plugin is rebuilt, `pl.Expr` (lazy) CoolProp
-  evaluation fails (eager numpy / `pl.Series` inputs are unaffected).
+- **Bound to the `polars-ffi` ABI, not the polars version.** The plugin is loaded over
+  polars' plugin ABI (`polars-ffi`, currently **major 0**, minor 1). The host polars
+  dispatches plugin calls on that ABI's *major* version and does not gate on the minor
+  (`polars-plan/.../plugin.rs`: `if major == 0 { use version_0::* }`), so a plugin built
+  against py-polars 1.42 keeps working on later 1.x releases — it is **not** pinned per
+  minor (verified across 1.42.0 → 1.42.1). This matches how community plugins ship: one
+  wheel per platform with a *minimum* polars, not a wheel per polars minor. A rebuild
+  (bumping `pyo3-polars` to the new Rust polars) is needed only if polars bumps the ffi
+  ABI **major** — rare and announced. `self_check()` evaluates a known value at first use,
+  so a genuinely incompatible polars surfaces as a clear error, never a silent wrong result.
 - **Version match**: CoolProp enum integers differ across versions; pin Python
   `coolprop==8.0.0` to match the bundled Rust lib. The plugin resolves parameter
   indices via CoolProp at runtime, never hardcoded.
