@@ -14,7 +14,6 @@ import re
 import shutil
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 
 PROJECT = Path(__file__).resolve().parent.parent  # repo root
@@ -27,12 +26,14 @@ def _coolprop_version() -> str:
     built at this floor; the Python ``coolprop`` package may be any version the
     requirement allows (>= the floor, same major). The two must share the CoolProp major
     so the ``input_pairs`` enum index encomp computes on the Python side stays valid for
-    the bundled library."""
-    deps = tomllib.loads((PROJECT / "pyproject.toml").read_text())["project"]["dependencies"]
-    for dep in deps:
-        match = re.match(r"\s*coolprop\s*(?:==|>=)\s*([\w.]+)", dep)
-        if match:
-            return f"v{match.group(1)}"
+    the bundled library.
+
+    Parsed with a regex rather than ``tomllib``: cibuildwheel's ``before-all`` runs this
+    under the manylinux image's system ``python``, which predates 3.11 and has no tomllib."""
+    text = (PROJECT / "pyproject.toml").read_text()
+    match = re.search(r"""["']coolprop\s*(?:==|>=)\s*([\w.]+)""", text)
+    if match:
+        return f"v{match.group(1)}"
     raise RuntimeError("no 'coolprop==' or 'coolprop>=' requirement found in pyproject.toml [project.dependencies]")
 
 
@@ -85,7 +86,9 @@ def main() -> None:
         sys.exit(f"libCoolProp not found under {build}")
     PKG.mkdir(parents=True, exist_ok=True)
     for stale in candidates:  # drop any other-platform lib so the wheel ships only this one
-        (PKG / stale).unlink(missing_ok=True)
+        old = PKG / stale
+        if old.exists():  # not Path.unlink(missing_ok=...): the before-all python may be < 3.8
+            old.unlink()
     dest = PKG / found.name
     shutil.copy2(found, dest)
     print(f"bundled {found} -> {dest}", flush=True)
