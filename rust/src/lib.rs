@@ -140,9 +140,21 @@ fn cp_evaluate(inputs: &[Series], kwargs: EvalKwargs) -> PolarsResult<Series> {
         st.specify_phase(ph).map_err(perr)?;
     }
 
-    let mut out = vec![0.0f64; n]; // update_and_1_out fills finite-or-NaN (failed rows -> NaN -> null)
+    let mut out = vec![0.0f64; n]; // update_and_1_out fills finite-or-NaN (failed rows -> NaN)
     st.update_and_1_out(pair, &v1, &v2, okey, &mut out).map_err(perr)?;
-    Series::new(PlSmallStr::EMPTY, out).cast(&out_dtype)
+    nan_to_null(out).cast(&out_dtype)
+}
+
+/// Build a Float64 Series whose non-finite entries (failed / out-of-range rows, left
+/// as NaN by the batched flash) are NULL, not NaN. encomp uses null as its single
+/// missing-value sentinel, so emitting it here lets the Python wrapper skip a
+/// `fill_nan(None)` -- that wrapper lowers to `when(is_not_nan).then(x).otherwise(null)`,
+/// which references the plugin subtree more than once and, with no common-subexpression
+/// elimination, re-runs the whole CoolProp flash 2-3x. One linear validity pass here is
+/// negligible next to the flash it saves.
+fn nan_to_null(out: Vec<f64>) -> Series {
+    let ca: Float64Chunked = out.into_iter().map(|x| x.is_finite().then_some(x)).collect();
+    ca.into_series().with_name(PlSmallStr::EMPTY)
 }
 
 #[derive(Deserialize)]
@@ -190,5 +202,5 @@ fn ha_evaluate(inputs: &[Series], kwargs: HaKwargs) -> PolarsResult<Series> {
         &mut out,
     )
     .map_err(perr)?;
-    Series::new(PlSmallStr::EMPTY, out).cast(&out_dtype)
+    nan_to_null(out).cast(&out_dtype)
 }

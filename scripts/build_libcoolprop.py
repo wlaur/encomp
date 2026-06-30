@@ -10,14 +10,33 @@ CoolProp ships no prebuilt 8.0 shared libraries, hence the from-source build.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
-COOLPROP_VERSION = "v8.0.0"  # must match the pinned Python `coolprop`
 PROJECT = Path(__file__).resolve().parent.parent  # repo root
 PKG = PROJECT / "encomp" / "coolprop"
+
+
+def _coolprop_version() -> str:
+    """The CoolProp git tag to build, derived from the LOWER BOUND of the ``coolprop``
+    requirement in pyproject.toml (single source of truth). The bundled C++ library is
+    built at this floor; the Python ``coolprop`` package may be any version the
+    requirement allows (>= the floor, same major). The two must share the CoolProp major
+    so the ``input_pairs`` enum index encomp computes on the Python side stays valid for
+    the bundled library."""
+    deps = tomllib.loads((PROJECT / "pyproject.toml").read_text())["project"]["dependencies"]
+    for dep in deps:
+        match = re.match(r"\s*coolprop\s*(?:==|>=)\s*([\w.]+)", dep)
+        if match:
+            return f"v{match.group(1)}"
+    raise RuntimeError("no 'coolprop==' or 'coolprop>=' requirement found in pyproject.toml [project.dependencies]")
+
+
+COOLPROP_VERSION = _coolprop_version()  # e.g. "v8.0.0" (the floor of the coolprop requirement)
 
 
 def run(*cmd: str, cwd: Path | None = None) -> None:

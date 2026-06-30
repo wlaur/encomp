@@ -72,13 +72,14 @@ def test_fluid_mixture_mole_fractions() -> None:
     assert np.allclose(out["d"].to_numpy(), ref, rtol=RTOL)
 
 
-def test_invalid_inputs_become_nan() -> None:
-    # the standalone plugin returns NaN for invalid inputs (encomp's Fluid wrapper is
-    # what converts NaN -> null); T = -5 K is invalid
+def test_invalid_inputs_become_null() -> None:
+    # the plugin emits null (encomp's single missing-value sentinel, never NaN) for
+    # invalid inputs, so the Fluid wrapper needs no fill_nan(None); T = -5 K is invalid
     df = pl.DataFrame({"P": [50e5, 50e5], "T": [400.0, -5.0]})
-    vals = df.select(rho=cp.fluid("DMASS", "P", "T"))["rho"].to_numpy()
-    assert np.isfinite(vals[0])
-    assert np.isnan(vals[1])
+    rho = df.select(rho=cp.fluid("DMASS", "P", "T"))["rho"]
+    assert rho[0] is not None and np.isfinite(rho[0])
+    assert rho[1] is None  # null, not NaN
+    assert rho.null_count() == 1
 
 
 def test_humid_air() -> None:

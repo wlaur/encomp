@@ -252,7 +252,6 @@ def _get_expr_evaluation_cache_key(
         comp_key,
         output,
         bool(fluid_any._append_name_to_cp_inputs),
-        bool(fluid_any._convert_pl_series_nan_null),
         bool(fluid_any._evaluate_invalid_separately),
         id(type(fluid).BACKEND["backend"]),
         tuple((prop, _expr_cache_digest(expr)) for prop, expr in points),
@@ -284,8 +283,6 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
     # PropsSI expects the fluid name as the first input, but not HAPropsSI
     _append_name_to_cp_inputs: bool = True
-
-    _convert_pl_series_nan_null: bool = True
 
     # HAPropsSI fails if one or more inputs are incorrect,
     # PropsSI returns NaN for invalid inputs in case valid inputs are also present
@@ -908,10 +905,14 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         return self._rust_spec() is not None
 
     def _rust_plugin_expr(self, output: CProperty, points: tuple[tuple[str, pl.Expr], ...]) -> pl.Expr:
-        """The raw Float64 encomp.coolprop plugin expr (aliased to ``output``).
+        """The raw encomp.coolprop plugin expr (aliased to ``output``): a
+        precision-preserving dtype (Float32 in -> Float32 out) with null (not NaN) for
+        failed/out-of-range rows.
 
         Shared by the lazy ``pl.Expr`` path (:meth:`_rust_expr`) and the eager
-        large-array path (:meth:`_rust_eager`). Output property names are resolved by
+        large-array path (:meth:`_rust_eager`); the latter reads it via ``to_numpy()``,
+        which maps null back to NaN, so its numpy masking is unchanged. Output property
+        names are resolved by
         CoolProp at runtime, so any valid name works regardless of the static
         ``FluidParam`` / ``HumidAirParam`` sets. Raises if the plugin is unavailable
         (there is no map_batches fallback) or cannot represent the request.
@@ -957,12 +958,12 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
     def _rust_expr(self, output: CProperty, points: tuple[tuple[CProperty, pl.Expr], ...]) -> pl.Expr:
         """The plugin expr for lazy ``pl.Expr`` inputs. The plugin's output dtype already
-        preserves the input precision (Float32 in -> Float32 out); only NaN->null is
-        applied here, no width cast."""
-        expr = self._rust_plugin_expr(output, points)
-        if self._convert_pl_series_nan_null:
-            expr = expr.fill_nan(None)
-        return expr.alias(output)
+        preserves the input precision (Float32 in -> Float32 out) and emits null (not
+        NaN) for failed/out-of-range rows directly, so no ``fill_nan(None)`` wrapper is
+        needed: that wrapper lowers to ``when(is_not_nan).then(x).otherwise(null)``, which
+        re-evaluates the whole plugin subtree (no common-subexpression elimination) and
+        runs the CoolProp flash 2-3x."""
+        return self._rust_plugin_expr(output, points)
 
     def _rust_eager(self, output: CProperty, points: tuple[tuple[str, Numpy1DArray], ...]) -> Numpy1DArray:
         """Evaluate eager numpy ``points`` through the rust plugin, returning a 1-D
@@ -1232,9 +1233,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             qty = qty.astype(self._mt)
 
         if isinstance(qty.m, pl.Series):
-            if self._convert_pl_series_nan_null:
-                qty.m = qty.m.fill_nan(None)
-
+            # missing values surface as null, never NaN (the library's single sentinel)
+            qty.m = qty.m.fill_nan(None)
             qty.m = cast(Any, qty.m).cast(self._eager_series_output_dtype())
 
         return cast("Quantity[Any, MT]", qty)
