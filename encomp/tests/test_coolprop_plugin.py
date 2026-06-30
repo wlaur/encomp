@@ -125,3 +125,38 @@ def test_typeguards() -> None:
     assert not cp.is_backend("NOPE")
     assert cp.is_phase("phase_liquid")
     assert not cp.is_phase("phase_nonsense")
+
+
+def test_plugin_output_dtype_preserves_input_precision() -> None:
+    # the plugin's output dtype follows the input column precision: Float32 only when
+    # every non-scalar input is Float32, else Float64 (the supertype for mixed). CoolProp
+    # still computes in f64, so the value is correct, just cast to the result dtype.
+    f32: pl.DataType = pl.Float32()
+    f64: pl.DataType = pl.Float64()
+
+    def fluid_dtype(p_dt: pl.DataType, t_dt: pl.DataType) -> pl.DataType:
+        df = pl.DataFrame({"P": pl.Series([50e5], dtype=p_dt), "T": pl.Series([400.0], dtype=t_dt)})
+        return df.select(cp.fluid("DMASS", "P", "T").alias("d"))["d"].dtype
+
+    assert fluid_dtype(f32, f32) == f32
+    assert fluid_dtype(f64, f64) == f64
+    assert fluid_dtype(f32, f64) == f64  # mixed -> highest
+    assert fluid_dtype(f64, f32) == f64
+
+    # a length-1 literal is neutral: a Float64 scalar alongside a Float32 column -> Float32
+    df = pl.DataFrame({"T": pl.Series([400.0], dtype=pl.Float32)})
+    out = df.select(cp.fluid("DMASS", pl.lit(50e5).alias("P"), "T").alias("d"))["d"]
+    assert out.dtype == pl.Float32
+    assert out[0] == pytest.approx(939.90625, rel=RTOL)  # value still correct
+
+    # humid air preserves precision the same way
+    dfa = pl.DataFrame(
+        {
+            "P": pl.Series([101325.0], dtype=pl.Float32),
+            "T": pl.Series([300.0], dtype=pl.Float32),
+            "R": pl.Series([0.5], dtype=pl.Float32),
+        }
+    )
+    assert dfa.select(cp.humid_air("W", "P", "T", "R").alias("w"))["w"].dtype == pl.Float32
+    dfa64 = dfa.with_columns(pl.all().cast(pl.Float64))
+    assert dfa64.select(cp.humid_air("W", "P", "T", "R").alias("w"))["w"].dtype == pl.Float64

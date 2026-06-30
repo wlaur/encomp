@@ -75,7 +75,27 @@ if SETTINGS.ignore_coolprop_warnings:
 # Strict Literals for CoolProp property names, single source of truth in the
 # encomp.coolprop plugin (fluid + humid-air namespaces).
 CProperty = FluidParam | HumidAirParam
-CName = Annotated[str, "CoolProp fluid name"]
+
+# A few common CoolProp fluid names surfaced as Literals so editors can suggest them;
+# ANY CoolProp name string is still accepted (the union widens to ``str``). "Water"
+# resolves to IF97 in the :class:`Water` helper; pass ``"HEOS::Water"`` for the HEOS
+# EOS, or a bare backend like ``"HEOS"`` together with ``composition=``.
+CommonFluidName = Literal[
+    "Water",
+    "IF97::Water",
+    "HEOS::Water",
+    "HEOS",
+    "Air",
+    "Nitrogen",
+    "Oxygen",
+    "CarbonDioxide",
+    "Hydrogen",
+    "Methane",
+    "Ammonia",
+    "Argon",
+    "R134a",
+]
+CName = CommonFluidName | str
 UnitString = Annotated[str, "Unit string"]
 
 
@@ -175,7 +195,7 @@ _ASSUMED_PHASE_MAP: dict[str, Any] = {
 }
 
 
-FractionValue = Quantity[Any, Any] | float | int | Numpy1DArray | pl.Series | pl.Expr
+FractionValue = float | int
 Composition = dict[CName, FractionValue]
 
 # backends that ignore AbstractState.specify_phase (region-explicit), so assuming a
@@ -184,6 +204,14 @@ _PHASE_IGNORING_BACKENDS = frozenset({"IF97"})
 
 # warn (when normalize=True) if a row's mole fractions sum this far from 1
 _COMPOSITION_SUM_TOLERANCE = 0.01
+
+# Eager numpy / pl.Series inputs with at least this many elements are evaluated
+# through the GIL-free rust plugin (faster and lower peak memory than CoolProp's
+# vectorized PropsSI, and much faster than the low-level per-row Python loop for an
+# assumed phase / composition). Scalars and smaller arrays stay on the Python
+# CoolProp path, where the plugin's fixed dispatch overhead would dominate. The two
+# paths are verified to agree on dtype, value, and NaN/inf handling (test_fluids).
+EAGER_PLUGIN_MIN_SIZE = 1000
 
 _EXPR_EVALUATION_CACHE_MAX_SIZE = 1024
 _EXPR_EVALUATION_CACHE: OrderedDict[tuple[Any, ...], pl.Expr] = OrderedDict()
@@ -223,7 +251,6 @@ def _get_expr_evaluation_cache_key(
         fluid_any._assumed_phase,
         comp_key,
         output,
-        SETTINGS.coolprop_backend,
         bool(fluid_any._append_name_to_cp_inputs),
         bool(fluid_any._convert_pl_series_nan_null),
         bool(fluid_any._evaluate_invalid_separately),
@@ -270,11 +297,11 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     # expensive) phase-stability search. None means CoolProp determines the phase.
     _assumed_phase: str | None = None
 
-    # per-row mixture composition (set via Fluid(..., composition=...)) as MOLE
-    # fractions. When not None, evaluation uses the low-level AbstractState loop
-    # with set_mole_fractions per row, so the composition may vary across rows.
-    # None means the composition is fixed (encoded in the fluid name) or pure.
-    _composition: dict[str, float | Numpy1DArray | pl.Expr] | None = None
+    # fixed mixture composition (set via Fluid(..., composition=...)) as MOLE
+    # fractions, one float per species. When not None, evaluation uses the
+    # low-level AbstractState API (PropsSI cannot take an explicit composition).
+    # None means the composition is fixed in the fluid name, or the fluid is pure.
+    _composition: dict[str, float] | None = None
     _composition_normalize: bool = True
 
     # True when an assumed phase or a composition is configured, i.e. evaluation
@@ -724,11 +751,9 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
     # ------------------------------------------------------------------ #
     # Low-level AbstractState path. Used whenever an assumed phase and/or a
-    # ``composition=`` dict is set (PropsSI cannot do either). Two cases:
-    #   * constant composition (fixed in the name, or scalar floats) -- the
-    #     common case: the state is built once and the loop only flashes.
-    #   * variable composition (array / pl.Expr fractions) -- a separate loop
-    #     that sets the per-row fractions before each flash.
+    # ``composition=`` dict is set (PropsSI cannot do either). The composition is
+    # fixed (baked into the name, or passed as floats), so the AbstractState is
+    # built once and the loop only flashes each (P, T) row.
     # ------------------------------------------------------------------ #
 
     def _lowlevel_backend(self) -> str:
@@ -741,7 +766,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         backend = self._lowlevel_backend()
         if comp is not None:
             state = _cp.AbstractState(backend, "&".join(comp))
-            fractions = [cast("float", v) for v in comp.values()]
+            fractions = list(comp.values())
             if self._composition_normalize:
                 total = sum(fractions)
                 if abs(total - 1.0) > _COMPOSITION_SUM_TOLERANCE:
@@ -789,110 +814,35 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         out[~np.isfinite(out)] = np.nan
         return out
 
-    def _lowlevel_loop_variable(
-        self,
-        output: CProperty,
-        p1_name: CProperty,
-        p1_arr: Numpy1DArray,
-        p2_name: CProperty,
-        p2_arr: Numpy1DArray,
-        species: list[str],
-        frac_arrs: list[Numpy1DArray],
-    ) -> Numpy1DArray:
-        state = _cp.AbstractState(self._lowlevel_backend(), "&".join(species))
-        set_fractions = state.set_mole_fractions
-        assumed_phase_idx = None if self._assumed_phase is None else _ASSUMED_PHASE_MAP[self._assumed_phase]
-        normalize = self._composition_normalize
-        k1 = _cp.get_parameter_index(p1_name)
-        k2 = _cp.get_parameter_index(p2_name)
-        out_idx = _cp.get_parameter_index(output)
-        generate_update_pair = _cp.generate_update_pair
-        update = state.update
-        keyed_output = state.keyed_output
-
-        if normalize and frac_arrs:
-            row_sums = np.sum(np.asarray(frac_arrs), axis=0)
-            finite = np.isfinite(row_sums)
-            if finite.any():
-                max_dev = float(np.max(np.abs(row_sums[finite] - 1.0)))
-                if max_dev > _COMPOSITION_SUM_TOLERANCE:
-                    _LOGGER.warning(
-                        f"composition fractions deviate from 1 by up to {max_dev:.3g} before "
-                        "normalization; they are renormalized per row. Pass normalize=False to "
-                        "treat a non-unit sum as an error instead."
-                    )
-
-        n_species = len(species)
-        out = np.full(p1_arr.size, np.nan)
-        for i in range(p1_arr.size):
-            v1 = p1_arr[i]
-            v2 = p2_arr[i]
-            fractions = [frac_arrs[j][i] for j in range(n_species)]
-            if not (np.isfinite(v1) and np.isfinite(v2) and all(np.isfinite(x) for x in fractions)):
-                continue
-            if normalize:
-                total = sum(fractions)
-                if total == 0:
-                    continue
-                fractions = [x / total for x in fractions]
-            try:
-                set_fractions(fractions)
-                if assumed_phase_idx is not None:
-                    state.specify_phase(assumed_phase_idx)
-                pair, a, b = generate_update_pair(k1, v1, k2, v2)
-                update(pair, a, b)
-                out[i] = keyed_output(out_idx)
-            except ValueError as e:
-                self.check_exception(output, e)
-
-        out[~np.isfinite(out)] = np.nan
-        return out
-
     def _evaluate_lowlevel(
         self, output: CProperty, points: tuple[tuple[CProperty, float | Numpy1DArray | pl.Expr], ...]
     ) -> float | Numpy1DArray | pl.Expr:
         p1_name = points[0][0]
         p2_name = points[1][0]
-        comp = self._composition
 
-        if comp is not None and any(isinstance(v, (np.ndarray, pl.Expr)) for v in comp.values()):
-            species = list(comp)
-            extra = [(f"__x_{sp}", comp[sp]) for sp in species]
-
-            def compute_variable(p1: Numpy1DArray, p2: Numpy1DArray, fracs: list[Numpy1DArray]) -> Numpy1DArray:
-                return self._lowlevel_loop_variable(output, p1_name, p1, p2_name, p2, species, fracs)
-
-            return self._lowlevel_dispatch(output, points, extra, compute_variable)
-
-        def compute_constant(p1: Numpy1DArray, p2: Numpy1DArray, _fracs: list[Numpy1DArray]) -> Numpy1DArray:
+        def compute(p1: Numpy1DArray, p2: Numpy1DArray) -> Numpy1DArray:
             return self._lowlevel_loop_constant(output, p1_name, p1, p2_name, p2)
 
-        return self._lowlevel_dispatch(output, points, [], compute_constant)
+        return self._lowlevel_dispatch(output, points, compute)
 
     def _lowlevel_dispatch(
         self,
         output: CProperty,
         points: tuple[tuple[CProperty, float | Numpy1DArray | pl.Expr], ...],
-        extra: list[tuple[str, float | Numpy1DArray | pl.Expr]],
-        compute: Callable[[Numpy1DArray, Numpy1DArray, list[Numpy1DArray]], Numpy1DArray],
+        compute: Callable[[Numpy1DArray, Numpy1DArray], Numpy1DArray],
     ) -> float | Numpy1DArray | pl.Expr:
         points = tuple((name, self._reduce_single_element(mag)) for name, mag in points)
-        extra = [(name, self._reduce_single_element(v)) for name, v in extra]
         p1 = points[0][1]
         p2 = points[1][1]
-        all_vals: list[float | Numpy1DArray | pl.Expr] = [p1, p2, *(v for _, v in extra)]
+        all_vals: list[float | Numpy1DArray | pl.Expr] = [p1, p2]
 
         if any(isinstance(m, pl.Expr) for m in all_vals):
             if any(isinstance(m, np.ndarray) for m in all_vals):
                 raise TypeError("cannot mix numpy array and pl.Expr inputs")
-            return self._lowlevel_expr(output, points, extra, compute)
+            return self._lowlevel_expr(output, points)
 
         if all(isinstance(m, float) for m in all_vals):
-            out = compute(
-                np.array([cast("float", p1)]),
-                np.array([cast("float", p2)]),
-                [np.array([cast("float", v)]) for _, v in extra],
-            )
+            out = compute(np.array([cast("float", p1)]), np.array([cast("float", p2)]))
             return float(out[0])
 
         arrays = [m for m in all_vals if isinstance(m, np.ndarray)]
@@ -906,19 +856,24 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 return m.flatten().astype(float)
             return np.full(n, cast("float", m))
 
-        out = compute(to_arr(p1), to_arr(p2), [to_arr(v) for _, v in extra])
+        p1_arr, p2_arr = to_arr(p1), to_arr(p2)
+        # large eager arrays: skip the per-row Python loop, use the rust plugin (it
+        # honors the assumed phase / composition too).
+        if n >= EAGER_PLUGIN_MIN_SIZE and self._rust_representable():
+            named = ((points[0][0], p1_arr), (points[1][0], p2_arr))
+            return self._rust_eager(output, named).reshape(shape)
+
+        out = compute(p1_arr, p2_arr)
         return out.reshape(shape)
 
     def _rust_spec(self) -> tuple[Backend, str, list[float] | None, Phase | None] | None:
-        """Plugin spec ``(backend, fluids, mole_fractions, phase)``, or None to fall back to Python."""
+        """Plugin spec ``(backend, fluids, mole_fractions, phase)``, or None if the
+        rust plugin cannot represent it (an unsupported backend)."""
         comp = self._composition
         if comp is not None:
-            if any(isinstance(v, (np.ndarray, pl.Expr)) for v in comp.values()):
-                return None  # per-row composition -> Python path
             backend = self._lowlevel_backend()
             fluids = "&".join(comp)
-            # the any() guard above already excluded ndarray / pl.Expr values
-            fractions: list[float] | None = [v for v in comp.values() if not isinstance(v, (np.ndarray, pl.Expr))]
+            fractions: list[float] | None = list(comp.values())
         else:
             backend_raw, fluid_str = _cp.extract_backend(self.name)
             backend = "HEOS" if backend_raw == "?" else backend_raw
@@ -941,62 +896,100 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             phase = phase_candidate
         return backend, fluids, fractions, phase
 
-    def _rust_expr(self, output: CProperty, points: tuple[tuple[CProperty, pl.Expr], ...]) -> pl.Expr | None:
-        """The encomp.coolprop plugin expr for these points, or None to fall back to map_batches."""
-        if SETTINGS.coolprop_backend != "rust":
-            return None
+    def _rust_representable(self) -> bool:
+        """Whether the rust plugin can evaluate this fluid's config (the output name is
+        resolved by CoolProp at runtime, so it never affects representability).
+
+        Humid air is always representable (per-row HAPropsSI in the plugin); a Fluid
+        is representable unless its backend is one the plugin's spec rejects.
+        """
+        if self.BACKEND["backend"] is HAPropsSI:
+            return True
+        return self._rust_spec() is not None
+
+    def _rust_plugin_expr(self, output: CProperty, points: tuple[tuple[str, pl.Expr], ...]) -> pl.Expr:
+        """The raw Float64 encomp.coolprop plugin expr (aliased to ``output``).
+
+        Shared by the lazy ``pl.Expr`` path (:meth:`_rust_expr`) and the eager
+        large-array path (:meth:`_rust_eager`). Output property names are resolved by
+        CoolProp at runtime, so any valid name works regardless of the static
+        ``FluidParam`` / ``HumidAirParam`` sets. Raises if the plugin is unavailable
+        (there is no map_batches fallback) or cannot represent the request.
+        """
         from . import coolprop as _cprust
 
         if not _cprust.self_check():
-            return None
+            raise RuntimeError(
+                "the encomp.coolprop rust plugin failed to load, but it is required to "
+                "evaluate pl.Expr (lazy) inputs and large eager arrays (there is no "
+                "fallback). Reinstall encomp with its compiled plugin."
+            )
         names = [p[0] for p in points]
         exprs = [p[1] for p in points]
-        try:
-            if self.BACKEND["backend"] is HAPropsSI:
-                if len(points) != 3:
-                    return None
-                if not is_humid_air_param(output):
-                    return None
-                n1, n2, n3 = names
-                # the plugin reads each input's property from its (aliased) name
-                expr = _cprust.humid_air(
-                    output,
-                    exprs[0].alias(n1),
-                    exprs[1].alias(n2),
-                    exprs[2].alias(n3),
+        if self.BACKEND["backend"] is HAPropsSI:
+            n1, n2, n3 = names
+            # the plugin reads each input's property from its (aliased) name
+            expr = _cprust.humid_air(
+                cast("HumidAirParam", output),
+                exprs[0].alias(n1),
+                exprs[1].alias(n2),
+                exprs[2].alias(n3),
+            )
+        else:
+            spec = self._rust_spec()
+            if spec is None:
+                raise TypeError(
+                    f"the encomp.coolprop rust plugin cannot represent this evaluation for "
+                    f"fluid {self.name!r} (an unsupported backend)."
                 )
-            else:
-                if len(points) != 2:
-                    return None
-                spec = self._rust_spec()
-                if spec is None:
-                    return None
-                backend, fluids, fractions, phase = spec
-                if not is_fluid_param(output):
-                    return None
-                n1, n2 = names
-                expr = _cprust.fluid(
-                    output,
-                    exprs[0].alias(n1),
-                    exprs[1].alias(n2),
-                    backend=backend,
-                    fluid=fluids,
-                    phase=phase,
-                    mole_fractions=fractions,
-                )
-        except Exception:
-            return None
+            backend, fluids, fractions, phase = spec
+            n1, n2 = names
+            expr = _cprust.fluid(
+                cast("FluidParam", output),
+                exprs[0].alias(n1),
+                exprs[1].alias(n2),
+                backend=backend,
+                fluid=fluids,
+                phase=phase,
+                mole_fractions=fractions,
+            )
+        return expr.alias(output)
+
+    def _rust_expr(self, output: CProperty, points: tuple[tuple[CProperty, pl.Expr], ...]) -> pl.Expr:
+        """The plugin expr for lazy ``pl.Expr`` inputs. The plugin's output dtype already
+        preserves the input precision (Float32 in -> Float32 out); only NaN->null is
+        applied here, no width cast."""
+        expr = self._rust_plugin_expr(output, points)
         if self._convert_pl_series_nan_null:
             expr = expr.fill_nan(None)
-        return expr.cast(pl.Float32).alias(output)
+        return expr.alias(output)
+
+    def _rust_eager(self, output: CProperty, points: tuple[tuple[str, Numpy1DArray], ...]) -> Numpy1DArray:
+        """Evaluate eager numpy ``points`` through the rust plugin, returning a 1-D
+        Float64 array with the *same* invalid handling as :meth:`evaluate_multiple`
+        (non-finite inputs and non-finite results -> NaN). ``points`` are equal-length
+        arrays; the caller reshapes the result.
+        """
+        names = [name for name, _ in points]
+        arrs = [np.ascontiguousarray(arr, dtype=float).ravel() for _, arr in points]
+        # generic column names avoid any collision between the input property names
+        frame = pl.DataFrame({f"__in{i}": a for i, a in enumerate(arrs)})
+        plugin_points = tuple((names[i], pl.col(f"__in{i}")) for i in range(len(arrs)))
+        expr = self._rust_plugin_expr(output, plugin_points)
+        out = np.array(frame.select(expr)[output].to_numpy(), dtype=float)
+        # match evaluate_multiple exactly: rows with any non-finite input are NaN, and
+        # any inf/_HUGE that slipped through becomes NaN.
+        finite_inputs = np.logical_and.reduce([np.isfinite(a) for a in arrs])
+        out[~finite_inputs] = np.nan
+        out[~np.isfinite(out)] = np.nan
+        return out
 
     def _lowlevel_expr(
         self,
         output: CProperty,
         points: tuple[tuple[CProperty, float | Numpy1DArray | pl.Expr], ...],
-        extra: list[tuple[str, float | Numpy1DArray | pl.Expr]],
-        compute: Callable[[Numpy1DArray, Numpy1DArray, list[Numpy1DArray]], Numpy1DArray],
     ) -> pl.Expr:
+        # fixed composition and/or assumed phase with pl.Expr inputs: rust-plugin only.
         expr_points: tuple[tuple[CProperty, pl.Expr], ...] = tuple(
             (name, v if isinstance(v, pl.Expr) else pl.lit(v)) for name, v in points
         )
@@ -1005,32 +998,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         if cached is not None:
             return cached
 
-        if not extra:  # constant composition: try the parallel rust plugin
-            rust = self._rust_expr(output, expr_points)
-            if rust is not None:
-                _expr_evaluation_cache_set(key, rust)
-                return rust
-
-        p1_name = points[0][0]
-        p2_name = points[1][0]
-        extra_fields = [(name, v if isinstance(v, pl.Expr) else pl.lit(v)) for name, v in extra]
-
-        def _evaluate(s: pl.Series) -> pl.Series:
-            p1_np = cast(Numpy1DArray, s.struct.field(p1_name).to_numpy())
-            p2_np = cast(Numpy1DArray, s.struct.field(p2_name).to_numpy())
-            frac_np = [cast(Numpy1DArray, s.struct.field(name).to_numpy()) for name, _ in extra]
-            ret = compute(p1_np, p2_np, frac_np)
-            ret_series = pl.Series(ret)
-            if self._convert_pl_series_nan_null:
-                ret_series = ret_series.fill_nan(None)
-            return ret_series.cast(pl.Float32)
-
-        fields = [
-            expr_points[0][1].alias(p1_name),
-            expr_points[1][1].alias(p2_name),
-            *[field.alias(name) for name, field in extra_fields],
-        ]
-        expr = pl.struct(*fields).map_batches(_evaluate, pl.Float32).alias(output)
+        expr = self._rust_expr(output, expr_points)
         _expr_evaluation_cache_set(key, expr)
         return expr
 
@@ -1062,36 +1030,16 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             return np.nan
 
     def evaluate_expression(self, output: CProperty, *points: tuple[CProperty, pl.Expr]) -> pl.Expr:
+        # pl.Expr (lazy) inputs are evaluated only through the GIL-free rust plugin;
+        # _rust_expr raises if it is unavailable (no map_batches fallback).
         key = _get_expr_evaluation_cache_key(self, output, points)
         cached_expr = _expr_evaluation_cache_get(key)
 
         if cached_expr is not None:
             return cached_expr
 
-        rust = self._rust_expr(output, points)
-        if rust is not None:
-            _expr_evaluation_cache_set(key, rust)
-            return rust
-
-        def _evaluate(s: pl.Series) -> pl.Series:
-            materialized: tuple[tuple[CProperty, Numpy1DArray], ...] = tuple(
-                (n[0], s.struct.field(n[0]).to_numpy()) for n in points
-            )
-            ret = self.evaluate_multiple(output, *materialized)
-
-            ret_series = pl.Series(ret)
-
-            if self._convert_pl_series_nan_null:
-                ret_series = ret_series.fill_nan(None)
-
-            ret_series = ret_series.cast(pl.Float32)
-
-            return ret_series
-
-        expr = pl.struct(*[n[1].alias(n[0]) for n in points]).map_batches(_evaluate, pl.Float32).alias(output)
-
+        expr = self._rust_expr(output, points)
         _expr_evaluation_cache_set(key, expr)
-
         return expr
 
     def evaluate_multiple_separately(
@@ -1232,7 +1180,20 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             (p, expand_scalars(cast(Any, v))) for p, v in reduced_points
         )
 
+        # large eager arrays go through the GIL-free rust plugin (faster + leaner);
+        # smaller arrays stay on the vectorized PropsSI path (lower fixed overhead).
+        if n >= EAGER_PLUGIN_MIN_SIZE and self._rust_representable():
+            return self._rust_eager(output, points_arr).reshape(shape)
+
         return self.evaluate_multiple(output, *points_arr)
+
+    def _eager_series_output_dtype(self) -> pl.DataType:
+        # eager pl.Series output preserves polars precision: Float32 only when every
+        # pl.Series input is Float32, else Float64. Scalar (float) inputs are neutral.
+        dtypes = [p[1].m.dtype for p in self.points if isinstance(p[1].m, pl.Series)]
+        if dtypes and all(dt == pl.Float32 for dt in dtypes):
+            return pl.Float32()
+        return pl.Float64()
 
     def construct_quantity(
         self, val: float | Numpy1DArray | pl.Expr, output: CProperty, convert_magnitude: bool = True
@@ -1274,7 +1235,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             if self._convert_pl_series_nan_null:
                 qty.m = qty.m.fill_nan(None)
 
-            qty.m = cast(Any, qty.m).cast(pl.Float32)
+            qty.m = cast(Any, qty.m).cast(self._eager_series_output_dtype())
 
         return cast("Quantity[Any, MT]", qty)
 
@@ -1403,14 +1364,16 @@ class Fluid(CoolPropFluid[MT]):
             (e.g. ``"HEOS"``); otherwise the full CoolProp name, optionally with
             fixed fractions (e.g. ``"HEOS::CO2[0.5]&O2[0.5]"``).
         composition : Composition | None
-            Per-row mixture composition as ``{species: mole fraction}``. Each
-            fraction may be scalar (fixed) or vectorised (ndarray / pl.Series /
-            pl.Expr). Cannot be combined with fractions in ``name``. Requires a
-            mixture backend (e.g. HEOS). Pair with :meth:`assume_phase` for speed.
-            (Mass fractions are not supported; convert to mole fractions first.)
+            Fixed mixture composition as ``{species: mole fraction}`` with float
+            fractions (mole fractions, like CoolProp's ``"HEOS::CO2[0.5]&O2[0.5]"``
+            name syntax). Cannot be combined with fractions baked into ``name``, and
+            requires a mixture backend (e.g. HEOS). Pair with :meth:`assume_phase`
+            for speed. Per-row varying composition is not supported -- loop and
+            build one Fluid per composition. (Mass fractions are not supported;
+            convert to mole fractions first.)
         normalize : bool
-            If True, normalise each row's fractions to sum to 1; if False, pass
-            them through as-is (CoolProp errors if a row does not sum to ~1).
+            If True, normalise the fractions to sum to 1; if False, pass them
+            through as-is (CoolProp errors if they do not sum to ~1).
         kwargs: Quantity[Any, MT]
             Values for the two fixed points. The name of the keyword argument is the
             CoolProp property name.
@@ -1434,24 +1397,27 @@ class Fluid(CoolPropFluid[MT]):
         self.points = [self.point_1, self.point_2]
 
     @staticmethod
-    def _coerce_fraction(value: FractionValue) -> float | Numpy1DArray | pl.Expr:
-        if isinstance(value, Quantity):
-            if not value.dimensionless:
-                raise ValueError(f"mole fractions must be dimensionless, got unit {value.u}")
-            value = cast(FractionValue, value.m)
-        if isinstance(value, pl.Series):
-            return cast(Numpy1DArray, value.to_numpy())
-        if isinstance(value, (list, tuple)):
-            return np.asarray(value, dtype=float)
-        if isinstance(value, bool):
-            raise TypeError("a mole fraction cannot be a bool")
-        if isinstance(value, int):
-            return float(value)
-        if isinstance(value, (float, np.ndarray, pl.Expr)):
-            return value
-        raise TypeError(f"unsupported fraction value type: {type(value)}")
+    def _coerce_fraction(species: str, value: object) -> float:
+        # ``value`` is untrusted runtime input (callers may pass arrays/exprs); only
+        # fixed float fractions are supported (bool is an int subclass -- reject it).
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(
+                f"mole fraction for {species!r} must be a float; per-row varying composition "
+                f"(array / pl.Series / pl.Expr fractions) is no longer supported -- loop over "
+                f"fixed compositions and build one Fluid each. Got {type(value).__name__}."
+            )
+        fraction = float(value)
+        if not np.isfinite(fraction):
+            raise ValueError(f"mole fraction for {species!r} must be finite, got {fraction}")
+        if fraction < 0.0:
+            raise ValueError(f"mole fraction for {species!r} must be non-negative, got {fraction}")
+        return fraction
 
     def _init_composition(self, name: CName, composition: Composition, normalize: bool) -> None:
+        # Validate the fixed mole-fraction composition and reconcile it with ``name``.
+        # ``name`` may be the bare backend ("HEOS") or include the species without
+        # fractions ("HEOS::CO2&O2"); fractions baked into the name ("...[0.5]...")
+        # conflict with composition= and are rejected.
         if len(composition) < 2:
             raise ValueError(f"composition requires at least two species, got {list(composition)}")
         if "[" in name:
@@ -1470,8 +1436,12 @@ class Fluid(CoolPropFluid[MT]):
             if set(name_species) != set(species):
                 raise ValueError(f"species in name ({name_species}) do not match composition keys ({species})")
 
+        fractions = {sp: self._coerce_fraction(sp, composition[sp]) for sp in species}
+        if sum(fractions.values()) <= 0.0:
+            raise ValueError(f"composition fractions must sum to a positive value, got {fractions}")
+
         self.name = f"{backend}::{'&'.join(species)}"
-        self._composition = {sp: self._coerce_fraction(composition[sp]) for sp in species}
+        self._composition = fractions
         self._composition_normalize = normalize
         self._lowlevel = True
 

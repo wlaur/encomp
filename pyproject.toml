@@ -36,7 +36,11 @@ dependencies = [
     "typing-extensions",
     "asttokens",
     "numpy",
-    "polars",
+    # ABI-locked to the bundled Rust CoolProp plugin: it embeds polars-ffi from Rust
+    # polars 0.54.x (pyo3-polars 0.27), which matches py-polars 1.42.x. A new minor
+    # (1.43+) bumps the FFI ABI and the plugin won't load until it's rebuilt, so cap it.
+    # Patch releases (1.42.x) keep the same ABI and are allowed. See encomp/coolprop/README.md.
+    "polars>=1.42,<1.43",
     "sympy",
     "uncertainties",
     # Pinned exactly: the bundled Rust CoolProp plugin and the Python coolprop must

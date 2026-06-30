@@ -3,8 +3,9 @@
 Parallel CoolProp property evaluation as **native Polars expression plugins**
 (Rust, `pyo3-polars`). Independent property nodes in one `collect()` run in
 parallel on the Polars thread pool — GIL-free — instead of a `map_batches` Python
-UDF that holds the GIL and serializes. Usable directly, or as the `"rust"`
-backend of `encomp.fluids` (`settings.coolprop_backend`).
+UDF that holds the GIL and serializes. Usable directly, or as the evaluation path
+of `encomp.fluids` for `pl.Expr` inputs and large eager arrays (≥1000 elements);
+small eager inputs (scalars, short arrays) use the Python CoolProp path.
 
 ## Usage
 
@@ -78,8 +79,9 @@ much slower per call (iterative solver). Still better than the Python path.
 ## Caveats
 
 - **Locked to a polars minor version** (`polars-ffi` ABI; built against Rust polars
-  0.54.4 = py-polars 1.42.x). A polars upgrade needs a plugin rebuild — the
-  `settings.coolprop_backend` rust/python runtime fallback makes that safe.
+  0.54.4 = py-polars 1.42.x). A polars upgrade needs a plugin rebuild: there is no
+  Python fallback, so until the plugin is rebuilt, `pl.Expr` (lazy) CoolProp
+  evaluation fails (eager numpy / `pl.Series` inputs are unaffected).
 - **Version match**: CoolProp enum integers differ across versions; pin Python
   `coolprop==8.0.0` to match the bundled Rust lib. The plugin resolves parameter
   indices via CoolProp at runtime, never hardcoded.

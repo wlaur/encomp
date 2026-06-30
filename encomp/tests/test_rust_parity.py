@@ -1,11 +1,12 @@
-"""Comprehensive parity between the rust and python CoolProp backends.
+"""Comprehensive parity between the rust plugin and the Python CoolProp path.
 
-Both backends evaluate CoolProp 8.0 and cast to Float32, so for the same fluid /
-backend / property / inputs the results should match to float precision. We
-compare across many fluids (IF97 water, a broad set of HEOS pure fluids, and a
-mixture), several properties, and (P,T) grids spanning liquid / gas / supercritical
-(reduced coordinates from each fluid's critical point), plus a few non-PT input
-pairs. The finite overlap is compared with a relative tolerance.
+``pl.Expr`` (lazy) inputs are evaluated by the encomp.coolprop rust plugin; eager
+numpy inputs go through the Python CoolProp path. Both evaluate CoolProp 8.0 and
+cast to Float32, so for the same fluid / property / inputs the results should match
+to float precision. We compare across many fluids (IF97 water, a broad set of HEOS
+pure fluids, and a mixture), several properties, and (P,T) grids spanning liquid /
+gas / supercritical (reduced coordinates from each fluid's critical point), plus a
+few non-PT input pairs. The finite overlap is compared with a relative tolerance.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from encomp.units import Quantity as Q
 # its dynamic functions (PropsSI, ...) do not surface unknown-type errors.
 CP: Any = _CP
 
-# both backends produce Float32; this comfortably allows any float-precision diff
+# both paths produce Float32; this comfortably allows any float-precision diff
 RTOL = 1e-4
 
 PURE = [
@@ -54,24 +55,24 @@ def _grid(name: str, kwargs: dict[str, Any]) -> pl.DataFrame:
     return pl.DataFrame({"P": pp.ravel(), "T": tt.ravel()})
 
 
-def _evaluate(
-    name: str, kwargs: dict[str, Any], prop: str, backend: str, df: pl.DataFrame, monkeypatch: pytest.MonkeyPatch
-) -> np.ndarray:
-    monkeypatch.setattr("encomp.fluids.SETTINGS.coolprop_backend", backend)
+def _evaluate(name: str, kwargs: dict[str, Any], prop: str, mode: str, df: pl.DataFrame) -> np.ndarray:
     clear_expr_evaluation_cache()
-    fluid = Fluid(name, P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K"), **kwargs)
-    expr = getattr(fluid, prop).m.alias("x")
-    return df.select(expr)["x"].to_numpy().astype(float)
+    if mode == "rust":  # pl.Expr inputs -> rust plugin
+        fluid = Fluid(name, P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K"), **kwargs)
+        return df.select(getattr(fluid, prop).m.alias("x"))["x"].to_numpy().astype(float)
+    # python reference: eager numpy inputs -> Python CoolProp path
+    fluid = Fluid(name, P=Q(df["P"].to_numpy(), "Pa"), T=Q(df["T"].to_numpy(), "K"), **kwargs)
+    return np.asarray(getattr(fluid, prop).m, dtype=float)
 
 
 @pytest.mark.parametrize(("label", "name", "kwargs"), _CONFIGS, ids=[c[0] for c in _CONFIGS])
-def test_rust_python_parity(label: str, name: str, kwargs: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rust_python_parity(label: str, name: str, kwargs: dict[str, Any]) -> None:
     assert encomp_coolprop.self_check()
 
     df = _grid(name, kwargs)
     for prop in PROPS:
-        py = _evaluate(name, kwargs, prop, "python", df, monkeypatch)
-        ru = _evaluate(name, kwargs, prop, "rust", df, monkeypatch)
+        py = _evaluate(name, kwargs, prop, "python", df)
+        ru = _evaluate(name, kwargs, prop, "rust", df)
         assert py.shape == ru.shape
 
         both = np.isfinite(py) & np.isfinite(ru)
@@ -83,7 +84,7 @@ def test_rust_python_parity(label: str, name: str, kwargs: dict[str, Any], monke
         )
 
 
-def test_rust_python_parity_input_pairs(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rust_python_parity_input_pairs() -> None:
     """Parity for non-PT input pairs (P,H and P,S) -- the rust path resolves the
     canonical pair + column order, the python path uses PropsSI."""
     assert encomp_coolprop.self_check()
@@ -96,12 +97,15 @@ def test_rust_python_parity_input_pairs(monkeypatch: pytest.MonkeyPatch) -> None
     for second, unit, vals in [("HMASS", "J/kg", h), ("SMASS", "J/kg/K", s)]:
         df = pl.DataFrame({"P": p, second: vals})
 
-        def density(backend: str, second: str = second, unit: str = unit, df: pl.DataFrame = df) -> np.ndarray:
-            monkeypatch.setattr("encomp.fluids.SETTINGS.coolprop_backend", backend)
+        def density(mode: str, second: str = second, unit: str = unit, df: pl.DataFrame = df) -> np.ndarray:
             clear_expr_evaluation_cache()
-            second_point: dict[str, Any] = {second: Q(pl.col(second), unit)}
-            fluid = Fluid("HEOS::Water", P=Q(pl.col("P"), "Pa"), **second_point)
-            return df.select(fluid.D.m.alias("d"))["d"].to_numpy().astype(float)
+            if mode == "rust":
+                second_point: dict[str, Any] = {second: Q(pl.col(second), unit)}
+                fluid = Fluid("HEOS::Water", P=Q(pl.col("P"), "Pa"), **second_point)
+                return df.select(fluid.D.m.alias("d"))["d"].to_numpy().astype(float)
+            second_point = {second: Q(df[second].to_numpy(), unit)}
+            fluid = Fluid("HEOS::Water", P=Q(df["P"].to_numpy(), "Pa"), **second_point)
+            return np.asarray(fluid.D.m, dtype=float)
 
         py = density("python")
         ru = density("rust")

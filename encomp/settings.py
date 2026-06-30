@@ -58,15 +58,6 @@ class Settings(BaseSettings):
     autoconvert_offset_to_baseunit: bool = False
     default_unit_format: PintFormattingSpecifier = "~P"
 
-    # Backend for CoolProp evaluation. Applies ONLY to lazy ``pl.Expr`` inputs:
-    # "rust" routes those through the encomp.coolprop Polars plugin (GIL-free,
-    # parallel across independent property nodes), falling back to "python"
-    # (map_batches) automatically if the plugin is unavailable. Eager inputs --
-    # float, numpy array, AND pl.Series -- always use the Python CoolProp path
-    # regardless of this setting (no parallelism benefit there; for scalars the
-    # Python path is faster).
-    coolprop_backend: Literal["rust", "python"] = "rust"
-
     model_config = SettingsConfigDict(
         env_prefix="ENCOMP_",
         env_file=".env",

@@ -581,8 +581,11 @@ expressions (``pl.Expr``) and return a ``pl.Expr``. Independent property nodes i
 one ``select`` / ``with_columns`` / ``collect()`` (eager or lazy) are evaluated
 *in parallel* by the ``encomp.coolprop`` plugin --
 a native Rust extension over the CoolProp C-API that runs without holding the GIL.
-The backend is selected by ``settings.coolprop_backend`` (``"rust"`` by default,
-falling back to a pure-Python path if the plugin is unavailable).
+``pl.Expr`` (lazy) inputs are evaluated exclusively through this plugin (there is no
+map_batches fallback). Eager ``float`` / numpy / ``pl.Series`` inputs use the Python
+CoolProp path, except arrays of at least ``EAGER_PLUGIN_MIN_SIZE`` (1000) elements,
+which also route through the plugin (faster and lower peak memory, bit-identical
+results).
 
 .. code-block:: python
 

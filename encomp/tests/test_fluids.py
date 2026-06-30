@@ -1,7 +1,8 @@
 # ruff: noqa: B018
-# pyright: reportConstantRedefinition=false
+# pyright: reportConstantRedefinition=false, reportPrivateUsage=false
 
 import logging
+from collections.abc import Callable
 from typing import Any, assert_type, cast
 
 import numpy as np
@@ -450,22 +451,21 @@ def test_polars_fluids() -> None:
 
 
 def _count_water_h_evaluations(monkeypatch: pytest.MonkeyPatch) -> list[int]:
-    # this counter tracks the Python map_batches path (evaluate_multiple); pin the
-    # backend so it is exercised regardless of the default (the rust plugin path
-    # bypasses evaluate_multiple but dedups via the same expr cache).
-    monkeypatch.setattr("encomp.fluids.SETTINGS.coolprop_backend", "python")
+    # pl.Expr inputs are built into a rust-plugin expr by _rust_expr; the expr cache
+    # dedups identical requests *before* that call, so counting _rust_expr invocations
+    # counts the distinct (cache-missing) expressions actually built.
     calls = [0]
-    original_evaluate_multiple = CoolPropFluid.evaluate_multiple
+    original_rust_expr = CoolPropFluid._rust_expr
 
-    def counted_evaluate_multiple(
-        self: CoolPropFluid[pl.Expr], output: str, *points: tuple[str, np.ndarray]
-    ) -> np.ndarray:
+    def counted_rust_expr(
+        self: CoolPropFluid[pl.Expr], output: str, points: tuple[tuple[str, pl.Expr], ...]
+    ) -> pl.Expr:
         if getattr(self, "name", "") == "IF97::Water" and output == "H":
             calls[0] += 1
 
-        return cast(np.ndarray, cast(Any, original_evaluate_multiple)(self, output, *points))
+        return cast(pl.Expr, cast(Any, original_rust_expr)(self, output, points))
 
-    monkeypatch.setattr(CoolPropFluid, "evaluate_multiple", counted_evaluate_multiple)
+    monkeypatch.setattr(CoolPropFluid, "_rust_expr", counted_rust_expr)
 
     return calls
 
@@ -520,27 +520,178 @@ def test_state_typeddicts_match_plugin_inputs() -> None:
     assert frozenset(HumidAirState.__annotations__) == encomp_coolprop.HUMID_AIR_INPUTS
 
 
-def test_polars_fluids_rust_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_polars_fluids_rust_backend() -> None:
     assert encomp_coolprop.self_check()
 
-    df = pl.DataFrame({"P": np.full(7, 50e5), "T": np.linspace(300.0, 500.0, 7)})
+    P = np.full(7, 50e5)
+    T = np.linspace(300.0, 500.0, 7)
+    df = pl.DataFrame({"P": P, "T": T})
 
-    def evaluate(backend: str) -> pl.DataFrame:
-        monkeypatch.setattr("encomp.fluids.SETTINGS.coolprop_backend", backend)
-        clear_expr_evaluation_cache()
-        w = Water[pl.Expr](P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K"))
-        return df.select(w.D.m.alias("D"), w.H.m.alias("H"), w.S.m.alias("S"), w.C.m.alias("C"))
+    # pl.Expr inputs go through the rust plugin; eager numpy inputs go through the
+    # Python CoolProp path. The two must match to float precision.
+    clear_expr_evaluation_cache()
+    w = Water[pl.Expr](P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K"))
+    rust = df.select(w.D.m.alias("D"), w.H.m.alias("H"), w.S.m.alias("S"), w.C.m.alias("C"))
 
-    py = evaluate("python")
-    rust = evaluate("rust")
-    for col in ("D", "H", "S", "C"):  # rust path is bit-for-bit identical to python
-        assert rust[col].to_numpy() == approx(py[col].to_numpy(), rel=1e-6, nan_ok=True)
+    wn = Water(P=Q(P, "Pa"), T=Q(T, "K"))
+    ref = {"D": wn.D.m, "H": wn.H.m, "S": wn.S.m, "C": wn.C.m}
+    for col in ("D", "H", "S", "C"):
+        assert rust[col].to_numpy() == approx(ref[col], rel=1e-4, nan_ok=True)
 
     # invalid inputs (T below the IF97 range) -> null, like the python path
-    monkeypatch.setattr("encomp.fluids.SETTINGS.coolprop_backend", "rust")
     clear_expr_evaluation_cache()
     bad = pl.DataFrame({"T": [150.0, 200.0]}).select(Water(P=Q(pl.lit(5), "bar"), T=Q(pl.col("T"), "K")).D.m)["D"]
     assert bad.is_null().all()
+
+
+def _eager_both_paths(
+    monkeypatch: pytest.MonkeyPatch, build: Callable[[], Q[Any, Any]]
+) -> tuple[np.ndarray, np.ndarray]:
+    # run build() once forcing the Python path and once forcing the rust plugin, by
+    # moving the eager size threshold above / below the input length.
+    monkeypatch.setattr("encomp.fluids.EAGER_PLUGIN_MIN_SIZE", 10**18)
+    py = build().m
+    monkeypatch.setattr("encomp.fluids.EAGER_PLUGIN_MIN_SIZE", 1)
+    ru = build().m
+    return py, ru
+
+
+def _assert_eager_parity(label: str, py: np.ndarray, ru: np.ndarray) -> None:
+    assert py.dtype == np.float64 and ru.dtype == np.float64, f"{label}: dtype {py.dtype}/{ru.dtype}"
+    assert not np.isinf(py).any() and not np.isinf(ru).any(), f"{label}: inf present"
+    assert np.array_equal(np.isnan(py), np.isnan(ru)), f"{label}: NaN positions differ"
+    finite = ~np.isnan(py)
+    assert np.allclose(py[finite], ru[finite], rtol=1e-9, atol=1e-12), f"{label}: values differ"
+
+
+def test_eager_plugin_parity(monkeypatch: pytest.MonkeyPatch) -> None:
+    # eager numpy arrays >= EAGER_PLUGIN_MIN_SIZE route through the rust plugin; the
+    # result must match the Python CoolProp path exactly -- dtype (float64), value, and
+    # NaN/inf/invalid handling -- including injected non-finite / out-of-range rows.
+    rng = np.random.default_rng(0)
+    n = 1500
+    P = np.full(n, 50e5)
+    T = 300.0 + 250.0 * rng.random(n)
+    T[0] = np.nan  # non-finite input -> NaN
+    P[1] = -1.0  # invalid (negative pressure) -> NaN
+    T[2] = 50.0  # below the IF97 range -> NaN
+
+    fluid_cases = {
+        "IF97": lambda: Water(P=Q(P, "Pa"), T=Q(T, "K")).D,
+        "HEOS": lambda: Fluid("HEOS::Water", P=Q(P, "Pa"), T=Q(T, "K")).D,
+        "assumed-phase": lambda: Fluid("HEOS::Water", P=Q(P, "Pa"), T=Q(T, "K")).assume_phase("gas").D,
+        "composition": lambda: (
+            Fluid("HEOS", composition={"CO2": 0.5, "O2": 0.5}, P=Q(P, "Pa"), T=Q(T, "K"))
+            .assume_phase("supercritical_gas")
+            .D
+        ),
+    }
+    for label, build in fluid_cases.items():
+        py, ru = _eager_both_paths(monkeypatch, build)
+        _assert_eager_parity(label, py, ru)
+
+    # humid air: the plugin loops HAPropsSI per row, matching evaluate_multiple_separately
+    Pa = np.full(n, 101325.0)
+    Tdb = 290.0 + 20.0 * rng.random(n)
+    R = 0.2 + 0.6 * rng.random(n)
+    Tdb[0] = np.nan
+    R[1] = 5.0  # relative humidity > 1 -> invalid
+    py, ru = _eager_both_paths(monkeypatch, lambda: HumidAir(P=Q(Pa, "Pa"), T=Q(Tdb, "K"), R=Q(R, "")).W)
+    _assert_eager_parity("humid-air", py, ru)
+
+
+def test_eager_plugin_threshold_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    # below EAGER_PLUGIN_MIN_SIZE -> Python (evaluate_multiple); at/above -> rust plugin
+    monkeypatch.setattr("encomp.fluids.EAGER_PLUGIN_MIN_SIZE", 1000)
+    counts = {"rust": 0, "multiple": 0}
+    orig_rust = CoolPropFluid._rust_eager
+    orig_mult = CoolPropFluid.evaluate_multiple
+
+    def spy_rust(self: CoolPropFluid[Any], output: str, points: tuple[tuple[str, np.ndarray], ...]) -> np.ndarray:
+        counts["rust"] += 1
+        return cast(np.ndarray, cast(Any, orig_rust)(self, output, points))
+
+    def spy_mult(self: CoolPropFluid[Any], output: str, *points: tuple[str, np.ndarray]) -> np.ndarray:
+        counts["multiple"] += 1
+        return cast(np.ndarray, cast(Any, orig_mult)(self, output, *points))
+
+    monkeypatch.setattr(CoolPropFluid, "_rust_eager", spy_rust)
+    monkeypatch.setattr(CoolPropFluid, "evaluate_multiple", spy_mult)
+
+    Water(P=Q(np.full(999, 50e5), "Pa"), T=Q(np.full(999, 400.0), "K")).D.m
+    assert counts == {"rust": 0, "multiple": 1}
+
+    counts["rust"] = counts["multiple"] = 0
+    Water(P=Q(np.full(1000, 50e5), "Pa"), T=Q(np.full(1000, 400.0), "K")).D.m
+    assert counts == {"rust": 1, "multiple": 0}
+
+
+def test_polars_dtype_preservation() -> None:
+    # pl.Float32() / pl.Float64() instances (the dtype= and == APIs accept either form)
+    F32: pl.DataType = pl.Float32()
+    F64: pl.DataType = pl.Float64()
+
+    # --- lazy pl.Expr: output dtype follows the input COLUMN precision (Float32 only
+    # if every non-scalar input is Float32, else Float64 = the supertype for mixed) ---
+    def lazy_fluid(name: str, p_dt: pl.DataType, t_dt: pl.DataType) -> pl.Series:
+        df = pl.DataFrame({"P": pl.Series([50e5] * 4, dtype=p_dt), "T": pl.Series([400.0] * 4, dtype=t_dt)})
+        f = Fluid[pl.Expr](name, P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K"))
+        return df.select(f.D.m.alias("D"))["D"]
+
+    for name in ("IF97::Water", "HEOS::Water"):
+        assert lazy_fluid(name, F32, F32).dtype == F32
+        assert lazy_fluid(name, F64, F64).dtype == F64
+        assert lazy_fluid(name, F32, F64).dtype == F64  # mixed -> highest
+        assert lazy_fluid(name, F64, F32).dtype == F64
+
+    # scalar inputs are NEUTRAL: a Float64 literal / python float beside a Float32 column
+    # must not force the result up to Float64
+    df32 = pl.DataFrame({"T": pl.Series([400.0] * 4, dtype=F32)})
+    lit_p = Water[pl.Expr](P=Q(pl.lit(50e5), "Pa"), T=Q(pl.col("T"), "K"))
+    scalar_p = Water[pl.Expr](P=Q(5.0, "bar"), T=Q(pl.col("T"), "K"))
+    assert df32.select(lit_p.D.m.alias("D"))["D"].dtype == F32
+    assert df32.select(scalar_p.D.m.alias("D"))["D"].dtype == F32
+
+    # humid air, lazy
+    def lazy_ha(dt: pl.DataType) -> pl.Series:
+        dfa = pl.DataFrame(
+            {
+                "P": pl.Series([101325.0] * 4, dtype=dt),
+                "T": pl.Series([300.0] * 4, dtype=dt),
+                "R": pl.Series([0.5] * 4, dtype=dt),
+            }
+        )
+        ha = HumidAir[pl.Expr](P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K"), R=Q(pl.col("R"), ""))
+        return dfa.select(ha.W.m.alias("W"))["W"]
+
+    assert lazy_ha(F32).dtype == F32
+    assert lazy_ha(F64).dtype == F64
+
+    # --- eager pl.Series: same rule ---
+    def eager_fluid(p_dt: pl.DataType, t_dt: pl.DataType) -> pl.Series:
+        w = Water[pl.Series](P=Q(pl.Series([50e5] * 4, dtype=p_dt), "Pa"), T=Q(pl.Series([400.0] * 4, dtype=t_dt), "K"))
+        return w.D.m
+
+    assert eager_fluid(F32, F32).dtype == F32
+    assert eager_fluid(F64, F64).dtype == F64
+    assert eager_fluid(F32, F64).dtype == F64  # mixed -> highest
+    # a python-float scalar beside a Float32 series stays Float32
+    scalar_eager = Water[pl.Series](P=Q(5.0, "bar"), T=Q(pl.Series([400.0] * 4, dtype=F32), "K"))
+    assert scalar_eager.D.m.dtype == F32
+
+    # --- numpy is always float64, regardless (no numpy float32 anywhere) ---
+    np_water = Water[np.ndarray](P=Q(np.full(4, 50e5), "Pa"), T=Q(np.full(4, 400.0), "K"))
+    assert np_water.D.m.dtype == np.float64
+
+    # --- values are correct at Float32 (computed in f64, then cast) for both polars paths ---
+    lazy_w = Water[pl.Expr](P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K"))
+    lazy_val = pl.DataFrame({"P": pl.Series([50e5], dtype=F32), "T": pl.Series([400.0], dtype=F32)}).select(
+        lazy_w.D.m.alias("D")
+    )["D"][0]
+    eager_w = Water[pl.Series](P=Q(pl.Series([50e5], dtype=F32), "Pa"), T=Q(pl.Series([400.0], dtype=F32), "K"))
+    eager_val = float(eager_w.D.m[0])
+    assert lazy_val == approx(939.90625, rel=1e-4)
+    assert eager_val == approx(939.90625, rel=1e-4)
 
 
 def test_assume_phase() -> None:
@@ -590,16 +741,7 @@ def test_composition() -> None:
     assert comp.u == ref.u
     assert float(comp.m) == approx(float(ref.m), rel=1e-9)
 
-    # per-row varying composition (array); the 0.5/0.5 row equals the reference
-    fa = Fluid(
-        "HEOS",
-        composition={"CO2": Q(np.array([0.3, 0.5, 0.7]), ""), "O2": Q(np.array([0.7, 0.5, 0.3]), "")},
-        P=Q(np.full(3, 50.0), "bar"),
-        T=Q(np.full(3, 350.0), "degC"),
-    ).assume_phase("supercritical_gas")
-    assert float(fa.D.m[1]) == approx(float(ref.m), rel=1e-9)
-
-    # a 1-element (scalar-like) fraction broadcasts against an N-element state
+    # a fixed float composition evaluates against an N-element state
     fb = Fluid(
         "HEOS",
         composition={"CO2": 0.5, "O2": 0.5},
@@ -609,14 +751,15 @@ def test_composition() -> None:
     assert isinstance(fb.D.m, np.ndarray) and fb.D.m.size == 3
     assert float(fb.D.m[0]) == approx(float(ref.m), rel=1e-9)
 
-    # per-row varying composition (pl.Expr / DAG)
+    # a fixed float composition also works with pl.Expr (lazy) state inputs, via the
+    # rust plugin (the composition is constant, only P/T vary per row)
     fe = Fluid(
         "HEOS",
-        composition={"CO2": Q(pl.col("x_CO2"), ""), "O2": Q(pl.col("x_O2"), "")},
+        composition={"CO2": 0.5, "O2": 0.5},
         P=Q(pl.col("P"), "bar"),
         T=Q(pl.col("T"), "degC"),
     ).assume_phase("supercritical_gas")
-    res = pl.DataFrame({"P": [50.0], "T": [350.0], "x_CO2": [0.5], "x_O2": [0.5]}).select(fe.D.m)
+    res = pl.DataFrame({"P": [50.0], "T": [350.0]}).select(fe.D.m)
     assert res["D"][0] == approx(float(ref.m), rel=1e-4)
 
     # normalize=True accepts unnormalised input (50/50 -> 0.5/0.5)
@@ -674,30 +817,42 @@ def test_composition_normalize_warning(caplog: pytest.LogCaptureFixture) -> None
     assert float(deviating.m) == approx(float(ref.m), rel=1e-9)
 
 
-def test_composition_length_validation() -> None:
-    # state vector longer than the composition vectors
-    with pytest.raises(ValueError, match="same shape"):
+def test_composition_rejects_non_float_fractions() -> None:
+    # per-row varying composition was removed: only fixed float mole fractions are
+    # accepted. array / pl.Series / pl.Expr fractions raise at construction; loop
+    # over fixed compositions (one Fluid each) instead.
+    with pytest.raises(TypeError, match="must be a float"):
         Fluid(
             "HEOS",
-            composition={"CO2": Q(np.array([0.5, 0.5]), ""), "O2": Q(np.array([0.5, 0.5]), "")},
-            P=Q(np.array([50.0, 50.0, 50.0]), "bar"),
-            T=Q(np.array([350.0, 360.0, 370.0]), "degC"),
-        ).assume_phase("supercritical_gas").D
-
-    # two fraction vectors of differing length
-    with pytest.raises(ValueError, match="same shape"):
-        Fluid(
-            "HEOS",
-            composition={"CO2": Q(np.array([0.5, 0.5, 0.5]), ""), "O2": Q(np.array([0.5, 0.5]), "")},
+            composition=cast(Any, {"CO2": Q(np.array([0.5, 0.5]), ""), "O2": Q(np.array([0.5, 0.5]), "")}),
             P=Q(np.array([50.0, 50.0]), "bar"),
             T=Q(np.array([350.0, 360.0]), "degC"),
-        ).assume_phase("supercritical_gas").D
+        )
 
-    # pl.Expr fractions are lazy: building the expression must not raise here
-    fe = Fluid(
-        "HEOS",
-        composition={"CO2": Q(pl.col("x_CO2"), ""), "O2": Q(pl.col("x_O2"), "")},
-        P=Q(pl.col("P"), "bar"),
-        T=Q(pl.col("T"), "degC"),
-    ).assume_phase("supercritical_gas")
-    assert isinstance(fe.D.m, pl.Expr)
+    with pytest.raises(TypeError, match="must be a float"):
+        Fluid(
+            "HEOS",
+            composition=cast(Any, {"CO2": Q(pl.col("x_CO2"), ""), "O2": Q(pl.col("x_O2"), "")}),
+            P=Q(pl.col("P"), "bar"),
+            T=Q(pl.col("T"), "degC"),
+        )
+
+    # bare (non-Quantity) array fractions are rejected too
+    with pytest.raises(TypeError, match="must be a float"):
+        Fluid(
+            "HEOS",
+            composition=cast(Any, {"CO2": np.array([0.5]), "O2": np.array([0.5])}),
+            P=Q(50.0, "bar"),
+            T=Q(350.0, "degC"),
+        )
+
+    # negative / non-finite fractions are rejected
+    with pytest.raises(ValueError, match="non-negative"):
+        Fluid("HEOS", composition={"CO2": -0.1, "O2": 1.1}, P=Q(50.0, "bar"), T=Q(350.0, "degC"))
+
+    with pytest.raises(ValueError, match="finite"):
+        Fluid("HEOS", composition={"CO2": float("nan"), "O2": 1.0}, P=Q(50.0, "bar"), T=Q(350.0, "degC"))
+
+    # fractions that cannot be normalised (sum to zero) are rejected
+    with pytest.raises(ValueError, match="sum to a positive value"):
+        Fluid("HEOS", composition={"CO2": 0.0, "O2": 0.0}, P=Q(50.0, "bar"), T=Q(350.0, "degC"))

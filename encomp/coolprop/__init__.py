@@ -355,6 +355,13 @@ def _as_expr(x: str | pl.Expr) -> pl.Expr:
     return pl.col(x) if isinstance(x, str) else x
 
 
+def _is_scalar(expr: pl.Expr) -> bool:
+    # a length-1 literal (pl.lit, or a lifted python float) depends on no column, so
+    # its dtype is "weak" and must not force the output precision up (e.g. a Float64
+    # literal alongside a Float32 column still yields Float32). Columns have root names.
+    return not expr.meta.root_names()
+
+
 def _input_name(x: str | pl.Expr) -> str:
     # a state input identifies its property by NAME: the string itself, or the
     # output name of the expression (e.g. pl.col("P") or pl.col("p").alias("P")).
@@ -389,10 +396,13 @@ def fluid(
             )
     pair_idx, swap = _resolve_pair(name1, name2)
     a, b = (input2, input1) if swap else (input1, input2)  # canonical order
+    a_expr, b_expr = _as_expr(a), _as_expr(b)
+    # inputs are passed at their own dtype (the plugin casts to f64 internally); the
+    # output dtype preserves the input precision (Float32 in -> Float32 out).
     return register_plugin_function(
         plugin_path=_HERE,
         function_name="cp_evaluate",
-        args=[_as_expr(a).cast(pl.Float64), _as_expr(b).cast(pl.Float64)],
+        args=[a_expr, b_expr],
         kwargs={
             "lib_path": lib_path(),
             "backend": backend,
@@ -401,6 +411,7 @@ def fluid(
             "output": output,
             "phase": phase,
             "mole_fractions": mole_fractions,
+            "scalar_mask": [_is_scalar(a_expr), _is_scalar(b_expr)],
         },
         is_elementwise=True,
         use_abs_path=True,
@@ -426,11 +437,19 @@ def humid_air(
                 f"(T, P, R, W, B, ...); got {name!r}. Alias the column, e.g. "
                 f'pl.col("rel_hum").alias("R").'
             )
+    e1, e2, e3 = _as_expr(input1), _as_expr(input2), _as_expr(input3)
     return register_plugin_function(
         plugin_path=_HERE,
         function_name="ha_evaluate",
-        args=[_as_expr(input1).cast(pl.Float64), _as_expr(input2).cast(pl.Float64), _as_expr(input3).cast(pl.Float64)],
-        kwargs={"lib_path": lib_path(), "output": output, "name1": name1, "name2": name2, "name3": name3},
+        args=[e1, e2, e3],
+        kwargs={
+            "lib_path": lib_path(),
+            "output": output,
+            "name1": name1,
+            "name2": name2,
+            "name3": name3,
+            "scalar_mask": [_is_scalar(e1), _is_scalar(e2), _is_scalar(e3)],
+        },
         is_elementwise=True,
         use_abs_path=True,
     )

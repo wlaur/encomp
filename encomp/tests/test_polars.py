@@ -56,6 +56,19 @@ def test_polars_expr_unit_algebra_works() -> None:
     assert df.select(qty.to("g").m)["asd"][0] == 1000.0
 
 
+def test_polars_select_quantity_raises() -> None:
+    # a Quantity is not a polars expression: passing one into a polars context
+    # iterates it (Iterable) and would silently drop the unit. float/pl.Expr are
+    # not iterable and pl.Series routes data through .m, so all three are refused
+    # with a message pointing at the explicit ".to(<unit>).m" boundary
+    for qty in (Q(25), Q(pl.lit(25)), Q(pl.Series([1, 2, 3]), "kg")):
+        with raises(TypeError, match=r"not\s+iterable; if using with Polars: materialize"):
+            pl.select(qty)
+
+    # the explicit boundary works for every magnitude
+    assert pl.select(Q(pl.Series("x", [1, 2, 3]), "kg").to("g").m)["x"][0] == 1000.0
+
+
 def test_polars_series_behaves_like_expr() -> None:
     # pl.Series is the polars world too: pint's numpy bridge is flaky on it
     # (half the reductions crash, the rest lose metadata), so the numpy-data

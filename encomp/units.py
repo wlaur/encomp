@@ -24,6 +24,7 @@ from typing import (
     ClassVar,
     Generic,
     Literal,
+    NoReturn,
     TypeVar,
     assert_never,
     cast,
@@ -2738,14 +2739,28 @@ class Quantity(
         ret = cast("Quantity[DT, MT]", super().__neg__())
         return self._call_subclass(ret.m, ret.u)
 
+    # only an ndarray magnitude (the numpy world) is iterable -- it yields
+    # scalar Quantity elements. float/pl.Expr/pl.Series are not: the generic
+    # overload returns NoReturn because __iter__ always raises for them (see
+    # the body), which lets the type checker flag iterating such a Quantity
+    # (e.g. passing one into pl.select) instead of silently allowing it.
     @overload
     def __iter__(self: Quantity[DT, Numpy1DArray]) -> Iterator[Quantity[DT, float]]: ...
     @overload
-    def __iter__(self: Quantity[DT, pl.Series]) -> Iterator[Quantity[DT, float]]: ...
-    @overload
-    @overload
-    def __iter__(self: Quantity[DT, MT]) -> Iterator[Any]: ...
+    def __iter__(self: Quantity[DT, MT]) -> NoReturn: ...
     def __iter__(self) -> Iterator[Any]:
+        mag = self._magnitude
+        # float and pl.Expr are not iterable, and pl.Series (the polars world)
+        # routes data access through .m like pl.Expr. the usual way to land here
+        # is passing a Quantity into a polars context (pl.select / with_columns /
+        # filter), which iterates any Iterable as a collection of expressions. A
+        # Quantity is not an expression and converting one drops its unit, so
+        # refuse and point at the explicit boundary (.m).
+        if isinstance(mag, (float, pl.Expr, pl.Series)):
+            raise TypeError(
+                f"Quantity with {self._get_magnitude_type_name(type(mag))} magnitude is not "
+                'iterable; if using with Polars: materialize the magnitude in an explicit unit with ".to(<unit>).m".'
+            )
         return (self._call_subclass(n.m, n.u) for n in super().__iter__())
 
     @overload

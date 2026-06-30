@@ -45,6 +45,50 @@ fn coolprop(lib_path: &str) -> PolarsResult<&'static CoolProp> {
     Ok(CP.get().unwrap())
 }
 
+/// Output dtype preserves the input precision: Float32 only when every non-scalar
+/// input column is Float32; otherwise Float64. `scalar_mask[i] == true` marks input
+/// i as a length-1 literal (the Python wrapper detects these via empty root names),
+/// so a Float64 scalar does not force the whole result up to Float64. If every input
+/// is a scalar, promote over all of them. CoolProp always computes in f64; this only
+/// sizes the result so a Float32 pipeline keeps Float32.
+fn output_dtype(dtypes: &[&DataType], scalar_mask: &[bool]) -> DataType {
+    let mut saw_column = false;
+    let mut all_f32 = true;
+    for (i, dt) in dtypes.iter().enumerate() {
+        if scalar_mask.get(i).copied().unwrap_or(false) {
+            continue;
+        }
+        saw_column = true;
+        if !matches!(dt, DataType::Float32) {
+            all_f32 = false;
+        }
+    }
+    if !saw_column {
+        all_f32 = dtypes.iter().all(|dt| matches!(dt, DataType::Float32));
+    }
+    if all_f32 {
+        DataType::Float32
+    } else {
+        DataType::Float64
+    }
+}
+
+fn cp_output(input_fields: &[Field], kwargs: EvalKwargs) -> PolarsResult<Field> {
+    let dtypes: Vec<&DataType> = input_fields.iter().map(|f| f.dtype()).collect();
+    Ok(Field::new(
+        input_fields[0].name().clone(),
+        output_dtype(&dtypes, &kwargs.scalar_mask),
+    ))
+}
+
+fn ha_output(input_fields: &[Field], kwargs: HaKwargs) -> PolarsResult<Field> {
+    let dtypes: Vec<&DataType> = input_fields.iter().map(|f| f.dtype()).collect();
+    Ok(Field::new(
+        input_fields[0].name().clone(),
+        output_dtype(&dtypes, &kwargs.scalar_mask),
+    ))
+}
+
 #[derive(Deserialize)]
 struct EvalKwargs {
     lib_path: String,                 // absolute path to libCoolProp (.dylib/.so/.dll)
@@ -54,17 +98,23 @@ struct EvalKwargs {
     output: String,                   // CoolProp parameter name, e.g. "DMASS"
     phase: Option<String>,            // CoolProp phase string (assume_phase)
     mole_fractions: Option<Vec<f64>>, // constant composition (mole fractions)
+    scalar_mask: Vec<bool>,           // per-input: true = length-1 literal (neutral for output dtype)
 }
 
 /// inputs[0], inputs[1] are the two state values already in the canonical order
 /// for `input_pair` (the Python caller orders them with generate_update_pair, so
 /// ARBITRARY input pairs are supported -- PT, PH, PQ, PS, ...). One batched flash
 /// over the whole chunk; Polars runs independent properties concurrently.
-#[polars_expr(output_type = Float64)]
+#[polars_expr(output_type_func_with_kwargs = cp_output)]
 fn cp_evaluate(inputs: &[Series], kwargs: EvalKwargs) -> PolarsResult<Series> {
     let cp = coolprop(&kwargs.lib_path)?;
     let pair = kwargs.input_pair;
     let okey = cp.param_index(&kwargs.output).map_err(perr)?;
+    // decide the output precision from the original input dtypes (before the f64 cast)
+    let out_dtype = output_dtype(
+        &inputs.iter().map(|s| s.dtype()).collect::<Vec<_>>(),
+        &kwargs.scalar_mask,
+    );
 
     let p1s = inputs[0].cast(&DataType::Float64)?.rechunk();
     let p2s = inputs[1].cast(&DataType::Float64)?.rechunk();
@@ -92,24 +142,29 @@ fn cp_evaluate(inputs: &[Series], kwargs: EvalKwargs) -> PolarsResult<Series> {
 
     let mut out = vec![0.0f64; n]; // update_and_1_out fills finite-or-NaN (failed rows -> NaN -> null)
     st.update_and_1_out(pair, &v1, &v2, okey, &mut out).map_err(perr)?;
-    Ok(Series::new(PlSmallStr::EMPTY, out))
+    Series::new(PlSmallStr::EMPTY, out).cast(&out_dtype)
 }
 
 #[derive(Deserialize)]
 struct HaKwargs {
     lib_path: String,
-    output: String, // HAPropsSI output name, e.g. "W", "Twb", "H"
-    name1: String,  // e.g. "P"
-    name2: String,  // e.g. "T"
-    name3: String,  // e.g. "R"
+    output: String,         // HAPropsSI output name, e.g. "W", "Twb", "H"
+    name1: String,          // e.g. "P"
+    name2: String,          // e.g. "T"
+    name3: String,          // e.g. "R"
+    scalar_mask: Vec<bool>, // per-input: true = length-1 literal (neutral for output dtype)
 }
 
 /// Humid air: inputs[0..3] are the three HAPropsSI values for name1/name2/name3.
 /// Loops the scalar HAPropsSI in Rust (lock-free) so independent humid-air
 /// expressions parallelize too -- humid air is NOT left to the Python path.
-#[polars_expr(output_type = Float64)]
+#[polars_expr(output_type_func_with_kwargs = ha_output)]
 fn ha_evaluate(inputs: &[Series], kwargs: HaKwargs) -> PolarsResult<Series> {
     let cp = coolprop(&kwargs.lib_path)?;
+    let out_dtype = output_dtype(
+        &inputs.iter().map(|s| s.dtype()).collect::<Vec<_>>(),
+        &kwargs.scalar_mask,
+    );
     let s: Vec<_> = (0..3)
         .map(|i| inputs[i].cast(&DataType::Float64).map(|s| s.rechunk()))
         .collect::<PolarsResult<_>>()?;
@@ -135,5 +190,5 @@ fn ha_evaluate(inputs: &[Series], kwargs: HaKwargs) -> PolarsResult<Series> {
         &mut out,
     )
     .map_err(perr)?;
-    Ok(Series::new(PlSmallStr::EMPTY, out))
+    Series::new(PlSmallStr::EMPTY, out).cast(&out_dtype)
 }
