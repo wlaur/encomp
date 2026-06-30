@@ -36,6 +36,15 @@ fn broadcast(s: &[f64], n: usize) -> PolarsResult<std::borrow::Cow<'_, [f64]>> {
     }
 }
 
+/// Materialize a Series as `Vec<f64>` with nulls mapped to NaN. CoolProp turns a NaN
+/// input into a failed flash (NaN output -> null via `nan_to_null`), so a null input
+/// row becomes a null output row -- matching the eager numpy path, rather than the old
+/// `cont_slice()` hard error on the first null (nulls are ubiquitous in real frames).
+fn to_f64(s: &Series) -> PolarsResult<Vec<f64>> {
+    let s = s.cast(&DataType::Float64)?;
+    Ok(s.f64()?.iter().map(|o| o.unwrap_or(f64::NAN)).collect())
+}
+
 fn coolprop(lib_path: &str) -> PolarsResult<&'static CoolProp> {
     if let Some(c) = CP.get() {
         return Ok(c);
@@ -116,19 +125,11 @@ fn cp_evaluate(inputs: &[Series], kwargs: EvalKwargs) -> PolarsResult<Series> {
         &kwargs.scalar_mask,
     );
 
-    let p1s = inputs[0].cast(&DataType::Float64)?.rechunk();
-    let p2s = inputs[1].cast(&DataType::Float64)?.rechunk();
-    let v1 = p1s
-        .f64()?
-        .cont_slice()
-        .map_err(|_| PolarsError::ComputeError("null inputs not supported".into()))?;
-    let v2 = p2s
-        .f64()?
-        .cont_slice()
-        .map_err(|_| PolarsError::ComputeError("null inputs not supported".into()))?;
-    let n = v1.len().max(v2.len());
-    let v1 = broadcast(v1, n)?;
-    let v2 = broadcast(v2, n)?;
+    let v1v = to_f64(&inputs[0])?;
+    let v2v = to_f64(&inputs[1])?;
+    let n = v1v.len().max(v2v.len());
+    let v1 = broadcast(&v1v, n)?;
+    let v2 = broadcast(&v2v, n)?;
 
     // state built once per chunk (handle lock held only here), then a lock-free
     // batched flash -> parallel across the independent property expressions.
@@ -177,19 +178,9 @@ fn ha_evaluate(inputs: &[Series], kwargs: HaKwargs) -> PolarsResult<Series> {
         &inputs.iter().map(|s| s.dtype()).collect::<Vec<_>>(),
         &kwargs.scalar_mask,
     );
-    let s: Vec<_> = (0..3)
-        .map(|i| inputs[i].cast(&DataType::Float64).map(|s| s.rechunk()))
-        .collect::<PolarsResult<_>>()?;
-    let v: Vec<&[f64]> = s
-        .iter()
-        .map(|x| {
-            x.f64()?
-                .cont_slice()
-                .map_err(|_| PolarsError::ComputeError("null inputs not supported".into()))
-        })
-        .collect::<PolarsResult<_>>()?;
+    let v: Vec<Vec<f64>> = (0..3).map(|i| to_f64(&inputs[i])).collect::<PolarsResult<_>>()?;
     let n = v[0].len().max(v[1].len()).max(v[2].len());
-    let (b0, b1, b2) = (broadcast(v[0], n)?, broadcast(v[1], n)?, broadcast(v[2], n)?);
+    let (b0, b1, b2) = (broadcast(&v[0], n)?, broadcast(&v[1], n)?, broadcast(&v[2], n)?);
     let mut out = vec![0.0f64; n];
     cp.ha_props_si_batch(
         &kwargs.output,

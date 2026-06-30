@@ -106,6 +106,20 @@ def test_invalid_inputs_become_null() -> None:
     assert rho.null_count() == 1
 
 
+def test_null_inputs_become_null() -> None:
+    # NULL input cells (not just out-of-range values) yield NULL outputs, matching the
+    # eager numpy/NaN path -- the lazy plugin must not hard-error on the first null
+    # (nulls are ubiquitous in real frames: joins, sensor dropouts)
+    df = pl.DataFrame({"P": [50e5, None, 60e5], "T": [400.0, 450.0, None]})
+    rho = df.select(rho=cp.fluid("DMASS", "P", "T"))["rho"]
+    assert rho[0] is not None and np.isfinite(rho[0])
+    assert rho[1] is None and rho[2] is None  # null P, then null T -> null
+    # humid air path handles nulls the same way
+    df2 = pl.DataFrame({"P": [101325.0, None], "T": [293.15, 300.0], "R": [0.5, 0.5]})
+    w = df2.select(w=cp.humid_air("W", "P", "T", "R"))["w"]
+    assert w[0] is not None and w[1] is None
+
+
 def test_humid_air() -> None:
     df = pl.DataFrame({"P": np.full(3, 101325.0), "T": [293.15, 303.15, 313.15], "R": [0.5, 0.4, 0.3]})
     out = df.select(w=cp.humid_air("W", "P", "T", "R"))
