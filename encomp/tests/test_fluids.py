@@ -874,3 +874,53 @@ def test_incompressible_mixture_all_paths_agree() -> None:
         big = Fluid(name, P=Q(np.full(1200, 3e5), "Pa"), T=Q(np.full(1200, temp), "K")).D.m
         small = float(Fluid(name, P=Q(3e5, "Pa"), T=Q(temp, "K")).D.m)
         assert float(np.asarray(big, dtype=float)[0]) == approx(small, rel=1e-4), f"large-eager {name}"
+
+
+def test_dimensional_property_missing_is_nan_never_zero() -> None:
+    # A failed/undefined dimensional calc must come back MISSING (NaN scalar/array, null
+    # column), never a spurious 0.0. CoolProp 8.0 raises or returns NaN for such cases, so no
+    # near-zero -> NaN scrub is needed; this guards that a future CoolProp reintroducing a
+    # 0.0 "missing data" sentinel would fail here (and want targeted handling, not a blanket
+    # scrub). Density is used because it is strictly positive -- 0 is unambiguously missing
+    # (unlike enthalpy/entropy, whose reference points make ~0 a legitimate value).
+    assert not Water(P=Q(1e5, "Pa"), T=Q(300.0, "K")).D.dimensionless
+
+    temperature = np.array([300.0, 50.0, 400.0, 450.0])  # 50 K is below the IF97 range
+    pressure = np.array([1e5, 1e5, -5.0, 2e5])  # negative pressure is invalid
+    missing = np.array([False, True, True, False])
+
+    def check_numpy(values: object, missing_mask: np.ndarray) -> None:
+        # float / ndarray magnitude: missing -> NaN, present finite and non-zero
+        arr = np.asarray(values, dtype=float)
+        assert np.all(np.isnan(arr[missing_mask])), "missing rows must be NaN"
+        present = arr[~missing_mask]
+        assert np.all(np.isfinite(present)) and not np.any(present == 0.0), "present rows: non-zero, never 0.0"
+
+    def check_polars(series: pl.Series, n_missing: int) -> None:
+        # pl.Series / pl.Expr magnitude: missing -> NULL (never NaN or 0.0), present non-zero
+        assert series.null_count() == n_missing, "missing rows must be null"
+        present = series.drop_nulls().to_numpy()
+        assert np.all(np.isfinite(present)) and not np.any(present == 0.0), "present rows: non-zero, never 0.0"
+
+    reps = 300  # 4 * 300 = 1200 >= EAGER_PLUGIN_MIN_SIZE -> plugin
+    big_p, big_t, big_missing = np.tile(pressure, reps), np.tile(temperature, reps), int(missing.sum()) * reps
+
+    # numpy magnitude: eager (PropsSI) and large-eager (plugin)
+    check_numpy(Water(P=Q(pressure, "Pa"), T=Q(temperature, "K")).D.m, missing)
+    check_numpy(Water(P=Q(big_p, "Pa"), T=Q(big_t, "K")).D.m, np.tile(missing, reps))
+
+    # pl.Series magnitude: small (PropsSI) and large (plugin) -- missing surfaces as null
+    check_polars(Water(P=Q(pl.Series(pressure), "Pa"), T=Q(pl.Series(temperature), "K")).D.m, int(missing.sum()))
+    check_polars(Water(P=Q(pl.Series(big_p), "Pa"), T=Q(pl.Series(big_t), "K")).D.m, big_missing)
+
+    # lazy pl.Expr magnitude (plugin): missing -> null
+    clear_expr_evaluation_cache()
+    col = pl.DataFrame({"P": pressure, "T": temperature}).select(
+        Water[pl.Expr](P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K")).D.m.alias("d")
+    )["d"]
+    check_polars(col, int(missing.sum()))
+
+    assert np.isnan(float(Water(P=Q(1e5, "Pa"), T=Q(50.0, "K")).D.m))  # scalar: NaN, not 0.0
+
+    # an undefined dimensional property (surface tension outside two-phase) is NaN, not 0.0
+    assert np.isnan(float(Fluid("Water", P=Q(100e5, "Pa"), T=Q(300.0, "K")).get("I").m))
