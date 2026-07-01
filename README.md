@@ -8,7 +8,7 @@
 
 `encomp` combines a few well-established scientific libraries behind a single, type-safe interface. Every physical quantity carries its magnitude, unit, and dimensionality. The dimensionality is a real type that static checkers and the runtime both understand.
 
-- **A dimensional `Quantity` type** (`encomp.units`, `encomp.utypes`). Extends [pint](https://pypi.org/project/Pint) so that each dimensionality (pressure, mass flow, density, ...) is a distinct subclass of `Quantity`. Multiplying a `Mass` by a `Volume` gives a `Density` — inferred by a static type checker *and* verified at runtime. Magnitudes can be a scalar, a NumPy array, a Polars `Series`, or a Polars `Expr`.
+- **A dimensional `Quantity` type** (`encomp.units`, `encomp.utypes`). Extends [pint](https://pypi.org/project/Pint) so that each dimensionality (pressure, mass flow, density, ...) is a distinct subclass of `Quantity`. Dividing a `Mass` by a `Volume` gives a `Density` — inferred by a static type checker *and* verified at runtime. Magnitudes can be a scalar, a NumPy array, a Polars `Series`, or a Polars `Expr`.
 
 - **A type system that catches unit errors before the code runs.** Common dimensionalities and their `*` / `/` / `**` combinations are encoded as `__new__` overloads, so type checkers flag a `Temperature` passed where a `Power` is expected. Decorate a function with `@typeguard.typechecked` to extend the same checks to runtime.
 
@@ -99,8 +99,9 @@ y = Q(15, "meter cubed").asdim(Volume)  # Quantity[Volume, float]
 # not match the unit, an error will be raised at runtime
 
 y = Q(15, "meter cubed").asdim(MassFlow)
-# ExpectedDimensionalityError: Quantity with unit "m³" has incorrect dimensionality
-# [length] ** 3, expected [mass] / [time]
+# ExpectedDimensionalityError: Cannot convert 15.0 m³ to dimensionality
+# <class 'encomp.utypes.MassFlow'>, the dimensions do not match:
+# [length] ** 3 != [mass] / [time]
 ```
 
 ### Runtime type checking
@@ -122,10 +123,10 @@ def some_func(T: Q[Temperature, float]) -> tuple[Q[Length, float], Q[Pressure, f
     return (T * Q(12.4, "m/K")).asdim(Length), Q(1, "bar")
 
 
-some_func(Q(12, "delta_degC"))  # the dimensionalities check out
+some_func(Q(12, "K"))  # the dimensionalities check out
 some_func(Q(26, "kW"))  # raises an exception:
-# TypeError: type of argument "T" must be Quantity[Temperature];
-# got Quantity[Power] instead
+# TypeCheckError: argument "T" (encomp.units.Quantity[Power, float])
+# is not an instance of encomp.units.Quantity[Temperature, float]
 
 
 class OutputDict(TypedDict):
@@ -139,8 +140,8 @@ def another_func(s: Q[Length, Any]) -> OutputDict:
 
 
 another_func(Q(25, "m"))
-# TypeError: type of dict item "T" for the return value must be
-# encomp.units.Quantity[Temperature]; got encomp.units.Quantity[Length] instead
+# TypeCheckError: value of key 'T' of the return value (dict)
+# is not an instance of encomp.units.Quantity[Temperature]
 ```
 
 To create a new dimensionality (for example temperature difference per mass flow rate), combine the `pint.UnitsContainer` objects stored in the `dimensions` class attribute.
@@ -171,7 +172,7 @@ CustomCoolingCapacity = Q[TemperaturePerMassFlow, float]
 # the pint library handles a wide range of input formats and unit names
 # the prefix "delta_" can be omitted in this case
 q1 = CustomCoolingCapacity(6, "°F per (lbs per week)")
-q2 = Q("3 delta_degF per (pound per fortnight)")
+q2 = Q(3, "delta_degF per (pound per fortnight)")
 
 assert q1 == q2
 assert type(q1) is type(q2)
@@ -193,7 +194,7 @@ from encomp.units import Quantity as Q
 air = Fluid("air", T=Q(25, "degC"), P=Q(2, "bar"))
 
 # common fluid properties have type hints, and show up using autocomplete
-air.D  # 2.338399526231983 kilogram/meter3
+air.D  # 2.338399526231983 kg/m³
 
 air.search("density")
 # ['DELTA, Delta: Reduced density (rho/rhoc) [dimensionless]',
@@ -201,7 +202,7 @@ air.search("density")
 #  'D, DMASS, Dmass: Mass density [kg/m³]', ...
 
 # any of the names are valid attributes (case-sensitive)
-air.Dmolar  # 80.73061937328056 mole/meter3
+air.Dmolar  # 80.73061937328056 mol/m³
 ```
 
 The `Water` subclass (and `Fluid("IF97::Water")`) evaluates steam and water properties with the *IAPWS-IF97* (Industrial Formulation 1997, "IF97") by default — the fast industrial standard. For the higher-accuracy *IAPWS-95* reference formulation, use the HEOS backend explicitly with `Fluid("HEOS::Water", ...)`; the bare name `Fluid("water", ...)` also resolves to HEOS (IAPWS-95).
@@ -216,7 +217,7 @@ Fluid("water", P=Q(25, "bar"), T=Q(550, "°C"))
 # note that the CoolProp property "Q" (vapor quality) has the same name as the class
 # the Water class has a slightly different string representation
 Water(Q=Q(0.5), T=Q(170, "degC"))
-# <Water (Two-phase), P=792 kPa, T=170.0 °C, D=8.2 kg/m³, V=0.0 cP>
+# <Water (Two-phase), P=792 kPa, T=170.0 °C, D=8.2 kg/m³, V=nan cP>
 
 Water(H=Q(2800, "kJ/kg"), S=Q(7300, "J/kg/K"))
 # <Water (Gas), P=225 kPa, T=165.8 °C, D=1.1 kg/m³, V=0.0 cP>

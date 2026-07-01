@@ -58,10 +58,10 @@ It is not possible to create an instance of the base class {py:class}`encomp.uni
 Each new dimensionality is represented by a unique subclass of {py:class}`encomp.units.Quantity`.
 
 ```python
-type(pressure)  # <class 'encomp.units.Quantity[encomp.utypes.Pressure]'>
+type(pressure)  # <class 'encomp.units.Quantity[Pressure, float]'>
 
 fraction = Q(5, "%")
-type(fraction)  # <class 'encomp.units.Quantity[encomp.utypes.Dimensionless]'>
+type(fraction)  # <class 'encomp.units.Quantity[Dimensionless, float]'>
 
 assert type(pressure) is type(pressure_kPa)
 
@@ -134,7 +134,7 @@ def func(p1: Q[Pressure]) -> tuple[Q[Length], Q[Power]]:
     return Q(1, "m"), Q(1, "kW")
 ```
 
-A `TypeError` will be raised if the function `func` is called with incorrect dimensionalities or if the return value has incorrect dimensionalities.
+A `typeguard.TypeCheckError` will be raised if the function `func` is called with incorrect dimensionalities or if the return value has incorrect dimensionalities.
 
 ### Custom base dimensionalities
 
@@ -157,7 +157,7 @@ n_O2 = Q(2.4, "mol * oxygen")
 M_O2 = Q(32, "g/mol")
 
 # compute mass fraction
-((n_O2 * M_O2) / m_air).to_base_units()  # 0.01536 oxygen/air
+((n_O2 * M_O2) / m_air).to_base_units()  # 0.01536 oxygen/dry_air
 ```
 
 ### Quantities with vector magnitudes
@@ -219,7 +219,7 @@ Q(4.19, "kJ/kg/K") * Q(5, "°C")  # raises OffsetUnitCalculusError
 # this is not the result we're after, °C is offset by 273.15 K
 Q(4.19, "kJ/kg/K") * Q(5, "°C").to("K")  # 1165.4485 kJ/kg
 
-Q(4.19, "kJ/kg/K") * Q(5, "delta_degC")  # 20.95 kJ Δ°C/(K kg)
+Q(4.19, "kJ/kg/K") * Q(5, "delta_degC")  # 20.95 Δ°C·kJ/K/kg
 Q(4.19, "kJ/kg/K") * Q(5, "K")  # 20.95 kJ/kg
 
 # the units Δ°C and K don't cancel out automatically,
@@ -381,8 +381,8 @@ All input and output parameter names follow the conventions used in CoolProp.
 
 To create a new instance, pass the CoolProp fluid name and the fixed points (for example *P, T*) to the class constructor.
 The documentation for the base class {py:class}`encomp.fluids.CoolPropFluid` contains a list of fluid and property names.
-All combinations of input parameters are not valid -- in case of incorrect inputs, a `ValueError` is raised when evaluating an attribute (i.e. not when the instance is created).
-The `__repr__` of the instance will show `N/A` instead of raising an error.
+Not every combination of input parameters is valid.
+For an invalid input pair CoolProp cannot fix the state, so every property evaluates to `nan` -- a CoolProp warning is emitted, but no exception is raised (an invalid *property name*, on the other hand, does raise a `ValueError`).
 
 ```python
 from encomp.fluids import Fluid
@@ -392,11 +392,10 @@ Fluid("toluene", T=Q(25, "°C"), P=Q(2, "bar"))
 
 # PCRIT cannot be used to fix the state
 invalid_inputs = Fluid("water", D=Q(500, "kg/m³"), PCRIT=Q(1, "bar"))
-# <Fluid "water", P=N/A, T=N/A, D=N/A, V=N/A>
+# <Fluid "water", P=nan kPa, T=nan °C, D=nan kg/m³, V=nan cP>
 
-# try to access the attribute "T" (temperature)
-invalid_inputs.T
-# ValueError: Input pair variable is invalid and output(s) are non-trivial; cannot do state update : PropsSI("T","D",500,"PCRIT",100000,"water")
+# every property is nan (CoolProp emits a warning about the invalid input pair)
+invalid_inputs.T  # nan °C
 ```
 
 When the class {py:class}`encomp.fluids.Water` is used, the fluid name can be omitted.
@@ -409,8 +408,8 @@ The {py:class}`encomp.fluids.HumidAir` class has a different set of input and ou
 from encomp.fluids import HumidAir, Water
 
 # input units are converted to SI
-Water(D=Q(12, "lbs / ft³"), T=Q(250, "°F"))
-# <Water (Two-phase), P=206 kPa, T=121.1 °C, D=192.2 kg/m³, V=0.0 cP, Q=0.00>
+Water(P=Q(30, "psi"), T=Q(250, "°F"))
+# <Water (Liquid), P=207 kPa, T=121.1 °C, D=942.2 kg/m³, V=0.2 cP>
 
 HumidAir(T=Q(25, "°C"), P=Q(2, "bar"), R=Q(25, "%"))
 # <HumidAir, P=200 kPa, T=25.0 °C, R=0.25, Vda=0.4 m³/kg, Vha=0.4 m³/kg, M=0.018 cP>
@@ -491,14 +490,13 @@ All inputs must have the same length (or a single scalar value).
 
 ```python
 Water(T=Q(np.linspace(25, 50, 10), "°C"), P=Q(np.linspace(25, 50, 10), "bar"))
-# <Water (Liquid), P=[2500 2778 3056 3333 3611 3889 4167 4444 4722 5000] kPa,
-# T=[25.0 27.8 30.6 33.3 36.1 38.9 41.7 44.4 47.2 50.0] °C,
-# D=[998.1 997.5 996.8 996.0 995.2 994.3 993.3 992.3 991.3 990.2] kg/m³,
-# V=[0.9 0.8 0.8 0.7 0.7 0.7 0.6 0.6 0.6 0.5] cP>
+# the repr shows only the head of each vector input
+# <Water (Liquid), P=[2500 2778 3056 ...] kPa, T=[25.0 27.8 30.6 ...] °C,
+# D=[998.1 997.5 996.8 ...] kg/m³, V=[0.9 0.8 0.8 ...] cP>
 
 # different phases
 Water(T=Q(np.linspace(25, 500, 10), "°C"), P=Q(np.linspace(0.5, 10, 10), "bar")).PHASE
-# array([0., 0., 5., 5., 5., 5., 5., 2., 2., 2.]) <Unit('dimensionless')>
+# <Quantity([0. 0. 5. 5. 5. 5. 5. 2. 2. 2.], 'dimensionless')>
 
 Water.PHASES
 # {0.0: 'Liquid',
@@ -512,10 +510,8 @@ Water.PHASES
 # when one input is constant (float, int, single element array),
 # it's repeated as an array
 Water(T=Q(np.linspace(25, 500, 10), "°C"), P=Q(5, "bar"))
-# <Water (Variable), P=[500 500 500 500 500 500 500 500 500 500] kPa,
-# T=[25.0 77.8 130.6 183.3 236.1 288.9 341.7 394.4 447.2 500.0] °C,
-# D=[997.2 973.3 934.5 2.5 2.2 2.0 1.8 1.6 1.5 1.4] kg/m³,
-# V=[0.9 0.4 0.2 0.0 0.0 0.0 0.0 0.0 0.0 0.0] cP>
+# <Water (Variable), P=[500 500 500 ...] kPa, T=[25.0 77.8 130.6 ...] °C,
+# D=[997.2 973.4 934.5 ...] kg/m³, V=[0.9 0.4 0.2 ...] cP>
 ```
 
 Missing or out-of-range results surface as `NaN` (for a numpy magnitude) or `null` (for a Polars magnitude), never as a zero or a raised exception, so a partly-invalid batch still returns the valid rows.
