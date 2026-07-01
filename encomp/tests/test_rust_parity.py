@@ -75,7 +75,13 @@ def test_rust_python_parity(label: str, name: str, kwargs: dict[str, Any]) -> No
         ru = _evaluate(name, kwargs, prop, "rust", df)
         assert py.shape == ru.shape
 
-        both = np.isfinite(py) & np.isfinite(ru)
+        # the two paths must agree on WHICH points are finite -- otherwise a path that
+        # returns NaN where the other returns a value would be silently excluded below
+        finite_py, finite_ru = np.isfinite(py), np.isfinite(ru)
+        assert np.array_equal(finite_py, finite_ru), (
+            f"{label}.{prop}: finite/NaN masks differ ({int((finite_py != finite_ru).sum())} points)"
+        )
+        both = finite_py & finite_ru
         assert both.sum() >= 8, f"{label}.{prop}: only {int(both.sum())} finite-overlap points"
         rel = np.abs(ru[both] - py[both]) / np.maximum(np.abs(py[both]), 1e-9)
         worst = int(np.argmax(rel))
@@ -109,7 +115,34 @@ def test_rust_python_parity_input_pairs() -> None:
 
         py = density("python")
         ru = density("rust")
-        both = np.isfinite(py) & np.isfinite(ru)
+        finite_py, finite_ru = np.isfinite(py), np.isfinite(ru)
+        assert np.array_equal(finite_py, finite_ru), (
+            f"P,{second}: finite/NaN masks differ ({int((finite_py != finite_ru).sum())} points)"
+        )
+        both = finite_py & finite_ru
         assert both.sum() >= 15, f"P,{second}: only {int(both.sum())} finite points"
         rel = np.abs(ru[both] - py[both]) / np.maximum(np.abs(py[both]), 1e-9)
         assert rel.max() <= RTOL, f"P,{second}: max rel {rel.max():.2e}"
+
+
+def test_eager_rust_non_pt_parity(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The large-eager numpy path (_rust_eager, n >= EAGER_PLUGIN_MIN_SIZE) with a NON-PT
+    pair must match the Python PropsSI path -- the eager-plugin parity test is PT-only, so
+    this covers the eager canonical-pair/column-order resolution for P,H."""
+    assert encomp_coolprop.self_check()
+
+    n = 1200  # >= EAGER_PLUGIN_MIN_SIZE (1000) -> eager rust plugin
+    p = np.geomspace(2e5, 200e5, n)
+    t = np.linspace(300.0, 620.0, n)
+    h = CP.PropsSI("HMASS", "P", p, "T", t, "HEOS::Water")
+
+    eager = np.asarray(Fluid("HEOS::Water", P=Q(p, "Pa"), H=Q(h, "J/kg")).D.m, dtype=float)
+
+    monkeypatch.setattr("encomp.fluids.EAGER_PLUGIN_MIN_SIZE", 10**18)  # force Python PropsSI
+    reference = np.asarray(Fluid("HEOS::Water", P=Q(p, "Pa"), H=Q(h, "J/kg")).D.m, dtype=float)
+
+    assert np.array_equal(np.isfinite(eager), np.isfinite(reference))
+    both = np.isfinite(eager) & np.isfinite(reference)
+    assert both.sum() >= n // 2
+    rel = np.abs(eager[both] - reference[both]) / np.maximum(np.abs(reference[both]), 1e-9)
+    assert rel.max() <= RTOL, f"eager non-PT: max rel {rel.max():.2e}"

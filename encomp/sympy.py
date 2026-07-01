@@ -4,6 +4,7 @@ Imports and extends the ``sympy`` library for symbolic mathematics.
 Contains tools for converting Sympy expressions to Python modules and functions.
 """
 
+import keyword
 import re
 from collections.abc import Callable, Iterable, Sequence
 from functools import lru_cache
@@ -52,15 +53,19 @@ def to_identifier(s: sp.Symbol | str) -> str:
     s = s.replace("^", "__")
     s = s.replace("'", "prime")
 
-    # need to differentiate between symbols "\text{m}" and "m"
-    # the string "text" is a bit long, replace with "T"
-    s = s.replace("text", "T")
-
-    # the substring "lambda" cannot exist in the identifier
-    s = s.replace("lambda", "lam")
+    # collapse the LaTeX \text{...} token (used to distinguish "\text{m}" from "m") to "T".
+    # anchored to the backslash so a plain symbol merely CONTAINING "text" (e.g. "context")
+    # is not corrupted
+    s = s.replace(r"\text", "T")
 
     # remove all non-alphanumeric or _
     s = re.sub(r"\W+", "", s)
+
+    # a Python keyword (e.g. "lambda", "class") is a valid identifier syntactically but
+    # cannot be used as a variable/parameter name -- suffix it so it can. handles all
+    # keywords, not just "lambda", and does not corrupt names that merely contain one
+    if keyword.iskeyword(s):
+        s = f"{s}_"
 
     if not s.isidentifier():
         raise ValueError(f"Symbol could not be converted to a valid Python identifer: {s_orig}")

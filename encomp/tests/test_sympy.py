@@ -1,3 +1,4 @@
+import keyword
 from typing import Any, cast
 
 import numpy as np
@@ -25,6 +26,21 @@ def test_to_identifier() -> None:
     s = to_identifier(x._("subscript").__("superscript"))
 
     assert s.isidentifier()
+
+
+def test_to_identifier_does_not_corrupt_plain_names() -> None:
+    # a plain symbol whose name merely CONTAINS "text" or a keyword must not be mangled:
+    # the \text collapse is anchored to the LaTeX token, keywords are suffixed not replaced
+    assert to_identifier(cast(Any, sp.Symbol("context"))) == "context"
+    assert to_identifier(cast(Any, sp.Symbol("flambda"))) == "flambda"
+    assert to_identifier(cast(Any, sp.Symbol("m"))) == "m"
+
+    # a bare Python keyword becomes a usable identifier (suffixed), not left as the keyword
+    lam = to_identifier(cast(Any, sp.Symbol("lambda")))
+    assert lam.isidentifier() and not keyword.iskeyword(lam)
+
+    # the LaTeX \text{...} token is still collapsed, so "\text{m}" and "m" stay distinct
+    assert to_identifier(cast(Any, sp.Symbol(r"\text{m}"))) != to_identifier(cast(Any, sp.Symbol("m")))
 
 
 def test_get_args() -> None:
