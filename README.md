@@ -42,8 +42,8 @@ from encomp.units import Quantity as Q
 # converts 1 bar to kPa, displays it in case it's the cell output
 Q(1, "bar").to("kPa")
 
-# a single string with one numerical value can also be given as input
-Q("0.1 MPa").to("bar")
+# the magnitude and unit are passed as separate arguments
+Q(0.1, "MPa").to("bar")
 
 # list and tuple inputs are converted to np.ndarray
 Q([1, 2, 3], "bar") * 2  # [2, 4, 6] bar
@@ -207,7 +207,7 @@ air.search("density")
 air.Dmolar  # 80.73061937328056 mole/meter3
 ```
 
-The `Water` subclass (and `Fluid('IF97::Water')`) evaluates steam and water properties with the *IAPWS-IF97* (Industrial Formulation 1997, "IF97") by default — the fast industrial standard. For the higher-accuracy *IAPWS-95* reference formulation, use the HEOS backend explicitly with `Fluid('HEOS::Water', ...)`; the bare name `Fluid('water', ...)` also resolves to HEOS (IAPWS-95).
+The `Water` subclass (and `Fluid("IF97::Water")`) evaluates steam and water properties with the *IAPWS-IF97* (Industrial Formulation 1997, "IF97") by default — the fast industrial standard. For the higher-accuracy *IAPWS-95* reference formulation, use the HEOS backend explicitly with `Fluid("HEOS::Water", ...)`; the bare name `Fluid("water", ...)` also resolves to HEOS (IAPWS-95).
 
 ```python
 from encomp.fluids import Fluid, Water
@@ -274,7 +274,7 @@ import polars as pl
 
 from encomp import coolprop as cp
 
-df = pl.DataFrame({"P": [50e5, 60e5], "T": [400.0, 450.0]})
+df = pl.DataFrame({"P": [1e5, 1e5], "T": [293.15, 313.15], "R": [0.4, 0.6]})  # Pa, K, -
 
 df.select(
     cp.fluid("DMASS", "P", "T").alias("rho"),  # default: IF97 water

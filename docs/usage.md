@@ -366,7 +366,7 @@ s.mass = Q(25, "bar")
 ```
 
 :::{note}
-Vector quantities, for example `Q([25, 26], 'kg')`, cannot be specified with an `.env`-file.
+Vector quantities, for example `Q([25, 26], "kg")`, cannot be specified with an `.env`-file.
 :::
 
 ## The Fluid class
@@ -481,7 +481,7 @@ The {py:meth}`encomp.fluids.Fluid.assume_phase` method pins the phase, skipping 
 Fluid("HEOS::CO2[0.7]&O2[0.3]", P=Q(10, "bar"), T=Q(300, "K")).assume_phase("gas").D
 ```
 
-`IF97` (the default backend for {py:class}`encomp.fluids.Water`) is region-explicit and ignores an assumed phase; the call is a no-op there and emits a warning. Use `Fluid('HEOS::Water', ...)` if you need an assumed phase for water.
+`IF97` (the default backend for {py:class}`encomp.fluids.Water`) is region-explicit and ignores an assumed phase; the call is a no-op there and emits a warning. Use `Fluid("HEOS::Water", ...)` if you need an assumed phase for water.
 
 ### Using vector inputs
 
@@ -547,7 +547,7 @@ import polars as pl
 
 from encomp import coolprop as cp
 
-df = pl.DataFrame({"P": [50e5, 60e5], "T": [400.0, 450.0]})
+df = pl.DataFrame({"P": [1e5, 1e5], "T": [293.15, 313.15], "R": [0.4, 0.6]})  # Pa, K, -
 
 df.select(
     cp.fluid("DMASS", "P", "T").alias("rho"),  # default: IF97 water
@@ -556,7 +556,7 @@ df.select(
 )
 ```
 
-The API mirrors {py:class}`encomp.fluids.Fluid`: any CoolProp input pair is supported (in any order), the fluid is given by `name` (with the backend folded in, e.g. `name='HEOS::CarbonDioxide'`), mixtures via a `composition={species: mole fraction}` dict, and a fixed phase via `assume_phase='gas'`. See the `encomp.coolprop` package README in the repository for the full design and thread-safety model.
+The API mirrors {py:class}`encomp.fluids.Fluid`: any CoolProp input pair is supported (in any order), the fluid is given by `name` (with the backend folded in, e.g. `name="HEOS::CarbonDioxide"`), mixtures via a `composition={species: mole fraction}` dict, and a fixed phase via `assume_phase="gas"`. See the `encomp.coolprop` package README in the repository for the full design and thread-safety model.
 
 ## Sympy functionality
 
@@ -592,16 +592,16 @@ The assumptions for an `sp.Symbol` instance are accessed with the attribute `ass
 
 The `_` and `__` methods will typeset the sub- and superscripts automatically:
 
-- Single-letter lower case with math font: `n._('a')` → $n_a$
-- Single-letter upper case with regular font: `n._('A')` → $n_{\text{A}}$
-- Chemical formulas: `n._('H_2O')` → $n_{\text{H}_2\text{O}}$
-- Strings with two or more characters with regular font: `n._('water')` → $n_{\text{water}}$
-- Parts are split with `,`: `n._('outlet,A,i,H_2SO_4')` → $n_{\text{outlet},\text{A},i,\text{H}_2\text{SO}_4}$
-- Combine sub- and superscript: `n._('a').__('in')` → $n_{a}^{\text{in}}$
+- Single-letter lower case with math font: `n._("a")` → $n_a$
+- Single-letter upper case with regular font: `n._("A")` → $n_{\text{A}}$
+- Chemical formulas: `n._("H_2O")` → $n_{\text{H}_2\text{O}}$
+- Strings with two or more characters with regular font: `n._("water")` → $n_{\text{water}}$
+- Parts are split with `,`: `n._("outlet,A,i,H_2SO_4")` → $n_{\text{outlet},\text{A},i,\text{H}_2\text{SO}_4}$
+- Combine sub- and superscript: `n._("a").__("in")` → $n_{a}^{\text{in}}$
 
 The `decorate` method offers more control:
 
-- `n.decorate(prefix='\sum', prefix_sub='2', suffix_sup='i', suffix='\ldots')` → ${\sum}_{2}n^{i}{\ldots}$
+- `n.decorate(prefix="\sum", prefix_sub="2", suffix_sup="i", suffix="\ldots")` → ${\sum}_{2}n^{i}{\ldots}$
 
 ### Integration with quantities
 
@@ -666,9 +666,6 @@ Q(10, "%") * x  # 10*x percent
 x * Q(1)  # x
 x * Q(10, "%")  # 0.1x
 
-# symbols can also be used as magnitude
-Q(x * y, "m") / Q(z, "s")  # x*y/z meter/second
-
 # when the output is a sympy object,
 # all derived units are expanded to the base SI units
 x + y / Q(25, "kW")
@@ -678,46 +675,3 @@ x + y / Q(25, "kW")
 :::{todo}
 This behavior is not encoded in the type hints.
 :::
-
-## Integration with other libraries
-
-### `fluids`
-
-The package [fluids](https://pypi.org/project/fluids/) contains a large collection of process engineering functions.
-The compatibility layer `fluids.units` automatically handles input and output quantities based on the units specified in the docstrings.
-This only works for functions that are defined on the top-level in the `fluids` module.
-Similar compatibility layers also exist in the [ht](https://pypi.org/project/ht/) and [thermo](https://pypi.org/project/thermo/) packages by the same author.
-
-:::{note}
-The `fluids.units` module must be imported *after* the `encomp.units` module.
-:::
-
-```python
-from encomp.units import Quantity as Q
-
-D = Q(25, "cm")
-rhop = Q(800, "kg/m3")
-rho = Q(700, "kg/m3")
-mu = Q(10, "cP")
-t = Q(25, "s")
-V = Q(25, "m/s")
-
-# wrapper that converts the inputs to magnitudes with the correct
-# units and creates a quantity from the output magnitude
-# imports from fluids.units must happen after encomp.units has been imported
-from fluids.units import integrate_drag_sphere
-
-integrate_drag_sphere(D, rhop, rho, mu, t, V=V)  # 1.037... meter/second
-```
-
-In case any of the inputs have incorrect units, an error is raised before the function is evaluated:
-
-```python
-from fluids.units import Reynolds
-
-# the "nu" parameter is kinematic viscosity, but cP is a unit of dynamic viscosity
-Reynolds(V=Q(1, "m/s"), D=Q(15, "cm"), nu=Q(12, "cP"))
-# ValueError: Converting 12 cP to units of m^2/s raised
-# DimensionalityError: Cannot convert from 'centipoise' ([mass] / [length] / [time])
-# to 'meter ** 2 / second' ([length] ** 2 / [time])
-```
