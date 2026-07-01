@@ -1,8 +1,9 @@
 from textwrap import dedent
+from typing import Any, cast
 
 from ..misc import isinstance_types, name_assignments
 from ..units import Quantity as Q
-from ..utypes import Dimensionless, Mass, Power, Temperature
+from ..utypes import Dimensionless, Mass, Power, Temperature, UnknownDimensionality
 
 
 def test_name_assignments() -> None:
@@ -64,3 +65,24 @@ def test_isinstance_types_quantity() -> None:
 
     assert isinstance_types(q2, Q[Mass]) or isinstance_types(q2, Q[Temperature])
     assert not (isinstance_types(q2, Q[Power]) or isinstance_types(q2, Q[Temperature]))
+
+
+def test_isinstance_types_quantity_union() -> None:
+    # a Quantity[UnknownDimensionality] union member matches ANY dimensionality, exactly as
+    # it does as a lone type -- the union and single-type checks must be consistent (a plain
+    # isinstance against the union would wrongly say False, since the unknown-dim subclass is
+    # a runtime sibling of the concrete dimensionality subclasses, not a parent)
+    q = Q(25.0, "kg")
+
+    # the runtime UnionType value is built dynamically, so the argument is cast to Any (the
+    # detailed union handling under test lives in isinstance_types, not the caller's types)
+    def _check(expected: object) -> bool:
+        return isinstance_types(q, cast(Any, expected))
+
+    assert isinstance_types(q, Q[UnknownDimensionality])
+    assert _check(Q[UnknownDimensionality] | Q[Power])
+    assert _check(Q[Power] | Q[UnknownDimensionality])
+
+    # a union of concrete dimensionalities still narrows correctly
+    assert _check(Q[Mass] | Q[Power])
+    assert not _check(Q[Power] | Q[Temperature])

@@ -728,6 +728,32 @@ def test_assume_phase() -> None:
         Fluid(mix, P=Q(50.0, "bar"), T=Q(350.0, "degC")).assume_phase(cast(Any, "plasma"))
 
 
+def test_assume_phase_changes_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    # test_assume_phase only checks single-phase regions where assumed == auto, so a
+    # regression that silently dropped assume_phase would pass it. Here a DISCRIMINATING
+    # state (HEOS::Water at 1 bar, 110 C) is auto-phase GAS (steam, ~0.57 kg/m3); forcing
+    # "liquid" must return the metastable subcooled-liquid root (~950 kg/m3). This proves
+    # assume_phase actually takes effect, and that the scalar low-level path and the
+    # large-eager rust path agree on the forced value. (An independent CoolProp
+    # specify_phase reference for the same state lives in test_coolprop_plugin.)
+    auto = Water(P=Q(1.0, "bar"), T=Q(110.0, "degC")).D.to("kg/m3")
+    assert float(auto.m) < 10.0  # auto-phase water here is steam
+
+    scalar = Fluid("HEOS::Water", P=Q(1.0, "bar"), T=Q(110.0, "degC")).assume_phase("liquid").D.to("kg/m3")
+    assert float(scalar.m) > 900.0  # forcing liquid gives the subcooled-liquid root
+    assert float(scalar.m) != approx(float(auto.m), rel=0.5)  # unmistakably not the auto (steam) value
+
+    # same config, large-eager array -> rust plugin path; must match the scalar low-level path
+    monkeypatch.setattr("encomp.fluids.EAGER_PLUGIN_MIN_SIZE", 1000)
+    n = 1200
+    eager = (
+        Fluid("HEOS::Water", P=Q(np.full(n, 1e5), "Pa"), T=Q(np.full(n, 383.15), "K"))
+        .assume_phase("liquid")
+        .D.to("kg/m3")
+    )
+    assert np.allclose(eager.m, float(scalar.m), rtol=1e-9)
+
+
 def test_composition() -> None:
     # reference: same mixture/state with fractions baked into the name string
     ref = Fluid("HEOS::CO2[0.5]&O2[0.5]", P=Q(50.0, "bar"), T=Q(350.0, "degC")).assume_phase("supercritical_gas").D

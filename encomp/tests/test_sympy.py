@@ -2,7 +2,7 @@ from typing import Any, cast
 
 import numpy as np
 
-from ..sympy import Symbol, get_args, get_function, sp, symbols, to_identifier
+from ..sympy import Symbol, get_args, get_function, get_lambda_matrix, sp, symbols, to_identifier
 from ..units import Quantity as Q
 
 
@@ -78,6 +78,27 @@ def test_Quantity_to_sympy_integration() -> None:
 
     _ = cast(Any, x) + Q(2)
     _ = cast(Any, x) + Q(2, "m")
+
+
+def test_get_lambda_matrix_arg_order() -> None:
+    # the generated lambda signature MUST use the same parameter order as the returned list,
+    # otherwise a caller binding the returned params positionally misaligns the values (the
+    # collected args are a set, whose order is arbitrary / PYTHONHASHSEED-dependent)
+    import inspect
+
+    sp_any = cast(Any, sp)
+    a, b, c, d, e = sp_any.symbols("a b c d e")
+    M = sp_any.Matrix([[a - 10 * b], [100 * c - d], [e]])
+
+    src, params = get_lambda_matrix(M)
+    fcn = eval(src, {"np": np})  # generated numeric lambda, test-only
+
+    assert list(inspect.signature(fcn).parameters) == params
+
+    # binding the returned params positionally yields the correct matrix
+    values = {"a": 1.0, "b": 0.0, "c": 0.0, "d": 0.0, "e": 0.0}  # row 0 = a - 10b = 1
+    result = fcn(*[values[p] for p in params])
+    assert float(np.asarray(result).ravel()[0]) == 1.0
 
 
 def test_get_function() -> None:

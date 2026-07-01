@@ -425,6 +425,34 @@ def test_type_eq() -> None:
     assert Q[Length] != type(q)  # noqa: E721
 
 
+def test_hash_eq_consistency() -> None:
+    # __eq__ compares across units and with a tolerance, so the eq/hash contract
+    # (a == b => hash(a) == hash(b)) requires hashing a canonical (root-unit) form,
+    # otherwise a Quantity is unusable as a dict key / set member.
+    def _eq_and_hash(a: Q[Any, float], b: Q[Any, float]) -> None:
+        assert a == b
+        assert hash(a) == hash(b), f"{a} == {b} but hashes differ"
+
+    _eq_and_hash(Q(1.0, "m"), Q(100.0, "cm"))
+    _eq_and_hash(Q(1.0, "bar"), Q(100.0, "kPa"))
+    _eq_and_hash(Q(0.0, "degC"), Q(273.15, "K"))
+    _eq_and_hash(Q(3600.0, "s"), Q(1.0, "h"))
+
+    # usable as dict key / set member regardless of the unit it was written in
+    assert Q(100.0, "cm") in {Q(1.0, "m"): "one metre"}
+    assert len({Q(1.0, "m"), Q(100.0, "cm"), Q(1000.0, "mm")}) == 1
+
+    # a TemperatureDifference must stay hashable (its to_base_units would raise, so
+    # __hash__ must use to_root_units) -- guards against a regression to base units
+    dt = Q(20.0, "degC") - Q(15.0, "degC")
+    assert dt.check(TemperatureDifference)
+    assert hash(dt) == hash(Q(5.0, "delta_degC"))
+
+    # non-float magnitudes remain unhashable (unchanged behaviour)
+    with pytest.raises(TypeError, match="unhashable"):
+        hash(Q(np.array([1.0, 2.0]), "m"))
+
+
 def test_Q() -> None:
     # test that Quantity objects can be constructed
     Q(1, "dimensionless")

@@ -378,7 +378,15 @@ class Quantity(
         if not isinstance(self.m, float):
             raise TypeError(f"unhashable type: 'Quantity' (magnitude type: {type(self.m).__name__})")
 
-        return hash((self.m, self.u))
+        # hash on the canonical root-unit representation so the eq/hash contract holds:
+        # __eq__ compares across units (Q(1, "m") == Q(100, "cm")), so two quantities that
+        # are equal must hash equal -- hashing the raw (m, u) would break that. to_root_units
+        # is used (not to_base_units) because it does not raise for a TemperatureDifference.
+        # NOTE: __eq__ is tolerant (np.isclose), so quantities that are only *approximately*
+        # equal may still hash differently -- an inherent limit of tolerant equality, the same
+        # way hash(0.1 + 0.2) != hash(0.3); exact equality (the common case) is now consistent.
+        root = self.to_root_units()
+        return hash((root.m, root.u))
 
     def __getattr__(self, item: str) -> Any:  # noqa: ANN401
         # private and dunder lookups (incl. the numpy __array_* protocol, and

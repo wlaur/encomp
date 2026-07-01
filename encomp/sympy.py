@@ -383,9 +383,13 @@ def get_lambda_matrix(M: sp.MutableDenseMatrix) -> tuple[str, list[str]]:
 
     # TODO: "VisibleDeprecationWarning: Creating an ndarray from ragged..."
     # when mixing input vectors and floats
-    func_src = f"lambda {', '.join(args)}: np.array({funcs})"
+    # the signature MUST use the same order as the returned parameter list, otherwise a
+    # caller binding the returned params positionally hits a different order than the lambda
+    # expects (args is a set: its iteration order is arbitrary and varies with PYTHONHASHSEED)
+    sorted_args = sorted(args)
+    func_src = f"lambda {', '.join(sorted_args)}: np.array({funcs})"
 
-    return func_src, sorted(args)
+    return func_src, sorted_args
 
 
 @lru_cache
@@ -593,8 +597,8 @@ def typeset(x: str | int) -> str:
 
     for i, p in enumerate(parts):
         # avoid typesetting single upper-case letters as text
-        # if they start with ~
-        if p.startswith("~") and p[1].isupper():
+        # if they start with ~ (guard len so a bare "~" part does not IndexError)
+        if p.startswith("~") and len(p) > 1 and p[1].isupper():
             parts[i] = p[1]
             continue
 

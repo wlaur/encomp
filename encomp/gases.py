@@ -94,7 +94,7 @@ def convert_gas_volume(
 ) -> Quantity[Volume, Any] | Quantity[VolumeFlow, Any]:
     """
     Converts the volume :math:`V_1` (at :math:`T_1, P_1`) to
-    :math:`V_2` (at :math:`T_1, P_1`).
+    :math:`V_2` (at :math:`T_2, P_2`).
     Uses compressibility factors from CoolProp.
 
     The values for :math:`T_i, P_i` are passed as a tuple

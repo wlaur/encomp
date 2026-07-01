@@ -18,11 +18,17 @@ def isinstance_types[T](obj: Any, expected: TypeForm[T]) -> TypeIs[T]:  # noqa: 
     from .utypes import UnknownDimensionality
 
     if get_origin(expected) is UnionType:
-        # narrowed to a UnionType by the check above, which isinstance accepts
-        try:
-            return isinstance(obj, cast(UnionType, expected))
-        except TypeError:
-            return any(isinstance_types(obj, n) for n in get_args(expected))
+        # a Quantity must be routed through the detailed per-member logic below: a plain
+        # isinstance against the union misclassifies a Quantity[UnknownDimensionality, ...]
+        # member (it matches ANY dimensionality here, but is a *sibling* class at runtime, so
+        # isinstance says False) -- decompose so single-type and union checks stay consistent.
+        if not isinstance(obj, Quantity):
+            # narrowed to a UnionType by the check above, which isinstance accepts
+            try:
+                return isinstance(obj, cast(UnionType, expected))
+            except TypeError:
+                pass
+        return any(isinstance_types(obj, n) for n in get_args(expected))
 
     if isinstance(obj, Quantity) and _is_quantity_subclass(expected):
         if expected is Quantity:

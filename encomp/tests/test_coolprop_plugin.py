@@ -104,6 +104,55 @@ def test_fluid_assume_phase() -> None:
     assert np.allclose(out["d"].to_numpy(), ref, rtol=RTOL)
 
 
+def test_fluid_assume_phase_changes_value() -> None:
+    # a DISCRIMINATING state: 1 bar, 110 C -- auto-phase water is GAS (steam, ~0.57 kg/m3).
+    # Forcing "liquid" must return the metastable subcooled-liquid root (~950 kg/m3), i.e. a
+    # value that (a) differs from auto by orders of magnitude and (b) equals an explicit
+    # specify_phase(iphase_liquid). This is what proves assume_phase is not silently a no-op.
+    df = pl.DataFrame({"P": [1e5], "T": [383.15]})
+    auto = df.select(d=cp.fluid("DMASS", "P", "T", name="HEOS::Water"))["d"][0]
+    forced = df.select(d=cp.fluid("DMASS", "P", "T", name="HEOS::Water", assume_phase="liquid"))["d"][0]
+
+    state = CP.AbstractState("HEOS", "Water")
+    state.specify_phase(CP.iphase_liquid)
+    state.update(CP.PT_INPUTS, 1e5, 383.15)
+    ref_liquid = float(state.rhomass())
+
+    assert forced == pytest.approx(ref_liquid, rel=RTOL)
+    assert forced > 900.0 and auto < 10.0  # liquid vs steam: unmistakably different roots
+    assert abs(forced - auto) / auto > 100.0
+
+
+def test_fluid_input_pair_order_invariant() -> None:
+    # the plugin canonicalizes input order via generate_update_pair, so evaluating the SAME
+    # state with the two inputs swapped must give identical results (guards the swap flag)
+    p = np.full(5, 50e5)
+    t = np.linspace(320.0, 500.0, 5)
+    h = CP.PropsSI("HMASS", "P", p, "T", t, "HEOS::Water")
+    cases: list[tuple[cp.FluidInput, cp.FluidInput, dict[str, Any]]] = [
+        ("P", "T", {"P": p, "T": t}),
+        ("P", "H", {"P": p, "H": h}),
+    ]
+    for a, b, cols in cases:
+        df = pl.DataFrame(cols)
+        forward = df.select(d=cp.fluid("DMASS", a, b, name="HEOS::Water"))["d"].to_numpy()
+        reverse = df.select(d=cp.fluid("DMASS", b, a, name="HEOS::Water"))["d"].to_numpy()
+        assert np.allclose(forward, reverse, rtol=RTOL, equal_nan=True), (a, b)
+
+
+def test_fluid_quality_input_pair() -> None:
+    # two-phase quality (P, Q) through the plugin -- a core input pair never otherwise
+    # exercised on the plugin path -- matches PropsSI, both orders
+    p = np.linspace(1e5, 20e5, 5)
+    q = np.full(5, 0.5)
+    df = pl.DataFrame({"P": p, "Q": q})
+    ref = CP.PropsSI("DMASS", "P", p, "Q", q, "HEOS::Water")
+    pq = df.select(d=cp.fluid("DMASS", "P", "Q", name="HEOS::Water"))["d"].to_numpy()
+    qp = df.select(d=cp.fluid("DMASS", "Q", "P", name="HEOS::Water"))["d"].to_numpy()
+    assert np.allclose(pq, ref, rtol=RTOL)
+    assert np.allclose(qp, ref, rtol=RTOL)
+
+
 def test_invalid_inputs_become_null() -> None:
     # the plugin emits null (encomp's single missing-value sentinel, never NaN) for
     # invalid inputs, so the Fluid wrapper needs no fill_nan(None); T = -5 K is invalid
