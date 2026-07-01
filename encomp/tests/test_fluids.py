@@ -877,12 +877,10 @@ def test_incompressible_mixture_all_paths_agree() -> None:
 
 
 def test_dimensional_property_missing_is_nan_never_zero() -> None:
-    # A failed/undefined dimensional calc must come back MISSING (NaN scalar/array, null
-    # column), never a spurious 0.0. CoolProp 8.0 raises or returns NaN for such cases, so no
-    # near-zero -> NaN scrub is needed; this guards that a future CoolProp reintroducing a
-    # 0.0 "missing data" sentinel would fail here (and want targeted handling, not a blanket
-    # scrub). Density is used because it is strictly positive -- 0 is unambiguously missing
-    # (unlike enthalpy/entropy, whose reference points make ~0 a legitimate value).
+    # A failed/undefined dimensional calc comes back MISSING, never a spurious 0.0: NaN for
+    # float/numpy, NULL for polars (null is the single polars sentinel -- a pl.Series/pl.Expr
+    # result must never contain NaN). Density is used because it is strictly positive, so 0 is
+    # unambiguously missing (unlike enthalpy/entropy, whose reference points make ~0 legit).
     assert not Water(P=Q(1e5, "Pa"), T=Q(300.0, "K")).D.dimensionless
 
     temperature = np.array([300.0, 50.0, 400.0, 450.0])  # 50 K is below the IF97 range
@@ -897,7 +895,8 @@ def test_dimensional_property_missing_is_nan_never_zero() -> None:
         assert np.all(np.isfinite(present)) and not np.any(present == 0.0), "present rows: non-zero, never 0.0"
 
     def check_polars(series: pl.Series, n_missing: int) -> None:
-        # pl.Series / pl.Expr magnitude: missing -> NULL (never NaN or 0.0), present non-zero
+        # pl.Series / pl.Expr magnitude: missing -> NULL, NaN must never appear, present non-zero
+        assert not series.is_nan().any(), "polars must never contain NaN -- missing is null"
         assert series.null_count() == n_missing, "missing rows must be null"
         present = series.drop_nulls().to_numpy()
         assert np.all(np.isfinite(present)) and not np.any(present == 0.0), "present rows: non-zero, never 0.0"
@@ -922,5 +921,14 @@ def test_dimensional_property_missing_is_nan_never_zero() -> None:
 
     assert np.isnan(float(Water(P=Q(1e5, "Pa"), T=Q(50.0, "K")).D.m))  # scalar: NaN, not 0.0
 
-    # an undefined dimensional property (surface tension outside two-phase) is NaN, not 0.0
+    # a property undefined for the state (surface tension, single-phase water) that CoolProp
+    # raises on: NaN for float/numpy, but NULL (never NaN) for the polars magnitudes
+    sp_p, sp_t = [100e5, 100e5], [300.0, 320.0]  # compressed liquid -> surface tension undefined
     assert np.isnan(float(Fluid("Water", P=Q(100e5, "Pa"), T=Q(300.0, "K")).get("I").m))
+    check_numpy(Fluid("Water", P=Q(np.array(sp_p), "Pa"), T=Q(np.array(sp_t), "K")).get("I").m, np.array([True, True]))
+    check_polars(Fluid("Water", P=Q(pl.Series(sp_p), "Pa"), T=Q(pl.Series(sp_t), "K")).get("I").m, 2)
+    clear_expr_evaluation_cache()
+    st_col = pl.DataFrame({"P": sp_p, "T": sp_t}).select(
+        Fluid[pl.Expr]("Water", P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K")).get("I").m.alias("i")
+    )["i"]
+    check_polars(st_col, 2)
