@@ -57,9 +57,9 @@ PARALLELISM  4 independent props, ONE collect(), 1M rows
 
 ## Design
 
-Removing the GIL is necessary but not sufficient: CoolProp's C-API takes a global
-handle-table lock on every call, so per-row calls serialize even in pure Rust. The
-plugin instead uses the **batched** C-API (`AbstractState_update_and_1_out`): one
+The GIL is not the only serialization point: CoolProp's C-API takes a global
+handle-table lock on every call, so per-row calls serialize even in Rust. The
+plugin uses the batched C-API (`AbstractState_update_and_1_out`): one
 call per chunk, the handle lock taken once at construction, then the flash loop
 runs lock-free in C++ — so independent chunks/expressions parallelize.
 

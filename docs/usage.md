@@ -473,7 +473,7 @@ For an incompressible mixture, the concentration is carried in the name instead,
 Fluid("INCOMP::MEG[0.5]", P=Q(1, "bar"), T=Q(20, "°C"))  # 50 % ethylene glycol
 ```
 
-The {py:meth}`encomp.fluids.Fluid.assume_phase` method pins the phase, skipping CoolProp's phase-stability search. For the HEOS/GERG mixture backends that search dominates the cost, so assuming a phase you already know is a large speedup. It is a *speed* tool, not a validation tool: forcing a phase the fluid is not actually in returns `NaN` or a non-physical metastable root rather than raising.
+The {py:meth}`encomp.fluids.Fluid.assume_phase` method pins the phase, skipping CoolProp's phase-stability search, which dominates the cost for the HEOS/GERG mixture backends. It is a *speed* tool, not a validation tool: forcing a phase the fluid is not actually in returns `NaN` or a non-physical metastable root rather than raising.
 
 ```python
 # ~100-1000x faster for mixtures, when the phase is known
@@ -518,8 +518,8 @@ Missing or out-of-range results surface as `NaN` (for a numpy magnitude) or `nul
 
 ### Parallel evaluation with Polars
 
-{py:class}`encomp.fluids.Fluid` properties also accept `Quantity`-wrapped Polars expressions (`pl.Expr`) and return a `pl.Expr`. Independent property nodes in one `select` / `with_columns` / `collect()` (eager or lazy) are evaluated *in parallel* by the `encomp.coolprop` plugin -- a native Rust extension over the CoolProp C-API that runs without holding the GIL.
-`pl.Expr` (lazy) inputs are evaluated exclusively through this plugin (there is no `map_batches` fallback). Eager `float` / numpy / `pl.Series` inputs use the Python CoolProp path, except arrays of at least `EAGER_PLUGIN_MIN_SIZE` (1000) elements, which also route through the plugin (faster and lower peak memory; results are bit-identical when the installed `coolprop` matches the bundled build, 8.0.0).
+{py:class}`encomp.fluids.Fluid` properties also accept `Quantity`-wrapped Polars expressions (`pl.Expr`) and return a `pl.Expr`. Independent property nodes in one `select` / `with_columns` / `collect()` (eager or lazy) are evaluated in parallel by the `encomp.coolprop` plugin -- a native Rust extension over the CoolProp C-API that runs without holding the GIL.
+`pl.Expr` (lazy) inputs are evaluated exclusively through this plugin (there is no `map_batches` fallback). Eager `float` / numpy / `pl.Series` inputs use the Python CoolProp path, except arrays of at least `EAGER_PLUGIN_MIN_SIZE` (1000) elements, which also route through the plugin (results are bit-identical when the installed `coolprop` matches the bundled build, 8.0.0).
 
 ```python
 import polars as pl

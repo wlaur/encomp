@@ -1,6 +1,6 @@
 # encomp
 
-> General-purpose library for *en*gineering *comp*utations, with focus on clean and consistent interfaces.
+> General-purpose library for *en*gineering *comp*utations.
 
 `encomp` is tested on Windows, Linux, and macOS, with Python 3.13 and 3.14.
 
@@ -14,11 +14,11 @@
 
 - **`Fluid` / `Water` / `HumidAir`** (`encomp.fluids`). A quantity-based wrapper over [CoolProp](http://www.coolprop.org): fix a state with two points (three for humid air) and read any property as an attribute. Inputs and outputs are `Quantity` objects, so units are converted and validated automatically.
 
-- **Parallel CoolProp evaluation with Polars** (`encomp.coolprop`). CoolProp properties evaluate as **native Polars expression plugins** written in Rust, so independent properties in one `select` / `with_columns` run in parallel on the Polars thread pool without holding the GIL. This is several times faster than a `map_batches` Python UDF (which serializes on the GIL) and than vectorized `PropsSI`, at roughly half the peak memory. See [Parallel CoolProp evaluation with Polars](#parallel-coolprop-evaluation-with-polars).
+- **Parallel CoolProp evaluation with Polars** (`encomp.coolprop`). CoolProp properties evaluate as native Polars expression plugins written in Rust, so independent properties in one `select` / `with_columns` run in parallel on the Polars thread pool without holding the GIL, unlike a `map_batches` Python UDF, which re-acquires the GIL per batch and serializes. See [Parallel CoolProp evaluation with Polars](#parallel-coolprop-evaluation-with-polars).
 
-- **Symbolic math that understands units** (`encomp.sympy`). Extends [Sympy](https://pypi.org/project/sympy/) with convenience methods for sub- and superscripts and for turning expressions (or whole systems) into NumPy-aware Python functions. Quantities and symbols combine directly.
+- **Symbolic math with units** (`encomp.sympy`). Extends [Sympy](https://pypi.org/project/sympy/) with convenience methods for sub- and superscripts and for turning expressions (or whole systems) into NumPy-aware Python functions. Quantities and symbols combine directly.
 
-- **Serialization and settings out of the box.** `Quantity` fields work as [Pydantic](https://pypi.org/project/pydantic/) model types (JSON round-trip, dimensionality validation), and library behavior is configured from an `.env` file.
+- **Serialization and settings.** `Quantity` fields work as [Pydantic](https://pypi.org/project/pydantic/) model types (JSON round-trip, dimensionality validation), and library behavior is configured from an `.env` file.
 
 The remaining modules (`encomp.gases`, `encomp.conversion`, `encomp.constants`, ...) implement calculations related to process engineering and thermodynamics.
 
@@ -205,7 +205,7 @@ air.search("density")
 air.Dmolar  # 80.73061937328056 mol/m³
 ```
 
-The `Water` subclass (and `Fluid("IF97::Water")`) evaluates steam and water properties with the *IAPWS-IF97* (Industrial Formulation 1997, "IF97") by default — the fast industrial standard. For the higher-accuracy *IAPWS-95* reference formulation, use the HEOS backend explicitly with `Fluid("HEOS::Water", ...)`; the bare name `Fluid("water", ...)` also resolves to HEOS (IAPWS-95).
+The `Water` subclass (and `Fluid("IF97::Water")`) evaluates steam and water properties with the *IAPWS-IF97* (Industrial Formulation 1997, "IF97") by default. For the higher-accuracy *IAPWS-95* reference formulation, use the HEOS backend explicitly with `Fluid("HEOS::Water", ...)`; the bare name `Fluid("water", ...)` also resolves to HEOS (IAPWS-95).
 
 ```python
 from encomp.fluids import Fluid, Water
@@ -224,7 +224,7 @@ Water(H=Q(2800, "kJ/kg"), S=Q(7300, "J/kg/K"))
 ```
 
 Mixtures are given either by fractions folded into the name or by a `composition` dict of mole fractions.
-Pair a composition with `assume_phase` to skip CoolProp's phase-stability search when the phase is already known (a large speedup for the HEOS/GERG mixture backends).
+Pair a composition with `assume_phase` to skip CoolProp's phase-stability search when the phase is already known (that search dominates the cost for the HEOS/GERG mixture backends).
 
 ```python
 from encomp.fluids import Fluid
@@ -246,7 +246,7 @@ HumidAir(P=Q(1, "bar"), T=Q(100, "degC"), R=Q(0.5))
 
 ## Parallel CoolProp evaluation with Polars
 
-CoolProp property evaluation is exposed as **native Polars expression plugins** (Rust, over the CoolProp C-API). Independent property nodes in one `select` / `with_columns` / `collect()` — eager or lazy alike — are evaluated **in parallel on the Polars thread pool, without holding the GIL**. A Python `map_batches` UDF cannot do this: it re-acquires the GIL per batch and serializes.
+CoolProp property evaluation is exposed as native Polars expression plugins (Rust, over the CoolProp C-API). Independent property nodes in one `select` / `with_columns` / `collect()`, eager or lazy, are evaluated in parallel on the Polars thread pool without holding the GIL. A Python `map_batches` UDF re-acquires the GIL per batch and serializes.
 
 `Fluid` properties accept `Quantity`-wrapped Polars expressions (`pl.Expr`) and return a `pl.Expr`:
 
@@ -284,11 +284,11 @@ df.select(
 # dict, and a fixed phase via assume_phase='gas'
 ```
 
-### Why it is fast
+### Implementation
 
-Removing the GIL is necessary but not sufficient: the CoolProp C-API takes a global handle-table lock on every call, so naive per-row calls serialize even in pure Rust. The plugin instead uses the **batched** C-API (`AbstractState_update_and_1_out`): one call per chunk, the handle lock taken once at construction, then the flash loop runs lock-free in C++. Independent chunks and independent property expressions therefore parallelize.
+The GIL is not the only serialization point: the CoolProp C-API takes a global handle-table lock on every call, so per-row calls serialize even in Rust. The plugin uses the batched C-API (`AbstractState_update_and_1_out`): one call per chunk, the handle lock taken once at construction, then the flash loop runs lock-free in C++. Independent chunks and independent property expressions parallelize.
 
-Indicative numbers (CoolProp 8.0, 14-thread pool):
+Benchmarks (CoolProp 8.0, 14-thread pool):
 
 | workload | vs `map_batches` | notes |
 | --- | --- | --- |
@@ -296,7 +296,7 @@ Indicative numbers (CoolProp 8.0, 14-thread pool):
 | 4 independent properties, one `collect()`, 1M rows | ~4.6x | `map_batches` is serial on the GIL; the plugin runs ~4 cores |
 | 8 enthalpy calculations, 1M rows | ~4.9x | ~6 cores vs 1, roughly half the peak memory |
 
-Each `fluid(...)` / `humid_air(...)` is an independent plugin node, so selecting *K* properties of one state runs *K* flashes of it — Polars cannot reuse the shared flash across opaque plugin nodes. Independent properties still parallelize, so this is a statement about total work, not wall-clock. See `encomp/coolprop/README.md` for the full design, thread-safety model, and caveats.
+Each `fluid(...)` / `humid_air(...)` is an independent plugin node, so selecting *K* properties of one state runs *K* flashes of it — Polars cannot reuse the shared flash across opaque plugin nodes. Independent properties still parallelize, so this is total work, not wall-clock. See `encomp/coolprop/README.md` for the design, thread-safety model, and caveats.
 
 ## Symbolic math
 
