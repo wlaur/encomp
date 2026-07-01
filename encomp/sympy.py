@@ -648,6 +648,10 @@ def typeset(x: str | int) -> str:
 
 
 class Symbol(sp.Symbol):
+    """A ``sympy.Symbol`` extended with convenience methods for typeset sub- and
+    superscripts (:meth:`_`, :meth:`__`, :meth:`decorate`). Each method returns a new
+    symbol with the same assumptions as the original."""
+
     def decorate(
         self,
         prefix: str | int | None = None,
