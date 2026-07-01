@@ -42,10 +42,7 @@ from encomp.units import Quantity as Q
 # converts 1 bar to kPa, displays it in case it's the cell output
 Q(1, "bar").to("kPa")
 
-# the magnitude and unit are passed as separate arguments
-Q(0.1, "MPa").to("bar")
-
-# list and tuple inputs are converted to np.ndarray
+# list inputs are converted to np.ndarray
 Q([1, 2, 3], "bar") * 2  # [2, 4, 6] bar
 
 # in case no unit is specified, the quantity is dimensionless
