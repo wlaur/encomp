@@ -4,6 +4,8 @@ The ``fluid`` / ``humid_air`` API mirrors :mod:`encomp.fluids`: a fluid is ident
 by its ``name`` (with the backend folded in, e.g. ``"HEOS::CarbonDioxide"``), a mixture
 by a ``composition`` dict, and a fixed phase by ``assume_phase``.
 
+.. code-block:: python
+
     import polars as pl
     from encomp import coolprop as cp
 

@@ -66,6 +66,7 @@ dev = [
     "pytest-asyncio",
     "coverage",
     "Sphinx",
+    "myst-parser",
     "nbsphinx",
     "furo",
     "sphinx-inline-tabs",

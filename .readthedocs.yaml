@@ -15,7 +15,12 @@ build:
       post_create_environment:
          - pip install uv
       post_install:
-         - UV_PROJECT_ENVIRONMENT=$READTHEDOCS_VIRTUALENV_PATH uv sync --all-extras --all-groups --link-mode=copy
+         # --no-install-project: install the dependencies + doc tooling (Sphinx, myst-parser,
+         # nbsphinx, ...) but do NOT build the Rust extension. conf.py adds the repo root to
+         # sys.path, and importing the encomp modules for autodoc never loads the compiled
+         # plugin (Polars loads it lazily only when an expression is evaluated), so the docs
+         # build without a Rust toolchain or the bundled CoolProp library.
+         - UV_PROJECT_ENVIRONMENT=$READTHEDOCS_VIRTUALENV_PATH uv sync --all-extras --all-groups --no-install-project --link-mode=copy
 
 python:
    install: []

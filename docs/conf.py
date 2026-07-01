@@ -36,6 +36,7 @@ release = __version__
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
+    "myst_parser",  # Markdown source (the docs are Markdown, not reStructuredText)
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
     "numpydoc",
@@ -50,6 +51,31 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx_autodoc_typehints",
 ]
+
+# The documentation is written in Markdown (parsed by MyST); the README at the repo root is
+# the single source of truth and is included verbatim into the landing page. nbsphinx still
+# registers the .ipynb suffix for the example notebooks.
+source_suffix = {
+    ".md": "markdown",
+}
+
+# MyST features used by the docs: ::: colon fences (so autodoc directives can live in .md via
+# {eval-rst}), $...$ / $$...$$ math, and definition/field lists.
+myst_enable_extensions = [
+    "colon_fence",
+    "deflist",
+    "fieldlist",
+    "dollarmath",
+    "substitution",
+]
+
+# generate anchors for headings h1-h3 so in-page Markdown links like
+# [...](#parallel-coolprop-evaluation-with-polars) resolve
+myst_heading_anchors = 3
+
+# prefix section labels with the document name so the README (included into index.md) and the
+# usage guide can share section titles ("The Fluid class", ...) without duplicate-label warnings
+autosectionlabel_prefix_document = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
