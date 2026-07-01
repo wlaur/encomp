@@ -92,7 +92,17 @@ def get_args(e: sp.Basic) -> list[str]:
         Sorted list of identifiers for each free symbol
     """
 
-    return sorted(map(to_identifier, e.free_symbols))
+    symbols = e.free_symbols
+    identifiers = sorted(map(to_identifier, symbols))
+    # to_identifier is a lossy per-symbol mapping, so two DISTINCT symbols can collapse to the
+    # same identifier (e.g. a bare keyword "lambda" and its twin "lambda_"). Refuse rather than
+    # silently emit a lambda with a duplicate parameter that merges the two symbols.
+    if len(set(identifiers)) != len(symbols):
+        raise ValueError(
+            f"Symbols in {e} map to colliding identifiers {identifiers}; "
+            "rename the symbols so their to_identifier() forms are distinct"
+        )
+    return identifiers
 
 
 def recursive_subs(e: sp.Basic, replacements: list[tuple[sp.Symbol, sp.Basic]]) -> sp.Basic:
@@ -366,6 +376,16 @@ def get_lambda_matrix(M: sp.MutableDenseMatrix) -> tuple[str, list[str]]:
     tuple[str, list[str]]
         Python source code for the function and a list of parameters
     """
+
+    # catch identifier collisions across the WHOLE matrix up front: a per-cell get_lambda only
+    # sees its own symbols, but two symbols in different cells could collapse to one identifier
+    # and silently merge (the args set below would dedupe them without a duplicate-param error)
+    matrix_symbols = cast("set[sp.Symbol]", M.free_symbols)
+    if len({to_identifier(s) for s in matrix_symbols}) != len(matrix_symbols):
+        raise ValueError(
+            "Symbols in the matrix map to colliding identifiers; "
+            "rename them so their to_identifier() forms are distinct"
+        )
 
     args = set()
 

@@ -2,6 +2,7 @@ import keyword
 from typing import Any, cast
 
 import numpy as np
+import pytest
 
 from ..sympy import Symbol, get_args, get_function, get_lambda_matrix, sp, symbols, to_identifier
 from ..units import Quantity as Q
@@ -115,6 +116,30 @@ def test_get_lambda_matrix_arg_order() -> None:
     values = {"a": 1.0, "b": 0.0, "c": 0.0, "d": 0.0, "e": 0.0}  # row 0 = a - 10b = 1
     result = fcn(*[values[p] for p in params])
     assert float(np.asarray(result).ravel()[0]) == 1.0
+
+
+def test_get_lambda_rejects_colliding_identifiers() -> None:
+    # to_identifier is a lossy per-symbol map, so distinct symbols CAN collapse to one
+    # identifier (a bare keyword "lambda" -> "lambda_" collides with a symbol named "lambda_").
+    # get_lambda / get_lambda_matrix must raise rather than emit a lambda that silently merges
+    # the two symbols into one parameter.
+    # get_lambda's return type uses a bare Callable (suppressed module-wide in sympy.py), so
+    # reach it via cast to avoid a partially-unknown-type error in this strict-checked test
+    from .. import sympy as _sympy
+
+    get_lambda = cast("Any", _sympy).get_lambda
+    sp_any = cast(Any, sp)
+    lam, lam_ = sp_any.Symbol("lambda"), sp_any.Symbol("lambda_")
+
+    with pytest.raises(ValueError, match="colliding identifiers"):
+        get_lambda(lam + 1000 * lam_, to_str=True)
+
+    with pytest.raises(ValueError, match="colliding identifiers"):
+        get_lambda_matrix(sp_any.Matrix([[lam], [lam_]]))
+
+    # a keyword symbol on its own is fine -- the guard only trips on an actual collision
+    _, params = get_lambda(lam + 1, to_str=True)
+    assert params == ["lambda_"]
 
 
 def test_get_function() -> None:
