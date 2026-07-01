@@ -7,11 +7,14 @@
 //!  * CoolProp's heavy math runs on a per-handle AbstractState and is pure --
 //!    safe to run from many threads at once AS LONG AS each thread owns its own
 //!    handle (a state caches its last flash; never share one across threads).
-//!  * The only shared mutable state in the C-API is the global handle table
-//!    (touched by factory/free) and one-time fluid-library init. We serialize
-//!    ONLY handle create/destroy with a narrow Mutex; the hot path
-//!    (update_and_1_out) takes NO lock, so it parallelizes. CoolProp 8.0 hardened
-//!    internal thread-safety, so the narrow lock is belt-and-suspenders.
+//!  * The shared mutable state in the C-API is the global handle table (touched
+//!    by factory/free) and CoolProp's lazy init (process-global fluid library +
+//!    index maps, and per-backend/fluid init such as TTSE/BICUBIC tables). We
+//!    serialize handle create/destroy with a narrow Mutex, and the per-config
+//!    lazy init with a warmup registry (`ensure_warmed_*`): the first flash of
+//!    each (backend, fluid) runs once single-threaded before the pool flashes it.
+//!    The hot path (update_and_1_out) takes NO lock, so it parallelizes. CoolProp
+//!    8.0 hardened internal thread-safety, so the locks are belt-and-suspenders.
 //!  * Every call passes its OWN errcode + message buffer (caller-owned, on the
 //!    stack), so error reporting is not a shared-state hazard.
 //!
@@ -28,8 +31,9 @@
 //! on every block, so unsafe cannot be added without a justification.
 
 use libloading::Library;
+use std::collections::HashSet;
 use std::ffi::{c_char, c_double, c_long, CString};
-use std::sync::Mutex;
+use std::sync::{Mutex, RwLock};
 
 const BUFLEN: c_long = 1024;
 
@@ -88,6 +92,9 @@ pub struct CoolProp {
     /// NARROW lock: guards ONLY handle create/destroy (the shared handle table),
     /// never the evaluation path -- so concurrent flashing stays parallel.
     handle_lock: Mutex<()>,
+    /// keys ("F\0<backend>\0<fluid>", or "HA") already warmed up. Read-locked on the hot
+    /// path (concurrent, no contention once warm); write-locked only for a first-time warmup.
+    warmed: RwLock<HashSet<String>>,
 }
 
 impl CoolProp {
@@ -130,6 +137,7 @@ impl CoolProp {
             get_input_pair_index,
             ha_props_si,
             handle_lock: Mutex::new(()),
+            warmed: RwLock::new(HashSet::new()),
         })
     }
 
@@ -153,17 +161,51 @@ impl CoolProp {
         Ok(i)
     }
 
-    /// Run CoolProp's process-global lazy inits (fluid library, index maps, flash machinery)
-    /// ONCE here, single-threaded, before the thread pool flashes. Best-effort: an error is
-    /// ignored (real evaluation surfaces its own), the first flash then just pays the init.
-    pub fn warmup(&self) {
-        let _ = (|| -> Result<(), CpError> {
-            let mut st = self.state("HEOS", "Water")?;
-            let okey = self.param_index("DMASS")?;
-            let pair = self.input_pair_index("PT_INPUTS")?;
+    /// Warm up ONE (backend, fluid) config, lazily. The FIRST call (any config) also runs
+    /// CoolProp's process-global lazy inits (fluid library, index maps, flash machinery);
+    /// every distinct config additionally pays one warmup flash so its backend-specific init
+    /// -- notably TTSE/BICUBIC table building and REFPROP globals -- runs ONCE, single-threaded,
+    /// before the thread pool flashes that config. A backend/fluid that is never used is never
+    /// warmed (so an IF97-only run never touches HEOS, and vice versa). Best-effort: the warmup
+    /// flash's own error is ignored -- triggering the init is the point, and a genuinely invalid
+    /// config surfaces its error from the real evaluation.
+    pub fn ensure_warmed_fluid(&self, backend: &str, fluid: &str) {
+        let key = format!("F\0{backend}\0{fluid}");
+        self.ensure_warmed(&key, || {
+            if let Ok(mut st) = self.state(backend, fluid) {
+                if let (Ok(pair), Ok(okey)) = (self.input_pair_index("PT_INPUTS"), self.param_index("DMASS")) {
+                    let mut out = [0.0f64];
+                    let _ = st.update_and_1_out(pair, &[101_325.0], &[300.0], okey, &mut out);
+                }
+            }
+        });
+    }
+
+    /// One-time warmup for the humid-air (HAPropsSI) path, so its global init runs
+    /// single-threaded before the pool loops HAPropsSI. Keyed once (no per-fluid variation).
+    pub fn ensure_warmed_humid_air(&self) {
+        self.ensure_warmed("HA", || {
             let mut out = [0.0f64];
-            st.update_and_1_out(pair, &[101_325.0], &[300.0], okey, &mut out)
-        })();
+            let _ = self.ha_props_si_batch("W", "P", &[101_325.0], "T", &[293.15], "R", &[0.5], &mut out);
+        });
+    }
+
+    /// Run `warm` exactly once for `key`. Fast path: a shared read lock + membership test, so
+    /// once a key is warm all threads pass concurrently. Slow path (first time per key): the
+    /// write lock is held ACROSS `warm`, so the first-ever warmup serialises CoolProp's global
+    /// init, and each new config's backend init completes before any parallel flash of it. No
+    /// re-entrancy (warm never calls back here) and no lock-order cycle (warm takes only the
+    /// separate handle_lock), so this cannot deadlock.
+    fn ensure_warmed(&self, key: &str, warm: impl FnOnce()) {
+        if self.warmed.read().unwrap().contains(key) {
+            return;
+        }
+        let mut warmed = self.warmed.write().unwrap();
+        if warmed.contains(key) {
+            return;
+        }
+        warm();
+        warmed.insert(key.to_string());
     }
 
     /// Batched humid air: loops the scalar HAPropsSI (no AbstractState handle, no

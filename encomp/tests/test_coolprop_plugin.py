@@ -104,6 +104,93 @@ def test_fluid_assume_phase() -> None:
     assert np.allclose(out["d"].to_numpy(), ref, rtol=RTOL)
 
 
+# Worker for the cold-start parallel warmup test below. Run in a FRESH process (via
+# subprocess) so CoolProp's process-global init and every (backend, fluid)'s backend-specific
+# init actually happen from cold, concurrently, under the plugin's per-config warmup.
+_COLD_PARALLEL_WORKER = r"""
+import warnings
+warnings.filterwarnings("ignore")
+import numpy as np, polars as pl
+from encomp import coolprop as cp
+import CoolProp.CoolProp as CP
+
+rng = np.random.default_rng(0)
+n = 300  # the warmup race is on concurrent first-use of distinct configs, not row count
+P = rng.uniform(10e5, 50e5, n)
+T = rng.uniform(300.0, 400.0, n)
+Ta = rng.uniform(285.0, 320.0, n)
+Pa = np.full(n, 101325.0)
+Rh = rng.uniform(0.1, 0.9, n)
+df = pl.DataFrame({"P": P, "T": T, "Pa": Pa, "Ta": Ta, "R": Rh})
+
+# many DISTINCT (backend, fluid) first-uses + humid air, ALL in one parallel select so their
+# warmups race; humid-air inputs are aliased to their HAPropsSI names (Pa->P, Ta->T)
+exprs = {
+    "if97": cp.fluid("DMASS", "P", "T", name="IF97::Water"),
+    "heos": cp.fluid("DMASS", "P", "T", name="HEOS::Water"),
+    "co2": cp.fluid("DMASS", "P", "T", name="HEOS::CarbonDioxide"),
+    "n2": cp.fluid("DMASS", "P", "T", name="HEOS::Nitrogen"),
+    "o2": cp.fluid("HMASS", "P", "T", name="HEOS::Oxygen"),
+    "ch4": cp.fluid("HMASS", "P", "T", name="HEOS::Methane"),
+    "mix": cp.fluid("DMASS", "P", "T", name="HEOS::CO2&O2", composition={"CO2": 0.7, "O2": 0.3}),
+    "meg": cp.fluid("DMASS", "P", "T", name="INCOMP::MEG[0.5]"),
+    "ha_w": cp.humid_air("W", pl.col("Pa").alias("P"), pl.col("Ta").alias("T"), "R"),
+    "ha_h": cp.humid_air("Hha", pl.col("Pa").alias("P"), pl.col("Ta").alias("T"), "R"),
+}
+out = df.select(**exprs)
+
+refs = {
+    "if97": CP.PropsSI("DMASS", "P", P, "T", T, "IF97::Water"),
+    "heos": CP.PropsSI("DMASS", "P", P, "T", T, "HEOS::Water"),
+    "co2": CP.PropsSI("DMASS", "P", P, "T", T, "HEOS::CarbonDioxide"),
+    "n2": CP.PropsSI("DMASS", "P", P, "T", T, "HEOS::Nitrogen"),
+    "o2": CP.PropsSI("HMASS", "P", P, "T", T, "HEOS::Oxygen"),
+    "ch4": CP.PropsSI("HMASS", "P", P, "T", T, "HEOS::Methane"),
+    "meg": CP.PropsSI("DMASS", "P", P, "T", T, "INCOMP::MEG[0.5]"),
+    "ha_w": CP.HAPropsSI("W", "P", Pa, "T", Ta, "R", Rh),
+    "ha_h": CP.HAPropsSI("Hha", "P", Pa, "T", Ta, "R", Rh),
+}
+st = CP.AbstractState("HEOS", "CO2&O2")
+st.set_mole_fractions([0.7, 0.3])
+mix = np.empty(n)
+for i in range(n):
+    st.update(CP.PT_INPUTS, P[i], T[i])
+    mix[i] = st.rhomass()
+refs["mix"] = mix
+
+bad = []
+for k, ref in refs.items():
+    got = out[k].to_numpy().astype(float)
+    ref = np.asarray(ref, dtype=float)
+    if not np.array_equal(np.isfinite(got), np.isfinite(ref)):
+        bad.append(k + ": nan-mask differs")
+        continue
+    m = np.isfinite(got) & np.isfinite(ref)
+    rel = np.abs(got[m] - ref[m]) / np.maximum(np.abs(ref[m]), 1e-9)
+    if rel.size and rel.max() > 1e-4:
+        bad.append(k + ": max rel " + format(rel.max(), ".2e"))
+if bad:
+    print("FAIL", bad)
+    raise SystemExit(1)
+print("OK")
+"""
+
+
+def test_cold_start_parallel_warmup() -> None:
+    # from a COLD process, evaluate many distinct (backend, fluid) configs + humid air in ONE
+    # parallel select so their first-use warmups happen concurrently. This exercises the
+    # per-config lazy warmup: process-global init and each backend's init must run correctly
+    # (once, single-threaded) under Polars' thread pool. Several fresh runs -- a warmup race
+    # would be probabilistic, not deterministic.
+    import subprocess
+    import sys
+
+    for i in range(2):
+        r = subprocess.run([sys.executable, "-c", _COLD_PARALLEL_WORKER], capture_output=True, text=True)
+        assert r.returncode == 0, f"cold-start parallel run {i} failed:\nSTDOUT:\n{r.stdout}\nSTDERR:\n{r.stderr}"
+        assert "OK" in r.stdout
+
+
 def test_fluid_assume_phase_changes_value() -> None:
     # a DISCRIMINATING state: 1 bar, 110 C -- auto-phase water is GAS (steam, ~0.57 kg/m3).
     # Forcing "liquid" must return the metastable subcooled-liquid root (~950 kg/m3), i.e. a

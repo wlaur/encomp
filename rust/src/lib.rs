@@ -1,9 +1,10 @@
 //! CoolProp property evaluation as a native Polars expression plugin, on the
 //! CoolProp C-API bindings in `coolprop.rs`. Independent property nodes run in
 //! parallel on Polars' thread pool (no GIL), via the BATCHED C-API (one
-//! AbstractState_update_and_1_out per chunk) with only handle create/destroy
-//! locked. Per chunk the state is built once (composition + assumed phase set up
-//! front), then a single batched flash runs over the whole chunk.
+//! AbstractState_update_and_1_out per chunk) with only handle create/destroy and
+//! the first-use per-config warmup locked. Per chunk the state is built once
+//! (composition + assumed phase set up front), then a single batched flash runs
+//! over the whole chunk.
 
 mod coolprop;
 
@@ -51,15 +52,15 @@ fn coolprop(lib_path: &str) -> PolarsResult<&'static CoolProp> {
     if let Some(c) = CP.get() {
         return Ok(c); // fast path: already initialised, no lock
     }
-    // double-checked locking: the first caller loads + warms up while the rest block, so
-    // CoolProp's global init runs single-threaded (a plain get/set would let several threads
-    // load-and-warm at once -- the race we avoid).
+    // double-checked locking: the first caller dlopens the lib while the rest block, so the
+    // load happens once (a plain get/set would let several threads load at once). CoolProp's
+    // process-global init is NOT done here -- it is deferred to the first per-config warmup
+    // (CoolProp::ensure_warmed_*), so an unused backend is never warmed.
     let _guard = INIT.lock().unwrap();
     if let Some(c) = CP.get() {
         return Ok(c);
     }
     let c = CoolProp::load(lib_path).map_err(perr)?;
-    c.warmup();
     let _ = CP.set(c);
     Ok(CP.get().unwrap())
 }
@@ -127,6 +128,8 @@ struct EvalKwargs {
 #[polars_expr(output_type_func_with_kwargs = cp_output)]
 fn cp_evaluate(inputs: &[Series], kwargs: EvalKwargs) -> PolarsResult<Series> {
     let cp = coolprop(&kwargs.lib_path)?;
+    // warm THIS (backend, fluid) once, single-threaded, before the parallel flash below
+    cp.ensure_warmed_fluid(&kwargs.backend, &kwargs.fluid);
     let pair = kwargs.input_pair;
     let okey = cp.param_index(&kwargs.output).map_err(perr)?;
     // decide the output precision from the original input dtypes (before the f64 cast)
@@ -184,6 +187,7 @@ struct HaKwargs {
 #[polars_expr(output_type_func_with_kwargs = ha_output)]
 fn ha_evaluate(inputs: &[Series], kwargs: HaKwargs) -> PolarsResult<Series> {
     let cp = coolprop(&kwargs.lib_path)?;
+    cp.ensure_warmed_humid_air(); // one-time HAPropsSI global init, single-threaded
     let out_dtype = output_dtype(
         &inputs.iter().map(|s| s.dtype()).collect::<Vec<_>>(),
         &kwargs.scalar_mask,
