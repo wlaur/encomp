@@ -25,18 +25,19 @@ df.select(
 The API mirrors `encomp.fluids.Fluid`:
 
 - `fluid(output, in1, in2, *, name="IF97::Water", assume_phase=None,
-  composition=None, normalize=True)` — each input names its property (a string, or an
-  expression's output name, e.g. `pl.col("p").alias("P")`); both must be CoolProp
-  state inputs (any pair: PT, PH, PQ, ...). `output` may be any property. The fluid is
-  `name` with the backend folded in (`name="HEOS::CarbonDioxide"`); a mixture is given
-  by fractions in the name (`"HEOS::CO2[0.5]&O2[0.5]"`) or a
-  `composition={species: mole fraction}` dict, and an assumed phase by
-  `assume_phase="gas"` (skips the phase flash, HEOS/GERG only).
+  composition=None)` — each input names its property (a string, or an expression's
+  output name, e.g. `pl.col("p").alias("P")`); both must be CoolProp state inputs (any
+  pair: PT, PH, PQ, ...). `output` may be any property. The fluid is `name` with the
+  backend folded in (`name="HEOS::CarbonDioxide"`); a mixture is given by fractions in the
+  name (`"HEOS::CO2[0.5]&O2[0.5]"`) or a `composition={species: mole fraction}` dict (mole
+  fractions must sum to 1); an incompressible mixture instead carries a single concentration
+  in the name (`"INCOMP::MEG[0.5]"`, on the fluid's own mass/volume basis). An assumed phase
+  is `assume_phase="gas"` (skips the phase flash, HEOS/GERG only).
 - `humid_air(output, in1, in2, in3)` — same naming rule for the three HAPropsSI inputs.
 - `FluidInput` / `HumidAirInput` (state inputs), `FluidParam` / `HumidAirParam` /
   `Backend` / `Phase` / `AssumedPhase` are `Literal`s; `CName` / `Composition` mirror
   `encomp.fluids`. The matching `frozenset`s and `is_*` `TypeIs` predicates are exported
-  too, along with `resolve_fluid_spec` (name → backend/fluids/mole-fractions).
+  too, along with `resolve_fluid_spec` (name → backend/fluids/fractions).
 
 ## Performance (CoolProp 8.0, 14-thread pool)
 
@@ -96,6 +97,10 @@ much slower per call (iterative solver). Still better than the Python path.
 - **Version match**: CoolProp enum integers differ across versions; pin Python
   `coolprop==8.0.0` to match the bundled Rust lib. The plugin resolves parameter
   indices via CoolProp at runtime, never hardcoded.
+- **One property per node (no output batching).** Each `fluid(...)` / `humid_air(...)` is an
+  independent plugin node, so selecting K properties of one state runs K flashes of it —
+  Polars cannot reuse (CSE) the shared flash across opaque plugin nodes. Independent
+  properties still parallelize, so this is about total work, not wall-clock.
 
 ## Build / install
 

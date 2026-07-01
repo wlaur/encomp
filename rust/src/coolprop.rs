@@ -83,6 +83,7 @@ pub struct CoolProp {
     set_fractions: SetFracFn,
     specify_phase: SpecPhaseFn,
     get_param_index: IndexFn,
+    get_input_pair_index: IndexFn,
     ha_props_si: HAPropsSIFn,
     /// NARROW lock: guards ONLY handle create/destroy (the shared handle table),
     /// never the evaluation path -- so concurrent flashing stays parallel.
@@ -106,7 +107,7 @@ impl CoolProp {
         // yield plain `extern "C"` fn pointers that do not borrow `lib`, so `lib`
         // can be moved into `_lib` afterwards and the pointers stay valid for its
         // lifetime.
-        let (factory, free, batch1, set_fractions, specify_phase, get_param_index, ha_props_si) = unsafe {
+        let (factory, free, batch1, set_fractions, specify_phase, get_param_index, get_input_pair_index, ha_props_si) = unsafe {
             (
                 sym!(FactoryFn, b"AbstractState_factory\0"),
                 sym!(FreeFn, b"AbstractState_free\0"),
@@ -114,6 +115,7 @@ impl CoolProp {
                 sym!(SetFracFn, b"AbstractState_set_fractions\0"),
                 sym!(SpecPhaseFn, b"AbstractState_specify_phase\0"),
                 sym!(IndexFn, b"get_param_index\0"),
+                sym!(IndexFn, b"get_input_pair_index\0"),
                 sym!(HAPropsSIFn, b"HAPropsSI\0"),
             )
         };
@@ -125,6 +127,7 @@ impl CoolProp {
             set_fractions,
             specify_phase,
             get_param_index,
+            get_input_pair_index,
             ha_props_si,
             handle_lock: Mutex::new(()),
         })
@@ -138,6 +141,29 @@ impl CoolProp {
             return Err(CpError(format!("unknown parameter {name:?}")));
         }
         Ok(i)
+    }
+
+    pub fn input_pair_index(&self, name: &str) -> Result<c_long, CpError> {
+        let c = cstr(name)?;
+        // SAFETY: `get_input_pair_index` reads a NUL-terminated C string; `c` outlives the call.
+        let i = unsafe { (self.get_input_pair_index)(c.as_ptr()) };
+        if i < 0 {
+            return Err(CpError(format!("unknown input pair {name:?}")));
+        }
+        Ok(i)
+    }
+
+    /// Run CoolProp's process-global lazy inits (fluid library, index maps, flash machinery)
+    /// ONCE here, single-threaded, before the thread pool flashes. Best-effort: an error is
+    /// ignored (real evaluation surfaces its own), the first flash then just pays the init.
+    pub fn warmup(&self) {
+        let _ = (|| -> Result<(), CpError> {
+            let mut st = self.state("HEOS", "Water")?;
+            let okey = self.param_index("DMASS")?;
+            let pair = self.input_pair_index("PT_INPUTS")?;
+            let mut out = [0.0f64];
+            st.update_and_1_out(pair, &[101_325.0], &[300.0], okey, &mut out)
+        })();
     }
 
     /// Batched humid air: loops the scalar HAPropsSI (no AbstractState handle, no
@@ -199,8 +225,10 @@ pub struct State<'a> {
 }
 
 impl State<'_> {
-    /// Set the (mole-basis) mixture composition on this state.
-    pub fn set_mole_fractions(&mut self, fracs: &[f64]) -> Result<(), CpError> {
+    /// Set the composition. Wraps the C-API `AbstractState_set_fractions`, which selects the
+    /// basis per fluid -- mole for the mixture EOS (HEOS/PR/...), and for the incompressible
+    /// backend the fluid's own mass or volume basis -- so one call is correct for every fluid.
+    pub fn set_fractions(&mut self, fracs: &[f64]) -> Result<(), CpError> {
         let mut err: c_long = 0;
         let mut msg = [0 as c_char; BUFLEN as usize];
         // SAFETY: `fracs` ptr + len describe the same slice; `self.handle` is a

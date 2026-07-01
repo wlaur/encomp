@@ -762,11 +762,9 @@ def test_composition() -> None:
     res = pl.DataFrame({"P": [50.0], "T": [350.0]}).select(fe.D.m)
     assert res["D"][0] == approx(float(ref.m), rel=1e-4)
 
-    # normalize=True accepts unnormalised input (50/50 -> 0.5/0.5)
-    fn = Fluid("HEOS", composition={"CO2": 50.0, "O2": 50.0}, P=Q(50.0, "bar"), T=Q(350.0, "degC")).assume_phase(
-        "supercritical_gas"
-    )
-    assert float(fn.D.m) == approx(float(ref.m), rel=1e-9)
+    # a composition that does not sum to 1 is an error (no silent renormalisation)
+    with pytest.raises(ValueError, match="sum to 1"):
+        Fluid("HEOS", composition={"CO2": 50.0, "O2": 50.0}, P=Q(50.0, "bar"), T=Q(350.0, "degC"))
 
     # cannot set composition both in the name and via composition=
     with pytest.raises(ValueError, match="both"):
@@ -798,23 +796,19 @@ def test_assume_phase_if97_noop(caplog: pytest.LogCaptureFixture) -> None:
     assert float(w.D.m) == approx(float(auto.m), rel=1e-9)
 
 
-def test_composition_normalize_warning(caplog: pytest.LogCaptureFixture) -> None:
-    # fractions far from summing to 1 are renormalised, but a warning is emitted
-    with caplog.at_level(logging.WARNING):
-        deviating = (
-            Fluid("HEOS", composition={"CO2": 0.3, "O2": 0.3}, P=Q(50.0, "bar"), T=Q(350.0, "degC"))
-            .assume_phase("supercritical_gas")
-            .D
-        )
+def test_composition_non_unit_sum_raises() -> None:
+    # fractions not summing to 1 are an error at construction (no silent renormalisation)
+    with pytest.raises(ValueError, match="sum to 1"):
+        Fluid("HEOS", composition={"CO2": 0.3, "O2": 0.3}, P=Q(50.0, "bar"), T=Q(350.0, "degC"))
 
-    assert "renormalized" in caplog.text
-    # still correct: 0.3/0.3 normalises to 0.5/0.5
-    ref = (
-        Fluid("HEOS", composition={"CO2": 0.5, "O2": 0.5}, P=Q(50.0, "bar"), T=Q(350.0, "degC"))
-        .assume_phase("supercritical_gas")
-        .D
+    # a small deviation (float rounding) is tolerated and normalised to exactly 1
+    ok = Fluid("HEOS", composition={"CO2": 0.5, "O2": 0.4999999}, P=Q(50.0, "bar"), T=Q(350.0, "degC")).assume_phase(
+        "supercritical_gas"
     )
-    assert float(deviating.m) == approx(float(ref.m), rel=1e-9)
+    ref = Fluid("HEOS", composition={"CO2": 0.5, "O2": 0.5}, P=Q(50.0, "bar"), T=Q(350.0, "degC")).assume_phase(
+        "supercritical_gas"
+    )
+    assert float(ok.D.m) == approx(float(ref.D.m), rel=1e-6)
 
 
 def test_composition_rejects_non_float_fractions() -> None:
@@ -856,3 +850,27 @@ def test_composition_rejects_non_float_fractions() -> None:
     # fractions that cannot be normalised (sum to zero) are rejected
     with pytest.raises(ValueError, match="sum to a positive value"):
         Fluid("HEOS", composition={"CO2": 0.0, "O2": 0.0}, P=Q(50.0, "bar"), T=Q(350.0, "degC"))
+
+
+def test_incompressible_mixture_all_paths_agree() -> None:
+    # regression: an INCOMP concentration mixture (INCOMP::MEG[0.5], ...) used to lose its
+    # concentration on the rust path (expr / large-eager), silently diverging from the
+    # PropsSI scalar/small-eager path. All paths must agree, mass- AND volume-based.
+    assert encomp_coolprop.self_check()
+    for name, temp in [("INCOMP::MEG[0.5]", 300.0), ("INCOMP::MITSW[0.035]", 290.0), ("INCOMP::AEG[0.4]", 300.0)]:
+        pressure = np.full(6, 3e5)
+        temperature = np.linspace(temp - 12.0, temp + 12.0, 6)
+        ref = Fluid(name, P=Q(pressure, "Pa"), T=Q(temperature, "K")).D.m  # small-eager -> PropsSI
+
+        clear_expr_evaluation_cache()
+        expr = (
+            pl.DataFrame({"P": pressure, "T": temperature})
+            .select(Fluid[pl.Expr](name, P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K")).D.m.alias("d"))["d"]
+            .to_numpy()
+        )
+        assert np.asarray(expr, dtype=float) == approx(ref, rel=1e-4), f"expr {name}"
+
+        clear_expr_evaluation_cache()  # large-eager (>= EAGER_PLUGIN_MIN_SIZE) -> plugin
+        big = Fluid(name, P=Q(np.full(1200, 3e5), "Pa"), T=Q(np.full(1200, temp), "K")).D.m
+        small = float(Fluid(name, P=Q(3e5, "Pa"), T=Q(temp, "K")).D.m)
+        assert float(np.asarray(big, dtype=float)[0]) == approx(small, rel=1e-4), f"large-eager {name}"

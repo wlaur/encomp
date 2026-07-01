@@ -37,9 +37,7 @@ _cp: Any = _CoolProp
 
 _LOGGER = logging.getLogger(__name__)
 
-# warn (when normalize=True) if mole fractions sum this far from 1 before renormalizing.
-# Single source for both renorm sites: resolve_fluid_spec (rust path) here and
-# encomp.fluids.Fluid._constant_state (python scalar/small-array path), which imports it.
+# mole fractions may sum this far from 1 (float rounding) before it is an error
 COMPOSITION_SUM_TOLERANCE = 0.01
 
 __all__ = [
@@ -443,10 +441,13 @@ def _phase_from_assumed(assume_phase: AssumedPhase) -> Phase:
 
 
 def _coerce_fraction(species: str, value: object) -> float:
-    # only fixed float fractions are valid (bool is an int subclass -- reject it);
-    # mirrors encomp.fluids.Fluid._coerce_fraction so both layers validate identically.
+    # only fixed float fractions (bool is an int subclass -- reject it)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise TypeError(f"mole fraction for {species!r} must be a float; got {type(value).__name__}.")
+        raise TypeError(
+            f"mole fraction for {species!r} must be a float; per-row varying composition "
+            f"(array / pl.Series / pl.Expr fractions) is not supported -- loop over fixed "
+            f"compositions and build one fluid each. Got {type(value).__name__}."
+        )
     fraction = float(value)
     if not math.isfinite(fraction):
         raise ValueError(f"mole fraction for {species!r} must be finite, got {fraction}")
@@ -458,31 +459,32 @@ def _coerce_fraction(species: str, value: object) -> float:
 def resolve_fluid_spec(
     name: CName,
     composition: Composition | None = None,
-    normalize: bool = True,
 ) -> tuple[str, str, list[float] | None]:
-    """Resolve a CoolProp fluid ``name`` (+ optional explicit ``composition``) into the
-    ``(backend, fluids, mole_fractions)`` the plugin's ``AbstractState`` needs. Mirrors
-    :class:`encomp.fluids.Fluid` (which delegates here for its rust path), so both layers
-    parse names identically.
+    """Resolve a CoolProp ``name`` (+ optional ``composition`` dict) into the
+    ``(backend, fluids, fractions)`` an ``AbstractState`` needs. The single place that parses
+    and validates a fluid name + composition; :class:`encomp.fluids.Fluid` delegates here.
 
-    The backend may be folded into ``name`` (``"IF97::Water"``, ``"HEOS::CO2&O2"``) or,
-    when a ``composition`` dict is given, passed as the bare backend (``"HEOS"``); a name
-    without a backend (``"Water"``, ``"CO2&O2"``) defaults to HEOS. Mole fractions come
-    from ``composition`` (``{species: fraction}``) or from the name
-    (``"HEOS::CO2[0.5]&O2[0.5]"``), renormalised to sum to 1 unless ``normalize=False``.
-    ``mole_fractions`` is ``None`` for a pure fluid.
+    The backend may be folded into ``name`` (``"IF97::Water"``, ``"HEOS::CO2&O2"``) or, with a
+    ``composition`` dict, passed as the bare backend (``"HEOS"``); no backend defaults to HEOS.
+
+    ``fractions`` is ``None`` for a pure fluid. Otherwise its basis is FLUID-SPECIFIC (CoolProp's
+    ``set_fractions`` selects it, the caller never does):
+
+    * a multi-species mixture (HEOS/PR/...) is **mole** fractions that must sum to 1 (a small
+      tolerance absorbs float rounding); a sum further off is an error, not a silent renormalise.
+    * a single-species incompressible concentration (``"INCOMP::MEG[0.5]"``) is an absolute
+      fraction on the fluid's own basis -- **mass** for aqueous solutions (glycols, brines,
+      seawater), **volume** for the volume-specified antifreezes -- and is NOT normalised.
     """
     if composition is not None:
-        # validate + reconcile name with composition exactly like Fluid._init_composition
-        # (the Fluid path validates there before delegating here; the bare cp.fluid path
-        # relies on this block, so the two stay consistent -- e.g. a name and dict that
-        # name different species is an error, not a silent use of the dict).
+        # reconcile the dict against the name (differing species is an error)
         if len(composition) < 2:
             raise ValueError(f"composition requires at least two species, got {list(composition)}")
         if "[" in name:
             raise ValueError(
-                "cannot set the composition both via the fluid name (e.g. 'HEOS::CO2[0.5]&O2[0.5]') "
-                "and the composition= argument; pass only the backend as name (e.g. 'HEOS')"
+                f"cannot set the composition both via the fluid name (got {name!r}) and the "
+                "composition= argument; pass only the backend as name (e.g. 'HEOS'), or drop "
+                "composition= and keep the fractions in the name (e.g. 'HEOS::CO2[0.5]&O2[0.5]')"
             )
         backend = name.split("::", 1)[0] if "::" in name else name
         if backend.upper() == "IF97":
@@ -497,21 +499,25 @@ def resolve_fluid_spec(
         if sum(mole_fractions) <= 0.0:
             raise ValueError(f"composition fractions must sum to a positive value, got {mole_fractions}")
         fractions: list[float] | None = mole_fractions
+        is_concentration = False
     else:
         backend_raw, fluid_str = _cp.extract_backend(name)
         backend = "HEOS" if backend_raw == "?" else backend_raw
         species, fracs = _cp.extract_fractions(fluid_str)
         fluids = "&".join(species)
-        fractions = [float(x) for x in fracs] if len(species) > 1 else None
-    if fractions is not None and normalize:
+        # extract_fractions validates + returns fractions only when the name carries them; a
+        # single species with a fraction is an incompressible concentration (absolute basis).
+        fractions = [float(x) for x in fracs] if fracs else None
+        is_concentration = fractions is not None and len(species) == 1
+    # mixture mole fractions must sum to 1; a concentration is absolute and passes through
+    if fractions is not None and not is_concentration:
         total = sum(fractions)
-        if total:
-            if abs(total - 1.0) > COMPOSITION_SUM_TOLERANCE:
-                _LOGGER.warning(
-                    f"composition fractions sum to {total:.3g}, not 1; they are renormalized. "
-                    "Pass normalize=False to treat a non-unit sum as an error instead."
-                )
-            fractions = [x / total for x in fractions]
+        if abs(total - 1.0) > COMPOSITION_SUM_TOLERANCE:
+            raise ValueError(
+                f"composition fractions must sum to 1, got {total:.6g} for {fluids!r}; "
+                "normalise them yourself (e.g. {species: x / total})."
+            )
+        fractions = [x / total for x in fractions]
     return backend, fluids, fractions
 
 
@@ -523,17 +529,18 @@ def fluid(
     name: CName = "IF97::Water",
     assume_phase: AssumedPhase | None = None,
     composition: Composition | None = None,
-    normalize: bool = True,
 ) -> pl.Expr:
     """A CoolProp fluid property (``output``) as a parallel Polars expression.
 
     Mirrors :class:`encomp.fluids.Fluid`. The fluid is identified by ``name`` with the
     backend folded in (``"HEOS::CarbonDioxide"``, ``"IF97::Water"``; a bare ``"Water"``
     defaults to HEOS/IAPWS-95). A mixture is given either by fractions in the name
-    (``"HEOS::CO2[0.5]&O2[0.5]"``) or a ``composition={species: mole fraction}`` dict
-    (renormalised unless ``normalize=False``). ``assume_phase`` pins the phase, skipping
-    CoolProp's phase-stability search (a speed tool; honoured by HEOS/GERG, ignored by
-    region-explicit backends like IF97).
+    (``"HEOS::CO2[0.5]&O2[0.5]"``) or a ``composition={species: mole fraction}`` dict;
+    mole fractions must sum to 1 (an off-by-more-than-rounding sum is an error). An
+    incompressible mixture instead carries a single concentration in the name
+    (``"INCOMP::MEG[0.5]"``), on the fluid's own basis (see :func:`resolve_fluid_spec`).
+    ``assume_phase`` pins the phase, skipping CoolProp's phase-stability search (a speed
+    tool; honoured by HEOS/GERG, ignored by region-explicit backends like IF97).
 
     Each input identifies its property by NAME -- a string is the property and the
     column read from it; an expression by its output name (``pl.col("P")`` or
@@ -551,7 +558,7 @@ def fluid(
     pair_idx, swap = _resolve_pair(name1, name2)
     a, b = (input2, input1) if swap else (input1, input2)  # canonical order
     a_expr, b_expr = _as_expr(a), _as_expr(b)
-    backend, fluids, mole_fractions = resolve_fluid_spec(name, composition, normalize)
+    backend, fluids, fractions = resolve_fluid_spec(name, composition)
     phase = _phase_from_assumed(assume_phase) if assume_phase is not None else None
     # inputs are passed at their own dtype (the plugin casts to f64 internally); the
     # output dtype preserves the input precision (Float32 in -> Float32 out).
@@ -566,7 +573,7 @@ def fluid(
             "input_pair": pair_idx,
             "output": output,
             "phase": phase,
-            "mole_fractions": mole_fractions,
+            "fractions": fractions,
             "scalar_mask": [_is_scalar(a_expr), _is_scalar(b_expr)],
         },
         is_elementwise=True,

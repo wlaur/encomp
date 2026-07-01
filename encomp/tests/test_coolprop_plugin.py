@@ -7,7 +7,6 @@ CoolProp's PropsSI / HAPropsSI / AbstractState.
 
 from __future__ import annotations
 
-import logging
 from typing import Any, cast
 
 import CoolProp.CoolProp as _CP
@@ -75,12 +74,20 @@ def test_fluid_mixture_composition() -> None:
         ref.append(float(state.rhomass()))
     assert np.allclose(out["d"].to_numpy(), ref, rtol=RTOL)
 
-    # fractions can also be folded into the name; a non-unit composition is renormalised
-    # by default. All three spellings agree.
+    # fractions can also be folded into the name; both spellings agree
     by_name = df.select(d=cp.fluid("DMASS", "P", "T", name="HEOS::CarbonDioxide[0.7]&Oxygen[0.3]"))
     assert np.allclose(by_name["d"].to_numpy(), ref, rtol=RTOL)
-    normed = df.select(d=cp.fluid("DMASS", "P", "T", name="HEOS", composition={"CarbonDioxide": 7.0, "Oxygen": 3.0}))
-    assert np.allclose(normed["d"].to_numpy(), ref, rtol=RTOL)
+
+
+def test_fluid_incompressible_mixture() -> None:
+    # an incompressible mixture carries its concentration in the name (INCOMP::MEG[0.5]); the
+    # basis is fluid-specific -- mass for glycols/brines, volume for the antifreezes -- and
+    # CoolProp's set_fractions picks it, so the plugin matches PropsSI for both bases
+    for name, temp in [("INCOMP::MEG[0.5]", 300.0), ("INCOMP::MITSW[0.035]", 290.0), ("INCOMP::AEG[0.4]", 300.0)]:
+        df = pl.DataFrame({"P": np.full(5, 3e5), "T": np.linspace(temp - 10.0, temp + 10.0, 5)})
+        out = df.select(d=cp.fluid("DMASS", "P", "T", name=name))
+        ref = CP.PropsSI("DMASS", "P", df["P"].to_numpy(), "T", df["T"].to_numpy(), name)
+        assert np.allclose(out["d"].to_numpy(), ref, rtol=RTOL), name
 
 
 def test_fluid_assume_phase() -> None:
@@ -170,12 +177,10 @@ def test_fluid_composition_validation_matches_fluids() -> None:
         cp.fluid("DMASS", "P", "T", name="HEOS", composition={"CO2": -0.7, "O2": 0.3})
 
 
-def test_composition_renormalize_warning(caplog: pytest.LogCaptureFixture) -> None:
-    # the shared resolver (rust / lazy path) warns on a non-unit composition sum, like
-    # the Fluid scalar path -- the warning no longer depends on which path evaluates
-    with caplog.at_level(logging.WARNING):
+def test_composition_non_unit_sum_raises() -> None:
+    # a composition that does not sum to 1 is an error, not a silent renormalisation
+    with pytest.raises(ValueError, match="sum to 1"):
         cp.fluid("DMASS", "P", "T", name="HEOS", composition={"CO2": 0.3, "O2": 0.3})
-    assert "renormalized" in caplog.text
 
 
 def test_humid_air_invalid_output_raises() -> None:

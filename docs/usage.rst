@@ -599,6 +599,10 @@ bit-identical when the installed ``coolprop`` matches the bundled build, 8.0.0).
     # independent CoolProp properties evaluated in parallel across cores
     df.select(w.D.m.alias('rho'), w.H.m.alias('h'), w.S.m.alias('s'))
 
+Each property is a separate plugin node, so selecting *K* properties of one state (as
+above) runs *K* flashes of it -- Polars cannot reuse the shared flash across the opaque
+plugin nodes. They still evaluate in parallel, so this is total work, not wall-clock.
+
 The plugin is also usable directly on any Polars expression, independent of the
 :py:class:`encomp.fluids.Fluid` class (the ``encomp.coolprop`` package):
 

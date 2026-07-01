@@ -11,10 +11,12 @@ use coolprop::{CoolProp, CpError};
 use polars::prelude::*;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 // One loaded libCoolProp per process (lib_path is constant for a session).
 static CP: OnceLock<CoolProp> = OnceLock::new();
+// serialises the one-time load + warmup (see `coolprop`); untouched on the hot path
+static INIT: Mutex<()> = Mutex::new(());
 
 fn perr(e: CpError) -> PolarsError {
     PolarsError::ComputeError(e.0.into())
@@ -47,10 +49,18 @@ fn to_f64(s: &Series) -> PolarsResult<Vec<f64>> {
 
 fn coolprop(lib_path: &str) -> PolarsResult<&'static CoolProp> {
     if let Some(c) = CP.get() {
+        return Ok(c); // fast path: already initialised, no lock
+    }
+    // double-checked locking: the first caller loads + warms up while the rest block, so
+    // CoolProp's global init runs single-threaded (a plain get/set would let several threads
+    // load-and-warm at once -- the race we avoid).
+    let _guard = INIT.lock().unwrap();
+    if let Some(c) = CP.get() {
         return Ok(c);
     }
     let c = CoolProp::load(lib_path).map_err(perr)?;
-    let _ = CP.set(c); // benign race: first writer wins, others reload-and-drop
+    c.warmup();
+    let _ = CP.set(c);
     Ok(CP.get().unwrap())
 }
 
@@ -100,14 +110,14 @@ fn ha_output(input_fields: &[Field], kwargs: HaKwargs) -> PolarsResult<Field> {
 
 #[derive(Deserialize)]
 struct EvalKwargs {
-    lib_path: String,                 // absolute path to libCoolProp (.dylib/.so/.dll)
-    backend: String,                  // "IF97", "HEOS", ...
-    fluid: String,                    // "Water", or a mixture as one string "CO2&O2"
-    input_pair: i64,                  // CoolProp input_pairs index (resolved caller-side)
-    output: String,                   // CoolProp parameter name, e.g. "DMASS"
-    phase: Option<String>,            // CoolProp phase string (assume_phase)
-    mole_fractions: Option<Vec<f64>>, // constant composition (mole fractions)
-    scalar_mask: Vec<bool>,           // per-input: true = length-1 literal (neutral for output dtype)
+    lib_path: String,            // absolute path to libCoolProp (.dylib/.so/.dll)
+    backend: String,             // "IF97", "HEOS", ...
+    fluid: String,               // "Water", or a mixture as one string "CO2&O2"
+    input_pair: i64,             // CoolProp input_pairs index (resolved caller-side)
+    output: String,              // CoolProp parameter name, e.g. "DMASS"
+    phase: Option<String>,       // CoolProp phase string (assume_phase)
+    fractions: Option<Vec<f64>>, // composition/concentration; set_fractions picks the basis per fluid
+    scalar_mask: Vec<bool>,      // per-input: true = length-1 literal (neutral for output dtype)
 }
 
 /// inputs[0], inputs[1] are the two state values already in the canonical order
@@ -134,8 +144,8 @@ fn cp_evaluate(inputs: &[Series], kwargs: EvalKwargs) -> PolarsResult<Series> {
     // state built once per chunk (handle lock held only here), then a lock-free
     // batched flash -> parallel across the independent property expressions.
     let mut st = cp.state(&kwargs.backend, &kwargs.fluid).map_err(perr)?;
-    if let Some(fr) = &kwargs.mole_fractions {
-        st.set_mole_fractions(fr).map_err(perr)?;
+    if let Some(fr) = &kwargs.fractions {
+        st.set_fractions(fr).map_err(perr)?;
     }
     if let Some(ph) = &kwargs.phase {
         st.specify_phase(ph).map_err(perr)?;
