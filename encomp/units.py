@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import math
 import numbers
 import re
 import warnings
@@ -572,7 +573,9 @@ class Quantity(
             exp1 = float(_exp1)
             exp2 = float(_exp2)
 
-            if not np.isclose(exp1, exp2, rtol=rtol, atol=atol):
+            # math.isclose, not np.isclose: this runs on every Quantity construction
+            # and the numpy call costs microseconds per exponent on plain floats
+            if not math.isclose(exp1, exp2, rel_tol=rtol, abs_tol=atol):
                 return False
 
         return True
