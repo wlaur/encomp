@@ -17,6 +17,13 @@ on:
   push:
     tags: ["v*"]
 
+# One in-flight run per ref: pushing a new commit to a PR branch cancels that branch's
+# previous run (frees runners, no stale queue). cancel-in-progress is limited to PRs, so a
+# `v*` tag publish -- which has its own unique ref anyway -- is never cancelled mid-run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   typecheck:
     # static analysis only: deps come from the lockfile, the project itself is NOT
