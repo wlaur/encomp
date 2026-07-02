@@ -23,6 +23,7 @@ by a ``composition`` dict, and a fixed phase by ``assume_phase``.
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 import math
 import sys
@@ -408,6 +409,30 @@ def lib_path() -> str:
     raise RuntimeError(f"bundled CoolProp library ({', '.join(_LIB_NAMES)}) not found in {_HERE}")
 
 
+@lru_cache(maxsize=1)
+def _plugin_path() -> str:
+    """Absolute path to the compiled plugin extension (``_internal.*``).
+
+    ``register_plugin_function`` accepts either the plugin file or its directory, but
+    polars' directory scan (``polars.plugins._resolve_plugin_path``) returns the *first*
+    ``.so`` / ``.dll`` / ``.pyd`` it happens to iterate. This package directory also holds
+    the bundled ``libCoolProp.{so,dll}``, which on Linux/Windows shares a scanned suffix
+    with the plugin -- so the scan can hand polars libCoolProp, which lacks the plugin ABI
+    symbols (``undefined symbol: _polars_plugin_get_version``). On macOS the bundled lib is
+    ``.dylib`` (never scanned), which is why passing the directory only fails off-macOS.
+    Resolve the exact plugin file instead so the bundled lib is never mistaken for it.
+    """
+    spec = importlib.util.find_spec("encomp.coolprop._internal")
+    if spec is not None and spec.origin:
+        return spec.origin
+    # fallback: locate the maturin-built extension by its module stem
+    for pattern in ("_internal*.so", "_internal*.pyd", "_internal*.dll"):
+        hits = sorted(_HERE.glob(pattern))
+        if hits:
+            return str(hits[0])
+    raise RuntimeError(f"compiled encomp.coolprop plugin (_internal.*) not found in {_HERE}")
+
+
 @cache
 def _resolve_pair(name1: str, name2: str) -> tuple[int, bool]:
     # CoolProp's generate_update_pair gives the canonical input_pairs index and
@@ -565,7 +590,7 @@ def fluid(
     # inputs are passed at their own dtype (the plugin casts to f64 internally); the
     # output dtype preserves the input precision (Float32 in -> Float32 out).
     return register_plugin_function(
-        plugin_path=_HERE,
+        plugin_path=_plugin_path(),
         function_name="cp_evaluate",
         args=[a_expr, b_expr],
         kwargs={
@@ -609,7 +634,7 @@ def humid_air(
             )
     e1, e2, e3 = _as_expr(input1), _as_expr(input2), _as_expr(input3)
     return register_plugin_function(
-        plugin_path=_HERE,
+        plugin_path=_plugin_path(),
         function_name="ha_evaluate",
         args=[e1, e2, e3],
         kwargs={
