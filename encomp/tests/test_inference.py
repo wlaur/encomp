@@ -388,43 +388,29 @@ def test_various() -> None:
 
 
 def test_inference_magnitude_type_promotion() -> None:
-    # ISSUE: scalar with units * array with units
-    # Runtime correctly produces ndarray, but static type is inferred as float
-    result1 = Q(3, "m") * Q([1, 2], "m")
-    assert isinstance(result1.m, np.ndarray)  # Runtime: ndarray ✓
-    # Static: Q[Area, float] ✗
+    # a scalar (float-magnitude) quantity combined with an array quantity promotes
+    # the magnitude to the array type, both statically (via the (float, MT_) member
+    # of each overload group) and at runtime
 
-    # ISSUE: dimensional scalar * dimensionless array
-    result2 = Q(1, "kg") * Q([2, 3])
-    assert isinstance(result2.m, np.ndarray)  # Runtime: ndarray ✓
-    # Static: Q[Mass, ndarray] would be correct but currently Any
+    # scalar * array, curated pair
+    assert_type(Q(3, "m") * Q([1, 2], "m"), Q[ut.Area, ut.Numpy1DArray])
 
-    # ISSUE: scalar / array with units
-    result3 = Q(4, "m") / Q([2, 4], "s")
-    assert isinstance(result3.m, np.ndarray)  # Runtime: ndarray ✓
-    # Static: Q[Velocity, float] ✗
+    # dimensional scalar * dimensionless array
+    assert_type(Q(1, "kg") * Q([2, 3]), Q[ut.Mass, ut.Numpy1DArray])
 
-    # ISSUE: dimensional scalar / dimensionless array
-    result4 = Q(4, "m") / Q([2, 4])
-    assert isinstance(result4.m, np.ndarray)  # Runtime: ndarray ✓
-    # Static: Q[Length, float] ✗
+    # scalar / array, curated pair
+    assert_type(Q(4, "m") / Q([2, 4], "s"), Q[ut.Velocity, ut.Numpy1DArray])
 
-    # ISSUE: scalar + array
-    result5 = Q(3) + Q([1, 2])
-    assert isinstance(result5.m, np.ndarray)  # Runtime: ndarray ✓
-    # Static: Q[Dimensionless, float] ✗
+    # dimensional scalar / dimensionless array
+    assert_type(Q(4, "m") / Q([2, 4]), Q[ut.Length, ut.Numpy1DArray])
 
-    result6 = Q(3, "m") + Q([1, 2], "m")
-    assert isinstance(result6.m, np.ndarray)  # Runtime: ndarray ✓
-    # Static: Q[Length, float] ✗
+    # scalar + array
+    assert_type(Q(3) + Q([1, 2]), Q[ut.Dimensionless, ut.Numpy1DArray])
+    assert_type(Q(3, "m") + Q([1, 2], "m"), Q[ut.Length, ut.Numpy1DArray])
 
-    _ = Q(pl.Series([1, 2])) * Q(2)
-    # Runtime behavior varies for polars Series
-    # Static type: Q[Dimensionless, pl.Series]
-
-    _ = Q(pl.Series([1, 2]), "m") / Q(2, "s")
-    # Runtime behavior varies
-    # Static type mismatch
+    # the same promotion for pl.Series magnitudes
+    assert_type(Q(pl.Series([1, 2])) * Q(2), Q[ut.Dimensionless, pl.Series])
+    assert_type(Q(pl.Series([1, 2]), "m") / Q(2, "s"), Q[ut.Velocity, pl.Series])
 
 
 def test_inference_mul_truediv() -> None:
