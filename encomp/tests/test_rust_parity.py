@@ -26,6 +26,27 @@ from encomp.units import Quantity as Q
 # its dynamic functions (PropsSI, ...) do not surface unknown-type errors.
 CP: Any = _CP
 
+
+# skip (not fail) when the plugin binaries simply have not been built in this
+# checkout (fresh clone before `python scripts/build_libcoolprop.py` + `maturin
+# develop`). Present-but-broken binaries still run the tests and fail loudly.
+def _plugin_built() -> bool:
+    from pathlib import Path
+
+    here = Path(encomp_coolprop.__file__).parent
+    has_lib = any(
+        (here / n).exists() for n in ("libCoolProp.dylib", "libCoolProp.so", "CoolProp.dll", "libCoolProp.dll")
+    )
+    return has_lib and bool(list(here.glob("_internal*")))
+
+
+if not _plugin_built():
+    pytest.skip(
+        "encomp.coolprop plugin binaries are not built (run scripts/build_libcoolprop.py + maturin develop)",
+        allow_module_level=True,
+    )
+
+
 # both paths produce Float32; this comfortably allows any float-precision diff
 RTOL = 1e-4
 

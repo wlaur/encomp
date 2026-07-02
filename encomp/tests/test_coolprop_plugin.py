@@ -21,9 +21,43 @@ CP: Any = _CP
 RTOL = 1e-5
 
 
+# skip (not fail) when the plugin binaries simply have not been built in this
+# checkout (fresh clone before `python scripts/build_libcoolprop.py` + `maturin
+# develop`). Present-but-broken binaries still run the tests and fail loudly.
+def _plugin_built() -> bool:
+    from pathlib import Path
+
+    here = Path(cast(Any, cp).__file__).parent
+    has_lib = any(
+        (here / n).exists() for n in ("libCoolProp.dylib", "libCoolProp.so", "CoolProp.dll", "libCoolProp.dll")
+    )
+    return has_lib and bool(list(here.glob("_internal*")))
+
+
+if not _plugin_built():
+    pytest.skip(
+        "encomp.coolprop plugin binaries are not built (run scripts/build_libcoolprop.py + maturin develop)",
+        allow_module_level=True,
+    )
+
+
+def _bundled_lib_expected_version() -> str:
+    # the bundled libCoolProp is built at the LOWER BOUND of the coolprop requirement
+    # (scripts/build_libcoolprop.py derives its git tag from the same bound); read it
+    # from the installed package metadata so this also holds for installed wheels
+    import importlib.metadata
+    import re
+
+    requires = importlib.metadata.requires("encomp") or []
+    requirement = next(r for r in requires if r.startswith("coolprop"))
+    match = re.search(r">=\s*([\w.]+)", requirement)
+    assert match, f"no lower bound in the coolprop requirement: {requirement!r}"
+    return match.group(1)
+
+
 def test_self_check_version_and_lib_path() -> None:
     assert cp.self_check()
-    assert cp.lib_version() == "8.0.0"
+    assert cp.lib_version() == _bundled_lib_expected_version()
     assert cp.lib_path().endswith((".dylib", ".so", ".dll"))
 
 
