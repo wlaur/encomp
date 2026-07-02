@@ -184,6 +184,14 @@ _PHASE_IGNORING_BACKENDS = frozenset({"IF97"})
 # paths are verified to agree on dtype, value, and NaN/inf handling (test_fluids).
 EAGER_PLUGIN_MIN_SIZE = 1000
 
+# Caches the CONSTRUCTED pl.Expr per (fluid config, output, input-expr digests), so
+# repeated evaluations of the same property return the IDENTICAL expression object.
+# That object identity is the point: callers that deduplicate expressions by id()
+# (e.g. DAG builders that level-batch shared nodes into with_columns stages) see one
+# node instead of many. Polars' own CSE is no help here -- it never touches plugin
+# expressions (measured: duplicate plugin nodes each run their own flash, whether
+# they are the same object or structurally identical fresh ones; plain expressions
+# in the same plan do get CSE'd).
 _EXPR_EVALUATION_CACHE_MAX_SIZE = 1024
 _EXPR_EVALUATION_CACHE: OrderedDict[tuple[Any, ...], pl.Expr] = OrderedDict()
 _EXPR_EVALUATION_CACHE_LOCK = Lock()
