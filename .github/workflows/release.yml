@@ -95,7 +95,19 @@ jobs:
     environment: pypi               # configure the Trusted Publisher against this env
     permissions:
       id-token: write               # OIDC -> PyPI; no API token/secret is used
+      contents: read                # checkout below reads pyproject.toml to guard the tag
     steps:
+      - uses: actions/checkout@v4
+      - name: Verify the tag matches the pyproject version
+        # the wheels carry the version from pyproject.toml; refuse to publish under a tag
+        # that disagrees (e.g. tagging v1.5.1 while pyproject still says 1.5.0)
+        run: |
+          version=$(grep -m1 '^version' pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match pyproject version $version (expected v$version)"
+            exit 1
+          fi
+          echo "tag $GITHUB_REF_NAME matches pyproject version $version"
       - uses: actions/download-artifact@v4
         with:
           path: dist
