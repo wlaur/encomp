@@ -88,6 +88,15 @@ def main() -> None:
         if tuple(int(p) for p in target.split(".")) < (10, 15):
             target = "10.15"
         cmake_args.append(f"-DCMAKE_OSX_DEPLOYMENT_TARGET={target}")
+    if sys.platform == "win32":
+        # Minimal Windows images (e.g. windows/servercore:ltsc2019) ship the OS UCRT but not
+        # the VC++ redistributable, and CPython provides only vcruntime140.dll -- so the C++
+        # CoolProp.dll's msvcp140.dll dependency is unmet there and the DLL fails to load.
+        # Statically link the MSVC runtime into it (CoolProp's own /MT switch) so the wheel is
+        # self-contained; the linker keeps only the runtime code actually used (roughly +1 MB on
+        # a ~10 MB DLL), it does not embed the whole msvcp140.dll. The Rust plugin .pyd needs
+        # only vcruntime140.dll, which ships with every CPython, so it stays on the dynamic CRT.
+        cmake_args.append("-DCOOLPROP_MSVC_STATIC=ON")
     run(*cmake_args, cwd=build)
     run("cmake", "--build", ".", "--config", "Release", "-j", "4", cwd=build)
 
