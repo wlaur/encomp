@@ -33,8 +33,8 @@ jobs:
     name: typecheck (pyright + pyrefly)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v8
         with:
           python-version: "3.13"
       - run: uv sync --locked --no-install-project
@@ -54,13 +54,13 @@ jobs:
           - macos-14           # macOS arm64
           - windows-latest     # Windows x86_64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.21.3
         with:
           package-dir: .
           output-dir: wheelhouse
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels-${{ matrix.os }}
           path: wheelhouse/*.whl
@@ -76,10 +76,10 @@ jobs:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-13, macos-14, windows-latest]
         python: ["3.13", "3.14"]
     steps:
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: wheelhouse
           pattern: wheels-*
@@ -104,7 +104,7 @@ jobs:
       id-token: write               # OIDC -> PyPI; no API token/secret is used
       contents: read                # checkout below reads pyproject.toml to guard the tag
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Verify the tag matches the pyproject version
         # the wheels carry the version from pyproject.toml; refuse to publish under a tag
         # that disagrees (e.g. tagging v1.5.1 while pyproject still says 1.5.0)
@@ -115,7 +115,7 @@ jobs:
             exit 1
           fi
           echo "tag $GITHUB_REF_NAME matches pyproject version $version"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           pattern: wheels-*
