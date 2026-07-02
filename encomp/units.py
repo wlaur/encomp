@@ -1018,6 +1018,21 @@ class Quantity(
                 f"Cannot convert {self.units} (dimensionality {current_name}) to {unit} (dimensionality {new_name})"
             )
 
+        # the reverse direction: pint happily scale-converts an absolute temperature
+        # to a delta unit (K -> delta_degC), silently reinterpreting an absolute
+        # temperature as a difference (and changing the dimensionality type, which
+        # to() must preserve). Require the explicit asdim() escape hatch instead.
+        if (
+            not self._is_temperature_difference
+            and self._is_temperature_difference_unit(unit)
+            and self.dimensionality == unit.dimensionality
+        ):
+            raise DimensionalityTypeError(
+                f"Cannot convert {self.units} (dimensionality {self.dt.__name__}) to {unit} "
+                "(dimensionality TemperatureDifference). Use .asdim(TemperatureDifference) "
+                "to explicitly reinterpret an absolute temperature as a difference"
+            )
+
     def _get_magnitude_type_safe(self, mt: type[MT]) -> type[MT]:
         # fall back to the source instance magnitude type in case
         # unsupported magnitudes are used, e.g. sp.Symbol
@@ -1091,13 +1106,10 @@ class Quantity(
 
     def ito(self, unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number]) -> None:
         # NOTE: this method cannot convert the dimensionality type
+        # (temperature <-> temperature difference is refused by
+        # _check_temperature_compatibility in both directions)
         valid_unit = self._to_unit(unit)
         self._check_temperature_compatibility(valid_unit)
-
-        if self._is_temperature_difference_unit(valid_unit) and not self._is_temperature_difference:
-            raise ValueError(
-                f"Cannot convert {self} ({type(self)}) to {valid_unit} inplace, use qty_converted = qty.to(...) instead"
-            )
 
         # it's not safe to convert units as int, the
         # user will have to convert back to int if necessary
@@ -1706,18 +1718,9 @@ class Quantity(
     def __sub__(
         self: Quantity[Temperature, MT], other: Quantity[TemperatureDifference, MT]
     ) -> Quantity[Temperature, MT]: ...
-    @overload
-    def __sub__(
-        self: Quantity[TemperatureDifference, float], other: Quantity[Temperature, MT_]
-    ) -> Quantity[Temperature, MT_]: ...
-    @overload
-    def __sub__(
-        self: Quantity[TemperatureDifference, MT], other: Quantity[Temperature, float]
-    ) -> Quantity[Temperature, MT]: ...
-    @overload
-    def __sub__(
-        self: Quantity[TemperatureDifference, MT], other: Quantity[Temperature, MT]
-    ) -> Quantity[Temperature, MT]: ...
+    # NOTE: TemperatureDifference - Temperature is intentionally NOT defined
+    # (physically not a temperature; pint refuses it too) -- only T ± ΔT, ΔT + T
+    # and T - T are meaningful
     @overload
     def __sub__(
         self: Quantity[Temperature, MT], other: Quantity[Temperature, MT]
@@ -1735,10 +1738,9 @@ class Quantity(
             if not isinstance(other, Quantity):
                 raise e
 
-            self_is_temp_or_diff_temp = self.check(Temperature) or self.check(TemperatureDifference)
-            other_is_temp_or_diff_temp = other.check(Temperature) or other.check(TemperatureDifference)
-
-            if self_is_temp_or_diff_temp and other_is_temp_or_diff_temp:
+            # only Temperature - TemperatureDifference is meaningful here; the
+            # reverse (ΔT - T) is not a temperature and stays an error
+            if self.check(Temperature) and other.check(TemperatureDifference):
                 return self._temperature_difference_add_sub(other, "sub")
 
             raise e
@@ -1811,8 +1813,11 @@ class Quantity(
 
         try:
             self.check_compatibility(cast(Any, other))
-        except DimensionalityTypeError as e:
-            raise DimensionalityComparisonError(f"Cannot compare {self} with {other}") from e
+        except DimensionalityTypeError:
+            # Python convention: == across incomparable operands answers False rather
+            # than raising (the ordering comparisons DO raise -- no answer is correct
+            # there). hash() is keyed on root units, so the eq/hash contract holds.
+            return False
 
         if isinstance(other, (float, int)):
             other = Quantity(other, "dimensionless")
@@ -1882,8 +1887,9 @@ class Quantity(
 
         try:
             self.check_compatibility(cast(Any, other))
-        except DimensionalityTypeError as e:
-            raise DimensionalityComparisonError(f"Cannot compare {self} with {other}") from e
+        except DimensionalityTypeError:
+            # mirror __eq__: incomparable operands are simply not equal
+            return True
 
         if isinstance(other, (float, int)):
             other = Quantity(other, "dimensionless")
@@ -1902,6 +1908,24 @@ class Quantity(
         ret = m != other_m
 
         return ret
+
+    def _ordering_comparison(
+        self,
+        other: Quantity[Any, Any] | float,
+        op: Literal["__gt__", "__ge__", "__lt__", "__le__"],
+    ) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:
+        # ordering across dimensionality types has no correct answer (e.g. Temperature
+        # vs TemperatureDifference share [temperature] but must not order), so it
+        # raises -- unlike __eq__, which can answer False for incompatible operands
+        try:
+            self.check_compatibility(other)
+        except DimensionalityTypeError as e:
+            raise DimensionalityComparisonError(f"Cannot compare {self} with {other}") from e
+
+        try:
+            return getattr(self._pint_super, op)(other)
+        except (ValueError, DimensionalityError) as e:
+            raise DimensionalityComparisonError(str(e)) from e
 
     @overload
     def __gt__(self: Quantity[Dimensionless, float], other: float) -> bool: ...
@@ -1928,10 +1952,7 @@ class Quantity(
     @overload
     def __gt__(self: Quantity[DT, float], other: Quantity[DT, pl.Expr]) -> pl.Expr: ...
     def __gt__(self, other: Quantity[DT, Any] | float) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:
-        try:
-            return self._pint_super.__gt__(other)
-        except ValueError as e:
-            raise DimensionalityComparisonError(str(e)) from e
+        return self._ordering_comparison(other, "__gt__")
 
     @overload
     def __ge__(self: Quantity[Dimensionless, float], other: float) -> bool: ...
@@ -1958,10 +1979,7 @@ class Quantity(
     @overload
     def __ge__(self: Quantity[DT, float], other: Quantity[DT, pl.Expr]) -> pl.Expr: ...
     def __ge__(self, other: Quantity[DT, Any] | float) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:
-        try:
-            return self._pint_super.__ge__(other)
-        except ValueError as e:
-            raise DimensionalityComparisonError(str(e)) from e
+        return self._ordering_comparison(other, "__ge__")
 
     @overload
     def __lt__(self: Quantity[Dimensionless, float], other: float) -> bool: ...
@@ -1988,10 +2006,7 @@ class Quantity(
     @overload
     def __lt__(self: Quantity[DT, float], other: Quantity[DT, pl.Expr]) -> pl.Expr: ...
     def __lt__(self, other: Quantity[DT, Any] | float) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:
-        try:
-            return self._pint_super.__lt__(other)
-        except ValueError as e:
-            raise DimensionalityComparisonError(str(e)) from e
+        return self._ordering_comparison(other, "__lt__")
 
     @overload
     def __le__(self: Quantity[Dimensionless, float], other: float) -> bool: ...
@@ -2018,10 +2033,7 @@ class Quantity(
     @overload
     def __le__(self: Quantity[DT, float], other: Quantity[DT, pl.Expr]) -> pl.Expr: ...
     def __le__(self, other: Quantity[DT, Any] | float) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:
-        try:
-            return self._pint_super.__le__(other)
-        except ValueError as e:
-            raise DimensionalityComparisonError(str(e)) from e
+        return self._ordering_comparison(other, "__le__")
 
     @overload
     def __mul__(self: Quantity[Dimensionless, float], other: Quantity[DT_, MT_]) -> Quantity[DT_, MT_]: ...
