@@ -1,0 +1,2 @@
+# match the repo's Python line length (ruff = 120)
+max_width = 120

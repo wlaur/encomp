@@ -1,6 +1,6 @@
 [project]
 name = "encomp"
-version = "1.4.1"
+version = "1.5.0"
 description = "General-purpose library for engineering calculations"
 authors = [{ name = "William Laurén", email = "lauren.william.a@gmail.com" }]
 requires-python = ">=3.13"
@@ -36,10 +36,25 @@ dependencies = [
     "typing-extensions",
     "asttokens",
     "numpy",
-    "polars",
+    # The bundled Rust plugin is loaded over polars' plugin ABI (polars-ffi, major 0),
+    # which the host dispatches on by *major* version -- stable across py-polars minors,
+    # so the plugin is NOT pinned per minor. We only require the version the shipped wheel
+    # was built/tested against; a rebuild is needed only on a (rare) ffi-ABI major bump,
+    # and encomp.coolprop.self_check() makes any incompatibility a clear runtime error.
+    # See encomp/coolprop/README.md.
+    "polars>=1.42",
     "sympy",
     "uncertainties",
-    "coolprop",
+    # encomp uses TWO copies of CoolProp: the Python `coolprop` package (scalar /
+    # small-eager PropsSI path) and the bundled libCoolProp the Rust plugin dlopens
+    # (lazy / large-eager path). The only integer crossing from Python into the bundled
+    # lib is the `input_pairs` enum index (via generate_update_pair); that enum is stable
+    # within a CoolProp major, so allow any 8.x but cap the major (a 9.x could renumber
+    # it -> silently wrong results). The bundled lib is built at the floor 8.0.0
+    # (scripts/build_libcoolprop.py); exact value-parity between the two paths holds when
+    # the installed coolprop equals that floor (a newer 8.x may differ slightly for a
+    # fluid whose reference EOS was updated).
+    "coolprop>=8.0.0,<9",
 ]
 
 [dependency-groups]
@@ -48,9 +63,9 @@ dev = [
     "ruff",
     "pytest",
     "hypothesis",
-    "pytest-asyncio",
     "coverage",
     "Sphinx",
+    "myst-parser",
     "nbsphinx",
     "furo",
     "sphinx-inline-tabs",
@@ -76,15 +91,43 @@ Documentation = "https://encomp.readthedocs.io"
 Repository = "https://github.com/wlaur/encomp"
 Issues = "https://github.com/wlaur/encomp/issues"
 
-[tool.hatch.build.targets.sdist]
-include = ["encomp", "encomp/defs"]
-
-[tool.hatch.build.targets.wheel]
-include = ["encomp", "encomp/defs"]
-
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.5,<2"]
+build-backend = "maturin"
+
+[tool.maturin]
+# encomp is a mixed Python + Rust project: the CoolProp Polars plugin (Rust crate in
+# rust/) and the bundled libCoolProp are placed in encomp/coolprop/ and shipped in
+# ONE per-platform wheel together with the pure-Python modules.
+manifest-path = "rust/Cargo.toml"
+python-source = "."
+module-name = "encomp.coolprop._internal"
+include = [
+    "encomp/defs/**/*",
+    # the bundled CoolProp lib: libCoolProp.{dylib,so} on macOS/Linux, but MSVC names
+    # the Windows DLL CoolProp.dll (no "lib" prefix) -- match both spellings.
+    { path = "encomp/coolprop/*CoolProp.*", format = "wheel" },
+]
+
+# Per-platform binary wheels (the plugin + bundled libCoolProp are native). abi3 ->
+# one wheel per platform covers CPython >=3.13. Built by .github/workflows/release.yml.
+[tool.cibuildwheel]
+build = "cp313-*"
+skip = ["*-musllinux*", "*_i686", "*-win32"]
+before-all = "pip install cmake && python {project}/scripts/build_libcoolprop.py"
+test-command = 'python -c "import encomp.coolprop as cp; assert cp.self_check()"'
+
+[tool.cibuildwheel.linux]
+# the manylinux image lacks Rust (needed by maturin); install it + cmake, then build
+before-all = "curl -sSf https://sh.rustup.rs | sh -s -- -y && pip install cmake && python {project}/scripts/build_libcoolprop.py"
+environment = { PATH = "$HOME/.cargo/bin:$PATH" }
+
+[tool.cibuildwheel.macos]
+# CoolProp uses std::filesystem, unavailable in Apple libc++ below macOS 10.15, so the
+# bundled libCoolProp is built at that floor (scripts/build_libcoolprop.py). Tag the wheel
+# to match so its stated minimum doesn't undercut the dylib; cibuildwheel raises this to
+# 11.0 for arm64 automatically.
+environment = { MACOSX_DEPLOYMENT_TARGET = "10.15" }
 
 [tool.ruff]
 lint.select = [

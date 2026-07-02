@@ -217,10 +217,10 @@ def test_custom_dimensionality() -> None:
 
         q2 = cast(Any, Q[Custom2])(1, "degC**2/m")
 
-        # the values and units are equivalent
-        # but the dimensionality types don't match
-        with pytest.raises(DimensionalityComparisonError):
-            assert q1 == q2
+        # the values and units are equivalent, but the dimensionality
+        # types don't match: not equal (== answers False, it does not raise)
+        assert q1 != q2
+        assert (q1 == q2) is False
 
         assert isinstance(q1.to("degC**2/km"), type(q1))
         assert isinstance(q1.to_base_units(), type(q1))
@@ -425,6 +425,58 @@ def test_type_eq() -> None:
     assert Q[Length] != type(q)  # noqa: E721
 
 
+def test_class_eq_hash_contract() -> None:
+    # Dimensionality classes compare by qualname, so equal classes (e.g. the same
+    # class statement re-executed, as under Jupyter autoreload) must hash equal
+    with _reset_dimensionality_registry():
+        X1 = type("XDimContract", (Dimensionality,), {"dimensions": Length.dimensions})
+        X2 = type("XDimContract", (Dimensionality,), {"dimensions": Length.dimensions})
+
+        assert X1 is not X2
+        assert cast(object, X1) == X2
+        assert hash(X1) == hash(X2)
+
+    assert (Temperature == TemperatureDifference) is False
+
+    # Quantity classes: `subclass == Quantity` is a convenience predicate, but the
+    # hash stays identity-based so class-keyed caches (typeguard, pydantic, pint)
+    # keep every subclass a distinct key and never alias it to the base class
+    assert type(Q(1.0, "m")) == Q  # noqa: E721
+    assert (Q[Mass, float] == Q[Length, float]) is False
+    keyed = {Q[Mass, float]: "mass", Q[Length, float]: "length"}
+    assert keyed[Q[Mass, float]] == "mass"
+    assert keyed[Q[Length, float]] == "length"
+    assert Q not in keyed
+
+
+def test_hash_eq_consistency() -> None:
+    # __eq__ compares across units and with a tolerance, so the eq/hash contract
+    # (a == b => hash(a) == hash(b)) requires hashing a canonical (root-unit) form,
+    # otherwise a Quantity is unusable as a dict key / set member.
+    def _eq_and_hash(a: Q[Any, float], b: Q[Any, float]) -> None:
+        assert a == b
+        assert hash(a) == hash(b), f"{a} == {b} but hashes differ"
+
+    _eq_and_hash(Q(1.0, "m"), Q(100.0, "cm"))
+    _eq_and_hash(Q(1.0, "bar"), Q(100.0, "kPa"))
+    _eq_and_hash(Q(0.0, "degC"), Q(273.15, "K"))
+    _eq_and_hash(Q(3600.0, "s"), Q(1.0, "h"))
+
+    # usable as dict key / set member regardless of the unit it was written in
+    assert Q(100.0, "cm") in {Q(1.0, "m"): "one metre"}
+    assert len({Q(1.0, "m"), Q(100.0, "cm"), Q(1000.0, "mm")}) == 1
+
+    # a TemperatureDifference must stay hashable (its to_base_units would raise, so
+    # __hash__ must use to_root_units) -- guards against a regression to base units
+    dt = Q(20.0, "degC") - Q(15.0, "degC")
+    assert dt.check(TemperatureDifference)
+    assert hash(dt) == hash(Q(5.0, "delta_degC"))
+
+    # non-float magnitudes remain unhashable (unchanged behaviour)
+    with pytest.raises(TypeError, match="unhashable"):
+        hash(Q(np.array([1.0, 2.0]), "m"))
+
+
 def test_Q() -> None:
     # test that Quantity objects can be constructed
     Q(1, "dimensionless")
@@ -457,14 +509,14 @@ def test_Q() -> None:
     assert type(Q(1)) is type(Quantity(1))
     assert type(Q) is type(Quantity)
 
-    with pytest.raises(DimensionalityComparisonError):
-        _ = Q(2, "kg") == 2
-
-    with pytest.raises(DimensionalityComparisonError):
-        _ = 2 == Q(2, "kg")  # noqa: SIM300
-
-    with pytest.raises(DimensionalityComparisonError):
-        _ = cast(Any, Q(2, "kg")) == Q(25, "m")
+    # == across incomparable operands answers False (Python convention);
+    # only the ordering comparisons raise
+    assert Q(2, "kg") != 2
+    assert (Q(2, "kg") == 2) is False
+    assert 2 != Q(2, "kg")  # noqa: SIM300
+    assert (2 == Q(2, "kg")) is False  # noqa: SIM300
+    assert cast(Any, Q(2, "kg")) != Q(25, "m")
+    assert (cast(Any, Q(2, "kg")) == Q(25, "m")) is False
 
     # inputs can be nested
     Q(Q(1, "kg"))
@@ -480,11 +532,10 @@ def test_Q() -> None:
     # no unit input defaults to dimensionless
     assert Q(12).check("")
     assert Q(1) == Q(100, "%")
-    Q[Dimensionless, float](21)  # pyrefly: ignore[bad-index]
-    assert isinstance_types(Q(21), Q[Dimensionless])  # pyrefly: ignore[bad-index]
-    assert isinstance_types(Q(21), Q[Dimensionless, float])  # pyrefly: ignore[bad-index]
-    assert isinstance_types(Q(21), Q[Dimensionless, Any])  # pyrefly: ignore[bad-index]
-
+    Q[Dimensionless, float](21)
+    assert isinstance_types(Q(21), Q[Dimensionless])
+    assert isinstance_types(Q(21), Q[Dimensionless, float])
+    assert isinstance_types(Q(21), Q[Dimensionless, Any])
     assert Q(1) == Q(1.0)
 
     assert isinstance(Q(1, "meter").m, float)
@@ -499,11 +550,10 @@ def test_Q() -> None:
     Q(Q(2, "bar").to("kPa").m, "kPa")
 
     # check that the dimensionality constraints work
-    Q[Length, float](1, "m")  # pyrefly: ignore[bad-index]
-    Q[Pressure, float](1, "kPa")  # pyrefly: ignore[bad-index]
-    Q[Temperature, float](1, "°C")  # pyrefly: ignore[bad-index]
-    Q[Temperature, Any](1, "°C")  # pyrefly: ignore[bad-index]
-
+    Q[Length, float](1, "m")
+    Q[Pressure, float](1, "kPa")
+    Q[Temperature, float](1, "°C")
+    Q[Temperature, Any](1, "°C")
     P = Q(1, "bar")
     # this Quantity must have the same dimensionality as P
     Q(2, "kPa").check(P)
@@ -511,14 +561,10 @@ def test_Q() -> None:
     # TODO: not possible to raise on constructing inconsistent Quantity
     # if the complete subclass is pre-defined
 
-    Q[Temperature, float](1, "kg")  # pyrefly: ignore[bad-index]
-
-    Q[Pressure, float](1, "meter")  # pyrefly: ignore[bad-index]
-
-    Q[Mass, float](1, str(P.u))  # pyrefly: ignore[bad-index]
-
-    Q[Mass, float](P)  # pyrefly: ignore[bad-index]
-
+    Q[Temperature, float](1, "kg")
+    Q[Pressure, float](1, "meter")
+    Q[Mass, float](1, str(P.u))
+    Q[Mass, float](P)
     # in-place conversion
     # NOTE: don't use this for objects that are passed in by the user
     P3 = Q(1, "bar")
@@ -550,13 +596,11 @@ def test_Q() -> None:
 
     # floating point math might make this off at the N:th decimal
     assert P2.m == approx(2, rel=1e-12)
-    assert isinstance_types(P2, Q[Pressure])  # pyrefly: ignore[bad-index]
-
-    assert_type(Q(Q(2, "feet_water"), Q(2, "kPa").u), Q[Pressure, float])  # pyrefly: ignore[bad-index]
-
+    assert isinstance_types(P2, Q[Pressure])
+    assert_type(Q(Q(2, "feet_water"), Q(2, "kPa").u), Q[Pressure, float])
     assert_type(
         Q(Q(2, "feet_water"), Q(321321, "psi").u).to(Q(123123, "feet_water").asdim(Pressure)),
-        Q[Pressure, float],  # pyrefly: ignore[bad-index]
+        Q[Pressure, float],
     )
 
     with pytest.raises(DimensionalityError):
@@ -568,8 +612,7 @@ def test_Q() -> None:
     class Custom(Dimensionality):
         dimensions = Length.dimensions * Length.dimensions * Length.dimensions / Temperature.dimensions
 
-    Q[Custom, float](1, "m³/K")  # pyrefly: ignore[bad-index]
-
+    Q[Custom, float](1, "m³/K")
     with pytest.raises(Exception):  # noqa: B017
         cast(Any, Q)[cast(Any, Pressure) / Area, float](1, "bar/m")
 
@@ -581,8 +624,9 @@ def test_Q() -> None:
     assert (Q([1, 2, 3], "kg") == Q([1000, 2000, 3000], "g")).all()
     assert not (Q([1, 2, 3], "kg") == Q([1000, 2000, 3001], "g")).all()
 
-    with pytest.raises(DimensionalityComparisonError):
-        (Q([1, 2, 3], "kg") == Q([1000, 2000, 300], "g * meter")).any()
+    # incompatible dimensionalities: == answers a plain False, even for arrays
+    incompatible_eq = cast(Any, Q([1, 2, 3], "kg")) == Q([1000, 2000, 300], "g * meter")
+    assert incompatible_eq is False
 
     vals = [1, 2, 3]
 
@@ -596,11 +640,9 @@ def test_custom_units() -> None:
     assert_type(Q(1, "kilogram"), Q[UnknownDimensionality, float])
     assert Q(1, "kg") == Q(1, "kilogram")
 
-    with pytest.raises(DimensionalityComparisonError):
-        assert cast(Any, Q(1, "kg")) == Q(1, "m")
-
-    with pytest.raises(DimensionalityComparisonError):
-        assert Q(1, "kilogram") == Q(1, "m")
+    assert cast(Any, Q(1, "kg")) != Q(1, "m")
+    assert (cast(Any, Q(1, "kg")) == Q(1, "m")) is False
+    assert Q(1, "kilogram") != Q(1, "m")
 
     # "ton" should always default to metric ton
     assert Q(1, "ton") == Q(1, "Ton") == Q(1, "TON") == Q(1, "tonne") == Q(1, "metric_ton") == Q(1000, "kg")
@@ -1169,8 +1211,14 @@ def test_float_cast() -> None:
 
 
 def test_temperature_difference() -> None:
-    T0 = Q(25, "K").to("delta_degC")
+    # .to() preserves the dimensionality type: an absolute temperature cannot be
+    # converted to a delta unit (use .asdim(TemperatureDifference) to reinterpret)
+    with pytest.raises(DimensionalityTypeError):
+        _ = Q(25, "K").to("delta_degC")
+
+    T0 = Q(25, "K").asdim(TemperatureDifference).to("delta_degC")
     assert isinstance_types(T0, Q[TemperatureDifference])
+    assert T0.m == approx(25.0)
 
     T1 = Q(25, "degC")
     T2 = Q(35, "degC")
@@ -1228,6 +1276,57 @@ def test_temperature_difference() -> None:
     T2_ = T1.to("K") - Q(100, "delta_degC")
 
     assert isinstance_types(T2_, Q[Temperature])
+
+
+def test_ordering_comparisons_across_dimensionalities() -> None:
+    import operator
+
+    t = Q(300.0, "K")
+    dt = Q(5.0, "delta_degC")
+
+    # == / != answer False / True across incompatible dimensionality types
+    # (the static layer rejects these comparisons outright, hence the casts)...
+    assert cast(Any, t) != dt
+    assert (cast(Any, t) == dt) is False
+    assert cast(Any, Q(1.0, "m")) != Q(1.0, "kg")
+
+    # ...but ordering raises: no answer is correct (pint would otherwise silently
+    # scale-convert, e.g. 5 delta_degC -> 5 K, and compare 5 < 300)
+    for op in (operator.lt, operator.le, operator.gt, operator.ge):
+        with pytest.raises(DimensionalityComparisonError):
+            op(dt, t)
+        with pytest.raises(DimensionalityComparisonError):
+            op(t, dt)
+        with pytest.raises(DimensionalityComparisonError):
+            op(Q(1.0, "m"), Q(1.0, "kg"))
+        with pytest.raises(DimensionalityComparisonError):
+            op(Q(1.0, "m"), 5.0)
+
+    # same dimensionality still orders normally, across units
+    assert Q(1.0, "kg") > Q(25.0, "g")
+    assert Q(5.0, "delta_degC") > Q(5.0, "delta_degF")
+
+
+def test_to_preserves_temperature_dimensionality() -> None:
+    # Temperature -> delta unit is refused in BOTH .to() and .ito()
+    with pytest.raises(DimensionalityTypeError):
+        _ = Q(300.0, "K").to("delta_degC")
+
+    with pytest.raises(DimensionalityTypeError):
+        _ = Q(25.0, "degC").to("delta_degF")
+
+    with pytest.raises(DimensionalityTypeError):
+        Q(np.array([300.0]), "K").ito("delta_degC")
+
+    # .asdim() is the explicit, value-preserving escape hatch
+    td = Q(300.0, "K").asdim(TemperatureDifference)
+    assert isinstance_types(td, Q[TemperatureDifference])
+    assert td.to("delta_degC").m == approx(300.0)
+    assert td.to("delta_degF").m == approx(540.0)
+
+    # non-temperature -> delta unit stays a plain dimensionality error
+    with pytest.raises(DimensionalityError):
+        _ = Q(1.0, "m").to("delta_degC")
 
 
 def test_temperature_unit_inputs() -> None:
@@ -1465,7 +1564,12 @@ def test_temperature_difference_add_sub() -> None:
     assert_type(Q([2, 3], "degC") - Q(2, "delta_degC"), Q[Temperature, Numpy1DArray])
 
     assert_type(Q([2, 3], "degC").astype(pl.Series) - Q(2, "delta_degC"), Q[Temperature, pl.Series])
-    assert_type(Q(2, "delta_degC") - Q([2, 3], "degC").astype(pl.Series), Q[Temperature, pl.Series])
+
+    # ΔT - T is not a temperature and is not defined (T ± ΔT and ΔT + T are)
+    with pytest.raises(DimensionalityTypeError):
+        _ = Q(2, "delta_degC") - cast(Any, Q([2, 3], "degC").astype(pl.Series))
+    with pytest.raises(DimensionalityTypeError):
+        _ = Q(2, "delta_degC") - cast(Any, Q(20, "degC"))
 
 
 def test_dimensionless_add_sub() -> None:

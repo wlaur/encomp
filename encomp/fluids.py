@@ -8,19 +8,32 @@ import logging
 import warnings
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from threading import Lock
-from typing import Annotated, Any, ClassVar, Generic, Literal, cast
+from typing import Annotated, Any, ClassVar, Generic, Literal, Self, TypedDict, Unpack, cast
 
 # CoolProp.CoolProp is a compiled extension module exporting both PropsSI and
-# HAPropsSI. pyright resolves it (and importing the module rather than the
-# untyped pure-Python CoolProp.HumidAirProp avoids its missing-stub warning),
-# but pyrefly cannot resolve the compiled module at all - hence the ignore.
-# The functions are untyped either way, so they are exposed as typed aliases below.
-import CoolProp.CoolProp as _CoolProp  # pyrefly: ignore[missing-import]
+# HAPropsSI. Importing the module (rather than the untyped pure-Python
+# CoolProp.HumidAirProp) avoids a missing-stub warning. The functions are
+# untyped, so they are exposed as typed aliases below.
+import CoolProp.CoolProp as _CoolProp
 import numpy as np
 import polars as pl
 
+from .coolprop import (
+    AssumedPhase,
+    Backend,
+    CName,
+    Composition,
+    FluidParam,
+    HumidAirParam,
+    Phase,
+    is_backend,
+    is_fluid_param,
+    is_humid_air_param,
+    is_phase,
+    resolve_fluid_spec,
+)
 from .settings import SETTINGS
 from .structures import flatten
 from .units import DimensionalityError, ExpectedDimensionalityError, Quantity, Unit
@@ -63,10 +76,122 @@ if SETTINGS.ignore_coolprop_warnings:
     warnings.filterwarnings("ignore", message="CoolProp could not calculate")
 
 
-CProperty = Annotated[str, "CoolProp property name"]
-CName = Annotated[str, "CoolProp fluid name"]
+# Strict Literals for CoolProp property names, single source of truth in the
+# encomp.coolprop plugin (fluid + humid-air namespaces). The fluid-name / composition /
+# assumed-phase types (CName, CommonFluidName, Composition, FractionValue, AssumedPhase)
+# live there too; the ones used here are imported above.
+CProperty = FluidParam | HumidAirParam
 UnitString = Annotated[str, "Unit string"]
 
+
+class FluidState(TypedDict, Generic[MT], total=False):  # noqa: UP046
+    """Valid CoolProp fluid state-input property names for ``Fluid``/``Water``.
+
+    Used with ``Unpack`` to statically check the ``**kwargs`` keys at the call
+    site. The ``Quantity[Any, float]`` arm of each value type lets one fixed
+    point be a plain scalar while another is vectorised, so a mixed
+    ``float`` + ``MT`` call still infers the magnitude type correctly.
+    """
+
+    P: Quantity[Any, MT] | Quantity[Any, float]
+    T: Quantity[Any, MT] | Quantity[Any, float]
+    Q: Quantity[Any, MT] | Quantity[Any, float]
+    D: Quantity[Any, MT] | Quantity[Any, float]
+    DMASS: Quantity[Any, MT] | Quantity[Any, float]
+    DMOLAR: Quantity[Any, MT] | Quantity[Any, float]
+    Dmass: Quantity[Any, MT] | Quantity[Any, float]
+    Dmolar: Quantity[Any, MT] | Quantity[Any, float]
+    H: Quantity[Any, MT] | Quantity[Any, float]
+    HMASS: Quantity[Any, MT] | Quantity[Any, float]
+    HMOLAR: Quantity[Any, MT] | Quantity[Any, float]
+    Hmass: Quantity[Any, MT] | Quantity[Any, float]
+    Hmolar: Quantity[Any, MT] | Quantity[Any, float]
+    S: Quantity[Any, MT] | Quantity[Any, float]
+    SMASS: Quantity[Any, MT] | Quantity[Any, float]
+    SMOLAR: Quantity[Any, MT] | Quantity[Any, float]
+    Smass: Quantity[Any, MT] | Quantity[Any, float]
+    Smolar: Quantity[Any, MT] | Quantity[Any, float]
+    U: Quantity[Any, MT] | Quantity[Any, float]
+    UMASS: Quantity[Any, MT] | Quantity[Any, float]
+    UMOLAR: Quantity[Any, MT] | Quantity[Any, float]
+    Umass: Quantity[Any, MT] | Quantity[Any, float]
+    Umolar: Quantity[Any, MT] | Quantity[Any, float]
+
+
+class HumidAirState(TypedDict, Generic[MT], total=False):  # noqa: UP046
+    """Valid CoolProp humid-air (``HAPropsSI``) STATE-INPUT parameter names for
+    ``HumidAir`` -- the subset that can fix a state (matches
+    ``encomp.coolprop.HUMID_AIR_INPUTS``; output-only properties like ``Visc`` /
+    ``Conductivity`` / heat capacities are excluded). Used with ``Unpack`` to
+    statically check the ``**kwargs`` keys at the call site.
+    """
+
+    B: Quantity[Any, MT] | Quantity[Any, float]
+    D: Quantity[Any, MT] | Quantity[Any, float]
+    DewPoint: Quantity[Any, MT] | Quantity[Any, float]
+    Enthalpy: Quantity[Any, MT] | Quantity[Any, float]
+    Entropy: Quantity[Any, MT] | Quantity[Any, float]
+    H: Quantity[Any, MT] | Quantity[Any, float]
+    Hda: Quantity[Any, MT] | Quantity[Any, float]
+    Hha: Quantity[Any, MT] | Quantity[Any, float]
+    HumRat: Quantity[Any, MT] | Quantity[Any, float]
+    Omega: Quantity[Any, MT] | Quantity[Any, float]
+    P: Quantity[Any, MT] | Quantity[Any, float]
+    P_w: Quantity[Any, MT] | Quantity[Any, float]
+    R: Quantity[Any, MT] | Quantity[Any, float]
+    RH: Quantity[Any, MT] | Quantity[Any, float]
+    RelHum: Quantity[Any, MT] | Quantity[Any, float]
+    S: Quantity[Any, MT] | Quantity[Any, float]
+    Sda: Quantity[Any, MT] | Quantity[Any, float]
+    Sha: Quantity[Any, MT] | Quantity[Any, float]
+    T: Quantity[Any, MT] | Quantity[Any, float]
+    T_db: Quantity[Any, MT] | Quantity[Any, float]
+    T_dp: Quantity[Any, MT] | Quantity[Any, float]
+    T_wb: Quantity[Any, MT] | Quantity[Any, float]
+    Tdb: Quantity[Any, MT] | Quantity[Any, float]
+    Tdp: Quantity[Any, MT] | Quantity[Any, float]
+    Twb: Quantity[Any, MT] | Quantity[Any, float]
+    V: Quantity[Any, MT] | Quantity[Any, float]
+    Vda: Quantity[Any, MT] | Quantity[Any, float]
+    Vha: Quantity[Any, MT] | Quantity[Any, float]
+    W: Quantity[Any, MT] | Quantity[Any, float]
+    WetBulb: Quantity[Any, MT] | Quantity[Any, float]
+    Y: Quantity[Any, MT] | Quantity[Any, float]
+    psi_w: Quantity[Any, MT] | Quantity[Any, float]
+
+
+# user-facing phase name (AssumedPhase, imported from encomp.coolprop) -> CoolProp phase
+# index for the low-level AbstractState.specify_phase path. (The rust plugin path instead
+# uses the ``phase_*`` string, resolved by encomp.coolprop._phase_from_assumed.)
+_ASSUMED_PHASE_MAP: dict[str, Any] = {
+    "gas": _cp.iphase_gas,
+    "liquid": _cp.iphase_liquid,
+    "supercritical": _cp.iphase_supercritical,
+    "supercritical_gas": _cp.iphase_supercritical_gas,
+    "supercritical_liquid": _cp.iphase_supercritical_liquid,
+    "twophase": _cp.iphase_twophase,
+}
+
+# backends that ignore AbstractState.specify_phase (region-explicit), so assuming a
+# phase has no effect and should not switch evaluation to the slower low-level loop
+_PHASE_IGNORING_BACKENDS = frozenset({"IF97"})
+
+# Eager numpy / pl.Series inputs with at least this many elements are evaluated
+# through the GIL-free rust plugin (faster and lower peak memory than CoolProp's
+# vectorized PropsSI, and much faster than the low-level per-row Python loop for an
+# assumed phase / composition). Scalars and smaller arrays stay on the Python
+# CoolProp path, where the plugin's fixed dispatch overhead would dominate. The two
+# paths are verified to agree on dtype, value, and NaN/inf handling (test_fluids).
+EAGER_PLUGIN_MIN_SIZE = 1000
+
+# Caches the CONSTRUCTED pl.Expr per (fluid config, output, input-expr digests), so
+# repeated evaluations of the same property return the IDENTICAL expression object.
+# That object identity is the point: callers that deduplicate expressions by id()
+# (e.g. DAG builders that level-batch shared nodes into with_columns stages) see one
+# node instead of many. Polars' own CSE is no help here -- it never touches plugin
+# expressions (measured: duplicate plugin nodes each run their own flash, whether
+# they are the same object or structurally identical fresh ones; plain expressions
+# in the same plan do get CSE'd).
 _EXPR_EVALUATION_CACHE_MAX_SIZE = 1024
 _EXPR_EVALUATION_CACHE: OrderedDict[tuple[Any, ...], pl.Expr] = OrderedDict()
 _EXPR_EVALUATION_CACHE_LOCK = Lock()
@@ -89,12 +214,18 @@ def _get_expr_evaluation_cache_key(
 ) -> tuple[Any, ...]:
     fluid_any = cast(Any, fluid)
 
+    comp = fluid_any._composition
+    # _composition holds fixed float fractions (per-row varying composition is rejected
+    # at construction), so repr is a stable, cheap cache key
+    comp_key = None if comp is None else tuple((sp, repr(v)) for sp, v in comp.items())
+
     return (
         type(fluid),
         fluid.name,
+        fluid_any._assumed_phase,
+        comp_key,
         output,
         bool(fluid_any._append_name_to_cp_inputs),
-        bool(fluid_any._convert_pl_series_nan_null),
         bool(fluid_any._evaluate_invalid_separately),
         id(type(fluid).BACKEND["backend"]),
         tuple((prop, _expr_cache_digest(expr)) for prop, expr in points),
@@ -127,11 +258,26 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     # PropsSI expects the fluid name as the first input, but not HAPropsSI
     _append_name_to_cp_inputs: bool = True
 
-    _convert_pl_series_nan_null: bool = True
-
     # HAPropsSI fails if one or more inputs are incorrect,
     # PropsSI returns NaN for invalid inputs in case valid inputs are also present
     _evaluate_invalid_separately: bool = False
+
+    # assumed phase (set via Fluid.assume_phase). When not None, property
+    # evaluation switches from the high-level PropsSI backend to the low-level
+    # AbstractState API with specify_phase, which skips the (for mixtures very
+    # expensive) phase-stability search. None means CoolProp determines the phase.
+    _assumed_phase: str | None = None
+
+    # fixed mixture composition (set via Fluid(..., composition=...)) as MOLE
+    # fractions, one float per species. When not None, evaluation uses the
+    # low-level AbstractState API (PropsSI cannot take an explicit composition).
+    # None means the composition is fixed in the fluid name, or the fluid is pure.
+    _composition: dict[str, float] | None = None
+
+    # True when an assumed phase or a composition is configured, i.e. evaluation
+    # must use the low-level AbstractState path. A single flag so the normal
+    # PropsSI path pays one attribute read, not several is-not-None checks.
+    _lowlevel: bool = False
 
     # display only head of vector inputs in the __repr__ method
     _repr_cutoff: int = 3
@@ -214,7 +360,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             "Residual molar Gibbs energy",
         ),
         ("GMOLAR", "Gmolar"): ("J/mol", "Molar specific Gibbs energy"),
-        ("G", "GAMES", "Gmass"): ("J/kg", "Mass specific Gibbs energy"),
+        ("G", "GMASS", "Gmass"): ("J/kg", "Mass specific Gibbs energy"),
         ("HELMHOLTZMASS", "Helmholtzmass"): ("J/kg", "Mass specific Helmholtz energy"),
         ("HELMHOLTZMOLAR", "Helmholtzmolar"): (
             "J/mol",
@@ -313,12 +459,6 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         "H": "kJ/kg",
         "C": "kJ/kg/K",
     }
-
-    # numerical accuracy, determines if return values are zero
-    _EPS: float = 1e-9
-
-    # skip checking for zero for these properties
-    _SKIP_ZERO_CHECK: tuple[CProperty, ...] = ("PHASE",)
 
     @property
     def _mt(self) -> type[MT]:
@@ -466,7 +606,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         """
 
     @classmethod
-    def get_prop_key(cls, prop: CProperty) -> tuple[CProperty, ...]:
+    def get_prop_key(cls, prop: str) -> tuple[CProperty, ...]:
         if prop not in cls.ALL_PROPERTIES:
             raise ValueError(f'Property "{prop}" is not a valid CoolProp property name')
 
@@ -487,7 +627,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         raise ValueError(f'Could not get unit, key "{key}" does not exist')
 
     @classmethod
-    def is_valid_prop(cls, prop: CProperty) -> bool:
+    def is_valid_prop(cls, prop: str) -> bool:
         try:
             cls.get_prop_key(prop)
             return True
@@ -496,7 +636,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             return False
 
     @classmethod
-    def check_inputs(cls, kwargs: dict[CProperty, Quantity[Any, Any]]) -> None:
+    def check_inputs(cls, kwargs: Mapping[str, object]) -> None:
         invalid = [key for key in kwargs if not cls.is_valid_prop(key)]
 
         if len(invalid):
@@ -505,6 +645,23 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 f"{', '.join(invalid)}\n"
                 f"Valid names:\n{', '.join(sorted(cls.ALL_PROPERTIES))}"
             )
+
+    def _build_points(
+        self, kwargs: Mapping[str, object]
+    ) -> list[tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]]]:
+        """Validate raw ``**kwargs`` keys and narrow each to the strict ``CProperty``
+        Literal union, producing the typed ``points`` list.
+
+        The ``Unpack[TypedDict]`` ``**kwargs`` degrades its values to ``object``
+        when iterated, so the property *name* is narrowed via the ``TypeGuard``
+        (no cast) while the *value* is cast back to the ``Quantity`` union."""
+        points: list[tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]]] = []
+        for name, qty in kwargs.items():
+            if is_fluid_param(name) or is_humid_air_param(name):
+                points.append((name, cast("Quantity[Any, MT] | Quantity[Any, float]", qty)))
+            else:
+                raise ValueError(f'Invalid CoolProp property name: "{name}"')
+        return points
 
     @classmethod
     def describe(cls, prop: CProperty) -> str:
@@ -556,6 +713,236 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         _LOGGER.warning(f'CoolProp could not calculate "{prop}" for fluid "{self.name}", output is NaN: {msg}')
 
+    # ------------------------------------------------------------------ #
+    # Low-level AbstractState path. Used whenever an assumed phase and/or a
+    # ``composition=`` dict is set (PropsSI cannot do either). The composition is
+    # fixed (baked into the name, or passed as floats), so the AbstractState is
+    # built once and the loop only flashes each (P, T) row.
+    # ------------------------------------------------------------------ #
+
+    def _constant_state(self) -> Any:  # noqa: ANN401 - CoolProp AbstractState is untyped
+        # name/composition parsing is delegated to resolve_fluid_spec (the single source);
+        # here we just build the AbstractState and pin the assumed phase.
+        backend, fluids, fractions = resolve_fluid_spec(self.name, self._composition)
+        state = _cp.AbstractState(backend, fluids)
+        if fractions is not None:
+            state.set_mole_fractions(fractions)
+        if self._assumed_phase is not None:
+            state.specify_phase(_ASSUMED_PHASE_MAP[self._assumed_phase])
+        return state
+
+    def _lowlevel_loop_constant(
+        self, output: CProperty, p1_name: CProperty, p1_arr: Numpy1DArray, p2_name: CProperty, p2_arr: Numpy1DArray
+    ) -> Numpy1DArray:
+        state = self._constant_state()
+        k1 = _cp.get_parameter_index(p1_name)
+        k2 = _cp.get_parameter_index(p2_name)
+        out_idx = _cp.get_parameter_index(output)
+        generate_update_pair = _cp.generate_update_pair
+        update = state.update
+        keyed_output = state.keyed_output
+
+        out = np.full(p1_arr.size, np.nan)
+        for i in range(p1_arr.size):
+            v1 = p1_arr[i]
+            v2 = p2_arr[i]
+            if not (np.isfinite(v1) and np.isfinite(v2)):
+                continue
+            try:
+                pair, a, b = generate_update_pair(k1, v1, k2, v2)
+                update(pair, a, b)
+                out[i] = keyed_output(out_idx)
+            except ValueError as e:
+                self.check_exception(output, e)
+
+        out[~np.isfinite(out)] = np.nan
+        return out
+
+    def _evaluate_lowlevel(
+        self, output: CProperty, points: tuple[tuple[CProperty, float | Numpy1DArray | pl.Expr], ...]
+    ) -> float | Numpy1DArray | pl.Expr:
+        p1_name = points[0][0]
+        p2_name = points[1][0]
+
+        def compute(p1: Numpy1DArray, p2: Numpy1DArray) -> Numpy1DArray:
+            return self._lowlevel_loop_constant(output, p1_name, p1, p2_name, p2)
+
+        return self._lowlevel_dispatch(output, points, compute)
+
+    def _lowlevel_dispatch(
+        self,
+        output: CProperty,
+        points: tuple[tuple[CProperty, float | Numpy1DArray | pl.Expr], ...],
+        compute: Callable[[Numpy1DArray, Numpy1DArray], Numpy1DArray],
+    ) -> float | Numpy1DArray | pl.Expr:
+        points = tuple((name, self._reduce_single_element(mag)) for name, mag in points)
+        p1 = points[0][1]
+        p2 = points[1][1]
+        all_vals: list[float | Numpy1DArray | pl.Expr] = [p1, p2]
+
+        if any(isinstance(m, pl.Expr) for m in all_vals):
+            if any(isinstance(m, np.ndarray) for m in all_vals):
+                raise TypeError("cannot mix numpy array and pl.Expr inputs")
+            return self._lowlevel_expr(output, points)
+
+        if all(isinstance(m, float) for m in all_vals):
+            out = compute(np.array([cast("float", p1)]), np.array([cast("float", p2)]))
+            return float(out[0])
+
+        arrays = [m for m in all_vals if isinstance(m, np.ndarray)]
+        shape = arrays[0].shape
+        n = arrays[0].size
+        if any(a.shape != shape for a in arrays):
+            raise ValueError("all array inputs must share the same shape")
+
+        def to_arr(m: float | Numpy1DArray | pl.Expr) -> Numpy1DArray:
+            if isinstance(m, np.ndarray):
+                return m.flatten().astype(float)
+            return np.full(n, cast("float", m))
+
+        p1_arr, p2_arr = to_arr(p1), to_arr(p2)
+        # large eager arrays: skip the per-row Python loop, use the rust plugin (it
+        # honors the assumed phase / composition too).
+        if n >= EAGER_PLUGIN_MIN_SIZE and self._rust_representable():
+            named = ((points[0][0], p1_arr), (points[1][0], p2_arr))
+            return self._rust_eager(output, named).reshape(shape)
+
+        out = compute(p1_arr, p2_arr)
+        return out.reshape(shape)
+
+    def _rust_spec(self) -> tuple[Backend, str, list[float] | None, Phase | None] | None:
+        """Plugin spec ``(backend, fluids, fractions, phase)``, or None if the rust plugin
+        cannot represent it (an unsupported backend). Name/composition resolution is
+        delegated to :func:`encomp.coolprop.resolve_fluid_spec` -- the same function
+        :func:`~encomp.coolprop.fluid` uses -- so both agree."""
+        backend, fluids, fractions = resolve_fluid_spec(self.name, self._composition)
+        if not is_backend(backend):
+            return None
+        phase: Phase | None
+        if self._assumed_phase is None:
+            phase = None
+        else:
+            phase_candidate = f"phase_{self._assumed_phase}"
+            if not is_phase(phase_candidate):
+                return None
+            phase = phase_candidate
+        return backend, fluids, fractions, phase
+
+    def _rust_representable(self) -> bool:
+        """Whether the rust plugin can evaluate this fluid's config (the output name is
+        resolved by CoolProp at runtime, so it never affects representability).
+
+        Humid air is always representable (per-row HAPropsSI in the plugin); a Fluid
+        is representable unless its backend is one the plugin's spec rejects.
+        """
+        if self.BACKEND["backend"] is HAPropsSI:
+            return True
+        return self._rust_spec() is not None
+
+    def _rust_plugin_expr(self, output: CProperty, points: tuple[tuple[str, pl.Expr], ...]) -> pl.Expr:
+        """The raw encomp.coolprop plugin expr (aliased to ``output``): a
+        precision-preserving dtype (Float32 in -> Float32 out) with null (not NaN) for
+        failed/out-of-range rows.
+
+        Shared by the lazy ``pl.Expr`` path (:meth:`_rust_expr`) and the eager
+        large-array path (:meth:`_rust_eager`); the latter reads it via ``to_numpy()``,
+        which maps null back to NaN, so its numpy masking is unchanged. Output property
+        names are resolved by
+        CoolProp at runtime, so any valid name works regardless of the static
+        ``FluidParam`` / ``HumidAirParam`` sets. Raises if the plugin is unavailable
+        (there is no map_batches fallback) or cannot represent the request.
+        """
+        from . import coolprop as _cprust
+
+        if not _cprust.self_check():
+            raise RuntimeError(
+                "the encomp.coolprop rust plugin failed to load, but it is required to "
+                "evaluate pl.Expr (lazy) inputs and large eager arrays (there is no "
+                "fallback). Reinstall encomp with its compiled plugin."
+            )
+        names = [p[0] for p in points]
+        exprs = [p[1] for p in points]
+        if self.BACKEND["backend"] is HAPropsSI:
+            n1, n2, n3 = names
+            # the plugin reads each input's property from its (aliased) name
+            expr = _cprust.humid_air(
+                cast("HumidAirParam", output),
+                exprs[0].alias(n1),
+                exprs[1].alias(n2),
+                exprs[2].alias(n3),
+            )
+        else:
+            if self._rust_spec() is None:
+                raise TypeError(
+                    f"the encomp.coolprop rust plugin cannot represent this evaluation for "
+                    f"fluid {self.name!r} (an unsupported backend)."
+                )
+            n1, n2 = names
+            # pass the high-level spec straight through; coolprop.fluid resolves the
+            # name + composition the same way _rust_spec does (both via resolve_fluid_spec)
+            expr = _cprust.fluid(
+                cast("FluidParam", output),
+                exprs[0].alias(n1),
+                exprs[1].alias(n2),
+                name=self.name,
+                assume_phase=cast("AssumedPhase | None", self._assumed_phase),
+                composition=cast("Composition | None", self._composition),
+            )
+        return expr.alias(output)
+
+    def _rust_expr(self, output: CProperty, points: tuple[tuple[CProperty, pl.Expr], ...]) -> pl.Expr:
+        """The plugin expr for lazy ``pl.Expr`` inputs. The plugin's output dtype already
+        preserves the input precision (Float32 in -> Float32 out) and emits null (not
+        NaN) for failed/out-of-range rows directly, so no ``fill_nan(None)`` wrapper is
+        needed: that wrapper lowers to ``when(is_not_nan).then(x).otherwise(null)``, which
+        re-evaluates the whole plugin subtree (no common-subexpression elimination) and
+        runs the CoolProp flash 2-3x."""
+        return self._rust_plugin_expr(output, points)
+
+    def _rust_eager(self, output: CProperty, points: tuple[tuple[str, Numpy1DArray], ...]) -> Numpy1DArray:
+        """Evaluate eager numpy ``points`` through the rust plugin, returning a 1-D
+        Float64 array with the *same* invalid handling as :meth:`evaluate_multiple`
+        (non-finite inputs and non-finite results -> NaN). ``points`` are equal-length
+        arrays; the caller reshapes the result.
+        """
+        names = [name for name, _ in points]
+        arrs = [np.ascontiguousarray(arr, dtype=float).ravel() for _, arr in points]
+        # generic column names avoid any collision between the input property names
+        frame = pl.DataFrame({f"__in{i}": a for i, a in enumerate(arrs)})
+        plugin_points = tuple((names[i], pl.col(f"__in{i}")) for i in range(len(arrs)))
+        expr = self._rust_plugin_expr(output, plugin_points)
+        out = np.array(frame.select(expr)[output].to_numpy(), dtype=float)
+        # match evaluate_multiple exactly: rows with any non-finite input are NaN, and
+        # any inf/_HUGE that slipped through becomes NaN.
+        finite_inputs = np.logical_and.reduce([np.isfinite(a) for a in arrs])
+        out[~finite_inputs] = np.nan
+        out[~np.isfinite(out)] = np.nan
+        return out
+
+    def _lowlevel_expr(
+        self,
+        output: CProperty,
+        points: tuple[tuple[CProperty, float | Numpy1DArray | pl.Expr], ...],
+    ) -> pl.Expr:
+        # fixed composition and/or assumed phase with pl.Expr inputs: rust-plugin only.
+        expr_points: tuple[tuple[CProperty, pl.Expr], ...] = tuple(
+            (name, v if isinstance(v, pl.Expr) else pl.lit(v)) for name, v in points
+        )
+        key = _get_expr_evaluation_cache_key(self, output, expr_points)
+        cached = _expr_evaluation_cache_get(key)
+        if cached is not None:
+            return cached
+
+        expr = self._rust_expr(output, expr_points)
+        _expr_evaluation_cache_set(key, expr)
+        return expr
+
+    @staticmethod
+    def _reduce_single_element(x: float | Numpy1DArray | pl.Expr) -> float | Numpy1DArray | pl.Expr:
+        if isinstance(x, np.ndarray) and x.size == 1:
+            return float(x[0])
+        return x
+
     def evaluate_single(self, output: CProperty, *points: tuple[CProperty, float]) -> float:
         inputs = list(flatten(points))
 
@@ -578,29 +965,16 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             return np.nan
 
     def evaluate_expression(self, output: CProperty, *points: tuple[CProperty, pl.Expr]) -> pl.Expr:
+        # pl.Expr (lazy) inputs are evaluated only through the GIL-free rust plugin;
+        # _rust_expr raises if it is unavailable (no map_batches fallback).
         key = _get_expr_evaluation_cache_key(self, output, points)
         cached_expr = _expr_evaluation_cache_get(key)
 
         if cached_expr is not None:
             return cached_expr
 
-        def _evaluate(s: pl.Series) -> pl.Series:
-            materialized = tuple((n[0], s.struct.field(n[0]).to_numpy()) for n in points)
-            ret = self.evaluate_multiple(output, *materialized)
-
-            ret_series = pl.Series(ret)
-
-            if self._convert_pl_series_nan_null:
-                ret_series = ret_series.fill_nan(None)
-
-            ret_series = ret_series.cast(pl.Float32)
-
-            return ret_series
-
-        expr = pl.struct(*[n[1].alias(n[0]) for n in points]).map_batches(_evaluate, pl.Float32).alias(output)
-
+        expr = self._rust_expr(output, points)
         _expr_evaluation_cache_set(key, expr)
-
         return expr
 
     def evaluate_multiple_separately(
@@ -635,7 +1009,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         return np.array(vals)
 
     def evaluate_multiple(self, output: CProperty, *points: tuple[CProperty, Numpy1DArray]) -> Numpy1DArray:
-        props = [pt[0] for pt in points]
+        props: list[CProperty] = [pt[0] for pt in points]
         arrs = [pt[1] for pt in points]
         shape = arrs[0].shape
 
@@ -667,7 +1041,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 val_masked = self.BACKEND["backend"](output, *inputs)
 
                 if isinstance(val_masked, float):
-                    raise TypeError(f"Unexpected value type: {type(val)}, expected np.ndarray")
+                    raise TypeError(f"Unexpected value type: {type(val_masked)}, expected np.ndarray")
 
             except ValueError as e:
                 self.check_exception(output, e)
@@ -689,6 +1063,9 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     def evaluate(
         self, output: CProperty, *points: tuple[CProperty, float | Numpy1DArray | pl.Expr]
     ) -> float | Numpy1DArray | pl.Expr:
+        if self._lowlevel:
+            return self._evaluate_lowlevel(output, points)
+
         if all(isinstance(pt[1], float) for pt in points):
             scalar_points = [cast("tuple[CProperty, float]", n) for n in points]
             return self.evaluate_single(output, *scalar_points)
@@ -700,25 +1077,18 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                     f"passed types: {[(n[0], type(n[1])) for n in points]}"
                 )
 
-            expr_points = [(n[0], n[1] if isinstance(n[1], pl.Expr) else pl.lit(n[1])) for n in points]
+            expr_points: list[tuple[CProperty, pl.Expr]] = [
+                (n[0], n[1] if isinstance(n[1], pl.Expr) else pl.lit(n[1])) for n in points
+            ]
             return self.evaluate_expression(output, *expr_points)
 
-        def single_element_vector_to_float(x: float | Numpy1DArray) -> float | Numpy1DArray:
-            if isinstance(x, float):
-                return x
-
-            if isinstance(x, np.ndarray) and x.size == 1:
-                return float(x[0])
-
-            return x
-
-        points = tuple(
-            (p, single_element_vector_to_float(v))
+        reduced_points: tuple[tuple[CProperty, float | Numpy1DArray | pl.Expr], ...] = tuple(
+            (p, self._reduce_single_element(v))
             for p, v in cast("tuple[tuple[CProperty, float | Numpy1DArray]]", points)
         )
 
-        sizes = [v.size for _, v in points if isinstance(v, np.ndarray)]
-        shapes = [v.shape for _, v in points if isinstance(v, np.ndarray)]
+        sizes = [v.size for _, v in reduced_points if isinstance(v, np.ndarray)]
+        shapes = [v.shape for _, v in reduced_points if isinstance(v, np.ndarray)]
 
         # the sizes list is empty if all inputs were 1-element vectors
         if len(sizes):
@@ -727,10 +1097,10 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
             # 1-length vectors were converted to float, so this error will be relevant
             if len(set(sizes)) != 1:
-                raise ValueError(f"All inputs must have the same size, passed {points} with sizes {sizes}")
+                raise ValueError(f"All inputs must have the same size, passed {reduced_points} with sizes {sizes}")
 
             if len(set(shapes)) != 1:
-                raise ValueError(f"All inputs must have the same shape, passed {points} with shapes {shapes}")
+                raise ValueError(f"All inputs must have the same shape, passed {reduced_points} with shapes {shapes}")
         else:
             n = 1
             shape = (1,)
@@ -741,9 +1111,24 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
             return np.repeat(x, n).astype(float).reshape(shape)
 
-        points_arr = tuple((p, expand_scalars(cast(Any, v))) for p, v in points)
+        points_arr: tuple[tuple[CProperty, Numpy1DArray], ...] = tuple(
+            (p, expand_scalars(cast(Any, v))) for p, v in reduced_points
+        )
+
+        # large eager arrays go through the GIL-free rust plugin (faster + leaner);
+        # smaller arrays stay on the vectorized PropsSI path (lower fixed overhead).
+        if n >= EAGER_PLUGIN_MIN_SIZE and self._rust_representable():
+            return self._rust_eager(output, points_arr).reshape(shape)
 
         return self.evaluate_multiple(output, *points_arr)
+
+    def _eager_series_output_dtype(self) -> pl.DataType:
+        # eager pl.Series output preserves polars precision: Float32 only when every
+        # pl.Series input is Float32, else Float64. Scalar (float) inputs are neutral.
+        dtypes = [p[1].m.dtype for p in self.points if isinstance(p[1].m, pl.Series)]
+        if dtypes and all(dt == pl.Float32 for dt in dtypes):
+            return pl.Float32()
+        return pl.Float64()
 
     def construct_quantity(
         self, val: float | Numpy1DArray | pl.Expr, output: CProperty, convert_magnitude: bool = True
@@ -752,25 +1137,6 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         # the dimensionality is not known until runtime
         qty = Quantity(cast(MT, val), unit_output)
-
-        # value with dimensions present in CoolProp (pressure, temperature, etc...)
-        # cannot be zero
-        # CoolProp uses 0.0 for missing data, change this to NaN
-        # the values are not always exactly 0,
-        # use the _EPS class attribute to check this
-        # skip this check for some properties
-        if qty.dimensionless and output not in self._SKIP_ZERO_CHECK:
-            if isinstance(qty.m, np.ndarray):
-                m = qty.m
-                m[m < self._EPS] = np.nan
-                qty.m = m
-            elif isinstance(qty.m, pl.Series):
-                raise TypeError(f"Invalid magnitude type for {qty} ({type(qty.m)})")
-            elif isinstance(qty.m, pl.Expr):
-                pass
-            else:
-                if qty.m < self._EPS:
-                    qty = cast("Quantity[Any, MT]", Quantity(np.nan, unit_output))
 
         key = self.get_prop_key(output)
 
@@ -782,10 +1148,9 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             qty = qty.astype(self._mt)
 
         if isinstance(qty.m, pl.Series):
-            if self._convert_pl_series_nan_null:
-                qty.m = qty.m.fill_nan(None)
-
-            qty.m = cast(Any, qty.m).cast(pl.Float32)
+            # missing values surface as null, never NaN (the library's single sentinel)
+            qty.m = qty.m.fill_nan(None)
+            qty.m = cast(Any, qty.m).cast(self._eager_series_output_dtype())
 
         return cast("Quantity[Any, MT]", qty)
 
@@ -844,16 +1209,19 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         if points is None:
             points = self.points
 
-        points_numeric = [(pt[0], self.to_numeric_correct_unit(*pt)) for pt in points]
+        points_numeric: list[tuple[CProperty, float | Numpy1DArray | pl.Expr]] = [
+            (pt[0], self.to_numeric_correct_unit(*pt)) for pt in points
+        ]
         val = self.evaluate(output, *points_numeric)
 
         return self.construct_quantity(val, output, convert_magnitude=convert_magnitude)
 
-    def __getattr__(self, attr: CProperty) -> Quantity[Any, MT]:
-        if attr not in self.ALL_PROPERTIES:
-            raise AttributeError(attr)
-
-        return self.get(attr)
+    def __getattr__(self, attr: str) -> Quantity[Any, MT]:
+        # __getattr__ is Python's fallback for any attribute name (str by protocol);
+        # narrow to a known property before delegating to the strictly-typed get().
+        if (is_fluid_param(attr) or is_humid_air_param(attr)) and attr in self.ALL_PROPERTIES:
+            return self.get(attr)
+        raise AttributeError(attr)
 
     def _get_repr(self, prop: CProperty, fmt: str) -> str:
         if all(isinstance(n[1].m, (float, int)) for n in self.points):
@@ -862,7 +1230,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         if any(isinstance(n[1].m, pl.Expr) for n in self.points):
             return "<pl.Expr>"
 
-        vector_inputs = [
+        vector_inputs: list[tuple[CProperty, Quantity[Any, Numpy1DArray] | Quantity[Any, pl.Series]]] = [
             (n[0], cast(Quantity[Any, Numpy1DArray] | Quantity[Any, pl.Series], n[1]))
             for n in self.points
             if isinstance(n[1].m, (np.ndarray, pl.Series))
@@ -873,10 +1241,13 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         def _get_cutoff_qty(q: Quantity[Any, Any]) -> Quantity[Any, Any]:
             return Quantity(q.m[: self._repr_cutoff], q.u)
 
-        vector_inputs_cutoff = [(n[0], _get_cutoff_qty(n[1])) for n in vector_inputs]
+        vector_inputs_cutoff: list[tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]]] = [
+            (n[0], _get_cutoff_qty(n[1])) for n in vector_inputs
+        ]
 
         # add optional scalar points also
-        vector_inputs_cutoff += [n for n in self.points if n[0] not in (n[0] for n in vector_inputs_cutoff)]
+        covered = {name for name, _ in vector_inputs_cutoff}
+        vector_inputs_cutoff += [pt for pt in self.points if pt[0] not in covered]
 
         qty = self.get(prop, points=vector_inputs_cutoff, convert_magnitude=False).astype(Numpy1DArray)
 
@@ -890,7 +1261,13 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
 
 class Fluid(CoolPropFluid[MT]):
-    def __init__(self, name: CName, **kwargs: Quantity[Any, MT] | Quantity[Any, float]) -> None:
+    def __init__(
+        self,
+        name: CName,
+        *,
+        composition: Composition | None = None,
+        **kwargs: Unpack[FluidState[MT]],
+    ) -> None:
         """
         Represents a fluid at a fixed state, for example at a
         specific temperature and pressure.
@@ -898,25 +1275,99 @@ class Fluid(CoolPropFluid[MT]):
         Parameters
         ----------
         name : CName
-            Name of the fluid
+            Name of the fluid. With ``composition`` this is the backend only
+            (e.g. ``"HEOS"``); otherwise the full CoolProp name, optionally with
+            fixed fractions (e.g. ``"HEOS::CO2[0.5]&O2[0.5]"``).
+        composition : Composition | None
+            Fixed mixture composition as ``{species: mole fraction}`` (like CoolProp's
+            ``"HEOS::CO2[0.5]&O2[0.5]"`` name syntax). Mole fractions must sum to 1.
+            Cannot be combined with fractions baked into ``name``, and requires a mixture
+            backend (e.g. HEOS). Pair with :meth:`assume_phase` for speed. Per-row varying
+            composition is not supported -- loop and build one Fluid per composition.
+            (For an incompressible mixture instead use the name concentration, e.g.
+            ``"INCOMP::MEG[0.5]"`` -- 50 % glycol, on the fluid's own mass/volume basis.)
         kwargs: Quantity[Any, MT]
             Values for the two fixed points. The name of the keyword argument is the
             CoolProp property name.
         """
-
-        self.name = name
 
         self.check_inputs(kwargs)
 
         if len(kwargs) != 2:
             raise ValueError(f"Exactly two fixed points are required, passed {list(kwargs)}")
 
-        kwargs_list = list(kwargs.items())
+        if composition is not None:
+            self._init_composition(name, composition)
+        else:
+            self.name = name
 
-        self.point_1: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = kwargs_list[0]
-        self.point_2: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = kwargs_list[1]
+        points = self._build_points(kwargs)
+
+        self.point_1: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = points[0]
+        self.point_2: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = points[1]
 
         self.points = [self.point_1, self.point_2]
+
+    def _init_composition(self, name: CName, composition: Composition) -> None:
+        # all name + composition parsing/validation lives in resolve_fluid_spec (the single
+        # source); store the canonical name + resolved fractions for the low-level/rust paths
+        backend, fluids, fractions = resolve_fluid_spec(name, composition)
+        assert fractions is not None  # a composition= dict always resolves to a mixture
+        self.name = f"{backend}::{fluids}"
+        self._composition = dict(zip(fluids.split("&"), fractions, strict=True))
+        self._lowlevel = True
+
+    def assume_phase(self, phase: AssumedPhase | None) -> Self:
+        """Force the equation of state to assume ``phase``, skipping CoolProp's
+        own phase determination. This is a *speed* tool, not a validation tool.
+
+        With ``P, T`` inputs CoolProp normally runs a phase-stability search to
+        decide whether the state is single- or two-phase. For HEOS/GERG mixtures
+        that search dominates the cost (~5 ms/point); assuming a phase you
+        already know skips it and switches evaluation to the low-level
+        ``AbstractState`` API -- on the order of 100-1000x faster.
+
+        Important caveats:
+
+        * **Only the HEOS/GERG backends honour it.** ``IF97`` (the default for
+          :class:`Water`) is region-explicit and ignores an assumed phase, so
+          this call is a no-op there: it emits a warning and keeps the fast
+          vectorized path (rather than switching to the slower per-point loop).
+          Use ``Fluid("HEOS::Water", ...)`` if you need an assumed phase for water.
+        * **The assumed phase must be correct for the operating domain.** Forcing
+          a phase the fluid is not actually in does NOT raise -- on HEOS you get
+          either ``NaN`` (deep in the wrong phase) or a finite but non-physical
+          metastable root (near the saturation line). So it cannot be used to
+          *detect* a wrong phase; for that, evaluate with auto-phase and check
+          :attr:`phase` (or quality ``Q``) instead.
+
+        Pass ``None`` to clear it and restore automatic determination. Mutates
+        ``self`` and returns it, so it can be chained::
+
+            Fluid("HEOS::CO2[0.5]&O2[0.5]", P=P, T=T).assume_phase("gas").D
+
+        Parameters
+        ----------
+        phase : AssumedPhase | None
+            One of ``"gas"``, ``"liquid"``, ``"supercritical"``,
+            ``"supercritical_gas"``, ``"supercritical_liquid"``, ``"twophase"``,
+            or ``None`` to clear.
+        """
+        if phase is not None and phase not in _ASSUMED_PHASE_MAP:
+            raise ValueError(f"unknown phase {phase!r}, expected one of {sorted(_ASSUMED_PHASE_MAP)} or None")
+
+        backend = self.name.split("::", 1)[0] if "::" in self.name else self.name
+        if phase is not None and backend.upper() in _PHASE_IGNORING_BACKENDS:
+            _LOGGER.warning(
+                f"the {backend} backend is region-explicit and ignores an assumed phase; "
+                f"assume_phase({phase!r}) is a no-op here (the fast vectorized path is kept). "
+                "Use a HEOS-backed fluid (e.g. Fluid('HEOS::Water', ...)) to assume a phase."
+            )
+            return self
+
+        self._assumed_phase = phase
+        self._lowlevel = phase is not None or self._composition is not None
+        return self
 
     @property
     def phase(self) -> str:
@@ -1089,14 +1540,14 @@ class Fluid(CoolPropFluid[MT]):
 
 
 class Water(Fluid[MT]):
-    REPR_PROPERTIES: tuple[tuple[str, str], ...] = (
+    REPR_PROPERTIES: tuple[tuple[CProperty, str], ...] = (
         ("P", ".0f"),
         ("T", ".1f"),
         ("D", ".1f"),
         ("V", ".1f"),
     )
 
-    def __init__(self, **kwargs: Quantity[Any, MT] | Quantity[Any, float]) -> None:
+    def __init__(self, **kwargs: Unpack[FluidState[MT]]) -> None:
         """
         Convenience class to access water and steam properties via CoolProp.
 
@@ -1107,7 +1558,7 @@ class Water(Fluid[MT]):
             CoolProp property name.
         """
 
-        # default IF97, set to "Water to use IAPWS-95
+        # default IF97; use the name "Water" for IAPWS-95
         self.name = "IF97::Water"
 
         self.check_inputs(kwargs)
@@ -1120,10 +1571,10 @@ class Water(Fluid[MT]):
 
             raise ValueError(f"Exactly two fixed points are required, passed {list(kwargs)}")
 
-        kwargs_list = list(kwargs.items())
+        points = self._build_points(kwargs)
 
-        self.point_1 = kwargs_list[0]
-        self.point_2 = kwargs_list[1]
+        self.point_1 = points[0]
+        self.point_2 = points[1]
 
         self.points = [self.point_1, self.point_2]
 
@@ -1199,7 +1650,7 @@ class HumidAir(CoolPropFluid[MT]):
         ("M", ".2g"),
     )
 
-    def __init__(self, **kwargs: Quantity[Any, MT] | Quantity[Any, float]) -> None:
+    def __init__(self, **kwargs: Unpack[HumidAirState[MT]]) -> None:
         """
         Interface to the CoolProp function for humid air,
         ``CoolProp.CoolProp.HAPropsSI``.
@@ -1219,11 +1670,11 @@ class HumidAir(CoolPropFluid[MT]):
         if len(kwargs) != 3:
             raise ValueError(f"Exactly three fixed points are required, passed {list(kwargs)}")
 
-        kwargs_list = list(kwargs.items())
+        points = self._build_points(kwargs)
 
-        self.point_1: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = kwargs_list[0]
-        self.point_2: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = kwargs_list[1]
-        self.point_3: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = kwargs_list[2]
+        self.point_1: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = points[0]
+        self.point_2: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = points[1]
+        self.point_3: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = points[2]
 
         self.points = [self.point_1, self.point_2, self.point_3]
 

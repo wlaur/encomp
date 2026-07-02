@@ -20,8 +20,8 @@ assert_type.__code__ = _assert_type.__code__
 def test_inference_basic() -> None:
     assert_type(Q([1]), Q[ut.Dimensionless])
     assert_type(Q(1), Q[ut.Dimensionless, float])
-    assert_type(Q(np.array([1])), Q[ut.Dimensionless, ut.Numpy1DArray])
-    assert_type(Q(np.array([1])), Q[ut.Dimensionless, ut.Numpy1DArray])
+    assert_type(Q(np.array([1])), Q[ut.Dimensionless, ut.Numpy1DArray])  # pyrefly: ignore[assert-type]
+    assert_type(Q(np.array([1])), Q[ut.Dimensionless, ut.Numpy1DArray])  # pyrefly: ignore[assert-type]
     assert_type(Q(pl.Series([1])), Q[ut.Dimensionless, pl.Series])
     assert_type(Q(pl.lit(1)), Q[ut.Dimensionless, pl.Expr])
 
@@ -174,8 +174,8 @@ def test_inference_dimensional_multiplication() -> None:
     assert_type(Q(10.0, "m^2") * Q(2.0, "m"), Q[ut.Volume, float])
 
     # Mass * SpecificVolume = Volume
-    assert_type(Q(100.0, "kg") * Q(0.001, "m^3/kg"), Q[ut.UnknownDimensionality, float])
-    assert_type(Q(pl.lit(100.0), "kg") * Q(0.001, "m^3/kg"), Q[ut.UnknownDimensionality, pl.Expr])
+    assert_type(Q(100.0, "kg") * Q(0.001, "m^3/kg"), Q[ut.Volume, float])
+    assert_type(Q(pl.lit(100.0), "kg") * Q(0.001, "m^3/kg"), Q[ut.Volume, pl.Expr])
 
     # Time * Power = Energy
     assert_type(Q(3600.0, "s") * Q(1000.0, "W"), Q[ut.Energy, float])
@@ -192,11 +192,11 @@ def test_inference_dimensional_multiplication() -> None:
     assert_type(Q(pl.Series([1.0, 2.0]), "m^3") * Q(1000.0, "kg/m^3"), Q[ut.Mass, pl.Series])
 
     # Pressure * Volume = Energy
-    assert_type(Q(101325.0, "Pa") * Q(1.0, "m^3"), Q[ut.UnknownDimensionality, float])
+    assert_type(Q(101325.0, "Pa") * Q(1.0, "m^3"), Q[ut.Energy, float])
 
     # Velocity * Area = VolumeFlow
-    assert_type(Q(5.0, "m/s") * Q(2.0, "m^2"), Q[ut.UnknownDimensionality, float])
-    assert_type(Q([5.0, 10.0], "m/s") * Q(2.0, "m^2"), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
+    assert_type(Q(5.0, "m/s") * Q(2.0, "m^2"), Q[ut.VolumeFlow, float])
+    assert_type(Q([5.0, 10.0], "m/s") * Q(2.0, "m^2"), Q[ut.VolumeFlow, ut.Numpy1DArray])
 
 
 def test_inference_dimensional_division() -> None:
@@ -224,21 +224,101 @@ def test_inference_dimensional_division() -> None:
     assert_type(Q([1000.0, 2000.0], "J") / Q(1.0, "kg"), Q[ut.EnergyPerMass, ut.Numpy1DArray])
 
     # Volume / Area = Length
-    assert_type(Q(100.0, "m^3") / Q(10.0, "m^2"), Q[ut.UnknownDimensionality, float])
+    assert_type(Q(100.0, "m^3") / Q(10.0, "m^2"), Q[ut.Length, float])
 
     # Area / Length = Length
-    assert_type(Q(50.0, "m^2") / Q(5.0, "m"), Q[ut.UnknownDimensionality, float])
-    assert_type(Q(pl.Series([50.0]), "m^2") / Q(5.0, "m"), Q[ut.UnknownDimensionality, pl.Series])
+    assert_type(Q(50.0, "m^2") / Q(5.0, "m"), Q[ut.Length, float])
+    assert_type(Q(pl.Series([50.0]), "m^2") / Q(5.0, "m"), Q[ut.Length, pl.Series])
 
     # VolumeFlow / Area = Velocity
-    assert_type(Q(10.0, "m^3/s") / Q(2.0, "m^2"), Q[ut.UnknownDimensionality, float])
+    assert_type(Q(10.0, "m^3/s") / Q(2.0, "m^2"), Q[ut.Velocity, float])
 
     # Power / Area = PowerPerArea (heat flux)
     assert_type(Q(1000.0, "W") / Q(1.0, "m^2"), Q[ut.UnknownDimensionality, float])
     assert_type(Q([1000.0, 2000.0], "W") / Q(1.0, "m^2"), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
 
     # MassFlow / Density = VolumeFlow
-    assert_type(Q(10.0, "kg/s") / Q(1000.0, "kg/m^3"), Q[ut.UnknownDimensionality, float])
+    assert_type(Q(10.0, "kg/s") / Q(1000.0, "kg/m^3"), Q[ut.VolumeFlow, float])
+
+
+def test_inference_inverse_closure() -> None:
+    # these are the inverses of the curated products; they are kept in sync with the
+    # forward operations by test_overload_conformance.test_curated_algebra_is_closed_under_inverse
+
+    # Mass / MassFlow = Time  (inverse of MassFlow * Time = Mass)
+    assert_type(Q(100.0, "kg") / Q(10.0, "kg/s"), Q[ut.Time, float])
+    assert_type(Q([100.0, 200.0], "kg") / Q(10.0, "kg/s"), Q[ut.Time, ut.Numpy1DArray])
+
+    # Volume / VolumeFlow = Time  (inverse of VolumeFlow * Time = Volume)
+    assert_type(Q(100.0, "m^3") / Q(10.0, "m^3/s"), Q[ut.Time, float])
+
+    # Energy / Power = Time  (inverse of Power * Time = Energy)
+    assert_type(Q(100.0, "J") / Q(10.0, "W"), Q[ut.Time, float])
+
+    # Length / Velocity = Time  (inverse of Velocity * Time = Length)
+    assert_type(Q(100.0, "m") / Q(10.0, "m/s"), Q[ut.Time, float])
+
+    # Mass / Density = Volume  (inverse of Density * Volume = Mass)
+    assert_type(Q(100.0, "kg") / Q(10.0, "kg/m^3"), Q[ut.Volume, float])
+    assert_type(Q(pl.Series([100.0]), "kg") / Q(10.0, "kg/m^3"), Q[ut.Volume, pl.Series])
+
+    # Volume / Length = Area, Volume / Area = Length, Area / Length = Length
+    # (inverses of Length * Area = Volume and Length * Length = Area)
+    assert_type(Q(100.0, "m^3") / Q(10.0, "m"), Q[ut.Area, float])
+    assert_type(Q(100.0, "m^3") / Q(10.0, "m^2"), Q[ut.Length, float])
+    assert_type(Q(50.0, "m^2") / Q(5.0, "m"), Q[ut.Length, float])
+
+    # Energy / EnergyPerMass = Mass, and Mass * EnergyPerMass = Energy (both orders)
+    # "J/kg" does not infer to EnergyPerMass via the constructor, so coerce with asdim
+    eg = Q(10.0, "J/kg").asdim(ut.EnergyPerMass)
+    assert_type(Q(100.0, "J") / eg, Q[ut.Mass, float])
+    assert_type(Q(2.0, "kg") * eg, Q[ut.Energy, float])
+    assert_type(eg * Q(2.0, "kg"), Q[ut.Energy, float])
+
+
+def test_inference_flow_thermo() -> None:
+    # mass flow = density * volume flow  (both orders), and its inverses
+    assert_type(Q(1000.0, "kg/m^3") * Q(2.0, "m^3/s"), Q[ut.MassFlow, float])
+    assert_type(Q(2.0, "m^3/s") * Q(1000.0, "kg/m^3"), Q[ut.MassFlow, float])
+    assert_type(Q([1.0, 2.0], "kg/m^3") * Q(2.0, "m^3/s"), Q[ut.MassFlow, ut.Numpy1DArray])
+    assert_type(Q(10.0, "kg/s") / Q(1000.0, "kg/m^3"), Q[ut.VolumeFlow, float])
+    assert_type(Q(10.0, "kg/s") / Q(2.0, "m^3/s"), Q[ut.Density, float])
+
+    # volume flow = area * velocity, and its inverses
+    assert_type(Q(0.5, "m^2") * Q(2.0, "m/s"), Q[ut.VolumeFlow, float])
+    assert_type(Q(1.0, "m^3/s") / Q(0.5, "m^2"), Q[ut.Velocity, float])
+
+    # volume flow = mass flow * specific volume
+    assert_type(Q(10.0, "kg/s") * Q(0.001, "m^3/kg"), Q[ut.VolumeFlow, float])
+
+    # energy = pressure * volume (PV work), power = pressure * volume flow, and inverses
+    assert_type(Q(2.0, "bar") * Q(1.0, "m^3"), Q[ut.Energy, float])
+    assert_type(Q(1.0, "m^3") * Q(2.0, "bar"), Q[ut.Energy, float])
+    assert_type(Q(2.0, "bar") * Q(0.5, "m^3/s"), Q[ut.Power, float])
+    assert_type(Q(1000.0, "J") / Q(2.0, "bar"), Q[ut.Volume, float])
+    assert_type(Q(1000.0, "J") / Q(1.0, "m^3"), Q[ut.Pressure, float])
+    assert_type(Q(1000.0, "W") / Q(2.0, "bar"), Q[ut.VolumeFlow, float])
+    assert_type(Q(1000.0, "W") / Q(0.5, "m^3/s"), Q[ut.Pressure, float])
+
+    # volume = mass * specific volume, and its inverses
+    assert_type(Q(2.0, "kg") * Q(0.001, "m^3/kg"), Q[ut.Volume, float])
+    assert_type(Q(1.0, "m^3") / Q(2.0, "kg"), Q[ut.SpecificVolume, float])
+    assert_type(Q(1.0, "m^3") / Q(0.001, "m^3/kg"), Q[ut.Mass, float])
+
+    # specific enthalpy change = cp * dT, and the (clean) inverse cp = dh / dT
+    assert_type(Q(4.18, "kJ/kg/K") * Q(10.0, "delta_degC"), Q[ut.EnergyPerMass, float])
+    assert_type(Q(10.0, "delta_degC") * Q(4.18, "kJ/kg/K"), Q[ut.EnergyPerMass, float])
+    assert_type(Q(41.8, "J/kg").asdim(ut.EnergyPerMass) / Q(10.0, "delta_degC"), Q[ut.SpecificHeatCapacity, float])
+
+
+def test_inference_reciprocals() -> None:
+    # 1 / density = specific volume (and back), 1 / time = frequency (and back)
+    assert_type(1 / Q(1000.0, "kg/m^3"), Q[ut.SpecificVolume, float])
+    assert_type(1 / Q(0.001, "m^3/kg"), Q[ut.Density, float])
+    assert_type(1 / Q(0.5, "s"), Q[ut.Frequency, float])
+    # "Hz" has no unit-literal overload, so coerce the static type with asdim
+    assert_type(1 / Q(50.0, "Hz").asdim(ut.Frequency), Q[ut.Time, float])
+    assert_type(1 / Q([0.5, 1.0], "s"), Q[ut.Frequency, ut.Numpy1DArray])
 
 
 def test_inference_dimensional_derived_units() -> None:
@@ -308,43 +388,29 @@ def test_various() -> None:
 
 
 def test_inference_magnitude_type_promotion() -> None:
-    # ISSUE: scalar with units * array with units
-    # Runtime correctly produces ndarray, but static type is inferred as float
-    result1 = Q(3, "m") * Q([1, 2], "m")
-    assert isinstance(result1.m, np.ndarray)  # Runtime: ndarray ✓
-    # Static: Q[Area, float] ✗
+    # a scalar (float-magnitude) quantity combined with an array quantity promotes
+    # the magnitude to the array type, both statically (via the (float, MT_) member
+    # of each overload group) and at runtime
 
-    # ISSUE: dimensional scalar * dimensionless array
-    result2 = Q(1, "kg") * Q([2, 3])
-    assert isinstance(result2.m, np.ndarray)  # Runtime: ndarray ✓
-    # Static: Q[Mass, ndarray] would be correct but currently Any
+    # scalar * array, curated pair
+    assert_type(Q(3, "m") * Q([1, 2], "m"), Q[ut.Area, ut.Numpy1DArray])
 
-    # ISSUE: scalar / array with units
-    result3 = Q(4, "m") / Q([2, 4], "s")
-    assert isinstance(result3.m, np.ndarray)  # Runtime: ndarray ✓
-    # Static: Q[Velocity, float] ✗
+    # dimensional scalar * dimensionless array
+    assert_type(Q(1, "kg") * Q([2, 3]), Q[ut.Mass, ut.Numpy1DArray])
 
-    # ISSUE: dimensional scalar / dimensionless array
-    result4 = Q(4, "m") / Q([2, 4])
-    assert isinstance(result4.m, np.ndarray)  # Runtime: ndarray ✓
-    # Static: Q[Length, float] ✗
+    # scalar / array, curated pair
+    assert_type(Q(4, "m") / Q([2, 4], "s"), Q[ut.Velocity, ut.Numpy1DArray])
 
-    # ISSUE: scalar + array
-    result5 = Q(3) + Q([1, 2])
-    assert isinstance(result5.m, np.ndarray)  # Runtime: ndarray ✓
-    # Static: Q[Dimensionless, float] ✗
+    # dimensional scalar / dimensionless array
+    assert_type(Q(4, "m") / Q([2, 4]), Q[ut.Length, ut.Numpy1DArray])
 
-    result6 = Q(3, "m") + Q([1, 2], "m")
-    assert isinstance(result6.m, np.ndarray)  # Runtime: ndarray ✓
-    # Static: Q[Length, float] ✗
+    # scalar + array
+    assert_type(Q(3) + Q([1, 2]), Q[ut.Dimensionless, ut.Numpy1DArray])
+    assert_type(Q(3, "m") + Q([1, 2], "m"), Q[ut.Length, ut.Numpy1DArray])
 
-    _ = Q(pl.Series([1, 2])) * Q(2)
-    # Runtime behavior varies for polars Series
-    # Static type: Q[Dimensionless, pl.Series]
-
-    _ = Q(pl.Series([1, 2]), "m") / Q(2, "s")
-    # Runtime behavior varies
-    # Static type mismatch
+    # the same promotion for pl.Series magnitudes
+    assert_type(Q(pl.Series([1, 2])) * Q(2), Q[ut.Dimensionless, pl.Series])
+    assert_type(Q(pl.Series([1, 2]), "m") / Q(2, "s"), Q[ut.Velocity, pl.Series])
 
 
 def test_inference_mul_truediv() -> None:
@@ -378,7 +444,7 @@ def test_mul_dimensionless_float_float() -> None:
 
 def test_mul_dimensionless_float_array() -> None:
     assert_type(Q(1.0) * Q([2.0]), Q[ut.Dimensionless, ut.Numpy1DArray])
-    assert_type(Q(1.0) * Q(np.array([2.0])), Q[ut.Dimensionless, ut.Numpy1DArray])
+    assert_type(Q(1.0) * Q(np.array([2.0])), Q[ut.Dimensionless, ut.Numpy1DArray])  # pyrefly: ignore[assert-type]
 
 
 def test_mul_dimensionless_float_series() -> None:
@@ -391,12 +457,12 @@ def test_mul_dimensionless_float_expr() -> None:
 
 def test_mul_dimensionless_array_float() -> None:
     assert_type(Q([1.0]) * Q(2.0), Q[ut.Dimensionless, ut.Numpy1DArray])
-    assert_type(Q(np.array([1.0])) * Q(2.0), Q[ut.Dimensionless, ut.Numpy1DArray])
+    assert_type(Q(np.array([1.0])) * Q(2.0), Q[ut.Dimensionless, ut.Numpy1DArray])  # pyrefly: ignore[assert-type]
 
 
 def test_mul_dimensionless_array_array() -> None:
     assert_type(Q([1.0]) * Q([2.0]), Q[ut.Dimensionless, ut.Numpy1DArray])
-    assert_type(Q(np.array([1.0])) * Q(np.array([2.0])), Q[ut.Dimensionless, ut.Numpy1DArray])
+    assert_type(Q(np.array([1.0])) * Q(np.array([2.0])), Q[ut.Dimensionless, ut.Numpy1DArray])  # pyrefly: ignore[assert-type]
 
 
 def test_mul_dimensionless_series_float() -> None:
@@ -608,22 +674,25 @@ def test_truediv_dimensionless_by_dimensional_expr() -> None:
 
 
 def test_rtruediv_float_by_quantity() -> None:
-    assert_type(2 / Q(1.0, "s"), Q[ut.UnknownDimensionality, float])
-    assert_type(2.0 / Q(1.0, "s"), Q[ut.UnknownDimensionality, float])
+    # 1/time = frequency, so a scalar divided by a Time quantity is a Frequency
+    assert_type(2 / Q(1.0, "s"), Q[ut.Frequency, float])
+    assert_type(2.0 / Q(1.0, "s"), Q[ut.Frequency, float])
     assert_type(2 / Q(1.0), Q[ut.Dimensionless, float])
+    # a dimensionality without a reciprocal overload still falls through to Unknown
+    assert_type(2 / Q(1.0, "kg"), Q[ut.UnknownDimensionality, float])
 
 
 def test_rtruediv_float_by_array_quantity() -> None:
-    assert_type(2 / Q([1.0], "s"), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
-    assert_type(2.0 / Q([1.0], "s"), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
+    assert_type(2 / Q([1.0], "s"), Q[ut.Frequency, ut.Numpy1DArray])
+    assert_type(2.0 / Q([1.0], "s"), Q[ut.Frequency, ut.Numpy1DArray])
 
 
 def test_rtruediv_float_by_series_quantity() -> None:
-    assert_type(2 / Q(pl.Series([1.0]), "s"), Q[ut.UnknownDimensionality, pl.Series])
+    assert_type(2 / Q(pl.Series([1.0]), "s"), Q[ut.Frequency, pl.Series])
 
 
 def test_rtruediv_float_by_expr_quantity() -> None:
-    assert_type(2 / Q(pl.lit(1.0), "s"), Q[ut.UnknownDimensionality, pl.Expr])
+    assert_type(2 / Q(pl.lit(1.0), "s"), Q[ut.Frequency, pl.Expr])
 
 
 def test_floordiv_dimensional_by_dimensionless() -> None:
@@ -737,7 +806,7 @@ def test_truediv_mass_time_to_massflow_float() -> None:
 
 def test_truediv_mass_time_to_massflow_array() -> None:
     assert_type(Q([10.0], "kg") / Q(2.0, "s"), Q[ut.MassFlow, ut.Numpy1DArray])
-    assert_type(Q(np.array([10.0, 20.0]), "kg") / Q(2.0, "s"), Q[ut.MassFlow, ut.Numpy1DArray])
+    assert_type(Q(np.array([10.0, 20.0]), "kg") / Q(2.0, "s"), Q[ut.MassFlow, ut.Numpy1DArray])  # pyrefly: ignore[assert-type]
 
 
 def test_truediv_mass_time_to_massflow_series() -> None:
@@ -1031,6 +1100,36 @@ def test_pow_inference() -> None:
 
     assert_type(Q(25, "kg") ** 0.5, Q[ut.UnknownDimensionality, float])
     assert_type(Q(25, "m") ** 0.5, Q[ut.UnknownDimensionality, float])
+
+
+def test_int_scalar_accepted() -> None:
+    # the operator/comparison overloads annotate the scalar operand as `float`
+    # (not `float | int`); int arguments must still be accepted via the PEP 484
+    # numeric tower and normalized to a float-magnitude result.
+    # these assertions are validated statically (pyright/pyrefly) and at runtime.
+    q = Q(2.0, "bar")
+
+    assert_type(q * 3, Q[ut.Pressure, float])
+    assert_type(3 * q, Q[ut.Pressure, float])
+    assert_type(q / 3, Q[ut.Pressure, float])
+    assert_type(q // 3, Q[ut.Pressure, float])
+    assert_type(q**2, Q[ut.UnknownDimensionality, float])
+
+    d = Q(2.0)  # dimensionless
+
+    assert_type(d + 3, Q[ut.Dimensionless, float])
+    assert_type(3 + d, Q[ut.Dimensionless, float])
+    assert_type(d - 3, Q[ut.Dimensionless, float])
+    assert_type(3 - d, Q[ut.Dimensionless, float])
+    assert_type(d**3, Q[ut.Dimensionless, float])
+
+    # int operand against an array magnitude broadcasts to the array type
+    # (pyrefly cannot infer the constrained magnitude TypeVar through numpy here,
+    # so it falls back to Any — the same gap annotated elsewhere in this file;
+    # pyright resolves it and the runtime check below verifies it precisely)
+    arr = Q(np.array([1.0, 2.0]), "bar")
+    assert_type(arr * 2, Q[ut.Pressure, ut.Numpy1DArray])  # pyrefly: ignore[assert-type]
+    assert_type(arr / 2, Q[ut.Pressure, ut.Numpy1DArray])  # pyrefly: ignore[assert-type]
 
 
 def test_unknown() -> None:

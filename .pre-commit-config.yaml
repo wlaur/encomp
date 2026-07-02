@@ -6,9 +6,25 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.13
+    rev: v0.15.20
     hooks:
       - id: ruff-check
         types_or: [ python, pyi, jupyter ]
       - id: ruff-format
         types_or: [python, pyi, jupyter]
+  # Rust lint/format for the CoolProp plugin crate (rust/). `language: system` uses
+  # the developer's installed toolchain (rustfmt + clippy ship with stable Rust).
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --manifest-path rust/Cargo.toml -- --check
+        language: system
+        files: ^rust/src/.*\.rs$
+        pass_filenames: false
+      - id: cargo-clippy
+        name: cargo clippy -D warnings
+        entry: cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
+        language: system
+        files: ^rust/src/.*\.rs$
+        pass_filenames: false

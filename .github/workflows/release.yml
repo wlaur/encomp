@@ -1,0 +1,122 @@
+name: encomp release
+
+# Build the encomp wheels (pure-Python modules + the compiled CoolProp Polars plugin
+# + bundled libCoolProp, all in one wheel) for macOS / Linux / Windows, run the full
+# test suite against each wheel on Python 3.13 and 3.14, and publish to PyPI on a tag.
+#
+#   typecheck     -> pyright (strict) + pyrefly, the required-green checkers
+#                    (ty is advisory and intentionally not gated)
+#   build-wheels  -> one wheel per OS/arch (abi3 cp313 => runs on 3.13+)
+#   test          -> install each prebuilt wheel + run pytest, every OS x py
+#   publish       -> only on a `v*` tag, after all tests pass, via PyPI Trusted
+#                    Publishing (OIDC -- no token/secret stored anywhere)
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ["encomp/**", "rust/**", "scripts/**", "pyproject.toml", ".github/workflows/release.yml"]
+  push:
+    tags: ["v*"]
+
+# One in-flight run per ref: pushing a new commit to a PR branch cancels that branch's
+# previous run (frees runners, no stale queue). cancel-in-progress is limited to PRs, so a
+# `v*` tag publish -- which has its own unique ref anyway -- is never cancelled mid-run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  typecheck:
+    # static analysis only: deps come from the lockfile, the project itself is NOT
+    # built (--no-install-project skips the maturin/Rust build -- the checkers
+    # analyze the source tree, and the compiled plugin is loaded by file path at
+    # runtime, never imported, so it is not needed for type checking)
+    name: typecheck (pyright + pyrefly)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.0
+      - uses: astral-sh/setup-uv@v8.2.0
+        with:
+          python-version: "3.13"
+      - run: uv sync --locked --no-install-project
+      - run: uv run --no-sync pyright
+      - run: uv run --no-sync pyrefly check
+
+  build-wheels:
+    name: build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest      # manylinux x86_64
+          - ubuntu-24.04-arm   # manylinux aarch64
+          - macos-14           # macOS arm64 (Apple Silicon; Intel x86_64 intentionally unsupported)
+          - windows-latest     # Windows x86_64
+    steps:
+      - uses: actions/checkout@v7.0.0
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v4.1.0
+        with:
+          package-dir: .
+          output-dir: wheelhouse
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: wheels-${{ matrix.os }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  test:
+    name: test ${{ matrix.os }} py${{ matrix.python }}
+    needs: build-wheels
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-14, windows-latest]
+        python: ["3.13", "3.14"]
+    steps:
+      - uses: actions/setup-python@v6.3.0
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          path: wheelhouse
+          pattern: wheels-*
+          merge-multiple: true
+      - name: Install the prebuilt wheel + run the full suite
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          # install the PREBUILT encomp wheel (abi3 cp313 installs on 3.14 too) by
+          # name so it is not rebuilt from source; deps + test deps come from PyPI
+          pip install --find-links wheelhouse encomp pytest hypothesis
+          python -c "from encomp import coolprop as cp; assert cp.self_check(), 'plugin self_check failed'"
+          python -m pytest --pyargs encomp.tests -q
+
+  publish:
+    name: publish to PyPI
+    needs: [typecheck, build-wheels, test]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: pypi               # configure the Trusted Publisher against this env
+    permissions:
+      id-token: write               # OIDC -> PyPI; no API token/secret is used
+      contents: read                # checkout below reads pyproject.toml to guard the tag
+    steps:
+      - uses: actions/checkout@v7.0.0
+      - name: Verify the tag matches the pyproject version
+        # the wheels carry the version from pyproject.toml; refuse to publish under a tag
+        # that disagrees (e.g. tagging v1.5.1 while pyproject still says 1.5.0)
+        run: |
+          version=$(grep -m1 '^version' pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match pyproject version $version (expected v$version)"
+            exit 1
+          fi
+          echo "tag $GITHUB_REF_NAME matches pyproject version $version"
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          path: dist
+          pattern: wheels-*
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1

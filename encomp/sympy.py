@@ -4,6 +4,7 @@ Imports and extends the ``sympy`` library for symbolic mathematics.
 Contains tools for converting Sympy expressions to Python modules and functions.
 """
 
+import keyword
 import re
 from collections.abc import Callable, Iterable, Sequence
 from functools import lru_cache
@@ -52,15 +53,19 @@ def to_identifier(s: sp.Symbol | str) -> str:
     s = s.replace("^", "__")
     s = s.replace("'", "prime")
 
-    # need to differentiate between symbols "\text{m}" and "m"
-    # the string "text" is a bit long, replace with "T"
-    s = s.replace("text", "T")
-
-    # the substring "lambda" cannot exist in the identifier
-    s = s.replace("lambda", "lam")
+    # collapse the LaTeX \text{...} token (used to distinguish "\text{m}" from "m") to "T".
+    # anchored to the backslash so a plain symbol merely CONTAINING "text" (e.g. "context")
+    # is not corrupted
+    s = s.replace(r"\text", "T")
 
     # remove all non-alphanumeric or _
     s = re.sub(r"\W+", "", s)
+
+    # a Python keyword (e.g. "lambda", "class") is a valid identifier syntactically but
+    # cannot be used as a variable/parameter name -- suffix it so it can. handles all
+    # keywords, not just "lambda", and does not corrupt names that merely contain one
+    if keyword.iskeyword(s):
+        s = f"{s}_"
 
     if not s.isidentifier():
         raise ValueError(f"Symbol could not be converted to a valid Python identifer: {s_orig}")
@@ -87,7 +92,17 @@ def get_args(e: sp.Basic) -> list[str]:
         Sorted list of identifiers for each free symbol
     """
 
-    return sorted(map(to_identifier, e.free_symbols))
+    symbols = e.free_symbols
+    identifiers = sorted(map(to_identifier, symbols))
+    # to_identifier is a lossy per-symbol mapping, so two DISTINCT symbols can collapse to the
+    # same identifier (e.g. a bare keyword "lambda" and its twin "lambda_"). Refuse rather than
+    # silently emit a lambda with a duplicate parameter that merges the two symbols.
+    if len(set(identifiers)) != len(symbols):
+        raise ValueError(
+            f"Symbols in {e} map to colliding identifiers {identifiers}; "
+            "rename the symbols so their to_identifier() forms are distinct"
+        )
+    return identifiers
 
 
 def recursive_subs(e: sp.Basic, replacements: list[tuple[sp.Symbol, sp.Basic]]) -> sp.Basic:
@@ -362,6 +377,16 @@ def get_lambda_matrix(M: sp.MutableDenseMatrix) -> tuple[str, list[str]]:
         Python source code for the function and a list of parameters
     """
 
+    # catch identifier collisions across the WHOLE matrix up front: a per-cell get_lambda only
+    # sees its own symbols, but two symbols in different cells could collapse to one identifier
+    # and silently merge (the args set below would dedupe them without a duplicate-param error)
+    matrix_symbols = cast("set[sp.Symbol]", M.free_symbols)
+    if len({to_identifier(s) for s in matrix_symbols}) != len(matrix_symbols):
+        raise ValueError(
+            "Symbols in the matrix map to colliding identifiers; "
+            "rename them so their to_identifier() forms are distinct"
+        )
+
     args = set()
 
     nrows, ncols = M.shape
@@ -383,9 +408,13 @@ def get_lambda_matrix(M: sp.MutableDenseMatrix) -> tuple[str, list[str]]:
 
     # TODO: "VisibleDeprecationWarning: Creating an ndarray from ragged..."
     # when mixing input vectors and floats
-    func_src = f"lambda {', '.join(args)}: np.array({funcs})"
+    # the signature MUST use the same order as the returned parameter list, otherwise a
+    # caller binding the returned params positionally hits a different order than the lambda
+    # expects (args is a set: its iteration order is arbitrary and varies with PYTHONHASHSEED)
+    sorted_args = sorted(args)
+    func_src = f"lambda {', '.join(sorted_args)}: np.array({funcs})"
 
-    return func_src, sorted(args)
+    return func_src, sorted_args
 
 
 @lru_cache
@@ -593,8 +622,8 @@ def typeset(x: str | int) -> str:
 
     for i, p in enumerate(parts):
         # avoid typesetting single upper-case letters as text
-        # if they start with ~
-        if p.startswith("~") and p[1].isupper():
+        # if they start with ~ (guard len so a bare "~" part does not IndexError)
+        if p.startswith("~") and len(p) > 1 and p[1].isupper():
             parts[i] = p[1]
             continue
 
@@ -619,6 +648,10 @@ def typeset(x: str | int) -> str:
 
 
 class Symbol(sp.Symbol):
+    """A ``sympy.Symbol`` extended with convenience methods for typeset sub- and
+    superscripts (:meth:`_`, :meth:`__`, :meth:`decorate`). Each method returns a new
+    symbol with the same assumptions as the original."""
+
     def decorate(
         self,
         prefix: str | int | None = None,

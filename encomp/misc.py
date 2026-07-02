@@ -18,11 +18,17 @@ def isinstance_types[T](obj: Any, expected: TypeForm[T]) -> TypeIs[T]:  # noqa: 
     from .utypes import UnknownDimensionality
 
     if get_origin(expected) is UnionType:
-        # narrowed to a UnionType by the check above, which isinstance accepts
-        try:
-            return isinstance(obj, cast(UnionType, expected))
-        except TypeError:
-            return any(isinstance_types(obj, n) for n in get_args(expected))
+        # a Quantity must be routed through the detailed per-member logic below: a plain
+        # isinstance against the union misclassifies a Quantity[UnknownDimensionality, ...]
+        # member (it matches ANY dimensionality here, but is a *sibling* class at runtime, so
+        # isinstance says False) -- decompose so single-type and union checks stay consistent.
+        if not isinstance(obj, Quantity):
+            # narrowed to a UnionType by the check above, which isinstance accepts
+            try:
+                return isinstance(obj, cast(UnionType, expected))
+            except TypeError:
+                pass
+        return any(isinstance_types(obj, n) for n in get_args(expected))
 
     if isinstance(obj, Quantity) and _is_quantity_subclass(expected):
         if expected is Quantity:
@@ -52,49 +58,6 @@ def isinstance_types[T](obj: Any, expected: TypeForm[T]) -> TypeIs[T]:  # noqa: 
         return True
     except Exception:
         return False
-
-
-def grid_dimensions(N: int, nrows: int, ncols: int) -> tuple[int, int]:
-    """
-    Returns image grid dimensions (rows and columns) based
-    on the total number of items ``N``.
-
-    Parameters
-    ----------
-    N : int
-        Total number of items
-    nrows : int
-        Number or rows, -1 means determined by the number of items
-    ncols : int
-        Number of columns, -1 means determined by the number of items
-
-    Returns
-    -------
-    tuple[int, int]
-        Number of rows and columns for a grid that fits all items
-    """
-
-    if nrows == -1 and ncols == -1:
-        # start with a square grid
-        nrows = ncols = int(N**0.5)
-
-        # increase the number of cols until all items fit in the grid
-        while nrows * ncols < N:
-            ncols += 1
-
-        return nrows, ncols
-
-    if nrows == -1:
-        nrows = N // ncols if N % ncols == 0 else N // ncols + 1
-
-    elif ncols == -1:
-        ncols = N // nrows if N % nrows == 0 else N // nrows + 1
-
-    else:
-        if nrows * ncols < N:
-            raise ValueError(f"{N} items cannot be placed in a {nrows} x {ncols} grid")
-
-    return nrows, ncols
 
 
 class _ASTTokens(Protocol):

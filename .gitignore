@@ -140,3 +140,15 @@ generated
 .python-version
 .ruff-cache/
 .claude
+
+**/temp
+
+# Rust / maturin build artifacts (the compiled plugin + bundled libCoolProp live in
+# encomp/coolprop/ and are produced at build time, not committed)
+/target/
+*.dylib
+*.dll
+*.pyd
+*.so
+/_coolprop_build/
+/wheelhouse*/

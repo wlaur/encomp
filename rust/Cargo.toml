@@ -1,0 +1,45 @@
+[package]
+name = "encomp_coolprop"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+# A Polars expression plugin is a dynamic library that Polars loads via libloading
+# and calls over the C ABI (not a Python extension module that gets imported).
+crate-type = ["cdylib"]
+
+[features]
+# pyo3's extension-module leaves the libpython symbols undefined -- correct for the
+# plugin cdylib (the host process provides them), but a `cargo test` binary cannot
+# defer them. It is therefore a DEFAULT feature (so maturin/plugin builds are
+# unchanged) that the test build disables, linking libpython instead:
+#   PYO3_PYTHON=$(pwd)/../.venv/bin/python cargo test --no-default-features
+# (PYO3_PYTHON must point at a >=3.13 interpreter for abi3-py313.)
+default = ["extension-module"]
+extension-module = ["pyo3/extension-module"]
+
+[dependencies]
+# Versions pinned to match the installed Python polars 1.42.0 (Rust polars 0.54.4).
+# pyo3-polars 0.27.0 -> polars ^0.54.4, pyo3 ^0.28. A plugin's polars-ffi version
+# must match the host polars or it won't load (see README).
+polars = { version = "0.54.4", default-features = false }
+pyo3-polars = { version = "0.27.0", features = ["derive"] }
+pyo3 = { version = "0.28", features = ["abi3-py313"] }
+serde = { version = "1", features = ["derive"] }
+libloading = "0.8" # dlopen libCoolProp at runtime (cross-platform: .dylib/.so/.dll)
+
+[lints.rust]
+# require `unsafe {}` inside an `unsafe fn` body (no implicit unsafe scope)
+unsafe_op_in_unsafe_fn = "warn"
+
+[lints.clippy]
+# every `unsafe {}` block must carry a `// SAFETY:` comment (rationale + error
+# modes). All unsafe lives in coolprop.rs; this keeps it documented and auditable.
+undocumented_unsafe_blocks = "warn"
+
+# Size-optimized release: the .so statically links polars, so LTO prunes a lot of
+# unused code and strip drops debug symbols (the wheel is mostly this .so).
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1

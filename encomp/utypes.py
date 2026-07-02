@@ -552,13 +552,21 @@ def get_registered_units() -> dict[str, tuple[str, ...]]:
 
 class _DimensionalityMeta(type):
     def __eq__(cls, other: object) -> bool:
+        # qualname-based identity keeps dimensionality classes stable across module
+        # reloads (e.g. Jupyter autoreload): a re-executed class statement produces
+        # a new class object that must still compare equal. NOTE: no metaclass /
+        # issubclass anchor here -- under a reload those module globals rebind to
+        # the new class objects and would make identical classes compare unequal
         if not isinstance(other, type):
             return False
 
         return cls.__qualname__ == other.__qualname__
 
     def __hash__(cls) -> int:
-        return id(cls)
+        # eq/hash contract: __eq__ compares by qualname, so equal (same-qualname)
+        # classes must hash equal for dict/set correctness. The tag is a plain
+        # string for the same reload-stability reason as in __eq__
+        return hash(("encomp.utypes.Dimensionality", cls.__qualname__))
 
 
 class Dimensionality(metaclass=_DimensionalityMeta):
@@ -612,9 +620,7 @@ class Dimensionality(metaclass=_DimensionalityMeta):
             return
 
         if cls.dimensions is cls._UnsetUC:
-            raise TypeError(
-                f"Cannot initialize {cls}, class attribute 'dimensionality' is not defined for this subclass"
-            )
+            raise TypeError(f"Cannot initialize {cls}, class attribute 'dimensions' is not defined for this subclass")
 
         # ensure that the subclass names are unique
         if cls.__name__ in (subcls.__name__ for subcls in cls._registry):

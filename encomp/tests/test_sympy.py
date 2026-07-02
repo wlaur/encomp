@@ -1,8 +1,10 @@
+import keyword
 from typing import Any, cast
 
 import numpy as np
+import pytest
 
-from ..sympy import Symbol, get_args, get_function, sp, symbols, to_identifier
+from ..sympy import Symbol, get_args, get_function, get_lambda_matrix, sp, symbols, to_identifier
 from ..units import Quantity as Q
 
 
@@ -25,6 +27,21 @@ def test_to_identifier() -> None:
     s = to_identifier(x._("subscript").__("superscript"))
 
     assert s.isidentifier()
+
+
+def test_to_identifier_does_not_corrupt_plain_names() -> None:
+    # a plain symbol whose name merely CONTAINS "text" or a keyword must not be mangled:
+    # the \text collapse is anchored to the LaTeX token, keywords are suffixed not replaced
+    assert to_identifier(cast(Any, sp.Symbol("context"))) == "context"
+    assert to_identifier(cast(Any, sp.Symbol("flambda"))) == "flambda"
+    assert to_identifier(cast(Any, sp.Symbol("m"))) == "m"
+
+    # a bare Python keyword becomes a usable identifier (suffixed), not left as the keyword
+    lam = to_identifier(cast(Any, sp.Symbol("lambda")))
+    assert lam.isidentifier() and not keyword.iskeyword(lam)
+
+    # the LaTeX \text{...} token is still collapsed, so "\text{m}" and "m" stay distinct
+    assert to_identifier(cast(Any, sp.Symbol(r"\text{m}"))) != to_identifier(cast(Any, sp.Symbol("m")))
 
 
 def test_get_args() -> None:
@@ -78,6 +95,51 @@ def test_Quantity_to_sympy_integration() -> None:
 
     _ = cast(Any, x) + Q(2)
     _ = cast(Any, x) + Q(2, "m")
+
+
+def test_get_lambda_matrix_arg_order() -> None:
+    # the generated lambda signature MUST use the same parameter order as the returned list,
+    # otherwise a caller binding the returned params positionally misaligns the values (the
+    # collected args are a set, whose order is arbitrary / PYTHONHASHSEED-dependent)
+    import inspect
+
+    sp_any = cast(Any, sp)
+    a, b, c, d, e = sp_any.symbols("a b c d e")
+    M = sp_any.Matrix([[a - 10 * b], [100 * c - d], [e]])
+
+    src, params = get_lambda_matrix(M)
+    fcn = eval(src, {"np": np})  # generated numeric lambda, test-only
+
+    assert list(inspect.signature(fcn).parameters) == params
+
+    # binding the returned params positionally yields the correct matrix
+    values = {"a": 1.0, "b": 0.0, "c": 0.0, "d": 0.0, "e": 0.0}  # row 0 = a - 10b = 1
+    result = fcn(*[values[p] for p in params])
+    assert float(np.asarray(result).ravel()[0]) == 1.0
+
+
+def test_get_lambda_rejects_colliding_identifiers() -> None:
+    # to_identifier is a lossy per-symbol map, so distinct symbols CAN collapse to one
+    # identifier (a bare keyword "lambda" -> "lambda_" collides with a symbol named "lambda_").
+    # get_lambda / get_lambda_matrix must raise rather than emit a lambda that silently merges
+    # the two symbols into one parameter.
+    # get_lambda's return type uses a bare Callable (suppressed module-wide in sympy.py), so
+    # reach it via cast to avoid a partially-unknown-type error in this strict-checked test
+    from .. import sympy as _sympy
+
+    get_lambda = cast("Any", _sympy).get_lambda
+    sp_any = cast(Any, sp)
+    lam, lam_ = sp_any.Symbol("lambda"), sp_any.Symbol("lambda_")
+
+    with pytest.raises(ValueError, match="colliding identifiers"):
+        get_lambda(lam + 1000 * lam_, to_str=True)
+
+    with pytest.raises(ValueError, match="colliding identifiers"):
+        get_lambda_matrix(sp_any.Matrix([[lam], [lam_]]))
+
+    # a keyword symbol on its own is fine -- the guard only trips on an actual collision
+    _, params = get_lambda(lam + 1, to_str=True)
+    assert params == ["lambda_"]
 
 
 def test_get_function() -> None:

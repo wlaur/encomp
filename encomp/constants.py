@@ -1,20 +1,13 @@
-"""
-Contains constants used elsewhere in the library.
-"""
-
-from dataclasses import dataclass
-
 from .units import Quantity as Q
 
 
-@dataclass
+# A namespace of physical constants, accessed via the CONSTANTS singleton (CONSTANTS.R, ...).
+# NOT a dataclass: the members have no field annotations, so @dataclass would generate an
+# empty __init__ (Constants(R=...) would fail) and add nothing -- they are plain class-level
+# constants by design.
 class Constants:
-    """
-    Collection of constants.
-    Use a single instance of this class to refer to these constants.
-    """
-
-    R = Q(8.3144598, "kg*m²/K/mol/s²")
+    # exact by the 2019 SI definition: R = k_B * N_A
+    R = Q(8.31446261815324, "kg*m²/K/mol/s²")
     SIGMA = Q(5.670374419e-8, "W/m**2/K**4")
 
     normal_conditions_pressure = Q(1, "atm")
