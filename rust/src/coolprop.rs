@@ -151,14 +151,19 @@ impl CoolProp {
         Ok(i)
     }
 
-    pub fn input_pair_index(&self, name: &str) -> Result<c_long, CpError> {
+    pub fn input_pair_index(&self, name: &str) -> Result<i64, CpError> {
         let c = cstr(name)?;
         // SAFETY: `get_input_pair_index` reads a NUL-terminated C string; `c` outlives the call.
         let i = unsafe { (self.get_input_pair_index)(c.as_ptr()) };
         if i < 0 {
             return Err(CpError(format!("unknown input pair {name:?}")));
         }
-        Ok(i)
+        // return the logical index as i64 (matching update_and_1_out / kwargs.input_pair). The
+        // c_long -> i64 conversion widens on Windows LLP64 (c_long is i32) and is a no-op on
+        // LP64, where clippy flags it as useless -- hence the targeted allow.
+        #[allow(clippy::useless_conversion)]
+        let index = i64::from(i);
+        Ok(index)
     }
 
     /// Warm up ONE (backend, fluid) config, lazily. The FIRST call (any config) also runs
