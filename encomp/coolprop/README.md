@@ -129,6 +129,13 @@ via `.github/workflows/release.yml`:
 the lib, and emits PyPI-compatible tags. Lint/format: `cargo fmt`, `cargo clippy
 --all-targets -- -D warnings` (wired into the repo's pre-commit).
 
+Rust unit tests (the pure helpers: broadcast, output dtype, error-buffer decoding)
+need `extension-module` off so the test binary can link libpython (see Cargo.toml):
+
+```bash
+PYO3_PYTHON=$(pwd)/.venv/bin/python cargo test --manifest-path rust/Cargo.toml --no-default-features
+```
+
 ## Files
 
 - `encomp/coolprop/__init__.py` — public Python API (`fluid`, `humid_air`).

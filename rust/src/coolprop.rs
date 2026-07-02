@@ -169,6 +169,12 @@ impl CoolProp {
     /// warmed (so an IF97-only run never touches HEOS, and vice versa). Best-effort: the warmup
     /// flash's own error is ignored -- triggering the init is the point, and a genuinely invalid
     /// config surfaces its error from the real evaluation.
+    ///
+    /// The key deliberately EXCLUDES fractions and assumed phase: CoolProp's lazy global
+    /// init (fluid library, binary-pair data, TTSE/BICUBIC tables) depends only on the
+    /// (backend, fluid-list) pair, while set_fractions / specify_phase are per-handle
+    /// state with no global side effects -- so one warmup per (backend, fluid) covers
+    /// every composition and phase of that config.
     pub fn ensure_warmed_fluid(&self, backend: &str, fluid: &str) {
         let key = format!("F\0{backend}\0{fluid}");
         self.ensure_warmed(&key, || {
@@ -360,5 +366,26 @@ impl Drop for State<'_> {
         // SAFETY: frees a handle we own exactly once (Drop runs once); the
         // handle-table write is serialised by `handle_lock` held here.
         unsafe { (self.cp.free)(self.handle, &mut err, msg.as_mut_ptr(), BUFLEN) };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn read_msg_stops_at_nul_and_survives_non_utf8() {
+        let buf: Vec<c_char> = b"error text\0garbage".iter().map(|&b| b as c_char).collect();
+        assert_eq!(read_msg(&buf), "error text");
+        assert_eq!(read_msg(&[0]), "");
+        // a negative c_char (high byte) round-trips through the lossy decode
+        let weird: Vec<c_char> = vec![b'a' as c_char, -1, 0];
+        assert_eq!(read_msg(&weird), "a\u{fffd}");
+    }
+
+    #[test]
+    fn cstr_rejects_interior_nul() {
+        assert!(cstr("Water").is_ok());
+        assert!(cstr("Wa\0ter").is_err());
     }
 }

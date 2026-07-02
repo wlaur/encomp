@@ -372,3 +372,56 @@ def test_plugin_output_dtype_preserves_input_precision() -> None:
     assert dfa.select(cp.humid_air("W", "P", "T", "R").alias("w"))["w"].dtype == pl.Float32
     dfa64 = dfa.with_columns(pl.all().cast(pl.Float64))
     assert dfa64.select(cp.humid_air("W", "P", "T", "R").alias("w"))["w"].dtype == pl.Float64
+
+
+# results must be BIT-identical regardless of the polars thread count: the flash is
+# pure per-row math on per-thread states, and chunk boundaries only affect scheduling,
+# never values. POLARS_MAX_THREADS is read at polars import, so each count runs in a
+# fresh subprocess; the digest covers every byte of every output column (nulls -> NaN).
+_THREAD_PARITY_WORKER = r"""
+import hashlib
+import numpy as np
+import polars as pl
+from encomp import coolprop as cp
+
+rng = np.random.default_rng(1234)
+n = 5_000
+P = rng.uniform(1e5, 200e5, n)
+T = rng.uniform(280.0, 900.0, n)
+P[0] = np.nan  # null-propagation must also be thread-count-invariant
+df = pl.DataFrame({"P": P, "T": T})
+out = df.select(
+    cp.fluid("DMASS", "P", "T", name="IF97::Water").alias("d"),
+    cp.fluid("HMASS", "P", "T", name="IF97::Water").alias("h"),
+    cp.fluid(
+        "SMASS", "P", "T", name="HEOS::CO2&O2",
+        composition={"CO2": 0.5, "O2": 0.5}, assume_phase="gas",
+    ).alias("s_mix"),
+    cp.fluid("VISCOSITY", "P", "T", name="HEOS::Nitrogen").alias("v"),
+)
+digest = hashlib.blake2s()
+for name in out.columns:
+    arr = out[name].to_numpy()
+    digest.update(np.ascontiguousarray(arr, dtype=np.float64).tobytes())
+print(pl.thread_pool_size(), digest.hexdigest())
+"""
+
+
+def test_thread_count_parity() -> None:
+    import os
+    import subprocess
+    import sys
+
+    digests: dict[str, str] = {}
+    for threads in ("1", "4", "8"):
+        env = dict(os.environ, POLARS_MAX_THREADS=threads)
+        r = subprocess.run(
+            [sys.executable, "-c", _THREAD_PARITY_WORKER], capture_output=True, text=True, env=env, check=False
+        )
+        assert r.returncode == 0, f"thread-parity worker ({threads} threads) failed:\n{r.stdout}\n{r.stderr}"
+        reported, digest = r.stdout.split()
+        # the pin must actually take effect, otherwise this test compares nothing
+        assert reported == threads, f"expected a {threads}-thread pool, got {reported}"
+        digests[threads] = digest
+
+    assert len(set(digests.values())) == 1, f"results differ across thread counts: {digests}"

@@ -171,6 +171,50 @@ fn nan_to_null(out: Vec<f64>) -> Series {
     ca.into_series().with_name(PlSmallStr::EMPTY)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn broadcast_passthrough_and_scalar() {
+        let full = [1.0, 2.0, 3.0];
+        assert_eq!(broadcast(&full, 3).unwrap().as_ref(), &full);
+        assert_eq!(broadcast(&[7.0], 3).unwrap().as_ref(), &[7.0, 7.0, 7.0]);
+        assert!(broadcast(&[1.0, 2.0], 3).is_err());
+    }
+
+    #[test]
+    fn output_dtype_column_precision_wins() {
+        let f32d = DataType::Float32;
+        let f64d = DataType::Float64;
+        // all-Float32 columns stay Float32; any Float64 column promotes
+        assert_eq!(output_dtype(&[&f32d, &f32d], &[false, false]), DataType::Float32);
+        assert_eq!(output_dtype(&[&f32d, &f64d], &[false, false]), DataType::Float64);
+        // a Float64 scalar literal is neutral next to a Float32 column
+        assert_eq!(output_dtype(&[&f32d, &f64d], &[false, true]), DataType::Float32);
+        // all-scalar inputs promote over the scalars themselves
+        assert_eq!(output_dtype(&[&f32d, &f32d], &[true, true]), DataType::Float32);
+        assert_eq!(output_dtype(&[&f32d, &f64d], &[true, true]), DataType::Float64);
+        // integer columns promote to Float64
+        assert_eq!(
+            output_dtype(&[&DataType::Int64, &f32d], &[false, false]),
+            DataType::Float64
+        );
+    }
+
+    #[test]
+    fn nan_to_null_maps_non_finite() {
+        let s = nan_to_null(vec![1.0, f64::NAN, f64::INFINITY, -2.5]);
+        assert_eq!(s.len(), 4);
+        assert_eq!(s.null_count(), 2);
+        let ca = s.f64().unwrap();
+        assert_eq!(ca.get(0), Some(1.0));
+        assert_eq!(ca.get(1), None);
+        assert_eq!(ca.get(2), None);
+        assert_eq!(ca.get(3), Some(-2.5));
+    }
+}
+
 #[derive(Deserialize)]
 struct HaKwargs {
     lib_path: String,
