@@ -6,7 +6,8 @@ from .units import Quantity as Q
 # empty __init__ (Constants(R=...) would fail) and add nothing -- they are plain class-level
 # constants by design.
 class Constants:
-    R = Q(8.3144598, "kg*m²/K/mol/s²")
+    # exact by the 2019 SI definition: R = k_B * N_A
+    R = Q(8.31446261815324, "kg*m²/K/mol/s²")
     SIGMA = Q(5.670374419e-8, "W/m**2/K**4")
 
     normal_conditions_pressure = Q(1, "atm")

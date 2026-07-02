@@ -54,8 +54,9 @@ def ideal_gas_density(
         \\rho = \\frac{p M}{R T}
 
     The gas constant :math:`R` is
-    :math:`8.3144598 \\; \\frac{\\text{kg} \\,
-    \\text{m}^2}{\\text{s}^2 \\, \\text{K} \\, \\text{mol}}`.
+    :math:`8.31446261815324 \\; \\frac{\\text{kg} \\,
+    \\text{m}^2}{\\text{s}^2 \\, \\text{K} \\, \\text{mol}}`
+    (exact by the 2019 SI definition).
 
     Parameters
     ----------

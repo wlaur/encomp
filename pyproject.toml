@@ -63,7 +63,6 @@ dev = [
     "ruff",
     "pytest",
     "hypothesis",
-    "pytest-asyncio",
     "coverage",
     "Sphinx",
     "myst-parser",
@@ -108,7 +107,6 @@ include = [
     # the bundled CoolProp lib: libCoolProp.{dylib,so} on macOS/Linux, but MSVC names
     # the Windows DLL CoolProp.dll (no "lib" prefix) -- match both spellings.
     { path = "encomp/coolprop/*CoolProp.*", format = "wheel" },
-    "encomp/coolprop/py.typed",
 ]
 
 # Per-platform binary wheels (the plugin + bundled libCoolProp are native). abi3 ->

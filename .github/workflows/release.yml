@@ -83,7 +83,7 @@ jobs:
           python -m pip install --upgrade pip
           # install the PREBUILT encomp wheel (abi3 cp313 installs on 3.14 too) by
           # name so it is not rebuilt from source; deps + test deps come from PyPI
-          pip install --find-links wheelhouse encomp pytest hypothesis pytest-asyncio
+          pip install --find-links wheelhouse encomp pytest hypothesis
           python -c "from encomp import coolprop as cp; assert cp.self_check(), 'plugin self_check failed'"
           python -m pytest --pyargs encomp.tests -q
 

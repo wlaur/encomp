@@ -1033,7 +1033,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 val_masked = self.BACKEND["backend"](output, *inputs)
 
                 if isinstance(val_masked, float):
-                    raise TypeError(f"Unexpected value type: {type(val)}, expected np.ndarray")
+                    raise TypeError(f"Unexpected value type: {type(val_masked)}, expected np.ndarray")
 
             except ValueError as e:
                 self.check_exception(output, e)
@@ -1238,7 +1238,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         ]
 
         # add optional scalar points also
-        vector_inputs_cutoff += [n for n in self.points if n[0] not in (n[0] for n in vector_inputs_cutoff)]
+        covered = {name for name, _ in vector_inputs_cutoff}
+        vector_inputs_cutoff += [pt for pt in self.points if pt[0] not in covered]
 
         qty = self.get(prop, points=vector_inputs_cutoff, convert_magnitude=False).astype(Numpy1DArray)
 
@@ -1549,7 +1550,7 @@ class Water(Fluid[MT]):
             CoolProp property name.
         """
 
-        # default IF97, set to "Water to use IAPWS-95
+        # default IF97; use the name "Water" for IAPWS-95
         self.name = "IF97::Water"
 
         self.check_inputs(kwargs)

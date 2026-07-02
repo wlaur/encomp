@@ -2800,8 +2800,9 @@ class Quantity(
         return cast("Quantity[DT, float]", instance)
 
 
-# override the implementations for the Quantity
-# and Unit classes for the current registry
-# this ensures that all Quantity objects created with this registry are the correct type
+# register the Quantity implementation on the registry, so every Quantity object
+# created through it (including results of pint-internal operations) is this type.
+# Unit is NOT registered: pint-internal units are wrapped at the encomp boundaries
+# (the .u / .units properties and _validate_unit)
 setattr(UNIT_REGISTRY, "Quantity", Quantity)  # noqa: B010
 setattr(UNIT_REGISTRY, "Unit", Unit)  # noqa: B010

@@ -620,9 +620,7 @@ class Dimensionality(metaclass=_DimensionalityMeta):
             return
 
         if cls.dimensions is cls._UnsetUC:
-            raise TypeError(
-                f"Cannot initialize {cls}, class attribute 'dimensionality' is not defined for this subclass"
-            )
+            raise TypeError(f"Cannot initialize {cls}, class attribute 'dimensions' is not defined for this subclass")
 
         # ensure that the subclass names are unique
         if cls.__name__ in (subcls.__name__ for subcls in cls._registry):
