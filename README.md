@@ -4,23 +4,23 @@
 
 `encomp` is tested on Windows, Linux, and macOS, with Python 3.13 and 3.14.
 
-## Highlights
+## Overview
 
-`encomp` combines a few well-established scientific libraries behind a single, type-safe interface. Every physical quantity carries its magnitude, unit, and dimensionality. The dimensionality is a real type that static checkers and the runtime both understand.
+Every physical quantity in `encomp` carries a magnitude, a unit, and a dimensionality. The dimensionality is a type that both static checkers and the runtime understand.
 
-- **A dimensional `Quantity` type** (`encomp.units`, `encomp.utypes`). Extends [pint](https://pypi.org/project/Pint) so that each dimensionality (pressure, mass flow, density, ...) is a distinct subclass of `Quantity`. Dividing a `Mass` by a `Volume` gives a `Density` — inferred by a static type checker *and* verified at runtime. Magnitudes can be a scalar, a NumPy array, a Polars `Series`, or a Polars `Expr`.
+- **`Quantity`** (`encomp.units`, `encomp.utypes`) extends [pint](https://pypi.org/project/Pint): each dimensionality (pressure, mass flow, density, ...) is a distinct subclass of `Quantity`. Dividing a `Mass` by a `Volume` gives a `Density`, inferred by static type checkers and verified at runtime. Magnitudes can be scalars, NumPy arrays, Polars `Series`, or Polars `Expr`.
 
-- **A type system that catches unit errors before the code runs.** Common dimensionalities and their `*` / `/` / `**` combinations are encoded as `__new__` overloads, so type checkers flag a `Temperature` passed where a `Power` is expected. Decorate a function with `@typeguard.typechecked` to extend the same checks to runtime.
+- **Static unit checking.** Common dimensionalities and their `*` / `/` / `**` combinations are encoded as `__new__` overloads, so a type checker flags a `Temperature` passed where a `Power` is expected. `@typeguard.typechecked` extends the same checks to runtime.
 
-- **`Fluid` / `Water` / `HumidAir`** (`encomp.fluids`). A quantity-based wrapper over [CoolProp](http://www.coolprop.org): fix a state with two points (three for humid air) and read any property as an attribute. Inputs and outputs are `Quantity` objects, so units are converted and validated automatically.
+- **`Fluid` / `Water` / `HumidAir`** (`encomp.fluids`) wrap [CoolProp](http://www.coolprop.org): fix a state with two points (three for humid air) and read any property as an attribute. Inputs and outputs are `Quantity` objects, so units are converted and validated automatically.
 
-- **Parallel CoolProp evaluation with Polars** (`encomp.coolprop`). CoolProp properties evaluate as native Polars expression plugins written in Rust, so independent properties in one `select` / `with_columns` run in parallel on the Polars thread pool without holding the GIL, unlike a `map_batches` Python UDF, which re-acquires the GIL per batch and serializes. See [Parallel CoolProp evaluation with Polars](#parallel-coolprop-evaluation-with-polars).
+- **CoolProp as Polars expressions** (`encomp.coolprop`). Properties evaluate as native Polars expression plugins written in Rust, so independent properties in one `select` / `with_columns` run in parallel without holding the GIL. See [Parallel CoolProp evaluation with Polars](#parallel-coolprop-evaluation-with-polars).
 
-- **Symbolic math with units** (`encomp.sympy`). Extends [Sympy](https://pypi.org/project/sympy/) with convenience methods for sub- and superscripts and for turning expressions (or whole systems) into NumPy-aware Python functions. Quantities and symbols combine directly.
+- **Symbolic math with units** (`encomp.sympy`) extends [Sympy](https://pypi.org/project/sympy/): typeset sub- and superscripts, convert expressions or systems to NumPy functions, combine quantities directly with symbols.
 
-- **Serialization and settings.** `Quantity` fields work as [Pydantic](https://pypi.org/project/pydantic/) model types (JSON round-trip, dimensionality validation), and library behavior is configured from an `.env` file.
+- **Serialization and settings.** `Quantity` fields work as [Pydantic](https://pypi.org/project/pydantic/) model types (JSON round-trip, dimensionality validation). Library behavior is configured from an `.env` file.
 
-The remaining modules (`encomp.gases`, `encomp.conversion`, `encomp.constants`, ...) implement calculations related to process engineering and thermodynamics.
+The remaining modules (`encomp.gases`, `encomp.conversion`, `encomp.constants`, ...) implement process-engineering and thermodynamics calculations.
 
 ## Installation
 
@@ -32,38 +32,35 @@ pip install encomp
 
 ## The `Quantity` class
 
-The fundamental building block of `encomp` is the `encomp.units.Quantity` class (shorthand alias `Q`), which is an extension of `pint.Quantity`.
-This class is used to construct objects with a *magnitude* and *unit*.
-Each unit also has a *dimensionality* (combination of the base dimensions), and each dimensionality will have multiple associated units.
+`encomp.units.Quantity` (alias `Q`) extends `pint.Quantity`.
+A quantity has a *magnitude* and a *unit*; each unit has a *dimensionality* (a combination of the base dimensions), and each dimensionality has multiple associated units.
 
 ```python
 from encomp.units import Quantity as Q
 
-# converts 1 bar to kPa, displays it in case it's the cell output
+# convert 1 bar to kPa
 Q(1, "bar").to("kPa")
 
 # list inputs are converted to np.ndarray
 Q([1, 2, 3], "bar") * 2  # [2, 4, 6] bar
 
-# in case no unit is specified, the quantity is dimensionless
+# without a unit, the quantity is dimensionless
 Q(0.1) == Q(10, "%")
 ```
 
 ### `Quantity` type system
 
-The `Quantity` object has an associated `Dimensionality` type parameter that is dynamically determined based on the unit.
-Each dimensionality (for example *pressure*, *length*, *time*, *dimensionless*) is represented by a subclass of `Quantity`.
+Each `Quantity` has a `Dimensionality` type parameter, determined at runtime from the unit.
+Each dimensionality (for example *pressure*, *length*, *time*, *dimensionless*) is a subclass of `Quantity`.
 
-Common dimensionalities can be statically determined based on overload variants of the `Quantity.__new__` method (see `encomp.utypes.get_registered_units` for a list of units that support this).
-Additionally, operations using `*`, `**` and `/` are also defined using overload variants for combinations of the default dimensionalities.
+For registered units (see `encomp.utypes.get_registered_units`), the dimensionality is also inferred statically, via overloads of `Quantity.__new__`.
+The `*`, `/` and `**` operations between the default dimensionalities are overloaded as well.
+When the dimensionality cannot be inferred, the static type falls back to `UnknownDimensionality`; the runtime dimensionality is always evaluated from the unit.
 
-In case the dimensionality cannot be inferred, the type checker will use the dimensionality `Any`.
-At runtime, the dimensionality will be evaluated based on the unit that was specified.
+The dimensionality can also be given explicitly, using a subclass of `encomp.utypes.Dimensionality` as the type parameter.
 
-If necessary, the dimensionality of a quantity can be explicitly specified by providing a subclass of `encomp.utypes.Dimensionality` as type parameter.
-
-Commonly used dimensionalities are defined in the `encomp.utypes` module.
-When a new dimensionality is created, the classname will be `Dimensionality[...]` (for example `Quantity[Dimensionality[[mass] ** 2 / [length] ** 3]]`).
+Common dimensionalities are defined in the `encomp.utypes` module.
+A newly created dimensionality gets a class name of the form `Dimensionality[...]` (for example `Quantity[Dimensionality[[mass] ** 2 / [length] ** 3]]`).
 
 ```python
 from encomp.units import Quantity as Q
@@ -95,8 +92,8 @@ x = m**2 / V  # Quantity[UnknownDimensionality, float]
 # the unit name "meter cubed" is not defined using an overload
 y = Q(15, "meter cubed").asdim(Volume)  # Quantity[Volume, float]
 
-# in case the explicitly defined dimensionality does
-# not match the unit, an error will be raised at runtime
+# if the explicit dimensionality does not match
+# the unit, an error is raised at runtime
 
 y = Q(15, "meter cubed").asdim(MassFlow)
 # ExpectedDimensionalityError: Cannot convert 15.0 m³ to dimensionality
@@ -106,8 +103,8 @@ y = Q(15, "meter cubed").asdim(MassFlow)
 
 ### Runtime type checking
 
-The `Quantity` subtypes can be used to restrict function and class attribute types at runtime.
-Use the `typeguard.typechecked` decorator to apply runtime typechecking to function inputs and outputs:
+The `Quantity` subtypes also restrict function and class attribute types at runtime.
+The `typeguard.typechecked` decorator checks function inputs and outputs:
 
 ```python
 from typing import Any, TypedDict
@@ -180,12 +177,10 @@ assert type(q1) is type(q2)
 
 ## The `Fluid` class
 
-The class `encomp.fluids.Fluid` is a wrapper around the *CoolProp* library.
-The class uses two input points (three for humid air) that fix the state of the fluid.
-Other fluid parameters can be evaluated using attribute access.
-The outputs and inputs are `Quantity` objects.
-CoolProp property names and codes are used throughout.
-Use the `.search()` method to find the correct name.
+`encomp.fluids.Fluid` wraps the *CoolProp* library.
+Two input points (three for humid air) fix the state of the fluid; any other property is read as an attribute.
+Inputs and outputs are `Quantity` objects.
+Property names follow CoolProp; use the `.search()` method to find them.
 
 ```python
 from encomp.fluids import Fluid
@@ -205,7 +200,7 @@ air.search("density")
 air.Dmolar  # 80.73061937328056 mol/m³
 ```
 
-The `Water` subclass (and `Fluid("IF97::Water")`) evaluates steam and water properties with the *IAPWS-IF97* (Industrial Formulation 1997, "IF97") by default. For the higher-accuracy *IAPWS-95* reference formulation, use the HEOS backend explicitly with `Fluid("HEOS::Water", ...)`; the bare name `Fluid("water", ...)` also resolves to HEOS (IAPWS-95).
+The `Water` subclass (and `Fluid("IF97::Water")`) evaluates steam and water properties with *IAPWS-IF97* (Industrial Formulation 1997). For the *IAPWS-95* reference formulation, use the HEOS backend: `Fluid("HEOS::Water", ...)`; the bare name `Fluid("water", ...)` also resolves to HEOS.
 
 ```python
 from encomp.fluids import Fluid, Water
@@ -224,7 +219,7 @@ Water(H=Q(2800, "kJ/kg"), S=Q(7300, "J/kg/K"))
 ```
 
 Mixtures are given either by fractions folded into the name or by a `composition` dict of mole fractions.
-Pair a composition with `assume_phase` to skip CoolProp's phase-stability search when the phase is already known (that search dominates the cost for the HEOS/GERG mixture backends).
+Use `assume_phase` to skip CoolProp's phase-stability search when the phase is known; that search dominates the cost for the HEOS/GERG mixture backends.
 
 ```python
 from encomp.fluids import Fluid
@@ -246,7 +241,7 @@ HumidAir(P=Q(1, "bar"), T=Q(100, "degC"), R=Q(0.5))
 
 ## Parallel CoolProp evaluation with Polars
 
-CoolProp property evaluation is exposed as native Polars expression plugins (Rust, over the CoolProp C-API). Independent property nodes in one `select` / `with_columns` / `collect()`, eager or lazy, are evaluated in parallel on the Polars thread pool without holding the GIL. A Python `map_batches` UDF re-acquires the GIL per batch and serializes.
+CoolProp property evaluation is exposed as native Polars expression plugins (Rust, over the CoolProp C-API). Independent property nodes in one `select` / `with_columns` / `collect()`, eager or lazy, are evaluated in parallel on the Polars thread pool without holding the GIL (a Python `map_batches` UDF re-acquires the GIL per batch and serializes).
 
 `Fluid` properties accept `Quantity`-wrapped Polars expressions (`pl.Expr`) and return a `pl.Expr`:
 
@@ -318,8 +313,7 @@ For array magnitudes, convert the expression to a NumPy-aware function with `enc
 
 ## Tests
 
-First, make sure the development dependencies are installed with `uv sync --all-extras --all-groups`.
-Run the tests with
+Install the development dependencies with `uv sync --all-extras --all-groups`, then run
 
 ```bash
 pytest
@@ -327,10 +321,9 @@ pytest
 
 ## Settings
 
-The attributes in the `encomp.settings.Settings` class can be modified with an `.env`-file.
-Place a file named `.env` in the current working directory to override the default settings.
-The attribute names are prefixed with `ENCOMP_`.
+The attributes of `encomp.settings.Settings` are overridden with a file named `.env` in the current working directory.
+Attribute names are prefixed with `ENCOMP_`.
 
 ## Documentation
 
-Full documentation, including the detailed usage guide and example notebooks, is at [encomp.readthedocs.io](https://encomp.readthedocs.io).
+The usage guide, example notebooks, and API reference are at [encomp.readthedocs.io](https://encomp.readthedocs.io).

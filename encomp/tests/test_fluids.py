@@ -935,8 +935,10 @@ def test_dimensional_property_missing_is_nan_never_zero() -> None:
     check_numpy(Water(P=Q(big_p, "Pa"), T=Q(big_t, "K")).D.m, np.tile(missing, reps))
 
     # pl.Series magnitude: small (PropsSI) and large (plugin) -- missing surfaces as null
-    check_polars(Water(P=Q(pl.Series(pressure), "Pa"), T=Q(pl.Series(temperature), "K")).D.m, int(missing.sum()))
-    check_polars(Water(P=Q(pl.Series(big_p), "Pa"), T=Q(pl.Series(big_t), "K")).D.m, big_missing)
+    check_polars(
+        Water[pl.Series](P=Q(pl.Series(pressure), "Pa"), T=Q(pl.Series(temperature), "K")).D.m, int(missing.sum())
+    )
+    check_polars(Water[pl.Series](P=Q(pl.Series(big_p), "Pa"), T=Q(pl.Series(big_t), "K")).D.m, big_missing)
 
     # lazy pl.Expr magnitude (plugin): missing -> null
     clear_expr_evaluation_cache()
@@ -952,7 +954,7 @@ def test_dimensional_property_missing_is_nan_never_zero() -> None:
     sp_p, sp_t = [100e5, 100e5], [300.0, 320.0]  # compressed liquid -> surface tension undefined
     assert np.isnan(float(Fluid("Water", P=Q(100e5, "Pa"), T=Q(300.0, "K")).get("I").m))
     check_numpy(Fluid("Water", P=Q(np.array(sp_p), "Pa"), T=Q(np.array(sp_t), "K")).get("I").m, np.array([True, True]))
-    check_polars(Fluid("Water", P=Q(pl.Series(sp_p), "Pa"), T=Q(pl.Series(sp_t), "K")).get("I").m, 2)
+    check_polars(Fluid[pl.Series]("Water", P=Q(pl.Series(sp_p), "Pa"), T=Q(pl.Series(sp_t), "K")).get("I").m, 2)
     clear_expr_evaluation_cache()
     st_col = pl.DataFrame({"P": sp_p, "T": sp_t}).select(
         Fluid[pl.Expr]("Water", P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K")).get("I").m.alias("i")

@@ -1,6 +1,6 @@
 # Examples
 
-The following Jupyter notebooks demonstrate `encomp` in practice.
+Jupyter notebooks demonstrating `encomp`:
 
 ```{eval-rst}
 .. nbgallery::
