@@ -328,6 +328,11 @@ class _QuantityMeta(type):
         return super().__eq__(obj)
 
     def __hash__(cls) -> int:
+        # identity hash, which DELIBERATELY deviates from the eq/hash contract for
+        # the `subclass == Quantity` convenience above: class-keyed caches
+        # (typeguard, pydantic, pint) must keep every subclass a distinct key --
+        # a hash shared with Quantity would let those caches alias any subclass
+        # to the base class, returning entries for the wrong type
         return id(cls)
 
 
@@ -573,8 +578,8 @@ class Quantity(
             exp1 = float(_exp1)
             exp2 = float(_exp2)
 
-            # math.isclose, not np.isclose: this runs on every Quantity construction
-            # and the numpy call costs microseconds per exponent on plain floats
+            # runs on every Quantity construction: keep this pure-Python, a
+            # vectorized isclose costs microseconds per exponent on plain floats
             if not math.isclose(exp1, exp2, rel_tol=rtol, abs_tol=atol):
                 return False
 

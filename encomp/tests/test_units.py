@@ -425,6 +425,30 @@ def test_type_eq() -> None:
     assert Q[Length] != type(q)  # noqa: E721
 
 
+def test_class_eq_hash_contract() -> None:
+    # Dimensionality classes compare by qualname, so equal classes (e.g. the same
+    # class statement re-executed, as under Jupyter autoreload) must hash equal
+    with _reset_dimensionality_registry():
+        X1 = type("XDimContract", (Dimensionality,), {"dimensions": Length.dimensions})
+        X2 = type("XDimContract", (Dimensionality,), {"dimensions": Length.dimensions})
+
+        assert X1 is not X2
+        assert cast(object, X1) == X2
+        assert hash(X1) == hash(X2)
+
+    assert (Temperature == TemperatureDifference) is False
+
+    # Quantity classes: `subclass == Quantity` is a convenience predicate, but the
+    # hash stays identity-based so class-keyed caches (typeguard, pydantic, pint)
+    # keep every subclass a distinct key and never alias it to the base class
+    assert type(Q(1.0, "m")) == Q  # noqa: E721
+    assert (Q[Mass, float] == Q[Length, float]) is False
+    keyed = {Q[Mass, float]: "mass", Q[Length, float]: "length"}
+    assert keyed[Q[Mass, float]] == "mass"
+    assert keyed[Q[Length, float]] == "length"
+    assert Q not in keyed
+
+
 def test_hash_eq_consistency() -> None:
     # __eq__ compares across units and with a tolerance, so the eq/hash contract
     # (a == b => hash(a) == hash(b)) requires hashing a canonical (root-unit) form,
