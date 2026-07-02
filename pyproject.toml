@@ -122,6 +122,13 @@ test-command = 'python -c "import encomp.coolprop as cp; assert cp.self_check()"
 before-all = "curl -sSf https://sh.rustup.rs | sh -s -- -y && pip install cmake && python {project}/scripts/build_libcoolprop.py"
 environment = { PATH = "$HOME/.cargo/bin:$PATH" }
 
+[tool.cibuildwheel.macos]
+# CoolProp uses std::filesystem, unavailable in Apple libc++ below macOS 10.15, so the
+# bundled libCoolProp is built at that floor (scripts/build_libcoolprop.py). Tag the wheel
+# to match so its stated minimum doesn't undercut the dylib; cibuildwheel raises this to
+# 11.0 for arm64 automatically.
+environment = { MACOSX_DEPLOYMENT_TARGET = "10.15" }
+
 [tool.ruff]
 lint.select = [
     "E",

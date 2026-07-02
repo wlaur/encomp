@@ -77,6 +77,17 @@ def main() -> None:
         arches = [a for a in archflags.split() if a not in ("-arch", "")]
         if arches:
             cmake_args.append("-DCMAKE_OSX_ARCHITECTURES=" + ";".join(arches))
+        # CoolProp uses std::filesystem (src/CPfilepaths.cpp), which Apple's libc++ marks
+        # unavailable below macOS 10.15. CoolProp only pins CMAKE_OSX_DEPLOYMENT_TARGET under
+        # -DDARWIN_USE_LIBCPP (unset here), so the build would otherwise inherit cibuildwheel's
+        # lower default target and fail to compile. Force a >=10.15 floor -- this -D wins over
+        # the MACOSX_DEPLOYMENT_TARGET env (cmake only falls back to the env when the cache var
+        # is unset). Keep it in step with the wheel tag ([tool.cibuildwheel.macos] in
+        # pyproject.toml); arm64 clamps up to its own 11.0 minimum.
+        target = os.environ.get("MACOSX_DEPLOYMENT_TARGET") or "10.15"
+        if tuple(int(p) for p in target.split(".")) < (10, 15):
+            target = "10.15"
+        cmake_args.append(f"-DCMAKE_OSX_DEPLOYMENT_TARGET={target}")
     run(*cmake_args, cwd=build)
     run("cmake", "--build", ".", "--config", "Release", "-j", "4", cwd=build)
 
