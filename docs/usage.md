@@ -11,15 +11,11 @@ Each dimensionality is a separate subclass, so static type checkers catch dimens
 `Q` is an alias for `Quantity`: `from encomp.units import Quantity as Q`
 :::
 
-Import the class:
+Import the class, then create an instance representing an absolute pressure of 1 bar:
 
 ```python
 from encomp.units import Quantity as Q
-```
 
-Create an instance representing an absolute pressure of 1 bar:
-
-```python
 pressure = Q(1, "bar")
 ```
 
@@ -30,8 +26,12 @@ pressure = Q(1, "bar")
 Convert the pressure to another unit:
 
 ```python
-# pressure_kPa is a new Quantity instance
-pressure_kPa = pressure.to("kPa")
+from encomp.units import Quantity as Q
+
+pressure = Q(1, "bar")
+
+# pressure_kpa is a new Quantity instance
+pressure_kpa = pressure.to("kPa")
 ```
 
 The unit definition file (`encomp/defs/units.txt`) lists the accepted unit names.
@@ -41,6 +41,7 @@ Quantities can also be constructed from unit registry attributes:
 
 ```python
 from encomp.units import UNIT_REGISTRY
+from encomp.units import Quantity as Q
 
 d = 50 * UNIT_REGISTRY.m
 v = d / UNIT_REGISTRY.s
@@ -54,12 +55,17 @@ Each dimensionality is a unique subclass of {py:class}`encomp.units.Quantity`.
 The base class itself cannot be instantiated, since it would have no dimensionality at all (a *dimensionless* quantity still has a dimensionality of *1*).
 
 ```python
+from encomp.units import Quantity as Q
+
+pressure = Q(1, "bar")
+pressure_kpa = pressure.to("kPa")
+
 type(pressure)  # <class 'encomp.units.Quantity[Pressure, float]'>
 
 fraction = Q(5, "%")
 type(fraction)  # <class 'encomp.units.Quantity[Dimensionless, float]'>
 
-assert type(pressure) is type(pressure_kPa)
+assert type(pressure) is type(pressure_kpa)
 
 length = Q(1, "meter")
 assert type(pressure) is not type(length)
@@ -75,11 +81,12 @@ The type parameter is the subclass itself, not an instance: `Q[Power]` works, `Q
 Subclasses for common dimensionalities are defined in {py:mod}`encomp.utypes`.
 
 ```python
+from encomp.units import Quantity as Q
 from encomp.utypes import Dimensionality, Length, Power, Pressure
 
 Q[Pressure, float]  # subclass with dimensionality pressure and magnitude float
 
-Pressure.dimensions  # <UnitsContainer({'[length]': -1, '[mass]': 1, '[time]': -2})>
+pressure_dims = Pressure.dimensions  # <UnitsContainer({'[length]': -1, '[mass]': 1, '[time]': -2})>
 
 
 # the class name PowerPerLength must be globally unique
@@ -94,6 +101,12 @@ Check the dimensionality of a quantity with `isinstance()` or {py:meth}`encomp.u
 For parameterized types like `list[Quantity[Pressure]]`, use {py:func}`encomp.misc.isinstance_types` instead of `isinstance()`.
 
 ```python
+from encomp.misc import isinstance_types
+from encomp.units import Quantity as Q
+from encomp.utypes import Length, Pressure
+
+pressure = Q(1, "bar")
+
 pressure.check(Length)  # False
 pressure.check("meter")  # False
 
@@ -108,8 +121,6 @@ isinstance(pressure, Q[Length])  # False
 # complex types must use isinstance_types
 # this function can also be used with simple types
 
-from encomp.misc import isinstance_types
-
 isinstance_types([pressure, pressure], list[Q[Pressure]])  # True
 isinstance_types({1: Q(2, "m"), 2: Q(25, "cm")}, dict[int, Q[Length]])  # True
 
@@ -120,11 +131,16 @@ isinstance_types(pressure, Q)  # True
 For functions and methods, use the `typeguard.typechecked` decorator instead of explicit checks in the function body:
 
 ```python
+# test: no-run
+
 from typeguard import typechecked
+
+from encomp.units import Quantity as Q
+from encomp.utypes import Length, Power, Pressure
 
 
 @typechecked
-def func(p1: Q[Pressure]) -> tuple[Q[Length], Q[Power]]:
+def func(_p1: Q[Pressure]) -> tuple[Q[Length], Q[Power]]:
     return Q(1, "m"), Q(1, "kW")
 ```
 
@@ -139,6 +155,7 @@ Additionally, the *normal* dimensionality (used to represent normal volume) and 
 If the dimensionality already exists, {py:class}`encomp.units.DimensionalityRedefinitionError` is raised.
 
 ```python
+from encomp.units import Quantity as Q
 from encomp.units import define_dimensionality
 
 define_dimensionality("dry_air")
@@ -146,11 +163,11 @@ define_dimensionality("oxygen")
 
 # the new dimensionality [dry_air] has a single unit: "dry_air"
 m_air = Q(5, "kg * dry_air")
-n_O2 = Q(2.4, "mol * oxygen")
+n_o2 = Q(2.4, "mol * oxygen")
 M_O2 = Q(32, "g/mol")
 
 # compute mass fraction
-((n_O2 * M_O2) / m_air).to_base_units()  # 0.01536 oxygen/dry_air
+((n_o2 * M_O2) / m_air).to_base_units()  # 0.01536 oxygen/dry_air
 ```
 
 ### Quantities with vector magnitudes
@@ -158,9 +175,11 @@ M_O2 = Q(32, "g/mol")
 Lists, Numpy arrays and Polars Series objects can also be used as magnitude.
 
 ```python
-type(Q([1, 2, 3], "kg").m)  # numpy.ndarray
-
 import numpy as np
+
+from encomp.units import Quantity as Q
+
+type(Q([1, 2, 3], "kg").m)  # numpy.ndarray
 
 arr = np.linspace(0, 1)
 Q(arr, "bar")
@@ -173,6 +192,8 @@ Polars Expressions can be used as magnitude:
 
 ```python
 import polars as pl
+
+from encomp.units import Quantity as Q
 
 type(Q(pl.lit(5), "kg").m)  # pl.Expr
 ```
@@ -188,6 +209,8 @@ Units do not always cancel out automatically.
 Call {py:meth}`encomp.units.Quantity.to_base_units` to simplify to base SI units, {py:meth}`encomp.units.Quantity.to` when the target unit is known, or {py:meth}`encomp.units.Quantity.to_reduced_units` to cancel units without converting to base SI units.
 
 ```python
+from encomp.units import Quantity as Q
+
 (Q(5, "%") * Q(1, "meter")).to("mm")  # 50.0 mm
 ```
 
@@ -196,10 +219,14 @@ A temperature *difference* in a degree scale is written with the prefix `delta_`
 Temperature ({py:class}`encomp.utypes.Temperature`) and temperature difference ({py:class}`encomp.utypes.TemperatureDifference`) are distinct dimensionalities and deliberately not interchangeable: a difference cannot silently be used as an absolute temperature.
 
 ```python
-dT = Q(5, "delta_degC")  # 5 Δ°C
+# test: no-run
+
+from encomp.units import Quantity as Q
+
+temp_diff = Q(5, "delta_degC")  # 5 Δ°C
 
 # this is not allowed
-dT.to("degC")
+temp_diff.to("degC")
 # DimensionalityTypeError: Cannot convert Δ°C (dimensionality TemperatureDifference)
 # to °C (dimensionality Temperature)
 
@@ -229,6 +256,8 @@ The dimensionality {py:class}`encomp.utypes.Currency` represents an arbitrary cu
 `SEK`, `EUR` and `USD` are defined by default.
 
 ```python
+from encomp.units import Quantity as Q
+
 mf = Q(25, "kg/s")
 t = Q(365, "d")
 
@@ -262,6 +291,8 @@ This error can also be imported from the {py:mod}`encomp.units` module.
 
 ```python
 from encomp.units import DimensionalityError
+from encomp.units import Quantity as Q
+from encomp.utypes import Pressure
 
 # alternatively, use pint.errors.DimensionalityError
 # from pint.errors import DimensionalityError
@@ -328,6 +359,8 @@ ratio=0.25
 `.py`-file:
 
 ```python
+# test: no-run
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from encomp.units import Quantity as Q
@@ -367,17 +400,21 @@ Not every combination of input parameters can fix the state: with an invalid inp
 An invalid property *name*, on the other hand, raises `ValueError`.
 
 ```python
+# test: no-run
+
 from encomp.fluids import Fluid
+from encomp.units import Quantity as Q
 
 Fluid("toluene", T=Q(25, "°C"), P=Q(2, "bar"))
 # <Fluid "toluene", P=200 kPa, T=25.0 °C, D=862.3 kg/m³, V=0.55 cP>
 
-# PCRIT cannot be used to fix the state
+# PCRIT cannot be used to fix the state (it is an output-only property,
+# not one of the FluidState inputs, so it is rejected statically too)
 invalid_inputs = Fluid("water", D=Q(500, "kg/m³"), PCRIT=Q(1, "bar"))
 # <Fluid "water", P=nan kPa, T=nan °C, D=nan kg/m³, V=nan cP>
 
 # every property is nan (CoolProp emits a warning about the invalid input pair)
-invalid_inputs.T  # nan °C
+temperature = invalid_inputs.T  # nan °C
 ```
 
 {py:class}`encomp.fluids.Water` omits the fluid name and uses `IAPWS-IF97` (Industrial Formulation 1997).
@@ -387,6 +424,7 @@ The {py:class}`encomp.fluids.HumidAir` class has a different set of input and ou
 
 ```python
 from encomp.fluids import HumidAir, Water
+from encomp.units import Quantity as Q
 
 # input units are converted to SI
 Water(P=Q(30, "psi"), T=Q(250, "°F"))
@@ -399,6 +437,11 @@ HumidAir(T=Q(25, "°C"), P=Q(2, "bar"), R=Q(25, "%"))
 Property names must match CoolProp's exactly:
 
 ```python
+# test: no-run
+
+from encomp.fluids import HumidAir
+from encomp.units import Quantity as Q
+
 HumidAir(T=Q(25, "°C"), Ps=Q(2, "bar"), R=Q(25, "%"))
 # ValueError: Invalid CoolProp property name: Ps
 # Valid names:
@@ -410,6 +453,8 @@ HumidAir(T=Q(25, "°C"), Ps=Q(2, "bar"), R=Q(25, "%"))
 Use the `search()` and `describe()` methods to get more information about the properties:
 
 ```python
+from encomp.fluids import Fluid, HumidAir
+
 HumidAir.search("bulb")
 # ['B, Twb, T_wb, WetBulb: Wet-Bulb Temperature [K]',
 #  'T, Tdb, T_db: Dry-Bulb Temperature [K]']
@@ -421,12 +466,15 @@ Fluid.describe("Z")
 All property synonyms are valid instance attributes:
 
 ```python
+from encomp.fluids import Water
+from encomp.units import Quantity as Q
+
 Water.describe("PCRIT")
 # 'PCRIT, P_CRITICAL, Pcrit, p_critical, pcrit: Pressure at the critical point [Pa]'
 
 water = Water(T=Q(25, "°C"), P=Q(1, "atm"))
 
-water.p_critical, water.PCRIT
+critical = water.p_critical, water.PCRIT
 # (22064000.0 <Unit('pascal')>, 22064000.0 <Unit('pascal')>)
 ```
 
@@ -440,6 +488,7 @@ A mixture is given either by fractions folded into the fluid name or by a `compo
 
 ```python
 from encomp.fluids import Fluid
+from encomp.units import Quantity as Q
 
 Fluid("HEOS::CO2[0.7]&O2[0.3]", P=Q(10, "bar"), T=Q(300, "K"))
 
@@ -449,14 +498,20 @@ Fluid("HEOS", P=Q(10, "bar"), T=Q(300, "K"), composition={"CO2": 0.7, "O2": 0.3}
 For an incompressible mixture, the concentration is carried in the name instead, on the fluid's own basis (mass for glycols/brines, volume for the volume-specified antifreezes):
 
 ```python
+from encomp.fluids import Fluid
+from encomp.units import Quantity as Q
+
 Fluid("INCOMP::MEG[0.5]", P=Q(1, "bar"), T=Q(20, "°C"))  # 50 % ethylene glycol
 ```
 
 The {py:meth}`encomp.fluids.Fluid.assume_phase` method pins the phase, skipping CoolProp's phase-stability search, which dominates the cost for the HEOS/GERG mixture backends. It is a *speed* tool, not a validation tool: forcing a phase the fluid is not actually in returns `NaN` or a non-physical metastable root rather than raising.
 
 ```python
+from encomp.fluids import Fluid
+from encomp.units import Quantity as Q
+
 # ~100-1000x faster for mixtures, when the phase is known
-Fluid("HEOS::CO2[0.7]&O2[0.3]", P=Q(10, "bar"), T=Q(300, "K")).assume_phase("gas").D
+density = Fluid("HEOS::CO2[0.7]&O2[0.3]", P=Q(10, "bar"), T=Q(300, "K")).assume_phase("gas").D
 ```
 
 `IF97` (the default backend for {py:class}`encomp.fluids.Water`) is region-explicit and ignores an assumed phase; the call is a no-op there and emits a warning. Use `Fluid("HEOS::Water", ...)` if you need an assumed phase for water.
@@ -467,16 +522,21 @@ CoolProp evaluates vector inputs in a single backend call.
 The inputs are {py:class}`encomp.units.Quantity` instances with one-dimensional Numpy arrays as magnitude, all of the same length (or a single scalar, which is repeated).
 
 ```python
+import numpy as np
+
+from encomp.fluids import Water
+from encomp.units import Quantity as Q
+
 Water(T=Q(np.linspace(25, 50, 10), "°C"), P=Q(np.linspace(25, 50, 10), "bar"))
 # the repr shows only the head of each vector input
 # <Water (Liquid), P=[2500 2778 3056 ...] kPa, T=[25.0 27.8 30.6 ...] °C,
 # D=[998.1 997.5 996.8 ...] kg/m³, V=[0.9 0.8 0.8 ...] cP>
 
 # different phases
-Water(T=Q(np.linspace(25, 500, 10), "°C"), P=Q(np.linspace(0.5, 10, 10), "bar")).PHASE
+phases = Water(T=Q(np.linspace(25, 500, 10), "°C"), P=Q(np.linspace(0.5, 10, 10), "bar")).PHASE
 # <Quantity([0. 0. 5. 5. 5. 5. 5. 2. 2. 2.], 'dimensionless')>
 
-Water.PHASES
+phase_names = Water.PHASES
 # {0.0: 'Liquid',
 #  5.0: 'Gas',
 #  6.0: 'Two-phase',
@@ -536,10 +596,6 @@ The API mirrors {py:class}`encomp.fluids.Fluid`: any CoolProp input pair is supp
 
 To load additional methods for the `sympy.Symbol` class, import Sympy via the {py:mod}`encomp.sympy` module.
 
-```python
-from encomp.sympy import sp
-```
-
 ### Typesetting
 
 The following convenience methods are added to the `sp.Symbol` class:
@@ -551,6 +607,8 @@ The following convenience methods are added to the `sp.Symbol` class:
 These methods return new `sp.Symbol` instances with the same assumptions (*positive*, *real*, *integer*, ...) as the original.
 
 ```python
+from encomp.sympy import sp
+
 n = sp.Symbol("n", integer=True)
 
 n_test = n._("test")
@@ -583,6 +641,9 @@ Quantities can be substituted into Sympy expressions; the units are converted to
 The class method {py:meth}`encomp.units.Quantity.from_expr` converts an expression back to a quantity.
 
 ```python
+from encomp.sympy import sp
+from encomp.units import Quantity as Q
+
 x, y, z = sp.symbols("x, y, z")
 
 expr = 25 * x * y / z
@@ -603,7 +664,10 @@ Sympy integration only works with the seven SI dimensionalities, not with dimens
 Convert the expression to a function with {py:func}`encomp.sympy.get_function` instead:
 
 ```python
-from encomp.sympy import get_function
+import numpy as np
+
+from encomp.sympy import get_function, sp
+from encomp.units import Quantity as Q
 
 x, y, z = sp.symbols("x, y, z")
 
@@ -625,6 +689,9 @@ result_qty = fcn(
 Quantity objects combine directly with Sympy symbols; the units are converted to their symbolic representations by {py:meth}`encomp.units.Quantity._sympy_`.
 
 ```python
+from encomp.sympy import sp
+from encomp.units import Quantity as Q
+
 x, y, z = sp.symbols("x, y, z")
 
 # the type of the left object determines the output
