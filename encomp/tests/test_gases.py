@@ -55,7 +55,8 @@ def test_ideal_gas_density() -> None:
     # args are cast (needed for both checkers), and pyrefly additionally cannot solve
     # the shared constrained TypeVar across multiple arguments at all
     assert_type(  # pyrefly: ignore[assert-type]
-        ideal_gas_density(Q(25, "degC"), Q(12, "bar"), Q(12, "g/mol")), Q[Density, float]
+        ideal_gas_density(Q(25, "degC"), Q(12, "bar"), Q(12, "g/mol")),  # pyrefly: ignore[bad-specialization]
+        Q[Density, float],
     )
 
     ret = ideal_gas_density(Q([25, 26], "degC"), cast(Any, Q(12, "bar")), cast(Any, Q(12, "g/mol")))  # pyrefly: ignore[bad-argument-type, bad-specialization]
