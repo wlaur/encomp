@@ -165,6 +165,10 @@ lint.ignore = [
 ]
 
 lint.dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+# the Sphinx config isn't library code: its API-override callbacks (resolve_xref, setup)
+# don't warrant full type annotations
+lint.per-file-ignores = { "docs/conf.py" = ["ANN"] }
 exclude = [
     ".bzr",
     ".direnv",

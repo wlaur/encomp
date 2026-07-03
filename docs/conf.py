@@ -12,13 +12,14 @@
 
 
 import sys
+import tomllib
 from pathlib import Path
 
 from sphinx.domains.python import PythonDomain
 
-# make sure the local source is loaded when importing
+# make sure the local source is loaded when importing (autodoc imports encomp from source;
+# the project itself is not installed on RTD -- see .readthedocs.yaml --no-install-project)
 sys.path.insert(0, str(Path("..").absolute()))
-from encomp import __version__
 
 # -- Project information -----------------------------------------------------
 
@@ -27,7 +28,7 @@ copyright = "2026, William Laurén"
 author = "William Laurén"
 
 
-release = __version__
+release = tomllib.loads((Path(__file__).resolve().parent.parent / "pyproject.toml").read_text())["project"]["version"]
 
 
 # -- General configuration ---------------------------------------------------
@@ -178,9 +179,7 @@ class PatchedPythonDomain(PythonDomain):
     def resolve_xref(self, env, fromdocname, builder, typ, target, node, contnode):
         if "refspecific" in node:
             del node["refspecific"]
-        return super().resolve_xref(
-            env, fromdocname, builder, typ, target, node, contnode
-        )
+        return super().resolve_xref(env, fromdocname, builder, typ, target, node, contnode)
 
 
 def setup(sphinx) -> None:
