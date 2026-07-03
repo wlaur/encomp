@@ -12,8 +12,10 @@ name: encomp release
 #                    Publishing (OIDC -- no token/secret stored anywhere)
 on:
   workflow_dispatch:
+  # no paths filter: the checks below are REQUIRED by branch protection, and a required
+  # check that is skipped (paths not matched) would block the PR forever -- so every PR
+  # runs them. The concurrency group cancels superseded runs.
   pull_request:
-    paths: ["encomp/**", "rust/**", "scripts/**", "pyproject.toml", ".github/workflows/release.yml"]
   push:
     tags: ["v*"]
 
