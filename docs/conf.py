@@ -61,13 +61,15 @@ source_suffix = {
 }
 
 # MyST features used by the docs: ::: colon fences (so autodoc directives can live in .md via
-# {eval-rst}), $...$ / $$...$$ math, and definition/field lists.
+# {eval-rst}), $...$ / $$...$$ math, definition/field lists, and raw HTML <img> tags (the
+# README logo needs an <img> tag to control its rendered size on GitHub/PyPI).
 myst_enable_extensions = [
     "colon_fence",
     "deflist",
     "fieldlist",
     "dollarmath",
     "substitution",
+    "html_image",
 ]
 
 # generate anchors for headings h1-h3 so in-page Markdown links like
@@ -102,7 +104,10 @@ html_theme_options = {"sidebar_hide_name": True}
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ["_static"]
+# img/ is included so the logo is available in the build output (the notebook
+# gallery thumbnail below references it; nbsphinx does not copy thumbnail
+# files that are not part of a document)
+html_static_path = ["_static", "img"]
 
 
 html_css_files = [
@@ -142,11 +147,11 @@ todo_include_todos = True
 pygments_style = "sphinx"
 pygments_dark_style = "monokai"
 
-# the images must be included in the _build dir when generating the HTML docs
-# make sure they are referenced inside the corresponding notebook
+# gallery thumbnails for the example notebooks; the values must exist in the build
+# output -- _static/logo.svg comes from the img/ entry in html_static_path above
 # NOTE: the .ipynb suffix is not included in the names
 nbsphinx_thumbnails = {
-    "notebooks/test": "_images/logo.svg",
+    "notebooks/test": "_static/logo.svg",
 }
 
 add_module_names = False

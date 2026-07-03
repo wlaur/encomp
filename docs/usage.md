@@ -43,10 +43,12 @@ Quantities can also be constructed from unit registry attributes:
 from encomp.units import UNIT_REGISTRY
 from encomp.units import Quantity as Q
 
-d = 50 * UNIT_REGISTRY.m
-v = d / UNIT_REGISTRY.s
+# the registry attributes are typed for use as Quantity units, not for
+# direct arithmetic, so these operations need pyrefly suppressions
+d = 50 * UNIT_REGISTRY.m  # pyrefly: ignore[unsupported-operation]
+v = d / UNIT_REGISTRY.s  # pyrefly: ignore[unsupported-operation]
 
-mf = Q(25, UNIT_REGISTRY.kg / UNIT_REGISTRY.h)
+mf = Q(25, UNIT_REGISTRY.kg / UNIT_REGISTRY.h)  # pyrefly: ignore[unsupported-operation]
 ```
 
 ### Quantity types
@@ -114,8 +116,11 @@ pressure.check(Pressure)  # True
 pressure.check("psi")  # True
 
 # alternative using isinstance()
+# (parameterized isinstance is a runtime-only feature, hence the suppressions)
 
+# pyrefly: ignore[invalid-argument]
 isinstance(pressure, Q[Pressure])  # True
+# pyrefly: ignore[invalid-argument]
 isinstance(pressure, Q[Length])  # False
 
 # complex types must use isinstance_types
@@ -131,8 +136,6 @@ isinstance_types(pressure, Q)  # True
 For functions and methods, use the `typeguard.typechecked` decorator instead of explicit checks in the function body:
 
 ```python
-# test: no-run
-
 from typeguard import typechecked
 
 from encomp.units import Quantity as Q
@@ -219,20 +222,28 @@ A temperature *difference* in a degree scale is written with the prefix `delta_`
 Temperature ({py:class}`encomp.utypes.Temperature`) and temperature difference ({py:class}`encomp.utypes.TemperatureDifference`) are distinct dimensionalities and deliberately not interchangeable: a difference cannot silently be used as an absolute temperature.
 
 ```python
-# test: no-run
+from pint.errors import OffsetUnitCalculusError
 
+from encomp.units import DimensionalityTypeError
 from encomp.units import Quantity as Q
 
 temp_diff = Q(5, "delta_degC")  # 5 Δ°C
 
-# this is not allowed
-temp_diff.to("degC")
-# DimensionalityTypeError: Cannot convert Δ°C (dimensionality TemperatureDifference)
-# to °C (dimensionality Temperature)
+# a temperature difference cannot be converted to an absolute temperature
+try:
+    temp_diff.to("degC")
+except DimensionalityTypeError as e:
+    print(f"Error: {e}")
+    # Cannot convert Δ°C (dimensionality TemperatureDifference)
+    # to °C (dimensionality Temperature)
 
 Q(25, "degC") - Q(36, "degC")  # -11 Δ°C
 
-Q(4.19, "kJ/kg/K") * Q(5, "°C")  # raises OffsetUnitCalculusError
+# multiplying with an offset unit (°C) is ambiguous
+try:
+    Q(4.19, "kJ/kg/K") * Q(5, "°C")
+except OffsetUnitCalculusError as e:
+    print(f"Error: {e}")
 
 # this is not the result we're after, °C is offset by 273.15 K
 Q(4.19, "kJ/kg/K") * Q(5, "°C").to("K")  # 1165.4485 kJ/kg
@@ -298,7 +309,8 @@ from encomp.utypes import Pressure
 # from pint.errors import DimensionalityError
 
 try:
-    Q(25, "bar") + Q(25, "m")
+    # a static type checker rejects this addition as well
+    Q(25, "bar") + Q(25, "m")  # pyrefly: ignore[unsupported-operation]
 except DimensionalityError as e:
     print(f"Error: {e}")
 
@@ -337,57 +349,13 @@ class Model(BaseModel):
     r: Q[Dimensionless, float] = Q(0.5)
 
 
-# if the input dimensionalities do not match the type hint,
-# pydantic.ValidationError is raised
+# if the input dimensionality does not match the type hint,
+# encomp.units.ExpectedDimensionalityError is raised
 model = Model(a=Q(25, "cSt"), m=Q(25, "kg"), s=Q(25, "cm"))
 
 # Quantity fields round-trip through JSON, including the magnitude type
 Model.model_validate_json(model.model_dump_json())
 ```
-
-`pydantic_settings.BaseSettings` reads, converts and validates key-value pairs from an `.env`-file.
-
-`.env`-file:
-
-```text
-any_quantity=1.215 kJ/kg/K
-mass=24 kg
-length=25 m
-ratio=0.25
-```
-
-`.py`-file:
-
-```python
-# test: no-run
-
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-from encomp.units import Quantity as Q
-from encomp.utypes import Dimensionless, Length, Mass, Pressure
-
-
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(validate_assignment=True)
-
-    any_quantity: Q
-    mass: Q[Mass]
-    length: Q[Length]
-
-    ratio: Q[Dimensionless] = Q(0)
-    pressure: Q[Pressure] = Q(1, "atm")
-
-
-# parameters that are not explicitly passed here are read from the .env-file
-s = Settings(ratio=0.75)
-
-# raises pydantic.ValidationError (since validate_assignment is True)
-s.mass = Q(25, "bar")
-```
-
-:::{note}
-Vector quantities, for example `Q([25, 26], "kg")`, cannot be specified with an `.env`-file.
-:::
 
 ## The Fluid class
 
@@ -400,7 +368,7 @@ Not every combination of input parameters can fix the state: with an invalid inp
 An invalid property *name*, on the other hand, raises `ValueError`.
 
 ```python
-# test: no-run
+from typing import Any
 
 from encomp.fluids import Fluid
 from encomp.units import Quantity as Q
@@ -408,9 +376,12 @@ from encomp.units import Quantity as Q
 Fluid("toluene", T=Q(25, "°C"), P=Q(2, "bar"))
 # <Fluid "toluene", P=200 kPa, T=25.0 °C, D=862.3 kg/m³, V=0.55 cP>
 
-# PCRIT cannot be used to fix the state (it is an output-only property,
-# not one of the FluidState inputs, so it is rejected statically too)
-invalid_inputs = Fluid("water", D=Q(500, "kg/m³"), PCRIT=Q(1, "bar"))
+# PCRIT cannot be used to fix the state: it is an output-only property, not one
+# of the FluidState inputs, so a static type checker rejects it at the call
+# site (the inputs are routed through Any here to show the runtime behavior)
+state: Any = {"D": Q(500, "kg/m³"), "PCRIT": Q(1, "bar")}
+
+invalid_inputs = Fluid("water", **state)
 # <Fluid "water", P=nan kPa, T=nan °C, D=nan kg/m³, V=nan cP>
 
 # every property is nan (CoolProp emits a warning about the invalid input pair)
@@ -434,20 +405,28 @@ HumidAir(T=Q(25, "°C"), P=Q(2, "bar"), R=Q(25, "%"))
 # <HumidAir, P=200 kPa, T=25.0 °C, R=0.25, Vda=0.4 m³/kg, Vha=0.4 m³/kg, M=0.018 cP>
 ```
 
-Property names must match CoolProp's exactly:
+Property names must match CoolProp's exactly.
+An invalid state-input name is rejected statically at the call site, and the constructor raises `ValueError` at runtime:
 
 ```python
-# test: no-run
+from typing import Any
 
 from encomp.fluids import HumidAir
 from encomp.units import Quantity as Q
 
-HumidAir(T=Q(25, "°C"), Ps=Q(2, "bar"), R=Q(25, "%"))
-# ValueError: Invalid CoolProp property name: Ps
-# Valid names:
-# B, C, CV, CVha, Cha, Conductivity, D, DewPoint, Enthalpy, Entropy, H, Hda, Hha,
-# HumRat, K, M, Omega, P, P_w, R, RH, RelHum, S, Sda, Sha, T, T_db, T_dp, T_wb, Tdb,
-# Tdp, Twb, V, Vda, Vha, Visc, W, WetBulb, Y, Z, cp, cp_ha, cv_ha, k, mu, psi_w
+# "Ps" is not a valid property name (the inputs are routed through Any here,
+# since HumidAir(T=..., Ps=..., R=...) is also rejected statically)
+state: Any = {"T": Q(25, "°C"), "Ps": Q(2, "bar"), "R": Q(25, "%")}
+
+try:
+    HumidAir(**state)
+except ValueError as e:
+    print(f"Error: {e}")
+    # Invalid CoolProp property name: Ps
+    # Valid names:
+    # B, C, CV, CVha, Cha, Conductivity, D, DewPoint, Enthalpy, Entropy, H, Hda, Hha,
+    # HumRat, K, M, Omega, P, P_w, R, RH, RelHum, S, Sda, Sha, T, T_db, T_dp, T_wb, Tdb,
+    # Tdp, Twb, V, Vda, Vha, Visc, W, WetBulb, Y, Z, cp, cp_ha, cv_ha, k, mu, psi_w
 ```
 
 Use the `search()` and `describe()` methods to get more information about the properties:
@@ -566,7 +545,7 @@ from encomp.fluids import Water
 from encomp.units import Quantity as Q
 
 df = pl.DataFrame({"P": [50e5, 60e5], "T": [400.0, 450.0]})  # Pa, K
-w = Water(P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K"))
+w: Water[pl.Expr] = Water(P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K"))
 
 # independent CoolProp properties evaluated in parallel across cores
 df.select(w.D.m.alias("rho"), w.H.m.alias("h"), w.S.m.alias("s"))
@@ -611,7 +590,8 @@ from encomp.sympy import sp
 
 n = sp.Symbol("n", integer=True)
 
-n_test = n._("test")
+# the _ method is added to sp.Symbol at runtime by encomp.sympy
+n_test = n._("test")  # pyrefly: ignore[missing-attribute]
 str(n_test)
 # n_{\text{test}}
 

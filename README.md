@@ -1,5 +1,7 @@
 # encomp
 
+<img src="https://raw.githubusercontent.com/wlaur/encomp/main/docs/img/logo.png" alt="encomp logo" width="150">
+
 > General-purpose library for *en*gineering *comp*utations.
 
 `encomp` is tested on Windows, Linux, and macOS, with Python 3.13 and 3.14.
@@ -63,8 +65,7 @@ Common dimensionalities are defined in the `encomp.utypes` module.
 A newly created dimensionality gets a class name of the form `Dimensionality[...]` (for example `Quantity[Dimensionality[[mass] ** 2 / [length] ** 3]]`).
 
 ```python
-# test: no-run
-
+from encomp.units import ExpectedDimensionalityError
 from encomp.units import Quantity as Q
 from encomp.utypes import MassFlow, Volume
 
@@ -83,8 +84,10 @@ rho = m / V  # Quantity[Density, float]
 # the type checker does not know how to combine these units
 m_ = Q(25, "kg/week")  # Quantity[UnknownDimensionality, float]
 
-# at runtime, the dimensionality of m_ will be evaluated to MassFlow
-isinstance(m_, Q[MassFlow])  # True
+# at runtime, the dimensionality of m_ is evaluated to MassFlow;
+# Q[MassFlow] is a real class, but parameterized isinstance is a runtime-only feature
+# pyrefly: ignore[invalid-argument]
+assert isinstance(m_, Q[MassFlow])
 
 # these operations (Mass**2 divided by Volume) are not explicitly defined as overloads
 # at runtime, the type will be evaluated to
@@ -94,13 +97,15 @@ x = m**2 / V  # Quantity[UnknownDimensionality, float]
 # the unit name "meter cubed" is not defined using an overload
 y = Q(15, "meter cubed").asdim(Volume)  # Quantity[Volume, float]
 
-# if the explicit dimensionality does not match
-# the unit, an error is raised at runtime
-
-y = Q(15, "meter cubed").asdim(MassFlow)
-# ExpectedDimensionalityError: Cannot convert 15.0 m³ to dimensionality
-# <class 'encomp.utypes.MassFlow'>, the dimensions do not match:
-# [length] ** 3 != [mass] / [time]
+# if the explicit dimensionality does not match the unit,
+# an error is raised at runtime
+try:
+    Q(15, "meter cubed").asdim(MassFlow)
+except ExpectedDimensionalityError as e:
+    print(f"Error: {e}")
+    # Cannot convert 15.0 m³ to dimensionality
+    # <class 'encomp.utypes.MassFlow'>, the dimensions do not match:
+    # [length] ** 3 != [mass] / [time]
 ```
 
 ### Runtime type checking
@@ -109,11 +114,9 @@ The `Quantity` subtypes also restrict function and class attribute types at runt
 The `typeguard.typechecked` decorator checks function inputs and outputs:
 
 ```python
-# test: no-run
+from typing import Any, TypedDict, cast
 
-from typing import Any, TypedDict
-
-from typeguard import typechecked
+from typeguard import TypeCheckError, typechecked
 
 from encomp.units import Quantity as Q
 from encomp.utypes import Length, Pressure, Temperature
@@ -125,9 +128,16 @@ def some_func(T: Q[Temperature, float]) -> tuple[Q[Length, float], Q[Pressure, f
 
 
 some_func(Q(12, "K"))  # the dimensionalities check out
-some_func(Q(26, "kW"))  # raises an exception:
-# TypeCheckError: argument "T" (encomp.units.Quantity[Power, float])
-# is not an instance of encomp.units.Quantity[Temperature, float]
+
+# a static type checker rejects some_func(Q(26, "kW")) before the code runs;
+# typeguard catches the same error at runtime for values the checker cannot
+# see through (simulated here by casting to Any)
+try:
+    some_func(cast(Any, Q(26, "kW")))
+except TypeCheckError as e:
+    print(f"Error: {e}")
+    # argument "T" (encomp.units.Quantity[Power, float])
+    # is not an instance of encomp.units.Quantity[Temperature, float]
 
 
 class OutputDict(TypedDict):
@@ -137,12 +147,16 @@ class OutputDict(TypedDict):
 
 @typechecked
 def another_func(_s: Q[Length, Any]) -> OutputDict:
-    return {"T": Q(25, "m"), "P": Q(25, "kPa")}
+    # the value for the key "T" has the wrong dimensionality
+    return {"T": cast(Any, Q(25, "m")), "P": Q(25, "kPa")}
 
 
-another_func(Q(25, "m"))
-# TypeCheckError: value of key 'T' of the return value (dict)
-# is not an instance of encomp.units.Quantity[Temperature]
+try:
+    another_func(Q(25, "m"))
+except TypeCheckError as e:
+    print(f"Error: {e}")
+    # value of key 'T' of the return value (dict)
+    # is not an instance of encomp.units.Quantity[Temperature]
 ```
 
 To create a new dimensionality (for example temperature difference per mass flow rate), combine the `pint.UnitsContainer` objects stored in the `dimensions` class attribute.
@@ -257,7 +271,7 @@ from encomp.fluids import Water
 from encomp.units import Quantity as Q
 
 df = pl.DataFrame({"P": [50e5, 60e5], "T": [400.0, 450.0]})  # Pa, K
-w = Water(P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K"))
+w: Water[pl.Expr] = Water(P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K"))
 
 # these independent CoolProp properties run in parallel across cores
 df.select(w.D.m.alias("rho"), w.H.m.alias("h"), w.S.m.alias("s"))
@@ -307,6 +321,9 @@ from encomp.sympy import sp
 from encomp.units import Quantity as Q
 
 n = sp.Symbol("n", integer=True)
+
+# the _ / __ methods are added to sp.Symbol at runtime by encomp.sympy
+# pyrefly: ignore[missing-attribute]
 n._("H_2O").__("out")  # n_{\text{H}_2\text{O}}^{\text{out}}, keeps the integer assumption
 
 x, y, z = sp.symbols("x, y, z")

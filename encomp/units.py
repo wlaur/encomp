@@ -908,9 +908,12 @@ class Quantity(
     @overload
     def __new__(cls, val: MT, unit: str) -> Quantity[UnknownDimensionality, MT]: ...
     @overload
-    def __new__(  # fallback overload: matches anything not covered above
+    def __new__(  # fallback overload: any supported magnitude type not covered above
         cls,
-        val: Any,  # noqa: ANN401
+        # str is deliberately absent: string parsing like Q("24 kg") must be rejected
+        # statically (it also raises ValueError at runtime) -- Quantity magnitudes and
+        # units are always passed separately
+        val: float | np.ndarray[Any, Any] | pl.Series | pl.Expr | Sequence[float] | Quantity[Any, Any] | sp.Basic,
         unit: Any = None,  # noqa: ANN401
         _depth: int = 0,
     ) -> Quantity[Any, Any]: ...
