@@ -5,8 +5,8 @@ error in isolation.
 This guards the documentation against drift -- a renamed API, a missing import, or a
 snippet that only worked as a continuation of an earlier block all fail here. The block
 is the unit: each fenced block is extracted verbatim, then linted, type-checked, and
-executed in a fresh namespace, so a block that relies on a name defined in a *previous*
-block is a failure.
+executed on its own, so a block that relies on a name defined in a *previous* block is
+a failure.
 
 Discovery is dynamic: EVERY ``*.md`` under the repo (minus build/vendor/scratch dirs) is
 scanned for ```` ```python ```` fences, so adding a block anywhere is automatically covered
@@ -16,16 +16,25 @@ Checks per block:
 - ``ruff check`` under the repo's full ruff config (run with cwd at the repo root), so each
   block is held to the same ruleset as the source (imports, naming, bugbear, ...) with no
   per-block exceptions -- ``F401`` (unused import) and ``F821`` (undefined name) both gate.
-- ``pyrefly check``: the public API, as exercised by the examples, must type-check under
-  pyrefly too (not only pyright). A type error in an example is a real defect to fix, not
-  to ignore -- ``Q(1, "bar")`` infers ``Quantity[Pressure, float]``, so a correct block is
-  clean; an "unknown type" almost always traces back to a missing import.
-- execution in a fresh namespace: the snippet actually runs.
+- ``pyrefly check`` against the repo config (``--config`` is passed explicitly: without
+  it, pyrefly silently skips files outside a configured project and reports "0 errors"
+  without analyzing anything). A type error in an example is a real defect to fix --
+  ``Q(1, "bar")`` infers ``Quantity[Pressure, float]``, so a correct block is clean.
+  Blocks that demonstrate runtime-only dynamic behavior (parameterized ``isinstance``,
+  the sympy ``_``/``__`` methods added at import time, deliberately-invalid operations
+  shown inside ``try``/``except``) carry explicit ``# pyrefly: ignore[...]`` comments;
+  the repo config elevates ``unused-ignore`` to an error, so a suppression that stops
+  matching real errors fails this test instead of lingering.
+- execution as a real script: the block is written to a file and run in a fresh
+  interpreter with a temporary working directory, exactly as a reader would run it.
+  A subprocess (not in-process ``exec``) is required for the ``typeguard`` examples --
+  ``@typechecked`` instruments by re-reading the module source, which does not exist for
+  exec'd strings -- and the temporary cwd lets blocks create scratch files (e.g. the
+  ``.env`` example) without touching the repo.
 
-A block can opt out of *execution and type-checking* (linting still applies, so its
-imports must be correct) with ``# test: no-run`` as its first line -- for a snippet that is
-pseudo-code, illustrates inferred types in comments, or intentionally shows a type/runtime
-error (e.g. the ``typeguard`` demos that pass a deliberately wrong dimensionality).
+There is deliberately no opt-out: a snippet that cannot run as written (for example one
+that demonstrates an exception) shows the failure with ``try: ... except SomeError:``
+instead, so it still executes.
 
 The whole module skips when the repo docs are not on disk (e.g. running from an installed
 wheel via ``pytest --pyargs encomp.tests``); it is a source-tree / CI check. Individual
@@ -66,7 +75,6 @@ pytestmark = pytest.mark.skipif(
 )
 
 _FENCE = re.compile(r"^```python\s*$(.*?)^```", re.MULTILINE | re.DOTALL)
-_NO_RUN = "# test: no-run"
 # directories that never hold published docs: build output, deps, caches, VCS, and the
 # repo's `temp/` scratch area
 _SKIP_DIRS = {
@@ -130,12 +138,14 @@ def test_doc_block_lints(code: str, tmp_path: Path) -> None:
 @pytest.mark.parametrize("code", _CODES, ids=_IDS)
 def test_doc_block_typechecks(code: str, tmp_path: Path) -> None:
     assert _PYREFLY is not None  # narrowed by the skipif above
-    if code.splitlines()[:1] == [_NO_RUN]:
-        pytest.skip("block marked # test: no-run")
+    assert ROOT is not None  # narrowed by the module-level skipif
     block = tmp_path / "block.py"
     block.write_text(code)
+    # --config is required: without it, pyrefly silently checks NOTHING for a file
+    # outside any configured project (it reports "0 errors" without analyzing), so
+    # the block must be checked against the repo config explicitly
     proc = subprocess.run(
-        [_PYREFLY, "check", str(block)],
+        [_PYREFLY, "check", "--config", str(ROOT / "pyproject.toml"), str(block)],
         capture_output=True,
         text=True,
         cwd=ROOT,  # resolve `encomp` via the project venv
@@ -144,7 +154,13 @@ def test_doc_block_typechecks(code: str, tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("code", _CODES, ids=_IDS)
-def test_doc_block_runs(code: str) -> None:
-    if code.splitlines()[:1] == [_NO_RUN]:
-        pytest.skip("block marked # test: no-run")
-    exec(compile(code, "<doc block>", "exec"), {"__name__": "__doc_block__"})
+def test_doc_block_runs(code: str, tmp_path: Path) -> None:
+    block = tmp_path / "block.py"
+    block.write_text(code)
+    proc = subprocess.run(
+        [sys.executable, str(block)],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,  # scratch files a block creates (e.g. the .env example) land in tmp
+    )
+    assert proc.returncode == 0, f"doc block failed:\n--- stdout:\n{proc.stdout}\n--- stderr:\n{proc.stderr}"
