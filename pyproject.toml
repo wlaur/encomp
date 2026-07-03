@@ -1,6 +1,6 @@
 [project]
 name = "encomp"
-version = "1.5.1"
+version = "1.5.2"
 description = "General-purpose library for engineering calculations"
 authors = [{ name = "William Laurén", email = "lauren.william.a@gmail.com" }]
 requires-python = ">=3.13"
@@ -60,6 +60,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pre-commit",
+    "maturin>=1.5,<2",
     "ruff",
     "pytest",
     "hypothesis",

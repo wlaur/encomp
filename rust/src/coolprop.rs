@@ -32,7 +32,7 @@
 
 use libloading::Library;
 use std::collections::HashSet;
-use std::ffi::{c_char, c_double, c_long, CString};
+use std::ffi::{CString, c_char, c_double, c_long};
 use std::sync::{Mutex, RwLock};
 
 const BUFLEN: c_long = 1024;
@@ -183,11 +183,11 @@ impl CoolProp {
     pub fn ensure_warmed_fluid(&self, backend: &str, fluid: &str) {
         let key = format!("F\0{backend}\0{fluid}");
         self.ensure_warmed(&key, || {
-            if let Ok(mut st) = self.state(backend, fluid) {
-                if let (Ok(pair), Ok(okey)) = (self.input_pair_index("PT_INPUTS"), self.param_index("DMASS")) {
-                    let mut out = [0.0f64];
-                    let _ = st.update_and_1_out(pair, &[101_325.0], &[300.0], okey, &mut out);
-                }
+            if let Ok(mut st) = self.state(backend, fluid)
+                && let (Ok(pair), Ok(okey)) = (self.input_pair_index("PT_INPUTS"), self.param_index("DMASS"))
+            {
+                let mut out = [0.0f64];
+                let _ = st.update_and_1_out(pair, &[101_325.0], &[300.0], okey, &mut out);
             }
         });
     }
