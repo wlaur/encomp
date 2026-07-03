@@ -11,9 +11,10 @@ small eager inputs (scalars, short arrays) use the Python CoolProp path.
 
 ```python
 import polars as pl
+
 from encomp import coolprop as cp
 
-df = pl.DataFrame({"P": [50e5, 60e5], "T": [400.0, 450.0]})  # Pa, K
+df = pl.DataFrame({"P": [50e5, 60e5], "T": [400.0, 450.0], "R": [0.4, 0.6]})  # Pa, K, -
 
 df.select(
     cp.fluid("DMASS", "P", "T").alias("rho"),   # default: IF97 water
@@ -46,7 +47,7 @@ CORRECTNESS  plugin vs raw PropsSI (IF97 water): 0.0e+00 exact (D/H/S/Cp)
 
 SPEED (property D)            raw PropsSI | encomp map_batches | rust plugin | vs m_b
   N=1                            0.003 ms |          0.114 ms |    0.029 ms |  3.98x
-  N=1,000,000                  177.6   ms |        184.1   ms |   86.6   ms |  2.12x
+  N=1M                         177.6   ms |        184.1   ms |   86.6   ms |  2.12x
 
 PARALLELISM  4 independent props, ONE collect(), 1M rows
   encomp map_batches : combined 823 ms,  1.00x   serial (GIL)

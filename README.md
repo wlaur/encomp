@@ -45,7 +45,7 @@ Q(1, "bar").to("kPa")
 Q([1, 2, 3], "bar") * 2  # [2, 4, 6] bar
 
 # without a unit, the quantity is dimensionless
-Q(0.1) == Q(10, "%")
+assert Q(0.1) == Q(10, "%")
 ```
 
 ### `Quantity` type system
@@ -63,6 +63,8 @@ Common dimensionalities are defined in the `encomp.utypes` module.
 A newly created dimensionality gets a class name of the form `Dimensionality[...]` (for example `Quantity[Dimensionality[[mass] ** 2 / [length] ** 3]]`).
 
 ```python
+# test: no-run
+
 from encomp.units import Quantity as Q
 from encomp.utypes import MassFlow, Volume
 
@@ -107,6 +109,8 @@ The `Quantity` subtypes also restrict function and class attribute types at runt
 The `typeguard.typechecked` decorator checks function inputs and outputs:
 
 ```python
+# test: no-run
+
 from typing import Any, TypedDict
 
 from typeguard import typechecked
@@ -132,7 +136,7 @@ class OutputDict(TypedDict):
 
 
 @typechecked
-def another_func(s: Q[Length, Any]) -> OutputDict:
+def another_func(_s: Q[Length, Any]) -> OutputDict:
     return {"T": Q(25, "m"), "P": Q(25, "kPa")}
 
 
@@ -144,9 +148,11 @@ another_func(Q(25, "m"))
 To create a new dimensionality (for example temperature difference per mass flow rate), combine the `pint.UnitsContainer` objects stored in the `dimensions` class attribute.
 
 ```python
+import contextlib
+
 from encomp.units import DimensionalityError
 from encomp.units import Quantity as Q
-from encomp.utypes import Dimensionality, MassFlow, TemperatureDifference, Volume
+from encomp.utypes import Dimensionality, MassFlow, TemperatureDifference
 
 
 # the class name TemperaturePerMassFlow must be globally unique
@@ -158,10 +164,8 @@ class TemperaturePerMassFlow(Dimensionality):
 qty = Q(1, "delta_degC/(kg/s)").asdim(TemperaturePerMassFlow)
 
 # raises an exception since liter is Length**3 and the Quantity expects Mass
-try:
-    another_qty = Q(1, "delta_degC/(liter/hour)").asdim(TemperaturePerMassFlow)
-except DimensionalityError:
-    pass
+with contextlib.suppress(DimensionalityError):
+    Q(1, "delta_degC/(liter/hour)").asdim(TemperaturePerMassFlow)
 
 # create a new subclass of Quantity with restricted input units
 CustomCoolingCapacity = Q[TemperaturePerMassFlow, float]
@@ -189,7 +193,7 @@ from encomp.units import Quantity as Q
 air = Fluid("air", T=Q(25, "degC"), P=Q(2, "bar"))
 
 # common fluid properties have type hints, and show up using autocomplete
-air.D  # 2.338399526231983 kg/m³
+density = air.D  # 2.338399526231983 kg/m³
 
 air.search("density")
 # ['DELTA, Delta: Reduced density (rho/rhoc) [dimensionless]',
@@ -197,7 +201,7 @@ air.search("density")
 #  'D, DMASS, Dmass: Mass density [kg/m³]', ...
 
 # any of the names are valid attributes (case-sensitive)
-air.Dmolar  # 80.73061937328056 mol/m³
+molar_density = air.Dmolar  # 80.73061937328056 mol/m³
 ```
 
 The `Water` subclass (and `Fluid("IF97::Water")`) evaluates steam and water properties with *IAPWS-IF97* (Industrial Formulation 1997). For the *IAPWS-95* reference formulation, use the HEOS backend: `Fluid("HEOS::Water", ...)`; the bare name `Fluid("water", ...)` also resolves to HEOS.
@@ -223,6 +227,7 @@ Use `assume_phase` to skip CoolProp's phase-stability search when the phase is k
 
 ```python
 from encomp.fluids import Fluid
+from encomp.units import Quantity as Q
 
 # equivalent: fractions in the name, or a composition dict
 Fluid("HEOS::CO2[0.7]&O2[0.3]", P=Q(10, "bar"), T=Q(300, "K"))
@@ -287,7 +292,7 @@ Benchmarks (CoolProp 8.0, 14-thread pool):
 
 | workload | vs `map_batches` | notes |
 | --- | --- | --- |
-| single property `D`, 1,000,000 rows | ~2.1x | also ~2x faster than vectorized `PropsSI` |
+| single property `D`, 1M rows | ~2.1x | also ~2x faster than vectorized `PropsSI` |
 | 4 independent properties, one `collect()`, 1M rows | ~4.6x | `map_batches` is serial on the GIL; the plugin runs ~4 cores |
 | 8 enthalpy calculations, 1M rows | ~4.9x | ~6 cores vs 1, roughly half the peak memory |
 
