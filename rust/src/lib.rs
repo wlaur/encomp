@@ -86,11 +86,7 @@ fn output_dtype(dtypes: &[&DataType], scalar_mask: &[bool]) -> DataType {
     if !saw_column {
         all_f32 = dtypes.iter().all(|dt| matches!(dt, DataType::Float32));
     }
-    if all_f32 {
-        DataType::Float32
-    } else {
-        DataType::Float64
-    }
+    if all_f32 { DataType::Float32 } else { DataType::Float64 }
 }
 
 fn cp_output(input_fields: &[Field], kwargs: EvalKwargs) -> PolarsResult<Field> {
