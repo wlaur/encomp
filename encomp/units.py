@@ -386,8 +386,7 @@ class Quantity(
 
         # hash on the canonical root-unit representation so the eq/hash contract holds:
         # __eq__ compares across units (Q(1, "m") == Q(100, "cm")), so two quantities that
-        # are equal must hash equal -- hashing the raw (m, u) would break that. to_root_units
-        # is used (not to_base_units) because it does not raise for a TemperatureDifference.
+        # are equal must hash equal -- hashing the raw (m, u) would break that.
         # NOTE: __eq__ is tolerant (np.isclose), so quantities that are only *approximately*
         # equal may still hash differently -- an inherent limit of tolerant equality, the same
         # way hash(0.1 + 0.2) != hash(0.3); exact equality (the common case) is now consistent.
@@ -1022,6 +1021,15 @@ class Quantity(
 
     def _check_temperature_compatibility(self, unit: Unit[DT]) -> None:
         if self._is_temperature_difference and unit._units not in self.TEMPERATURE_DIFFERENCE_UCS:
+            # a temperature difference is a scale-only quantity: any multiplicative
+            # [temperature] unit (K, degR, mK, ...) expresses it correctly, and the
+            # converted Quantity keeps the TemperatureDifference dimensionality.
+            # Offset scales (degC, degF) stay refused -- their zero point would
+            # silently reinterpret the difference as an absolute temperature
+            registry = cast(Any, self._REGISTRY)  # _is_multiplicative is a stable pint internal
+            if all(registry._is_multiplicative(u) for u in unit._units):
+                return
+
             current_name = self.dt.__name__
             new_name = Quantity(1, unit)._dimensionality_type.__name__
 
