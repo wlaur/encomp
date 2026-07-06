@@ -1,7 +1,7 @@
-from typing import Any, assert_never, overload
+from typing import Any, overload
 
 from .misc import isinstance_types
-from .units import Quantity
+from .units import ExpectedDimensionalityError, Quantity
 from .utypes import MT, Density, Mass, MassFlow, Volume, VolumeFlow
 
 
@@ -56,7 +56,7 @@ def convert_volume_mass(
         rho = Quantity(997, "kg/m³")
 
     if not isinstance_types(rho, Quantity[Density, Any]):
-        assert_never(rho)
+        raise ExpectedDimensionalityError(f"rho must be a Quantity[Density], passed {rho!r} ({type(rho).__name__})")
 
     if isinstance_types(inp, Quantity[Mass, Any]):
         return (inp / rho).to_reduced_units().asdim(Volume)
@@ -67,4 +67,7 @@ def convert_volume_mass(
     elif isinstance_types(inp, Quantity[VolumeFlow, Any]):
         return (inp * rho).to_reduced_units().asdim(MassFlow)
     else:
-        assert_never(inp)
+        raise ExpectedDimensionalityError(
+            "inp must be a Quantity with dimensionality Mass, MassFlow, Volume or VolumeFlow, "
+            f"passed {inp!r} ({type(inp).__name__})"
+        )
