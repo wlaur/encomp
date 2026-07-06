@@ -110,8 +110,8 @@ def convert_gas_volume(
     volume flow) and the units of the input are preserved.
     Uses compressibility factors from CoolProp.
 
-    The values for :math:`T_i, P_i` are passed as a tuple
-    using the parameter ``conditions_i``.
+    The values for :math:`P_i, T_i` are passed as a tuple ``(P, T)``
+    (pressure first) using the parameters ``condition_1`` and ``condition_2``.
     Optionally, the literal 'N' or 'S' can be passed
     to indicate normal and standard conditions.
 
@@ -241,7 +241,7 @@ def mass_to_normal_volume(
 @overload
 def mass_to_actual_volume(
     mass: Quantity[Mass, MT],
-    condition: tuple[Quantity[Pressure, MT], Quantity[Temperature, MT]],
+    condition: tuple[Quantity[Pressure, Any], Quantity[Temperature, Any]],
     fluid_name: str = "Air",
 ) -> Quantity[Volume, MT]: ...
 
@@ -249,7 +249,7 @@ def mass_to_actual_volume(
 @overload
 def mass_to_actual_volume(
     mass: Quantity[MassFlow, MT],
-    condition: tuple[Quantity[Pressure, MT], Quantity[Temperature, MT]],
+    condition: tuple[Quantity[Pressure, Any], Quantity[Temperature, Any]],
     fluid_name: str = "Air",
 ) -> Quantity[VolumeFlow, MT]: ...
 
@@ -266,7 +266,7 @@ def mass_to_actual_volume(
     ----------
     mass : Quantity[Mass, MT] | Quantity[MassFlow, MT]
         Input mass or mass flow
-    condition : tuple[Quantity[Pressure, MT], Quantity[Temperature, MT]]
+    condition : tuple[Quantity[Pressure, Any], Quantity[Temperature, Any]]
         Condition at which to calculate the actual volume
     fluid_name : str, optional
         Name of the fluid, by default 'Air'
@@ -337,7 +337,7 @@ def mass_from_normal_volume(
 @overload
 def mass_from_actual_volume(
     volume: Quantity[Volume, MT],
-    condition: tuple[Quantity[Pressure, MT], Quantity[Temperature, MT]],
+    condition: tuple[Quantity[Pressure, Any], Quantity[Temperature, Any]],
     fluid_name: str = "Air",
 ) -> Quantity[Mass, MT]: ...
 
@@ -345,7 +345,7 @@ def mass_from_actual_volume(
 @overload
 def mass_from_actual_volume(
     volume: Quantity[VolumeFlow, MT],
-    condition: tuple[Quantity[Pressure, MT], Quantity[Temperature, MT]],
+    condition: tuple[Quantity[Pressure, Any], Quantity[Temperature, Any]],
     fluid_name: str = "Air",
 ) -> Quantity[MassFlow, MT]: ...
 
@@ -362,7 +362,7 @@ def mass_from_actual_volume(
     ----------
     volume : Quantity[Volume, MT] | Quantity[VolumeFlow, MT]
         Input actual volume or actual volume flow
-    condition : tuple[Quantity[Pressure, MT], Quantity[Temperature, MT]]
+    condition : tuple[Quantity[Pressure, Any], Quantity[Temperature, Any]]
         Condition at which to calculate the mass
     fluid_name : str, optional
         Name of the fluid, by default 'Air'
