@@ -2827,9 +2827,9 @@ class Quantity(
         return cast("Quantity[DT, float]", instance)
 
 
-# register the Quantity implementation on the registry, so every Quantity object
-# created through it (including results of pint-internal operations) is this type.
-# Unit is NOT registered: pint-internal units are wrapped at the encomp boundaries
-# (the .u / .units properties and _validate_unit)
+# register the Quantity and Unit implementations on the registry, so every object
+# created through it (results of pint-internal operations, parse_units output) is
+# the encomp type. The .u / .units properties and _validate_unit additionally
+# re-wrap at the encomp boundaries, covering values that bypassed the registry
 setattr(UNIT_REGISTRY, "Quantity", Quantity)  # noqa: B010
 setattr(UNIT_REGISTRY, "Unit", Unit)  # noqa: B010
