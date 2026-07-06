@@ -266,6 +266,16 @@ The environment variable `ENCOMP_AUTOCONVERT_OFFSET_TO_BASEUNIT` can be set to `
 The dimensionality {py:class}`encomp.utypes.Currency` represents an arbitrary currency.
 `SEK`, `EUR` and `USD` are defined by default.
 
+:::{warning}
+Do **not** use this system for currency *conversions*.
+The scaling factors between the built-in currencies are fixed placeholders
+(`10 SEK = 1 EUR = 1 USD`), **not** exchange rates -- converting a quantity from one
+currency to another silently applies these fabricated factors.
+Keep all quantities in a single currency, or refer to the
+[pint documentation](https://pint.readthedocs.io/en/stable/advanced/currencies.html)
+for how to implement a registry context that handles currency conversion correctly.
+:::
+
 ```python
 from encomp.units import Quantity as Q
 
@@ -280,20 +290,13 @@ yearly_cost = mf * t * price  # Quantity[Currency]
 print(yearly_cost.to("MEUR"))
 
 # NOTE: this is only an approximation,
-# uses exchange rate 10 SEK = 1 EUR
+# uses the fixed placeholder scaling 10 SEK = 1 EUR
 print(yearly_cost.to("MSEK"))
 
 weekly_cost = Q(145, "GWh/year") * Q(1, "week") * Q(25, "EUR/MWh")
 
 print(weekly_cost.to("MEUR"))
 ```
-
-:::{warning}
-Do not use this system for currency *conversions*.
-The scaling factors between the default currencies are approximations (`10 SEK = 1 EUR = 1 USD`).
-
-Refer to the [pint documentation](https://pint.readthedocs.io/en/stable/currencies.html) for instructions on how to implement a registry context that handles currency conversion correctly.
-:::
 
 ### Handling unit-related errors
 

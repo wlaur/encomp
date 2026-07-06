@@ -34,6 +34,10 @@ DimensionlessUnits = Literal[
     "dimensionless",
 ]
 
+# NOTE: the scaling between currencies in defs/units.txt is a fixed placeholder
+# (10 SEK = 1 EUR = 1 USD), NOT an exchange rate: converting a Quantity across
+# currencies silently applies these fabricated factors. See the Currency
+# dimensionality docstring and the "Currency units" section of the docs
 CurrencyUnits = Literal[
     "SEK",
     "EUR",
@@ -900,6 +904,18 @@ class MolarDensity(Dimensionality):
 
 
 class Currency(Dimensionality):
+    """
+    Arbitrary currency (``[currency]`` dimension).
+
+    .. warning::
+        The scaling between the built-in currencies (``SEK``, ``EUR``, ``USD``)
+        is a fixed placeholder (``10 SEK = 1 EUR = 1 USD``), *not* an exchange
+        rate: converting a Quantity across currencies silently applies these
+        fabricated factors. Do not use this system for currency conversion --
+        keep all quantities in a single currency, or implement a pint context
+        with real exchange rates.
+    """
+
     dimensions = _CurrencyUC
 
 
