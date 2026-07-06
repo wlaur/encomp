@@ -708,7 +708,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         if "Initialize failed for backend" in msg:
             raise ValueError(
-                f"Fluid '{self.name}' could not be initalized, ensure that the name is a valid CoolProp fluid name"
+                f"Fluid '{self.name}' could not be initialized, ensure that the name is a valid CoolProp fluid name"
             ) from e
 
         _LOGGER.warning(f'CoolProp could not calculate "{prop}" for fluid "{self.name}", output is NaN: {msg}')
