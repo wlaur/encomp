@@ -257,7 +257,7 @@ UNIT_REGISTRY.formatter.default_format = SETTINGS.default_unit_format
 
 
 def set_quantity_format(fmt: str = "compact") -> None:
-    fmt_aliases = {"normal": "~P", "siunitx": "~Lx"}
+    fmt_aliases = {"compact": "~P", "normal": "~P", "siunitx": "~Lx"}
 
     if fmt in fmt_aliases:
         fmt = fmt_aliases[fmt]
@@ -266,7 +266,7 @@ def set_quantity_format(fmt: str = "compact") -> None:
         raise ValueError(
             f'Cannot set default format to "{fmt}", '
             f"fmt is one of {Quantity.FORMATTING_SPECS} "
-            "or alias siunitx: ~L, compact: ~P"
+            "or alias compact: ~P, siunitx: ~Lx"
         )
 
     UNIT_REGISTRY.formatter.default_format = fmt
