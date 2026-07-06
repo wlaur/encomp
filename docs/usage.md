@@ -99,6 +99,17 @@ class PowerPerLength(Dimensionality):
 Q[PowerPerLength, float]  # new dimensionality
 ```
 
+:::{important}
+The typed constructor does not *validate* the dimensionality at runtime -- it *redirects*.
+`Q[Length](1, "kg")` returns a `Quantity[Mass, float]`: the dimensionality of the created
+object is always determined by the unit. This is by design (`pint` constructs arithmetic
+results through `self.__class__(...)` with new dimensionalities, so the constructor must
+accept them). Dimensionality *enforcement* happens in the static type checker and at the
+explicit runtime boundaries: `isinstance()` / {py:func}`encomp.misc.isinstance_types`,
+{py:meth}`encomp.units.Quantity.check`, `typeguard.typechecked` functions and Pydantic
+model fields (which raise `ExpectedDimensionalityError` for a mismatch).
+:::
+
 Check the dimensionality of a quantity with `isinstance()` or {py:meth}`encomp.units.Quantity.check`.
 For parameterized types like `list[Quantity[Pressure]]`, use {py:func}`encomp.misc.isinstance_types` instead of `isinstance()`.
 
@@ -359,6 +370,15 @@ model = Model(a=Q(25, "cSt"), m=Q(25, "kg"), s=Q(25, "cm"))
 # Quantity fields round-trip through JSON, including the magnitude type
 Model.model_validate_json(model.model_dump_json())
 ```
+
+:::{note}
+`ExpectedDimensionalityError` inherits from `pint.errors.DimensionalityError` (a
+`TypeError` subclass), so Pydantic does **not** wrap it into a `pydantic.ValidationError`:
+a dimensionality mismatch propagates directly out of model construction, and a model with
+several invalid fields fails on the first one instead of collecting all errors. Catch
+`ExpectedDimensionalityError` (or `pint.errors.DimensionalityError`) around model
+construction rather than `pydantic.ValidationError`.
+:::
 
 ## The Fluid class
 
