@@ -1335,6 +1335,22 @@ def test_to_preserves_temperature_dimensionality() -> None:
         _ = Q(1.0, "m").to("delta_degC")
 
 
+def test_ambiguous_textile_units_removed() -> None:
+    # pint's default registry defines the textile unit "Nm" (number meter,
+    # km/kg) -- in a library where Nm³ prominently means *normal* cubic meter,
+    # a torque-intending "Nm" silently parsed as km/kg. The textile group is
+    # removed from defs/units.txt, so "Nm" is an explicit error instead
+    from pint.errors import UndefinedUnitError
+
+    for unit in ("Nm", "tex", "denier", "number_meter"):
+        with pytest.raises(UndefinedUnitError):
+            _ = Q(1.0, unit)
+
+    # the normal-volume shorthand is unaffected
+    assert Q(1.0, "Nm3/h").check(NormalVolumeFlow)
+    assert Q(1.0, "Nm³").check(NormalVolume)
+
+
 def test_temperature_difference_to_multiplicative_units() -> None:
     # a ΔT is a scale-only quantity: it can be expressed in any multiplicative
     # [temperature] unit (K, degR, mK, ...) and keeps its dimensionality type
