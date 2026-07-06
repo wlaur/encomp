@@ -49,6 +49,15 @@ def test_isinstance_types() -> None:
     assert isinstance_types(y, tuple[int, int, str]) or isinstance_types(y, str)
 
 
+def test_isinstance_types_invalid_expected() -> None:
+    import pytest
+
+    # a string "expected" is an unresolvable forward reference that typeguard
+    # would silently pass -- it must be an explicit error, never a silent True
+    with pytest.raises(TypeError, match="not a string"):
+        isinstance_types(5, cast(Any, "not a type"))
+
+
 def test_isinstance_types_quantity() -> None:
     q = Q(1)
     assert isinstance_types(q, Q)
