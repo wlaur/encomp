@@ -99,6 +99,18 @@ class PowerPerLength(Dimensionality):
 Q[PowerPerLength, float]  # new dimensionality
 ```
 
+:::{note}
+Dimensionality subclasses live in a single *process-wide*, name-keyed registry:
+
+- Two subclasses with the same class name and the **same** dimensions are treated as
+  one type -- the first definition wins and is silently reused (this keeps notebook
+  cell re-runs and module reloads working).
+- Two subclasses with the same class name but **different** dimensions raise
+  `TypeError` at class-definition time -- also across independent packages that both
+  define, say, `FuelPerAir`. Pick distinctive names for custom dimensionalities in
+  library code.
+:::
+
 :::{important}
 The typed constructor does not *validate* the dimensionality at runtime -- it *redirects*.
 `Q[Length](1, "kg")` returns a `Quantity[Mass, float]`: the dimensionality of the created
