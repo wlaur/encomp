@@ -136,6 +136,10 @@ SEK = 1 * currency
 EUR = 10 * currency
 USD = 10 * currency
 
+# named normal cubic meter so normal volumes display compactly as Nm³
+# (Quantity.correct_unit rewrites the Nm3/nm³/... input variants to this unit)
+normal_cubic_meter = normal * meter ** 3 = Nm³
+
 
 # Angle
 turn = 2 * π * radian = _ = revolution = cycle = circle

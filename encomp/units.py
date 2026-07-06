@@ -1216,8 +1216,9 @@ class Quantity(
         # so we'll not even try to parse that, use "nanometer**3" if necessary
         for n in Quantity.NORMAL_M3_VARIANTS:
             if n in unit:
-                # include brackets, otherwise "kg/nm3" is incorrectly converted to "kg/normal*m3"
-                unit = unit.replace(n, "(normal * m³)")
+                # the named unit (defined in defs/units.txt) displays as Nm³; being a
+                # single token it also composes safely, e.g. "kg/nm3"
+                unit = unit.replace(n, "normal_cubic_meter")
 
         # NOTE: the order of replacements matters here
         replacements = {
