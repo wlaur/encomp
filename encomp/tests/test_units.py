@@ -1335,6 +1335,36 @@ def test_to_preserves_temperature_dimensionality() -> None:
         _ = Q(1.0, "m").to("delta_degC")
 
 
+def test_temperature_add_sub_preserves_unit() -> None:
+    # T ± ΔT keeps the temperature operand's original unit (the value is the
+    # same absolute temperature either way; only the display unit differs)
+    res = Q(300.0, "K") + Q(10.0, "delta_degC")
+    assert res.u == Unit("K")
+    assert res.m == approx(310.0)
+    assert isinstance_types(res, Q[Temperature])
+
+    res = Q(10.0, "delta_degC") + Q(300.0, "K")
+    assert res.u == Unit("K")
+    assert res.m == approx(310.0)
+
+    res = Q(300.0, "K") - Q(10.0, "delta_degC")
+    assert res.u == Unit("K")
+    assert res.m == approx(290.0)
+
+    res = Q(25.0, "degC") + Q(10.0, "delta_degC")
+    assert res.u == Unit("degC")
+    assert res.m == approx(35.0)
+
+    res = Q(50.0, "degF") + Q(9.0, "delta_degF")
+    assert res.u == Unit("degF")
+    assert res.m == approx(59.0)
+
+    # vector magnitudes behave the same
+    res = Q(np.array([300.0, 400.0]), "K") + Q(10.0, "delta_degC")
+    assert res.u == Unit("K")
+    assert res.m == approx(np.array([310.0, 410.0]))
+
+
 def test_numpy_scalar_magnitudes() -> None:
     # numpy scalar magnitudes (e.g. arr.sum() on an integer array) normalize to
     # a plain float instead of failing with a confusing 1-D-array shape error

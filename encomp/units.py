@@ -1540,6 +1540,7 @@ class Quantity(
             v2 = other.to("delta_degC").m
 
             val = v1 + v2 if operator == "add" else v1 - v2
+            temperature_unit = self.u
         else:
             assert self.check(TemperatureDifference)
             assert other.check(Temperature)
@@ -1548,8 +1549,13 @@ class Quantity(
             v2 = other.to("degC").m
 
             val = v1 + v2 if operator == "add" else v1 - v2
+            temperature_unit = other.u
 
-        return cast("Quantity[Temperature, MT]", Quantity(val, "degC"))
+        # the arithmetic runs on the degC scale, but the result is an absolute
+        # temperature: express it in the temperature operand's original unit
+        # (K + ΔT stays in K) instead of normalizing everything to degC
+        result = cast("Quantity[Temperature, MT]", Quantity(val, "degC"))
+        return result.to(cast("Unit[Temperature]", temperature_unit))
 
     def __round__(self, ndigits: int | None = None) -> Quantity[DT, MT]:
         if ndigits is None:
