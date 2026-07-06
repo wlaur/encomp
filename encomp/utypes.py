@@ -578,7 +578,7 @@ class Dimensionality(metaclass=_DimensionalityMeta):
     Represents the *dimensionality* of a unit, i.e.
     a combination (product) of the base dimensions (with optional rational exponents).
 
-    A dimension ca be expressed as
+    A dimension can be expressed as
 
     .. math::
 

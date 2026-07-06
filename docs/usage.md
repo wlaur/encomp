@@ -604,7 +604,7 @@ The following convenience methods are added to the `sp.Symbol` class:
 
 - `sp.Symbol._()`: add subscript
 - `sp.Symbol.__()`: add superscript
-- `sp.Symbol.decorate()`: add sub- and superscript prefixes and suffixes ({py:func}`encomp.sympy.decorate`)
+- `sp.Symbol.decorate()`: add sub- and superscript prefixes and suffixes ({py:meth}`encomp.sympy.Symbol.decorate`)
 
 These methods return new `sp.Symbol` instances with the same assumptions (*positive*, *real*, *integer*, ...) as the original.
 
@@ -689,7 +689,7 @@ result_qty = fcn(
 # [26860.5 95726.25] kg
 ```
 
-Quantity objects combine directly with Sympy symbols; the units are converted to their symbolic representations by {py:meth}`encomp.units.Quantity._sympy_`.
+Quantity objects combine directly with Sympy symbols; the units are converted to their symbolic representations by the `Quantity._sympy_` method (the hook `sympy.sympify` looks for).
 
 ```python
 from encomp.sympy import sp
@@ -699,13 +699,13 @@ x, y, z = sp.symbols("x, y, z")
 
 # the type of the left object determines the output
 
-# output is Quantity[Dimensionless]
-Q(1) * x  # x dimensionless
-Q(10, "%") * x  # 10*x percent
+# output is a Quantity with a symbolic magnitude
+Q(1) * x  # 1.0*x dimensionless
+Q(10, "%") * x  # 10.0*x percent
 
 # output is a sympy object
-x * Q(1)  # x
-x * Q(10, "%")  # 0.1x
+x * Q(1)  # 1.0*x
+x * Q(10, "%")  # 0.1*x
 
 # when the output is a sympy object,
 # all derived units are expanded to the base SI units
