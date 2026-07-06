@@ -24,14 +24,19 @@ def divide_chunks(container: np.ndarray, N: int) -> Iterator[np.ndarray]: ...
 
 
 def divide_chunks(container: Any, N: int) -> Any:
+    # validate eagerly: a generator body would defer these errors to the first
+    # next() call, far from the call site
     if not len(container):
         raise ValueError("Cannot chunk empty container")
 
     if N < 1:
-        raise ValueError(f"Cannot split container with into {N} chunks")
+        raise ValueError(f"Chunk size must be at least 1, passed {N}")
 
-    for i in range(0, len(container), N):
-        yield container[i : i + N]
+    def _chunks() -> Iterator[Any]:
+        for i in range(0, len(container), N):
+            yield container[i : i + N]
+
+    return _chunks()
 
 
 def flatten(container: Iterable[Any], max_depth: int | None = None, _depth: int = 0) -> Iterator[Any]:
@@ -40,7 +45,9 @@ def flatten(container: Iterable[Any], max_depth: int | None = None, _depth: int 
         return
 
     for obj in container:
-        if isinstance(obj, (str, Quantity, np.ndarray, pl.Series, pl.Expr)):
+        # atomic despite being iterable: iterating a dict would silently drop its
+        # values (keys only), and bytes would flatten into individual integers
+        if isinstance(obj, (str, bytes, dict, Quantity, np.ndarray, pl.Series, pl.Expr)):
             yield obj
             continue
 
