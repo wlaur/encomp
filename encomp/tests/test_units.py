@@ -1335,6 +1335,17 @@ def test_to_preserves_temperature_dimensionality() -> None:
         _ = Q(1.0, "m").to("delta_degC")
 
 
+def test_numpy_scalar_magnitudes() -> None:
+    # numpy scalar magnitudes (e.g. arr.sum() on an integer array) normalize to
+    # a plain float instead of failing with a confusing 1-D-array shape error
+    for val in (np.int64(5), np.int32(5), np.float32(5.0), np.float64(5.0)):
+        q = Q(cast(Any, val), "m")
+        assert type(q.m) is float
+        assert q.m == approx(5.0)
+
+    assert Q(np.array([1, 2, 3]).sum(), "kg").m == approx(6.0)
+
+
 def test_ambiguous_textile_units_removed() -> None:
     # pint's default registry defines the textile unit "Nm" (number meter,
     # km/kg) -- in a library where Nm³ prominently means *normal* cubic meter,

@@ -664,7 +664,15 @@ class Quantity(
             return val
         elif hasattr(val, "is_Atom"):
             # implicit way of checking if the value is a sympy symbol without having to import Sympy
+            # (must come before the numbers.Real check: sympy Float/Integer register as Real,
+            # but a sympy magnitude must be kept symbolic)
             return cast("MT", val)
+        elif isinstance(val, numbers.Real):
+            # remaining real scalars that are not float subclasses: numpy scalars
+            # such as np.int64 / np.int32 / np.float32 (e.g. from arr.sum() on an
+            # integer array), Fraction, ... -- normalize to a plain float instead
+            # of falling through to np.array(), which fails on the 0-d shape
+            return cast("MT", float(val))
         else:
             arr = cast(MT, np.array(val).astype(np.float64))
             return arr
