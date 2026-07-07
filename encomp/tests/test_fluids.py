@@ -13,6 +13,7 @@ from encomp import coolprop as encomp_coolprop
 
 from .. import utypes as ut
 from ..fluids import CoolPropFluid, Fluid, FluidState, HumidAir, HumidAirState, Water, clear_expr_evaluation_cache
+from ..settings import SETTINGS
 from ..units import Quantity as Q
 from ..utypes import DT, Density, SpecificEntropy
 
@@ -159,6 +160,25 @@ def test_Fluid() -> None:
 
     with pytest.raises(ValueError):
         Fluid("water", T=Q([np.nan, np.nan], "°C"), P=Q([], "bar")).H
+
+
+def test_ignore_coolprop_warnings_gates_logger(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fluid = Fluid("water", P=Q(1.0, "bar"), T=Q(25.0, "degC"))
+
+    monkeypatch.setattr(SETTINGS, "ignore_coolprop_warnings", True)
+    with caplog.at_level(logging.WARNING, logger="encomp.fluids"):
+        fluid.check_exception("D", ValueError("unexpected backend failure"))
+
+    assert "CoolProp could not calculate" not in caplog.text
+
+    caplog.clear()
+    monkeypatch.setattr(SETTINGS, "ignore_coolprop_warnings", False)
+    with caplog.at_level(logging.WARNING, logger="encomp.fluids"):
+        fluid.check_exception("D", ValueError("unexpected backend failure"))
+
+    assert 'CoolProp could not calculate "D"' in caplog.text
 
 
 def test_incorrect_inputs() -> None:

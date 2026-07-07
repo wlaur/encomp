@@ -415,7 +415,8 @@ The abstract base class {py:class}`encomp.fluids.CoolPropFluid` implements the C
 All inputs and outputs are {py:class}`encomp.units.Quantity` instances.
 
 Pass the CoolProp fluid name and the fixed points (for example *P, T*) to the constructor.
-Not every combination of input parameters can fix the state: with an invalid input pair, every property evaluates to `nan` and CoolProp emits a warning, but no exception is raised.
+Not every combination of input parameters can fix the state: with an invalid input pair, every property evaluates to `nan` and `encomp.fluids` logs a warning, but no exception is raised.
+Set `ENCOMP_IGNORE_COOLPROP_WARNINGS=true` (the default) to suppress these calculation warnings, or `false` to emit them through Python logging.
 An invalid property *name*, on the other hand, raises `ValueError`.
 
 ```python
@@ -435,7 +436,7 @@ state: Any = {"D": Q(500, "kg/m³"), "PCRIT": Q(1, "bar")}
 invalid_inputs = Fluid("water", **state)
 # <Fluid "water", P=nan kPa, T=nan °C, D=nan kg/m³, V=nan cP>
 
-# every property is nan (CoolProp emits a warning about the invalid input pair)
+# every property is nan (and may log a warning about the invalid input pair)
 temperature = invalid_inputs.T  # nan °C
 ```
 

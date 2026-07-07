@@ -5,7 +5,6 @@ Uses CoolProp as backend.
 
 import hashlib
 import logging
-import warnings
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable, Mapping
@@ -71,10 +70,6 @@ _LOGGER = logging.getLogger(__name__)
 _cp: Any = _CoolProp
 PropsSI: Callable[..., float | Numpy1DArray] = _cp.PropsSI
 HAPropsSI: Callable[..., float | Numpy1DArray] = _cp.HAPropsSI
-
-if SETTINGS.ignore_coolprop_warnings:
-    warnings.filterwarnings("ignore", message="CoolProp could not calculate")
-
 
 # Strict Literals for CoolProp property names, single source of truth in the
 # encomp.coolprop plugin (fluid + humid-air namespaces). The fluid-name / composition /
@@ -713,7 +708,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 f"Fluid '{self.name}' could not be initialized, ensure that the name is a valid CoolProp fluid name"
             ) from e
 
-        _LOGGER.warning(f'CoolProp could not calculate "{prop}" for fluid "{self.name}", output is NaN: {msg}')
+        if not SETTINGS.ignore_coolprop_warnings:
+            _LOGGER.warning(f'CoolProp could not calculate "{prop}" for fluid "{self.name}", output is NaN: {msg}')
 
     # ------------------------------------------------------------------ #
     # Low-level AbstractState path. Used whenever an assumed phase and/or a
