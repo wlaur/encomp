@@ -498,7 +498,6 @@ name = "encomp"
 version = "1.5.4"
 source = { editable = "." }
 dependencies = [
-    { name = "asttokens" },
     { name = "coolprop" },
     { name = "numpy" },
     { name = "pint" },
@@ -542,7 +541,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "asttokens" },
     { name = "coolprop", specifier = ">=8.0.0,<9" },
     { name = "numpy", specifier = ">=2.1" },
     { name = "pint", specifier = ">=0.25.3" },

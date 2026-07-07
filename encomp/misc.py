@@ -1,8 +1,7 @@
 import ast
 from types import UnionType
-from typing import Any, Protocol, TypeIs, cast, get_args, get_origin
+from typing import Any, TypeIs, cast, get_args, get_origin
 
-import asttokens
 from typeguard import TypeCheckError, check_type
 from typing_extensions import TypeForm
 
@@ -74,22 +73,14 @@ def isinstance_types[T](obj: Any, expected: TypeForm[T]) -> TypeIs[T]:  # noqa: 
         return False
 
 
-class _ASTTokens(Protocol):
-    tree: ast.Module | None
-
-    def get_text(self, node: ast.AST) -> str: ...
-
-
 def name_assignments(src: str) -> list[tuple[str, str]]:
     assigned_names: list[tuple[str, str]] = []
 
-    atok = cast(_ASTTokens, asttokens.ASTTokens(src, parse=True))
+    tree = ast.parse(src)
 
-    if atok.tree is None:
-        return assigned_names
-
-    for node in ast.walk(atok.tree):
+    for node in ast.walk(tree):
         if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name):
-            assigned_names.append((node.targets[0].id, atok.get_text(node)))
+            source_segment = ast.get_source_segment(src, node) or ast.unparse(node)
+            assigned_names.append((node.targets[0].id, source_segment))
 
     return assigned_names

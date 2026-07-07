@@ -32,7 +32,6 @@ dependencies = [
     "pydantic-settings>=2",
     "typeguard>=4",
     "typing-extensions",
-    "asttokens",
     "numpy>=2.1",
     # The bundled Rust plugin is loaded over polars' plugin ABI (polars-ffi, major 0),
     # which the host dispatches on by *major* version -- stable across py-polars minors,
