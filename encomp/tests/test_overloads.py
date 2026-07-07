@@ -65,6 +65,10 @@ def test_eq() -> None:
 
     assert pl.DataFrame({"mass_kg": [1, 2, 3]}).select(expr).sum().item() == 1
 
+    tolerant_expr = Q(pl.col("x"), "m") == Q(0.3, "m")
+    assert_type(tolerant_expr, pl.Expr)
+    assert pl.DataFrame({"x": [0.1 + 0.2]}).select(tolerant_expr).item() is True
+
 
 def test_unknown_mul_div() -> None:
     q1 = Q(2, "kilogram")

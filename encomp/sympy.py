@@ -271,7 +271,7 @@ def get_lambda_kwargs(
     include: Sequence[sp.Symbol | str] | None = None,
     *,
     units: bool = False,
-) -> dict[str, Quantity | np.ndarray]:
+) -> dict[str, Quantity | np.ndarray | float]:
     """
     Returns a mapping from identifier to value (Quantity or float)
     based on the input value map (Symbol to value).
@@ -298,7 +298,7 @@ def get_lambda_kwargs(
 
     def _get_val(
         x: Quantity[Any, Numpy1DArray] | Numpy1DArray,
-    ) -> Quantity | Numpy1DArray:
+    ) -> Quantity | Numpy1DArray | float:
         if not isinstance(x, Quantity):
             return x
 
@@ -452,7 +452,7 @@ def evaluate(
     value_map: dict[sp.Symbol, Quantity | np.ndarray],
     *,
     units: bool = False,
-) -> Quantity | np.ndarray:
+) -> Quantity | np.ndarray | float:
     """
     Evaluates the input expression, given the mapping of symbol to
     value in ``value_map``.
@@ -476,7 +476,7 @@ def evaluate(
     """
 
     fcn = get_function(e, units=units)
-    return cast(Quantity | np.ndarray, fcn(value_map))
+    return cast(Quantity | np.ndarray | float, fcn(value_map))
 
 
 def substitute_unknowns(

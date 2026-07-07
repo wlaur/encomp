@@ -333,6 +333,21 @@ def test_input_not_named_after_state_input_raises() -> None:
         cp.humid_air("W", pl.col("rel_hum"), "T", "P")
 
 
+def test_invalid_input_pair_raises_before_plugin_execution() -> None:
+    with pytest.raises(ValueError, match="unsupported CoolProp input pair"):
+        cp.fluid("DMASS", "H", "U")
+
+
+def test_invalid_runtime_names_raise_python_exceptions() -> None:
+    df = pl.DataFrame({"P": [101325.0], "T": [300.0]})
+
+    with pytest.raises(Exception, match="unknown parameter"):
+        df.select(cp.fluid(cast(Any, "NOT_A_PROPERTY"), "P", "T"))
+
+    with pytest.raises(Exception, match="interior NUL"):
+        df.select(cp.fluid("DMASS", "P", "T", name=cast(Any, "Water\0bad")))
+
+
 def test_duplicate_state_inputs_raise() -> None:
     with pytest.raises(ValueError, match="distinct"):
         cp.fluid("DMASS", "P", "P")
@@ -345,6 +360,18 @@ def test_duplicate_state_inputs_raise() -> None:
 
     with pytest.raises(ValueError, match="same state input"):
         cp.humid_air("W", "P", "R", "RH")
+
+
+def test_scalar_literal_inputs_on_empty_frames_return_empty() -> None:
+    df = pl.DataFrame({"T": pl.Series([], dtype=pl.Float64)})
+    out = df.select(cp.fluid("DMASS", pl.lit(5e5).alias("P"), "T", name="HEOS::Water").alias("d"))
+    assert out.height == 0
+    assert out["d"].null_count() == 0
+
+    humid = pl.DataFrame({"T": pl.Series([], dtype=pl.Float64), "R": pl.Series([], dtype=pl.Float64)})
+    humid_out = humid.select(cp.humid_air("W", pl.lit(101325.0).alias("P"), "T", "R").alias("w"))
+    assert humid_out.height == 0
+    assert humid_out["w"].null_count() == 0
 
 
 def test_fluid_composition_validation_matches_fluids() -> None:

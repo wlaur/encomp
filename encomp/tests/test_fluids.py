@@ -89,6 +89,15 @@ def test_Fluid() -> None:
         # cannot fix all of P, T, Q
         Water(P=Q(1, "bar"), T=Q(150, "degC"), Q=Q(0.4, ""))
 
+    with pytest.raises(ValueError, match="same state input"):
+        Fluid("water", D=Q(1, "kg/m³"), Dmass=Q(1, "kg/m³"))
+
+    with pytest.raises(ValueError, match="same state input"):
+        HumidAir(T=Q(25, "degC"), Tdb=Q(25, "degC"), P=Q(1, "bar"))
+
+    with pytest.raises(ValueError, match="same state input"):
+        HumidAir(T=Q(25, "degC"), W=Q(0.01, ""), HumRat=Q(0.01, ""))
+
     with pytest.raises(ValueError):
         # incorrect argument name (built dynamically so the static
         # Unpack[TypedDict] key check does not flag the intentional typo)

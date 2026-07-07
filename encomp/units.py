@@ -15,6 +15,7 @@ import logging
 import math
 import numbers
 import re
+import sys
 import warnings
 from collections.abc import Iterable, Iterator, Sequence, Sized
 from types import UnionType
@@ -36,7 +37,7 @@ from typing import (
 import numpy as np
 import pint
 import polars as pl
-from pint.errors import DimensionalityError, UnitStrippedWarning
+from pint.errors import DimensionalityError, RedefinitionError, UnitStrippedWarning
 from pint.facets.measurement.objects import MeasurementQuantity
 from pint.facets.nonmultiplicative.objects import NonMultiplicativeQuantity
 from pint.facets.numpy.quantity import NumpyQuantity
@@ -299,6 +300,9 @@ def define_dimensionality(name: str, symbol: str | None = None, if_exists: Liter
         ``"warn"`` logs a warning and keeps the existing definition
     """
 
+    if if_exists not in ("raise", "warn"):
+        raise ValueError(f"Invalid value: {if_exists=}")
+
     if not name.isidentifier():
         raise ValueError(
             f"Dimensionality name must be a valid Python identifier (alphanumeric and underscores, "
@@ -309,20 +313,24 @@ def define_dimensionality(name: str, symbol: str | None = None, if_exists: Liter
         msg = f"Cannot define new dimensionality with name: {name}, a dimensionality with this name was already defined"
         if if_exists == "raise":
             raise DimensionalityRedefinitionError(msg)
-        elif if_exists == "warn":
-            # the existing definition stays in place: defining it again on the
-            # registry (on_redefinition="raise") would raise RedefinitionError
-            _LOGGER.warning(msg)
-            return
-        else:
-            raise ValueError(f"Invalid value: {if_exists=}")
+        # the existing definition stays in place: defining it again on the
+        # registry (on_redefinition="raise") would raise RedefinitionError
+        _LOGGER.warning(msg)
+        return
 
     definition_str = f"{name} = [{name}]"
 
     if symbol is not None:
         definition_str = f"{definition_str} = {symbol}"
 
-    UNIT_REGISTRY.define(definition_str)
+    try:
+        UNIT_REGISTRY.define(definition_str)
+    except RedefinitionError as e:
+        msg = f"Cannot define new dimensionality with name: {name}, a unit with this name was already defined"
+        if if_exists == "warn":
+            _LOGGER.warning(msg)
+            return
+        raise DimensionalityRedefinitionError(msg) from e
     CUSTOM_DIMENSIONS.append(name)
 
 
@@ -370,7 +378,12 @@ class Quantity(
 
     # constants
     NORMAL_M3_VARIANTS = ("nm³", "Nm³", "nm3", "Nm3", "nm**3", "Nm**3", "nm^3", "Nm^3")
-    TEMPERATURE_DIFFERENCE_UCS = (Unit("delta_degC")._units, Unit("delta_degF")._units)
+    TEMPERATURE_DIFFERENCE_UCS = (
+        Unit("delta_K")._units,
+        Unit("delta_degC")._units,
+        Unit("delta_degF")._units,
+        Unit("delta_degRe")._units,
+    )
 
     # used for float and numpy array comparison
     rtol: float = 1e-9
@@ -693,7 +706,13 @@ class Quantity(
             )
 
     @staticmethod
-    def _validate_magnitude(val: MT | Sequence[float]) -> MT:
+    def _validate_magnitude(val: MT | Sequence[float] | str | bytes | None) -> MT:
+        if val is None or isinstance(val, (str, bytes)):
+            raise ValueError(
+                "magnitude must be a numeric scalar, sympy atom, Polars object, "
+                "or 1-dimensional sequence of real numbers; strings and None are not supported"
+            )
+
         if isinstance(val, int):
             return cast("MT", float(val))
         elif isinstance(val, float):
@@ -704,7 +723,7 @@ class Quantity(
         elif isinstance(val, np.ndarray):
             if len(val.shape) != 1:
                 raise ValueError(f"Only 1-dimensional Numpy arrays can be used as magnitude, got shape {val.shape}")
-            return val
+            return cast("MT", Quantity._cast_array_float(val))
         elif isinstance(val, (pl.Series, pl.Expr)):
             return val
         elif hasattr(val, "is_Atom"):
@@ -719,8 +738,10 @@ class Quantity(
             # of falling through to np.array(), which fails on the 0-d shape
             return cast("MT", float(val))
         else:
-            arr = cast(MT, np.array(val).astype(np.float64))
-            return arr
+            arr = np.array(val)
+            if len(arr.shape) != 1:
+                raise ValueError(f"Only 1-dimensional sequences can be used as magnitude, got shape {arr.shape}")
+            return cast("MT", Quantity._cast_array_float(arr))
 
     @classmethod
     def get_unit(cls, unit_name: AllUnits | str) -> Unit:
@@ -764,17 +785,31 @@ class Quantity(
 
     def __reduce__(  # pyright: ignore[reportIncompatibleMethodOverride]  # pyrefly: ignore[bad-override]
         self,
-    ) -> tuple[object, tuple[object, str, type[Dimensionality]]]:
-        return (_reconstruct_quantity, (self._magnitude, str(self.u._units), self.dt))
+    ) -> tuple[object, tuple[object, str, type[Dimensionality] | None]]:
+        dim = self.dt if _is_pickle_global(self.dt) else None
+        return (_reconstruct_quantity, (self._magnitude, str(self.u._units), dim))
 
     @staticmethod
     def _cast_array_float(inp: np.ndarray) -> Numpy1DArray:
         # don't fail in case the array contains unsupported objects,
         # cast to float64, matches the Numpy1DArray type definition
+        if inp.dtype.kind in {"S", "U"}:
+            raise ValueError("magnitude sequences must contain real numbers, not strings")
+
+        if inp.dtype.kind == "O":
+            for item in inp:
+                if item is None or isinstance(item, (str, bytes)) or not isinstance(item, numbers.Real):
+                    raise ValueError(
+                        f"magnitude sequences must contain real numbers; got {type(item).__name__}: {item!r}"
+                    )
+
+        if inp.dtype == np.float64:
+            return cast("Numpy1DArray", inp)
+
         try:
             return inp.astype(np.float64, casting="unsafe", copy=True)
-        except TypeError:
-            return inp
+        except (TypeError, ValueError) as e:
+            raise ValueError("magnitude sequences must contain real numbers") from e
 
     @overload
     def __new__(cls, val: Sequence[float]) -> Quantity[Dimensionless, Numpy1DArray]: ...
@@ -998,7 +1033,7 @@ class Quantity(
         valid_magnitude = cls._validate_magnitude(val)
         valid_unit = cls._validate_unit(unit)
 
-        if cls._dimensionality_type == TemperatureDifference and cls._is_offset_temperature_unit(valid_unit):
+        if issubclass(cls._dimensionality_type, TemperatureDifference) and cls._is_offset_temperature_unit(valid_unit):
             raise DimensionalityTypeError(
                 f"Cannot construct TemperatureDifference with offset unit {valid_unit}; use a delta unit instead"
             )
@@ -1094,7 +1129,7 @@ class Quantity(
 
     @property
     def _is_temperature_difference(self) -> bool:
-        return self.dt == TemperatureDifference
+        return issubclass(self.dt, TemperatureDifference)
 
     @classmethod
     def _is_temperature_difference_unit(cls, unit: Unit[DT]) -> bool:
@@ -1113,11 +1148,17 @@ class Quantity(
 
     @classmethod
     def _as_temperature_difference_unit(cls, unit: Unit[Any]) -> Unit[TemperatureDifference]:
+        if unit._units == Unit("delta_K")._units:
+            return Unit("delta_K")
+
         if unit._units == Unit("degC")._units:
             return Unit("delta_degC")
 
         if unit._units == Unit("degF")._units:
             return Unit("delta_degF")
+
+        if unit._units == Unit("degRe")._units:
+            return Unit("delta_degRe")
 
         if cls._is_offset_temperature_unit(unit):
             raise DimensionalityTypeError(f"Cannot reinterpret offset temperature unit {unit} as TemperatureDifference")
@@ -1361,13 +1402,15 @@ class Quantity(
             "‰": "permille",
             "r/min": "rpm",
             # ΔK does not really make sense, it's not an offset scale
-            "ΔK": "K",
             "Δ": "delta_",
         }
 
         for old, new in replacements.items():
             if old in unit:
                 unit = unit.replace(old, new)
+
+        percent_basis = r"(?:mol(?:e)?|kg|g|m(?:3|³|\^3|\*\*3)|vol(?:ume)?|mass|wt|weight)"
+        unit = re.sub(rf"(?<![A-Za-z0-9_]){percent_basis}\s*-?\s*%", "%", unit, flags=re.IGNORECASE)
 
         unit = re.sub(r"(?<=[A-Za-z0-9_])%", " percent", unit)
         unit = unit.replace("%", "percent")
@@ -1881,7 +1924,10 @@ class Quantity(
     def __pow__(self, other: Quantity[Dimensionless, MT]) -> Quantity[UnknownDimensionality, MT]: ...
     def __pow__(self, other: Quantity[Dimensionless, Any] | float) -> Quantity[Any, Any]:
         ret = cast("Quantity[DT, MT]", self._pint_super.__pow__(other))
-        return ret
+        return self._call_subclass(ret.m, ret.u)
+
+    def __ipow__(self, other: Any) -> Any:  # noqa: ANN401
+        return cast("Quantity[Any, Any]", cast(Any, self).__pow__(other))
 
     @overload
     def __add__(self: Quantity[Dimensionless, MT], other: float) -> Quantity[Dimensionless, MT]: ...
@@ -2084,6 +2130,12 @@ class Quantity(
         if isinstance(other_m, pl.Series) and isinstance(m, (float, int)):
             return other_m.is_close(m, rel_tol=self.rtol, abs_tol=self.atol)
 
+        if isinstance(m, pl.Expr) and isinstance(other_m, (float, int, pl.Expr)):
+            return m.is_close(other_m, rel_tol=self.rtol, abs_tol=self.atol)
+
+        if isinstance(other_m, pl.Expr) and isinstance(m, (float, int)):
+            return other_m.is_close(m, rel_tol=self.rtol, abs_tol=self.atol)
+
         ret = m == other_m
 
         return ret
@@ -2160,6 +2212,12 @@ class Quantity(
             return m.is_close(other_m, rel_tol=self.rtol, abs_tol=self.atol).not_()
 
         if isinstance(other_m, pl.Series) and isinstance(m, (float, int)):
+            return other_m.is_close(m, rel_tol=self.rtol, abs_tol=self.atol).not_()
+
+        if isinstance(m, pl.Expr) and isinstance(other_m, (float, int, pl.Expr)):
+            return m.is_close(other_m, rel_tol=self.rtol, abs_tol=self.atol).not_()
+
+        if isinstance(other_m, pl.Expr) and isinstance(m, (float, int)):
             return other_m.is_close(m, rel_tol=self.rtol, abs_tol=self.atol).not_()
 
         ret = m != other_m
@@ -2622,6 +2680,9 @@ class Quantity(
 
         return self._call_subclass(ret.m, ret.u)
 
+    def __imul__(self, other: Any) -> Any:  # noqa: ANN401
+        return cast("Quantity[Any, Any]", cast(Any, self).__mul__(other))
+
     def __rmul__(self, other: float) -> Quantity[DT, MT]:
         ret = cast("Quantity[DT, MT]", self._pint_super.__rmul__(other))
         return self._call_subclass(ret.m, ret.u)
@@ -2962,6 +3023,9 @@ class Quantity(
 
         return self._call_subclass(ret.m, ret.u)
 
+    def __itruediv__(self, other: Any) -> Any:  # noqa: ANN401
+        return cast("Quantity[Any, Any]", cast(Any, self).__truediv__(other))
+
     @overload
     def __rtruediv__(self: Quantity[Dimensionless, MT], other: float) -> Quantity[Dimensionless, MT]: ...
 
@@ -3009,6 +3073,9 @@ class Quantity(
         ret = self._pint_super.__floordiv__(other)
 
         return self._call_subclass(ret.m, ret.u)
+
+    def __ifloordiv__(self, other: Any) -> Any:  # noqa: ANN401
+        return cast("Quantity[Any, Any]", cast(Any, self).__floordiv__(other))
 
     def __abs__(self) -> Quantity[DT, MT]:
         ret = cast("Quantity[DT, MT]", super().__abs__())
@@ -3064,8 +3131,16 @@ class Quantity(
         return cast("Quantity[Any, Any]", instance)
 
 
-def _reconstruct_quantity(magnitude: object, unit: str, dim: type[Dimensionality]) -> Quantity[Any, Any]:
-    return Quantity(cast(Any, magnitude), unit).asdim(dim)
+def _is_pickle_global(dim: type[Dimensionality]) -> bool:
+    module = sys.modules.get(dim.__module__)
+    return module is not None and getattr(module, dim.__name__, None) is dim
+
+
+def _reconstruct_quantity(magnitude: object, unit: str, dim: type[Dimensionality] | None) -> Quantity[Any, Any]:
+    qty = Quantity(cast(Any, magnitude), unit)
+    if dim is None:
+        return qty
+    return qty.asdim(dim)
 
 
 # register the Quantity and Unit implementations on the registry, so every object

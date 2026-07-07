@@ -665,6 +665,15 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 f"Valid state inputs:\n{', '.join(sorted(cls.STATE_INPUTS))}"
             )
 
+        seen: dict[tuple[CProperty, ...], str] = {}
+        for key in kwargs:
+            prop_key = cls.get_prop_key(key)
+            if previous := seen.get(prop_key):
+                raise ValueError(
+                    f"{cls.__name__} inputs must be distinct; got {previous!r} and {key!r} for the same state input"
+                )
+            seen[prop_key] = key
+
     def _build_points(
         self, kwargs: Mapping[str, object]
     ) -> list[tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]]]:

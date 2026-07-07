@@ -23,6 +23,17 @@ fn perr(e: CpError) -> PolarsError {
     PolarsError::ComputeError(e.0.into())
 }
 
+fn compute_error(msg: impl Into<String>) -> PolarsError {
+    PolarsError::ComputeError(msg.into().into())
+}
+
+fn validate_input_count(kind: &str, got: usize, expected: usize) -> PolarsResult<()> {
+    if got != expected {
+        return Err(compute_error(format!("{kind}: expected {expected} inputs, got {got}")));
+    }
+    Ok(())
+}
+
 /// Broadcast a length-1 input to `n` (Polars passes a scalar `pl.lit` input as
 /// length 1 alongside full columns; map_batches broadcasts via its struct, we
 /// must do it here). No copy when the length already matches.
@@ -37,6 +48,20 @@ fn broadcast(s: &[f64], n: usize) -> PolarsResult<std::borrow::Cow<'_, [f64]>> {
             format!("input length {} incompatible with {n}", s.len()).into(),
         ))
     }
+}
+
+fn broadcast_len(values: &[Vec<f64>], scalar_mask: &[bool]) -> usize {
+    let mut n: Option<usize> = None;
+    for (i, v) in values.iter().enumerate() {
+        if scalar_mask.get(i).copied().unwrap_or(false) {
+            continue;
+        }
+        n = Some(match n {
+            Some(current) => current.max(v.len()),
+            None => v.len(),
+        });
+    }
+    n.unwrap_or_else(|| values.iter().map(Vec::len).max().unwrap_or(0))
 }
 
 /// Materialize a Series as `Vec<f64>` with nulls mapped to NaN. CoolProp turns a NaN
@@ -56,13 +81,16 @@ fn coolprop(lib_path: &str) -> PolarsResult<&'static CoolProp> {
     // load happens once (a plain get/set would let several threads load at once). CoolProp's
     // process-global init is NOT done here -- it is deferred to the first per-config warmup
     // (CoolProp::ensure_warmed_*), so an unused backend is never warmed.
-    let _guard = INIT.lock().unwrap();
+    let _guard = INIT
+        .lock()
+        .map_err(|_| compute_error("CoolProp init lock was poisoned"))?;
     if let Some(c) = CP.get() {
         return Ok(c);
     }
     let c = CoolProp::load(lib_path).map_err(perr)?;
-    let _ = CP.set(c);
-    Ok(CP.get().unwrap())
+    CP.set(c)
+        .map_err(|_| compute_error("CoolProp was initialized concurrently"))?;
+    CP.get().ok_or_else(|| compute_error("CoolProp failed to initialize"))
 }
 
 /// Output dtype preserves the input precision: Float32 only when every non-scalar
@@ -90,6 +118,7 @@ fn output_dtype(dtypes: &[&DataType], scalar_mask: &[bool]) -> DataType {
 }
 
 fn cp_output(input_fields: &[Field], kwargs: EvalKwargs) -> PolarsResult<Field> {
+    validate_input_count("cp_evaluate", input_fields.len(), 2)?;
     let dtypes: Vec<&DataType> = input_fields.iter().map(|f| f.dtype()).collect();
     Ok(Field::new(
         input_fields[0].name().clone(),
@@ -98,6 +127,7 @@ fn cp_output(input_fields: &[Field], kwargs: EvalKwargs) -> PolarsResult<Field> 
 }
 
 fn ha_output(input_fields: &[Field], kwargs: HaKwargs) -> PolarsResult<Field> {
+    validate_input_count("ha_evaluate", input_fields.len(), 3)?;
     let dtypes: Vec<&DataType> = input_fields.iter().map(|f| f.dtype()).collect();
     Ok(Field::new(
         input_fields[0].name().clone(),
@@ -123,9 +153,11 @@ struct EvalKwargs {
 /// over the whole chunk; Polars runs independent properties concurrently.
 #[polars_expr(output_type_func_with_kwargs = cp_output)]
 fn cp_evaluate(inputs: &[Series], kwargs: EvalKwargs) -> PolarsResult<Series> {
+    validate_input_count("cp_evaluate", inputs.len(), 2)?;
+    validate_input_count("cp_evaluate scalar_mask", kwargs.scalar_mask.len(), 2)?;
     let cp = coolprop(&kwargs.lib_path)?;
     // warm THIS (backend, fluid) once, single-threaded, before the parallel flash below
-    cp.ensure_warmed_fluid(&kwargs.backend, &kwargs.fluid);
+    cp.ensure_warmed_fluid(&kwargs.backend, &kwargs.fluid).map_err(perr)?;
     let pair = kwargs.input_pair;
     let okey = cp.param_index(&kwargs.output).map_err(perr)?;
     // decide the output precision from the original input dtypes (before the f64 cast)
@@ -136,9 +168,12 @@ fn cp_evaluate(inputs: &[Series], kwargs: EvalKwargs) -> PolarsResult<Series> {
 
     let v1v = to_f64(&inputs[0])?;
     let v2v = to_f64(&inputs[1])?;
-    let n = v1v.len().max(v2v.len());
-    let v1 = broadcast(&v1v, n)?;
-    let v2 = broadcast(&v2v, n)?;
+    let values = vec![v1v, v2v];
+    let n = broadcast_len(&values, &kwargs.scalar_mask);
+    let v1v = &values[0];
+    let v2v = &values[1];
+    let v1 = broadcast(v1v, n)?;
+    let v2 = broadcast(v2v, n)?;
 
     // state built once per chunk (handle lock held only here), then a lock-free
     // batched flash -> parallel across the independent property expressions.
@@ -176,7 +211,15 @@ mod tests {
         let full = [1.0, 2.0, 3.0];
         assert_eq!(broadcast(&full, 3).unwrap().as_ref(), &full);
         assert_eq!(broadcast(&[7.0], 3).unwrap().as_ref(), &[7.0, 7.0, 7.0]);
+        assert_eq!(broadcast(&[7.0], 0).unwrap().as_ref(), &[] as &[f64]);
         assert!(broadcast(&[1.0, 2.0], 3).is_err());
+    }
+
+    #[test]
+    fn broadcast_len_ignores_scalar_literals() {
+        assert_eq!(broadcast_len(&[vec![1.0], vec![]], &[true, false]), 0);
+        assert_eq!(broadcast_len(&[vec![1.0], vec![2.0, 3.0]], &[true, false]), 2);
+        assert_eq!(broadcast_len(&[vec![1.0], vec![2.0]], &[true, true]), 1);
     }
 
     #[test]
@@ -226,14 +269,16 @@ struct HaKwargs {
 /// expressions parallelize too -- humid air is NOT left to the Python path.
 #[polars_expr(output_type_func_with_kwargs = ha_output)]
 fn ha_evaluate(inputs: &[Series], kwargs: HaKwargs) -> PolarsResult<Series> {
+    validate_input_count("ha_evaluate", inputs.len(), 3)?;
+    validate_input_count("ha_evaluate scalar_mask", kwargs.scalar_mask.len(), 3)?;
     let cp = coolprop(&kwargs.lib_path)?;
-    cp.ensure_warmed_humid_air(); // one-time HAPropsSI global init, single-threaded
+    cp.ensure_warmed_humid_air().map_err(perr)?; // one-time HAPropsSI global init, single-threaded
     let out_dtype = output_dtype(
         &inputs.iter().map(|s| s.dtype()).collect::<Vec<_>>(),
         &kwargs.scalar_mask,
     );
-    let v: Vec<Vec<f64>> = (0..3).map(|i| to_f64(&inputs[i])).collect::<PolarsResult<_>>()?;
-    let n = v[0].len().max(v[1].len()).max(v[2].len());
+    let v: Vec<Vec<f64>> = inputs.iter().take(3).map(to_f64).collect::<PolarsResult<_>>()?;
+    let n = broadcast_len(&v, &kwargs.scalar_mask);
     let (b0, b1, b2) = (broadcast(&v[0], n)?, broadcast(&v[1], n)?, broadcast(&v[2], n)?);
     let mut out = vec![0.0f64; n];
     cp.ha_props_si_batch(

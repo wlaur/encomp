@@ -3,7 +3,16 @@ from typing import Any, cast
 
 from ..misc import isinstance_types, name_assignments
 from ..units import Quantity as Q
-from ..utypes import Dimensionless, Mass, Power, Temperature, UnknownDimensionality
+from ..utypes import (
+    Dimensionless,
+    Mass,
+    Power,
+    Temperature,
+    UnknownDimensionality,
+)
+
+# This module tests the runtime isinstance_types helper itself, so it keeps
+# direct isinstance_types assertions instead of replacing them with assert_type.
 
 
 def test_name_assignments() -> None:
