@@ -8,6 +8,10 @@ convert between mass, actual volume and normal volume; the normal-volume side is
 typed (and returned) as ``NormalVolume`` / ``NormalVolumeFlow`` with ``Nm³``-based
 units.
 
+Gas-condition literals use the values in :data:`encomp.constants.CONSTANTS`:
+``"N"`` means normal conditions (0 °C, 1 atm) and ``"S"`` means standard
+conditions (15 °C, 1 atm).
+
 .. todo::
     Implement for humid air
 """
@@ -150,8 +154,10 @@ def convert_gas_volume(
 
     The values for :math:`P_i, T_i` are passed as a tuple ``(P, T)``
     (pressure first) using the parameters ``condition_1`` and ``condition_2``.
-    Optionally, the literal 'N' or 'S' can be passed
-    to indicate normal and standard conditions.
+    Optionally, the literals ``"N"`` and ``"S"`` can be passed to indicate
+    normal and standard conditions. ``"N"`` is 0 °C and 1 atm
+    (``CONSTANTS.normal_conditions_*``); ``"S"`` is 15 °C and 1 atm
+    (``CONSTANTS.standard_conditions_*``).
 
     Parameters
     ----------
