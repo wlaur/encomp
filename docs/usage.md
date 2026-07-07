@@ -217,9 +217,9 @@ from encomp.units import Quantity as Q
 
 type(Q([1, 2, 3], "kg").m)  # numpy.ndarray
 
-arr = np.linspace(0, 1)
+arr = np.linspace(0, 1, 6)
 Q(arr, "bar")
-# [0.0 0.0204 0.0408 ... 0.9795 1.0] bar
+# [0.0 0.2 0.4 0.6000000000000001 0.8 1.0] bar
 ```
 
 ### Quantities with expression magnitudes

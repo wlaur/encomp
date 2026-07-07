@@ -222,9 +222,10 @@ class TestUsageExamples:
         # Note: sets are not supported as magnitude
         # Use lists or arrays instead
 
-        arr = np.linspace(0, 1, 50)
+        arr = np.linspace(0, 1, 6)
         qty = Q(arr, "bar")
-        assert isinstance(qty.m, np.ndarray)  # default linspace size
+        assert isinstance(qty.m, np.ndarray)
+        assert str(qty) == "[0.0 0.2 0.4 0.6000000000000001 0.8 1.0] bar"
 
     def test_combining_quantities(self) -> None:
         """Test combining quantities with operations"""
