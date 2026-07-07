@@ -56,6 +56,12 @@ class Settings(BaseSettings):
     .. note::
         All names are case-insensitive.
 
+    Environment-backed settings are loaded once when this module is imported.
+    Some values are consumed during registry initialization, so assigning new
+    values to :data:`SETTINGS` is not a general runtime configuration API. Use
+    :func:`encomp.units.set_quantity_format` to change quantity/unit rendering
+    for the current process.
+
     """
 
     units: FilePath = PACKAGE_ROOT / "defs/units.txt"
@@ -76,6 +82,7 @@ class Settings(BaseSettings):
     )
 
 
-# the settings object is initialized the first time the library loads
-# settings can be changed during runtime by setting attributes on this instance
+# The settings object is initialized the first time the library loads. Some
+# consumers read values during their own import/initialization, so do not treat
+# attribute assignment on this instance as a general runtime configuration API.
 SETTINGS = Settings()

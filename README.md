@@ -345,6 +345,7 @@ pytest
 
 The attributes of `encomp.settings.Settings` are overridden with a file named `.env` in the current working directory.
 Attribute names are prefixed with `ENCOMP_`.
+Settings are loaded when `encomp.settings` is imported; for runtime changes to quantity and unit rendering, use `encomp.units.set_quantity_format()`.
 
 ## Documentation
 
