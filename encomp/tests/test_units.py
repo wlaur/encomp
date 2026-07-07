@@ -466,8 +466,8 @@ def test_hash_eq_consistency() -> None:
     assert Q(100.0, "cm") in {Q(1.0, "m"): "one metre"}
     assert len({Q(1.0, "m"), Q(100.0, "cm"), Q(1000.0, "mm")}) == 1
 
-    # a TemperatureDifference must stay hashable (its to_base_units would raise, so
-    # __hash__ must use to_root_units) -- guards against a regression to base units
+    # a TemperatureDifference must stay hashable -- __hash__ uses the root-unit
+    # representation, which expresses the ΔT in K without changing its meaning
     dt = Q(20.0, "degC") - Q(15.0, "degC")
     assert dt.check(TemperatureDifference)
     assert hash(dt) == hash(Q(5.0, "delta_degC"))
@@ -1258,20 +1258,26 @@ def test_temperature_difference() -> None:
     with pytest.raises(DimensionalityTypeError):
         (T1 - T2).to("degC")
 
-    with pytest.raises(DimensionalityTypeError):
-        (T1.to("K") - T2.to("K")).to("K")
+    # a ΔT converts to any multiplicative [temperature] unit (K, degR, ...)
+    # and keeps the TemperatureDifference dimensionality; only offset scales
+    # (degC, degF) are refused
+    dk = (T1.to("K") - T2.to("K")).to("K")
+    assert isinstance_types(dk, Q[TemperatureDifference])
+    assert dk.m == approx(-10.0)
+
+    dk2 = (T1 - T2).to("K")
+    assert isinstance_types(dk2, Q[TemperatureDifference])
+    assert dk2.m == approx(-10.0)
 
     with pytest.raises(DimensionalityTypeError):
-        (T1 - T2).to("K")
-
-    with pytest.raises(DimensionalityTypeError):
-        (T1 - T2).to("degC")
+        (T1 - T2).to("degF")
 
     T1 = Q(800, "degC")
     T2 = T1.to("K") - Q(100, "degC").to("K")
 
-    with pytest.raises(DimensionalityTypeError):
-        T2.to("K")
+    dk3 = T2.to("K")
+    assert isinstance_types(dk3, Q[TemperatureDifference])
+    assert dk3.m == approx(700.0)
 
     T2_ = T1.to("K") - Q(100, "delta_degC")
 
@@ -1327,6 +1333,103 @@ def test_to_preserves_temperature_dimensionality() -> None:
     # non-temperature -> delta unit stays a plain dimensionality error
     with pytest.raises(DimensionalityError):
         _ = Q(1.0, "m").to("delta_degC")
+
+
+def test_temperature_add_sub_preserves_unit() -> None:
+    # T ± ΔT keeps the temperature operand's original unit (the value is the
+    # same absolute temperature either way; only the display unit differs)
+    res = Q(300.0, "K") + Q(10.0, "delta_degC")
+    assert res.u == Unit("K")
+    assert res.m == approx(310.0)
+    assert isinstance_types(res, Q[Temperature])
+
+    res = Q(10.0, "delta_degC") + Q(300.0, "K")
+    assert res.u == Unit("K")
+    assert res.m == approx(310.0)
+
+    res = Q(300.0, "K") - Q(10.0, "delta_degC")
+    assert res.u == Unit("K")
+    assert res.m == approx(290.0)
+
+    res = Q(25.0, "degC") + Q(10.0, "delta_degC")
+    assert res.u == Unit("degC")
+    assert res.m == approx(35.0)
+
+    res = Q(50.0, "degF") + Q(9.0, "delta_degF")
+    assert res.u == Unit("degF")
+    assert res.m == approx(59.0)
+
+    # vector magnitudes behave the same
+    res = Q(np.array([300.0, 400.0]), "K") + Q(10.0, "delta_degC")
+    assert res.u == Unit("K")
+    assert res.m == approx(np.array([310.0, 410.0]))
+
+
+def test_numpy_scalar_magnitudes() -> None:
+    # numpy scalar magnitudes (e.g. arr.sum() on an integer array) normalize to
+    # a plain float instead of failing with a confusing 1-D-array shape error
+    for val in (np.int64(5), np.int32(5), np.float32(5.0), np.float64(5.0)):
+        q = Q(cast(Any, val), "m")
+        assert type(q.m) is float
+        assert q.m == approx(5.0)
+
+    assert Q(np.array([1, 2, 3]).sum(), "kg").m == approx(6.0)
+
+
+def test_ambiguous_textile_units_removed() -> None:
+    # pint's default registry defines the textile unit "Nm" (number meter,
+    # km/kg) -- in a library where Nm³ prominently means *normal* cubic meter,
+    # a torque-intending "Nm" silently parsed as km/kg. The textile group is
+    # removed from defs/units.txt, so "Nm" is an explicit error instead
+    from pint.errors import UndefinedUnitError
+
+    for unit in ("Nm", "tex", "denier", "number_meter"):
+        with pytest.raises(UndefinedUnitError):
+            _ = Q(1.0, unit)
+
+    # the normal-volume shorthand is unaffected
+    assert Q(1.0, "Nm3/h").check(NormalVolumeFlow)
+    assert Q(1.0, "Nm³").check(NormalVolume)
+
+
+def test_temperature_difference_to_multiplicative_units() -> None:
+    # a ΔT is a scale-only quantity: it can be expressed in any multiplicative
+    # [temperature] unit (K, degR, mK, ...) and keeps its dimensionality type
+    dt = Q(10.0, "delta_degC")
+
+    k = dt.to("K")
+    assert isinstance_types(k, Q[TemperatureDifference])
+    assert k.m == approx(10.0)
+    assert k.u == Unit("K")
+
+    assert dt.to("degR").m == approx(18.0)
+    assert dt.to("mK").m == approx(10000.0)
+
+    # round trip back to a delta unit
+    assert k.to("delta_degF").m == approx(18.0)
+
+    # to_base_units agrees with to_root_units (both express the ΔT in K)
+    base = dt.to_base_units()
+    assert isinstance_types(base, Q[TemperatureDifference])
+    assert base.m == approx(10.0)
+    assert base.m == approx(dt.to_root_units().m)
+
+    # in-place conversion keeps the dimensionality type too
+    arr = Q(np.array([10.0, 20.0]), "delta_degC")
+    arr.ito("K")
+    assert isinstance_types(arr, Q[TemperatureDifference])
+    assert arr.m == approx(np.array([10.0, 20.0]))
+
+    # offset scales stay refused: their zero point would silently reinterpret
+    # the difference as an absolute temperature
+    with pytest.raises(DimensionalityTypeError):
+        _ = dt.to("degC")
+    with pytest.raises(DimensionalityTypeError):
+        _ = dt.to("degF")
+
+    # the absolute -> delta direction is unchanged (asdim is the escape hatch)
+    with pytest.raises(DimensionalityTypeError):
+        _ = Q(300.0, "K").to("delta_degC")
 
 
 def test_temperature_unit_inputs() -> None:

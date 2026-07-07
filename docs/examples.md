@@ -8,5 +8,5 @@ Jupyter notebooks demonstrating `encomp`:
    :name: notebook-gallery
    :glob:
 
-   notebooks/test
+   notebooks/getting_started
 ```

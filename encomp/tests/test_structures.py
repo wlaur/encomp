@@ -71,11 +71,21 @@ def test_divide_chunks_errors() -> None:
     with pytest.raises(TypeError):
         cast(Any, divide_chunks)([])
 
+    # invalid inputs raise at the call site, not lazily on the first next()
     with pytest.raises(ValueError):
-        next(divide_chunks([1, 2, 3], 0))
+        divide_chunks([1, 2, 3], 0)
 
     with pytest.raises(ValueError):
-        next(divide_chunks([1, 2, 3], -5))
+        divide_chunks([1, 2, 3], -5)
 
     with pytest.raises(ValueError):
-        next(divide_chunks(cast("list[Any]", []), 2))
+        divide_chunks(cast("list[Any]", []), 2)
+
+
+def test_flatten_atomic_types() -> None:
+    # dicts are atomic (iterating one would silently drop the values), and
+    # bytes are atomic (they would flatten into individual integers)
+    d = {"a": 1, "b": 2}
+    assert list(flatten([d, 3])) == [d, 3]
+
+    assert list(flatten([b"ab", "cd"])) == [b"ab", "cd"]

@@ -5,6 +5,7 @@ import pytest
 
 from ..conversion import convert_volume_mass
 from ..misc import isinstance_types
+from ..units import ExpectedDimensionalityError
 from ..units import Quantity as Q
 from ..utypes import Numpy1DArray, Volume, VolumeFlow
 
@@ -35,8 +36,10 @@ def test_convert_volume_mass() -> None:
 
     assert isinstance_types(convert_volume_mass(m), Q[Volume])
 
-    with pytest.raises(AssertionError):
+    # wrong dimensionality raises a proper unit error naming the argument,
+    # not an internal AssertionError
+    with pytest.raises(ExpectedDimensionalityError, match="rho"):
         convert_volume_mass(mf, rho=cast(Any, Q(25, "bar")))
 
-    with pytest.raises(AssertionError):
+    with pytest.raises(ExpectedDimensionalityError, match="inp"):
         convert_volume_mass(cast(Any, Q(25, "m/s")))

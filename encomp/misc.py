@@ -3,7 +3,7 @@ from types import UnionType
 from typing import Any, Protocol, TypeIs, cast, get_args, get_origin
 
 import asttokens
-from typeguard import check_type
+from typeguard import TypeCheckError, check_type
 from typing_extensions import TypeForm
 
 
@@ -16,6 +16,12 @@ def _is_quantity_subclass(expected: object) -> bool:
 def isinstance_types[T](obj: Any, expected: TypeForm[T]) -> TypeIs[T]:  # noqa: ANN401
     from .units import Quantity
     from .utypes import UnknownDimensionality
+
+    # typeguard treats a plain string as a forward reference it cannot resolve
+    # here: it would emit a TypeHintWarning and *pass*, silently answering True
+    # for any obj. Reject it explicitly instead
+    if isinstance(expected, str):
+        raise TypeError(f"expected must be a type or type form, not a string: {expected!r}")
 
     if get_origin(expected) is UnionType:
         # a Quantity must be routed through the detailed per-member logic below: a plain
@@ -53,10 +59,18 @@ def isinstance_types[T](obj: Any, expected: TypeForm[T]) -> TypeIs[T]:  # noqa: 
 
         return not (expected_mt is not None and not isinstance_types(obj_m, expected_mt))
 
+    if _is_quantity_subclass(expected):
+        # obj is not a Quantity instance (that case is handled above), so it can
+        # never match -- and delegating to check_type could recurse forever
+        # through a custom typeguard checker that routes Quantity checks back here
+        return False
+
     try:
         check_type(cast(Any, obj), expected)
         return True
-    except Exception:
+    except TypeCheckError:
+        # only a genuine type mismatch answers False -- an invalid ``expected``
+        # (e.g. an unsupported type form) propagates instead of being swallowed
         return False
 
 

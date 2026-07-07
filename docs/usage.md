@@ -99,6 +99,29 @@ class PowerPerLength(Dimensionality):
 Q[PowerPerLength, float]  # new dimensionality
 ```
 
+:::{note}
+Dimensionality subclasses live in a single *process-wide*, name-keyed registry:
+
+- Two subclasses with the same class name and the **same** dimensions are treated as
+  one type -- the first definition wins and is silently reused (this keeps notebook
+  cell re-runs and module reloads working).
+- Two subclasses with the same class name but **different** dimensions raise
+  `TypeError` at class-definition time -- also across independent packages that both
+  define, say, `FuelPerAir`. Pick distinctive names for custom dimensionalities in
+  library code.
+:::
+
+:::{important}
+The typed constructor does not *validate* the dimensionality at runtime -- it *redirects*.
+`Q[Length](1, "kg")` returns a `Quantity[Mass, float]`: the dimensionality of the created
+object is always determined by the unit. This is by design (`pint` constructs arithmetic
+results through `self.__class__(...)` with new dimensionalities, so the constructor must
+accept them). Dimensionality *enforcement* happens in the static type checker and at the
+explicit runtime boundaries: `isinstance()` / {py:func}`encomp.misc.isinstance_types`,
+{py:meth}`encomp.units.Quantity.check`, `typeguard.typechecked` functions and Pydantic
+model fields (which raise `ExpectedDimensionalityError` for a mismatch).
+:::
+
 Check the dimensionality of a quantity with `isinstance()` or {py:meth}`encomp.units.Quantity.check`.
 For parameterized types like `list[Quantity[Pressure]]`, use {py:func}`encomp.misc.isinstance_types` instead of `isinstance()`.
 
@@ -266,6 +289,16 @@ The environment variable `ENCOMP_AUTOCONVERT_OFFSET_TO_BASEUNIT` can be set to `
 The dimensionality {py:class}`encomp.utypes.Currency` represents an arbitrary currency.
 `SEK`, `EUR` and `USD` are defined by default.
 
+:::{warning}
+Do **not** use this system for currency *conversions*.
+The scaling factors between the built-in currencies are fixed placeholders
+(`10 SEK = 1 EUR = 1 USD`), **not** exchange rates -- converting a quantity from one
+currency to another silently applies these fabricated factors.
+Keep all quantities in a single currency, or refer to the
+[pint documentation](https://pint.readthedocs.io/en/stable/advanced/currencies.html)
+for how to implement a registry context that handles currency conversion correctly.
+:::
+
 ```python
 from encomp.units import Quantity as Q
 
@@ -280,20 +313,13 @@ yearly_cost = mf * t * price  # Quantity[Currency]
 print(yearly_cost.to("MEUR"))
 
 # NOTE: this is only an approximation,
-# uses exchange rate 10 SEK = 1 EUR
+# uses the fixed placeholder scaling 10 SEK = 1 EUR
 print(yearly_cost.to("MSEK"))
 
 weekly_cost = Q(145, "GWh/year") * Q(1, "week") * Q(25, "EUR/MWh")
 
 print(weekly_cost.to("MEUR"))
 ```
-
-:::{warning}
-Do not use this system for currency *conversions*.
-The scaling factors between the default currencies are approximations (`10 SEK = 1 EUR = 1 USD`).
-
-Refer to the [pint documentation](https://pint.readthedocs.io/en/stable/currencies.html) for instructions on how to implement a registry context that handles currency conversion correctly.
-:::
 
 ### Handling unit-related errors
 
@@ -356,6 +382,15 @@ model = Model(a=Q(25, "cSt"), m=Q(25, "kg"), s=Q(25, "cm"))
 # Quantity fields round-trip through JSON, including the magnitude type
 Model.model_validate_json(model.model_dump_json())
 ```
+
+:::{note}
+`ExpectedDimensionalityError` inherits from `pint.errors.DimensionalityError` (a
+`TypeError` subclass), so Pydantic does **not** wrap it into a `pydantic.ValidationError`:
+a dimensionality mismatch propagates directly out of model construction, and a model with
+several invalid fields fails on the first one instead of collecting all errors. Catch
+`ExpectedDimensionalityError` (or `pint.errors.DimensionalityError`) around model
+construction rather than `pydantic.ValidationError`.
+:::
 
 ## The Fluid class
 
@@ -581,7 +616,7 @@ The following convenience methods are added to the `sp.Symbol` class:
 
 - `sp.Symbol._()`: add subscript
 - `sp.Symbol.__()`: add superscript
-- `sp.Symbol.decorate()`: add sub- and superscript prefixes and suffixes ({py:func}`encomp.sympy.decorate`)
+- `sp.Symbol.decorate()`: add sub- and superscript prefixes and suffixes ({py:meth}`encomp.sympy.Symbol.decorate`)
 
 These methods return new `sp.Symbol` instances with the same assumptions (*positive*, *real*, *integer*, ...) as the original.
 
@@ -666,7 +701,7 @@ result_qty = fcn(
 # [26860.5 95726.25] kg
 ```
 
-Quantity objects combine directly with Sympy symbols; the units are converted to their symbolic representations by {py:meth}`encomp.units.Quantity._sympy_`.
+Quantity objects combine directly with Sympy symbols; the units are converted to their symbolic representations by the `Quantity._sympy_` method (the hook `sympy.sympify` looks for).
 
 ```python
 from encomp.sympy import sp
@@ -676,13 +711,13 @@ x, y, z = sp.symbols("x, y, z")
 
 # the type of the left object determines the output
 
-# output is Quantity[Dimensionless]
-Q(1) * x  # x dimensionless
-Q(10, "%") * x  # 10*x percent
+# output is a Quantity with a symbolic magnitude
+Q(1) * x  # 1.0*x dimensionless
+Q(10, "%") * x  # 10.0*x percent
 
 # output is a sympy object
-x * Q(1)  # x
-x * Q(10, "%")  # 0.1x
+x * Q(1)  # 1.0*x
+x * Q(10, "%")  # 0.1*x
 
 # when the output is a sympy object,
 # all derived units are expanded to the base SI units

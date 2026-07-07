@@ -797,7 +797,7 @@ class Symbol(sp.Symbol):
 
     def delta(self) -> Self:
         """
-        Add ``\\delta`` prefix.
+        Add ``\\Delta`` prefix.
         """
         return self.decorate(prefix="\\Delta")
 

@@ -151,7 +151,7 @@ pygments_dark_style = "monokai"
 # output -- _static/logo.svg comes from the img/ entry in html_static_path above
 # NOTE: the .ipynb suffix is not included in the names
 nbsphinx_thumbnails = {
-    "notebooks/test": "_static/logo.svg",
+    "notebooks/getting_started": "_static/logo.svg",
 }
 
 add_module_names = False

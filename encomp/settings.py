@@ -18,7 +18,9 @@ class Settings(BaseSettings):
     """
     Settings class.
 
-    Use an ``.env``-file to override the defaults, make sure to load it with the ``python-dotenv`` package.
+    Use an ``.env``-file in the current working directory to override the
+    defaults; ``pydantic-settings`` loads it automatically when this module is
+    first imported (no manual loading needed).
 
     The variables in the ``.env``-file have the same names (not case-sensitive)
     as the attributes of this class, with the additional prefix ``ENCOMP_``.
@@ -30,6 +32,13 @@ class Settings(BaseSettings):
         Names that are defined as global environment variables (either on the system
         or user level) take precedence over names in the ``.env``-file.
         The global environment variables are loaded even if no ``.env``-file was found.
+
+    .. warning::
+
+        Because the ``.env``-file is resolved relative to the *current working
+        directory*, a stray ``.env`` containing an invalid ``ENCOMP_*`` value
+        (e.g. ``ENCOMP_UNITS`` pointing to a missing file) makes ``import encomp``
+        fail with a ``ValidationError`` -- even in an unrelated project.
 
     * ``UNITS``: path to a file with unit definitions for ``pint``
     * ``TYPESET_SYMBOL_SCRIPTS``: whether to typeset Sympy symbol sub- and superscripts

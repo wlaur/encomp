@@ -257,7 +257,7 @@ UNIT_REGISTRY.formatter.default_format = SETTINGS.default_unit_format
 
 
 def set_quantity_format(fmt: str = "compact") -> None:
-    fmt_aliases = {"normal": "~P", "siunitx": "~Lx"}
+    fmt_aliases = {"compact": "~P", "normal": "~P", "siunitx": "~Lx"}
 
     if fmt in fmt_aliases:
         fmt = fmt_aliases[fmt]
@@ -266,7 +266,7 @@ def set_quantity_format(fmt: str = "compact") -> None:
         raise ValueError(
             f'Cannot set default format to "{fmt}", '
             f"fmt is one of {Quantity.FORMATTING_SPECS} "
-            "or alias siunitx: ~L, compact: ~P"
+            "or alias compact: ~P, siunitx: ~Lx"
         )
 
     UNIT_REGISTRY.formatter.default_format = fmt
@@ -386,8 +386,7 @@ class Quantity(
 
         # hash on the canonical root-unit representation so the eq/hash contract holds:
         # __eq__ compares across units (Q(1, "m") == Q(100, "cm")), so two quantities that
-        # are equal must hash equal -- hashing the raw (m, u) would break that. to_root_units
-        # is used (not to_base_units) because it does not raise for a TemperatureDifference.
+        # are equal must hash equal -- hashing the raw (m, u) would break that.
         # NOTE: __eq__ is tolerant (np.isclose), so quantities that are only *approximately*
         # equal may still hash differently -- an inherent limit of tolerant equality, the same
         # way hash(0.1 + 0.2) != hash(0.3); exact equality (the common case) is now consistent.
@@ -665,7 +664,15 @@ class Quantity(
             return val
         elif hasattr(val, "is_Atom"):
             # implicit way of checking if the value is a sympy symbol without having to import Sympy
+            # (must come before the numbers.Real check: sympy Float/Integer register as Real,
+            # but a sympy magnitude must be kept symbolic)
             return cast("MT", val)
+        elif isinstance(val, numbers.Real):
+            # remaining real scalars that are not float subclasses: numpy scalars
+            # such as np.int64 / np.int32 / np.float32 (e.g. from arr.sum() on an
+            # integer array), Fraction, ... -- normalize to a plain float instead
+            # of falling through to np.array(), which fails on the 0-d shape
+            return cast("MT", float(val))
         else:
             arr = cast(MT, np.array(val).astype(np.float64))
             return arr
@@ -1022,6 +1029,15 @@ class Quantity(
 
     def _check_temperature_compatibility(self, unit: Unit[DT]) -> None:
         if self._is_temperature_difference and unit._units not in self.TEMPERATURE_DIFFERENCE_UCS:
+            # a temperature difference is a scale-only quantity: any multiplicative
+            # [temperature] unit (K, degR, mK, ...) expresses it correctly, and the
+            # converted Quantity keeps the TemperatureDifference dimensionality.
+            # Offset scales (degC, degF) stay refused -- their zero point would
+            # silently reinterpret the difference as an absolute temperature
+            registry = cast(Any, self._REGISTRY)  # _is_multiplicative is a stable pint internal
+            if all(registry._is_multiplicative(u) for u in unit._units):
+                return
+
             current_name = self.dt.__name__
             new_name = Quantity(1, unit)._dimensionality_type.__name__
 
@@ -1200,8 +1216,9 @@ class Quantity(
         # so we'll not even try to parse that, use "nanometer**3" if necessary
         for n in Quantity.NORMAL_M3_VARIANTS:
             if n in unit:
-                # include brackets, otherwise "kg/nm3" is incorrectly converted to "kg/normal*m3"
-                unit = unit.replace(n, "(normal * m³)")
+                # the named unit (defined in defs/units.txt) displays as Nm³; being a
+                # single token it also composes safely, e.g. "kg/nm3"
+                unit = unit.replace(n, "normal_cubic_meter")
 
         # NOTE: the order of replacements matters here
         replacements = {
@@ -1524,6 +1541,7 @@ class Quantity(
             v2 = other.to("delta_degC").m
 
             val = v1 + v2 if operator == "add" else v1 - v2
+            temperature_unit = self.u
         else:
             assert self.check(TemperatureDifference)
             assert other.check(Temperature)
@@ -1532,8 +1550,13 @@ class Quantity(
             v2 = other.to("degC").m
 
             val = v1 + v2 if operator == "add" else v1 - v2
+            temperature_unit = other.u
 
-        return cast("Quantity[Temperature, MT]", Quantity(val, "degC"))
+        # the arithmetic runs on the degC scale, but the result is an absolute
+        # temperature: express it in the temperature operand's original unit
+        # (K + ΔT stays in K) instead of normalizing everything to degC
+        result = cast("Quantity[Temperature, MT]", Quantity(val, "degC"))
+        return result.to(cast("Unit[Temperature]", temperature_unit))
 
     def __round__(self, ndigits: int | None = None) -> Quantity[DT, MT]:
         if ndigits is None:
@@ -2805,9 +2828,9 @@ class Quantity(
         return cast("Quantity[DT, float]", instance)
 
 
-# register the Quantity implementation on the registry, so every Quantity object
-# created through it (including results of pint-internal operations) is this type.
-# Unit is NOT registered: pint-internal units are wrapped at the encomp boundaries
-# (the .u / .units properties and _validate_unit)
+# register the Quantity and Unit implementations on the registry, so every object
+# created through it (results of pint-internal operations, parse_units output) is
+# the encomp type. The .u / .units properties and _validate_unit additionally
+# re-wrap at the encomp boundaries, covering values that bypassed the registry
 setattr(UNIT_REGISTRY, "Quantity", Quantity)  # noqa: B010
 setattr(UNIT_REGISTRY, "Unit", Unit)  # noqa: B010

@@ -307,6 +307,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         3.0: "Supercritical liquid",  # P > P_crit
         2.0: "Supercritical gas",  # T > T_crit
         1.0: "Supercritical fluid",  # P > P_crit and T > T_crit
+        4.0: "Critical point",
+        7.0: "Unknown",
         8.0: "Not imposed",
     }
 
@@ -708,7 +710,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         if "Initialize failed for backend" in msg:
             raise ValueError(
-                f"Fluid '{self.name}' could not be initalized, ensure that the name is a valid CoolProp fluid name"
+                f"Fluid '{self.name}' could not be initialized, ensure that the name is a valid CoolProp fluid name"
             ) from e
 
         _LOGGER.warning(f'CoolProp could not calculate "{prop}" for fluid "{self.name}", output is NaN: {msg}')
@@ -1184,7 +1186,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         convert_magnitude: bool = True,
     ) -> Quantity[Any, MT]:
         """
-        Wraps the function ``CoolProp.CoolProp.PropsSI``, handles input
+        Wraps the CoolProp backend function (``PropsSI``, or ``HAPropsSI``
+        for :py:class:`encomp.fluids.HumidAir`), handles input
         and output with :py:class:`encomp.units.Quantity` objects.
 
         Parameters

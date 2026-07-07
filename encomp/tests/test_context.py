@@ -19,6 +19,18 @@ def test_context() -> None:
     assert s == "1.0 kPa"
 
 
+def test_quantity_format_aliases() -> None:
+    # the default argument and every documented alias must be accepted
+    with quantity_format():
+        assert str(Quantity(1, "kPa")) == "1.0 kPa"
+
+    for alias, spec in [("compact", "~P"), ("normal", "~P"), ("siunitx", "~Lx")]:
+        with quantity_format(alias):
+            assert str(Quantity(1, "kPa")) == f"{Quantity(1, 'kPa'):{spec}}"
+
+    assert str(Quantity(1, "kPa")) == "1.0 kPa"
+
+
 def test_temp_dir() -> None:
     orig_cwd = Path.cwd()
 

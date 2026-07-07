@@ -136,6 +136,10 @@ SEK = 1 * currency
 EUR = 10 * currency
 USD = 10 * currency
 
+# named normal cubic meter so normal volumes display compactly as Nm³
+# (Quantity.correct_unit rewrites the Nm3/nm³/... input variants to this unit)
+normal_cubic_meter = normal * meter ** 3 = Nm³
+
 
 # Angle
 turn = 2 * π * radian = _ = revolution = cycle = circle
@@ -674,18 +678,6 @@ neper = 1 ; logbase: 2.71828182845904523536028747135266249775724709369995; logfa
     bits_per_pixel = bit / pixel = bpp
 @end
 
-@group Textile
-    tex = gram / kilometer = Tt
-    dtex = decitex
-    denier = gram / (9 * kilometer) = den = Td
-    jute = pound / (14400 * yard) = Tj
-    aberdeen = jute = Ta
-    RKM  = gf / tex
-
-    number_english = 840 * yard / pound = Ne = NeC = ECC
-    number_meter = kilometer / kilogram = Nm
-@end
-
 
 #### CGS ELECTROMAGNETIC UNITS ####
 
@@ -835,12 +827,6 @@ neper = 1 ; logbase: 2.71828182845904523536028747135266249775724709369995; logfa
     [substance] / [mass] -> [substance]/[volume]: value * solvent_mass / volume
     [substance] / [volume] -> [substance] / [mass]: value / solvent_mass * volume
 
-@end
-
-@context textile
-    # Allow switching between Direct count system (i.e. tex) and
-    # Indirect count system (i.e. Ne, Nm)
-    [mass] / [length] <-> [length] / [mass]: 1 / value
 @end
 
 
