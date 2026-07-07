@@ -294,7 +294,6 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         "Brent's method f(b) is NAN",
         "do not bracket the root",
         "was unable to find a solution for",
-        "is outside the range of validity",
     )
 
     PHASES: dict[float, str] = {
@@ -728,7 +727,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         # this error occurs in case the input values are outside
         # the allowable range for this property
         # in this case the return value will be NaN, no exception is raised
-        if "No outputs were able to be calculated" in msg or "is outside the range of validity" in msg:
+        if "No outputs were able to be calculated" in msg:
             self._warn_coolprop_nan(prop, msg)
             return
 

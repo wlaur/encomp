@@ -92,8 +92,7 @@ m_ = Q(25, "kg/week")  # Quantity[UnknownDimensionality, float]
 
 # at runtime, the dimensionality of m_ is evaluated to MassFlow;
 # Q[MassFlow] is a real class, but parameterized isinstance is a runtime-only feature
-# pyrefly: ignore[invalid-argument]
-assert isinstance(m_, Q[MassFlow])
+assert isinstance(m_, Q[MassFlow])  # pyright: ignore[reportArgumentType]
 
 # these operations (Mass**2 divided by Volume) are not explicitly defined as overloads
 # at runtime, the type will be evaluated to
@@ -239,7 +238,7 @@ Water(Q=Q(0.5), T=Q(170, "degC"))
 # <Water (Two-phase), P=792 kPa, T=170.0 °C, D=8.2 kg/m³, V=nan cP>
 
 Water(H=Q(2800, "kJ/kg"), S=Q(7300, "J/kg/K"))
-# <Water (Gas), P=225 kPa, T=165.8 °C, D=1.1 kg/m³, V=0.0 cP>
+# <Water (Gas), P=225 kPa, T=165.8 °C, D=1.1 kg/m³, V=0.015 cP>
 ```
 
 Mixtures are given either by fractions folded into the name or by a `composition` dict of mole fractions.
@@ -324,16 +323,17 @@ Each `fluid(...)` / `humid_air(...)` is an independent plugin node, so selecting
 To load additional methods for the `sympy.Symbol` class, import Sympy via the `encomp.sympy` module. The `_` / `__` methods add typeset sub- and superscripts, and quantities combine directly with symbols:
 
 ```python
+from typing import Any, cast
+
 from encomp.sympy import sp
 from encomp.units import Quantity as Q
 
 n = sp.Symbol("n", integer=True)
 
 # the _ / __ methods are added to sp.Symbol at runtime by encomp.sympy
-# pyrefly: ignore[missing-attribute]
-n._("H_2O").__("out")  # n_{\text{H}_2\text{O}}^{\text{out}}, keeps the integer assumption
+cast(Any, n)._("H_2O").__("out")  # n_{\text{H}_2\text{O}}^{\text{out}}, keeps the integer assumption
 
-x, y, z = sp.symbols("x, y, z")
+x, y, z = sp.symbols("x, y, z")  # pyright: ignore[reportUnknownMemberType]
 result_expr = (25 * x * y / z).subs({x: Q(235, "yard"), y: Q(2, "m²"), z: Q(0.4, "m³/kg")})
 Q.from_expr(result_expr)  # ≈ 26860.5 kg
 ```

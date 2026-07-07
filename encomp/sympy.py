@@ -434,9 +434,8 @@ def get_function(e: sp.Basic, *, units: bool = False) -> Callable[[dict[Any, Any
     Returns
     -------
     Callable
-        Function that evaluates the input expression, can be called
-        with extra kwargs. The kwargs can be a dict with mapping
-        from symbol to value.
+        Function that evaluates the input expression from a mapping of
+        symbols to values.
     """
 
     fcn, args = get_lambda(e)

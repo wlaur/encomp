@@ -4,7 +4,7 @@ name: encomp release
 # + bundled libCoolProp, all in one wheel) for macOS / Linux / Windows, run the full
 # test suite against each wheel on Python 3.13 and 3.14, and publish to PyPI on a tag.
 #
-#   typecheck      -> pyright (strict) + pyrefly, the required-green checkers
+#   typecheck      -> pyright (strict) + pyrefly, plus source-only doc/static tests
 #                     (ty is advisory and intentionally not gated)
 #   build-wheels   -> one wheel per OS/arch (abi3 cp313 => runs on 3.13+)
 #   test           -> install each prebuilt wheel + run pytest, every OS x py
@@ -44,6 +44,7 @@ jobs:
       - run: uv sync --locked --no-install-project
       - run: uv run --no-sync pyright
       - run: uv run --no-sync pyrefly check
+      - run: uv run --no-sync pytest encomp/tests/test_docs.py encomp/tests/test_static_typing.py -q
 
   build-wheels:
     name: build ${{ matrix.os }}
@@ -93,7 +94,8 @@ jobs:
           python -m pip install --upgrade pip
           # install the PREBUILT encomp wheel (abi3 cp313 installs on 3.14 too) by
           # name so it is not rebuilt from source; deps + test deps come from PyPI
-          pip install --find-links wheelhouse encomp pytest hypothesis
+          version=$(python -c 'from pathlib import Path; wheels = sorted(Path("wheelhouse").glob("encomp-*.whl")); assert len(wheels) == 1, f"expected exactly one encomp wheel, found {len(wheels)}"; print(wheels[0].name.split("-")[1])')
+          pip install --find-links wheelhouse "encomp==$version" pytest hypothesis
           python -c "from encomp import coolprop as cp; assert cp.self_check(), 'plugin self_check failed'"
           python -m pytest --pyargs encomp.tests -q
 

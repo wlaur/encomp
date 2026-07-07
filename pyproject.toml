@@ -1,6 +1,6 @@
 [project]
 name = "encomp"
-version = "1.6.0"
+version = "1.6.1"
 description = "General-purpose library for engineering calculations"
 authors = [{ name = "William Laurén", email = "lauren.william.a@gmail.com" }]
 requires-python = ">=3.13"
@@ -59,7 +59,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pre-commit",
-    "maturin>=1.5,<2",
+    "maturin>=1.8.2,<2",
     "ruff",
     "pytest",
     "hypothesis",
@@ -92,7 +92,7 @@ Repository = "https://github.com/wlaur/encomp"
 Issues = "https://github.com/wlaur/encomp/issues"
 
 [build-system]
-requires = ["maturin>=1.5,<2"]
+requires = ["maturin>=1.8.2,<2"]
 build-backend = "maturin"
 
 [tool.maturin]
@@ -203,8 +203,6 @@ max-complexity = 10
 
 [tool.pytest.ini_options]
 filterwarnings = [
-    # ignore CoolProp warnings for NaN/out of bounds inputs
-    "ignore:CoolProp could not calculate*:UserWarning",
     "ignore::pint.UnitStrippedWarning",
 ]
 
@@ -245,8 +243,8 @@ python-version = "3.13"
 [tool.ty.rules]
 # ty's default rule set is already effectively strict; these are the rules
 # that are not error-by-default, elevated here so `ty check` runs fully strict.
-# NOTE: for forward-compatibility (rules added in future ty versions), CI
-# should additionally pass `--error all`.
+# ty remains advisory in CI while the tool is moving quickly; these local
+# elevations document the intended strictness for manual `ty check` runs.
 redundant-cast = "error"
 possibly-missing-attribute = "error"
 unsupported-dynamic-base = "error"

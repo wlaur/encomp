@@ -169,7 +169,7 @@ class TestREADMEExamples:
 
 
 class TestUsageExamples:
-    """Test examples from docs/usage.rst"""
+    """Test examples from docs/usage.md"""
 
     def test_quantity_types(self) -> None:
         """Test quantity types and dimensionalities"""

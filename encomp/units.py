@@ -240,8 +240,8 @@ class _LazyRegistry(LazyRegistry[Any, Any]):
 
 UNIT_REGISTRY = cast(UnitRegistry[Any], _LazyRegistry())
 
-for k, v in _REGISTRY_STATIC_OPTIONS.items():
-    setattr(UNIT_REGISTRY, k, v)
+for _option_name, _option_value in _REGISTRY_STATIC_OPTIONS.items():
+    setattr(UNIT_REGISTRY, _option_name, _option_value)
 
 # make sure that UNIT_REGISTRY is the only registry that can be used
 setattr(pint, "_DEFAULT_REGISTRY", UNIT_REGISTRY)  # noqa: B010
