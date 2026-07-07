@@ -59,6 +59,11 @@ def test_comparisons() -> None:
     assert_type(Q(pl.Series([1]), "kg") == Q(pl.Series([25]), "g"), pl.Series)
     assert_type(Q(pl.Series([1]), "kg") != Q(pl.Series([25]), "g"), pl.Series)
 
+    assert (Q(pl.Series([0.1 + 0.2]), "m") == Q(pl.Series([0.3]), "m")).to_list() == [True]
+    assert (Q(pl.Series([0.1 + 0.2]), "m") != Q(pl.Series([0.3]), "m")).to_list() == [False]
+    assert (Q(pl.Series([0.1 + 0.2]), "m") == Q(0.3, "m")).to_list() == [True]
+    assert (Q(0.3, "m") == Q(pl.Series([0.1 + 0.2]), "m")).to_list() == [True]
+
     assert_type(Q(1, "kg") > Q(pl.col.asd, "g"), pl.Expr)
     assert_type(Q(1, "kg") >= Q(pl.col.asd, "g"), pl.Expr)
     assert_type(Q(1, "kg") <= Q(pl.col.asd, "g"), pl.Expr)

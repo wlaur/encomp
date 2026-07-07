@@ -1916,6 +1916,12 @@ class Quantity(
             else:
                 return ret
 
+        if isinstance(m, pl.Series) and isinstance(other_m, (float, int, pl.Series)):
+            return m.is_close(other_m, rel_tol=self.rtol, abs_tol=self.atol)
+
+        if isinstance(other_m, pl.Series) and isinstance(m, (float, int)):
+            return other_m.is_close(m, rel_tol=self.rtol, abs_tol=self.atol)
+
         ret = m == other_m
 
         return ret
@@ -1987,6 +1993,12 @@ class Quantity(
                 return bool(cast(Any, ret))
             else:
                 return ret
+
+        if isinstance(m, pl.Series) and isinstance(other_m, (float, int, pl.Series)):
+            return m.is_close(other_m, rel_tol=self.rtol, abs_tol=self.atol).not_()
+
+        if isinstance(other_m, pl.Series) and isinstance(m, (float, int)):
+            return other_m.is_close(m, rel_tol=self.rtol, abs_tol=self.atol).not_()
 
         ret = m != other_m
 
