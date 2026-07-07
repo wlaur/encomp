@@ -102,6 +102,8 @@ from .utypes import (
     NormalVolume,
     NormalVolumeFlow,
     NormalVolumeFlowUnits,
+    NormalVolumePerMass,
+    NormalVolumePerMassUnits,
     NormalVolumeUnits,
     Numpy1DArray,
     Numpy1DBoolArray,
@@ -807,6 +809,10 @@ class Quantity(
     @overload
     def __new__(cls, val: Sequence[float], unit: NormalVolumeFlowUnits) -> Quantity[NormalVolumeFlow, Numpy1DArray]: ...
     @overload
+    def __new__(
+        cls, val: Sequence[float], unit: NormalVolumePerMassUnits
+    ) -> Quantity[NormalVolumePerMass, Numpy1DArray]: ...
+    @overload
     def __new__(cls, val: Sequence[float], unit: DensityUnits) -> Quantity[Density, Numpy1DArray]: ...
     @overload
     def __new__(cls, val: Sequence[float], unit: SpecificVolumeUnits) -> Quantity[SpecificVolume, Numpy1DArray]: ...
@@ -898,6 +904,8 @@ class Quantity(
     def __new__(cls, val: MT, unit: VolumeFlowUnits) -> Quantity[VolumeFlow, MT]: ...
     @overload
     def __new__(cls, val: MT, unit: NormalVolumeFlowUnits) -> Quantity[NormalVolumeFlow, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: NormalVolumePerMassUnits) -> Quantity[NormalVolumePerMass, MT]: ...
     @overload
     def __new__(cls, val: MT, unit: DensityUnits) -> Quantity[Density, MT]: ...
     @overload

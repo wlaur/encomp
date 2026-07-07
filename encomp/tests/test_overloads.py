@@ -13,6 +13,7 @@ from ..utypes import (
     Length,
     Mass,
     MassFlow,
+    NormalVolumePerMass,
     Numpy1DArray,
     Numpy1DBoolArray,
     Power,
@@ -95,6 +96,8 @@ def test_unknown_mul_div() -> None:
 
     assert_type(Q(2, "m") / Q(25, "km"), Q[Dimensionless, float])
     assert_type(Q(2, "kg") / Q(25, "g"), Q[Dimensionless, float])
+    assert_type(Q(1.0, "Nm3/kg"), Q[NormalVolumePerMass, float])
+    assert_type(Q([1.0, 2.0], "Nm3/kg"), Q[NormalVolumePerMass, Numpy1DArray])
 
     assert_type(Q(25, "kg") / Q([1, 2, 3], "s"), Q[MassFlow, Numpy1DArray])
     assert_type(Q(25, "kg") / Q(pl.col.test, "s"), Q[MassFlow, pl.Expr])
