@@ -1,6 +1,6 @@
 import ast
 from types import UnionType
-from typing import Any, TypeIs, cast, get_args, get_origin
+from typing import Any, TypeIs, Union, cast, get_args, get_origin
 
 from typeguard import TypeCheckError, check_type
 from typing_extensions import TypeForm
@@ -22,12 +22,14 @@ def isinstance_types[T](obj: Any, expected: TypeForm[T]) -> TypeIs[T]:  # noqa: 
     if isinstance(expected, str):
         raise TypeError(f"expected must be a type or type form, not a string: {expected!r}")
 
-    if get_origin(expected) is UnionType:
+    origin = get_origin(expected)
+
+    if origin in (UnionType, Union):
         # a Quantity must be routed through the detailed per-member logic below: a plain
         # isinstance against the union misclassifies a Quantity[UnknownDimensionality, ...]
         # member (it matches ANY dimensionality here, but is a *sibling* class at runtime, so
         # isinstance says False) -- decompose so single-type and union checks stay consistent.
-        if not isinstance(obj, Quantity):
+        if not isinstance(obj, Quantity) and origin is UnionType:
             # narrowed to a UnionType by the check above, which isinstance accepts
             try:
                 return isinstance(obj, cast(UnionType, expected))

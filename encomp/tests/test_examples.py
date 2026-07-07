@@ -1,4 +1,4 @@
-from typing import Any, cast
+from typing import Any, assert_type, cast
 
 import numpy as np
 import pytest
@@ -21,6 +21,16 @@ from ..utypes import (
 
 # pytest.approx is loosely typed; expose it as an Any-typed alias
 approx = cast(Any, pytest).approx
+
+
+def _assert_type(val: object, typ: type) -> None:
+    from encomp.misc import isinstance_types
+
+    if not isinstance_types(val, typ):
+        raise TypeError(f"Type mismatch for {val}: {type(val)}, expected {typ}")
+
+
+assert_type.__code__ = _assert_type.__code__
 
 
 class TestREADMEExamples:
@@ -50,10 +60,10 @@ class TestREADMEExamples:
         """Test the Quantity type system with dimensionalities"""
         # the unit "kg" is registered as a Mass unit
         m = Q(12, "kg")
-        assert isinstance_types(m, Q[Mass])
+        assert_type(m, Q[Mass, float])
 
         V = Q(25, "liter")
-        assert isinstance_types(V, Q[Volume])
+        assert_type(V, Q[Volume, float])
 
         # common / and * operations
         _ = m / V
@@ -62,7 +72,8 @@ class TestREADMEExamples:
         # the unit "kg/week" is not registered by default
         m_ = Q(25, "kg/week")
 
-        # at runtime, the dimensionality of m_ will be evaluated to MassFlow
+        # "kg/week" is intentionally not in the literal overloads; only the runtime
+        # dimensionality resolver can prove this is MassFlow.
         assert isinstance_types(m_, Q[MassFlow])
 
         # these operations (Mass**2 divided by Volume) are not explicitly defined
@@ -71,7 +82,7 @@ class TestREADMEExamples:
         # the unit name "meter cubed" is not defined using an overload,
         # the type parameter Volume is used to infer the type
         y = Q(15, "meter cubed").asdim(Volume)
-        assert isinstance_types(y, Q[Volume])
+        assert_type(y, Q[Volume, float])
 
     def test_runtime_type_checking(self) -> None:
         """Test runtime type checking with typeguard"""
@@ -83,8 +94,8 @@ class TestREADMEExamples:
 
         # the dimensionalities check out
         result = some_func(Q(12, "delta_degC"))
-        assert isinstance_types(result[0], Q[Length])
-        assert isinstance_types(result[1], Q[Pressure])
+        assert_type(result[0], Q[Length, float])
+        assert_type(result[1], Q[Pressure, float])
 
         # raises an exception with wrong dimensionality
         with pytest.raises(TypeCheckError, match="is not an instance"):
@@ -99,7 +110,7 @@ class TestREADMEExamples:
 
         # note the extra parentheses around (kg/s)
         qty = Q(1, "delta_degC/(kg/s)").asdim(TemperaturePerMassFlowTest)
-        assert isinstance_types(qty, Q[TemperaturePerMassFlowTest])
+        assert_type(qty, Q[TemperaturePerMassFlowTest, float])
 
         with pytest.raises(ExpectedDimensionalityError):
             _ = Q(1, "delta_degC/(liter/hour)").asdim(TemperaturePerMassFlowTest)
@@ -111,7 +122,9 @@ class TestREADMEExamples:
         q2 = Q(3, "delta_degF per (pound per fortnight)")
 
         assert q1 == q2
-        # Both are instances of the same dimensionality
+        # CustomCoolingCapacity is an alias returned by the runtime metaclass, and
+        # q2 uses prose unit spelling outside the literal overloads; the checker
+        # cannot prove either custom dimensionality here.
         assert isinstance_types(q1, Q[TemperaturePerMassFlowTest])
         assert isinstance_types(q2, Q[TemperaturePerMassFlowTest])
 
@@ -156,15 +169,15 @@ class TestREADMEExamples:
 
 
 class TestUsageExamples:
-    """Test examples from docs/usage.rst"""
+    """Test examples from docs/usage.md"""
 
     def test_quantity_types(self) -> None:
         """Test quantity types and dimensionalities"""
         pressure = Q(1, "bar")
-        assert isinstance_types(pressure, Q[Pressure])
+        assert_type(pressure, Q[Pressure, float])
 
         fraction = Q(5, "%")
-        assert isinstance_types(fraction, Q[Dimensionless])
+        assert_type(fraction, Q[Dimensionless, float])
 
         pressure_kPa = pressure.to("kPa")
         assert type(pressure) is type(pressure_kPa)
@@ -179,7 +192,7 @@ class TestUsageExamples:
             dimensions = Power.dimensions / Length.dimensions
 
         qty = Q(100, "W/m").asdim(PowerPerLengthTest)
-        assert isinstance_types(qty, Q[PowerPerLengthTest])
+        assert_type(qty, Q[PowerPerLengthTest, float])
 
     def test_isinstance_checks(self) -> None:
         """Test isinstance and check methods"""
@@ -190,7 +203,8 @@ class TestUsageExamples:
         assert not pressure.check(Length)
         assert not pressure.check("meter")
 
-        # alternative using isinstance()
+        # This block demonstrates the runtime checking API from the docs; it is
+        # intentionally not replaced by assert_type.
         assert isinstance_types(pressure, Q[Pressure])
         assert not isinstance_types(pressure, Q[Length])
 
@@ -258,6 +272,8 @@ class TestUsageExamples:
         price = Q(25, "EUR/ton")
 
         yearly_cost = mf * t * price
+        # Currency is a custom unit combined through arithmetic; this is resolved
+        # from runtime unit dimensions rather than a static overload.
         assert isinstance_types(yearly_cost, Q[Currency])
 
         # SI prefixes can be used
@@ -286,9 +302,9 @@ class TestUsageExamples:
 
         # Valid model creation
         model = Model(a=Q(25, "cSt"), m=Q(25, "kg"), s=Q(25, "cm"))
-        assert isinstance_types(model.a, Q)
-        assert isinstance_types(model.m, Q[Mass])
-        assert isinstance_types(model.s, Q[Length])
+        assert_type(model.a, Q[Any, Any])
+        assert_type(model.m, Q[Mass, float])
+        assert_type(model.s, Q[Length, float])
 
         # Invalid dimensionality raises a Pydantic validation error
         with pytest.raises(ValidationError):

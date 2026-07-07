@@ -39,21 +39,23 @@ def divide_chunks(container: Any, N: int) -> Any:
     return _chunks()
 
 
-def flatten(container: Iterable[Any], max_depth: int | None = None, _depth: int = 0) -> Iterator[Any]:
-    if max_depth is not None and _depth >= max_depth:
-        yield container
-        return
+def flatten(container: Iterable[Any], max_depth: int | None = None) -> Iterator[Any]:
+    def _flatten(items: Iterable[Any], depth: int) -> Iterator[Any]:
+        if max_depth is not None and depth >= max_depth:
+            yield items
+            return
 
-    for obj in container:
-        # atomic despite being iterable: iterating a dict would silently drop its
-        # values (keys only), and bytes would flatten into individual integers
-        if isinstance(obj, (str, bytes, dict, Quantity, np.ndarray, pl.Series, pl.Expr)):
+        for obj in items:
+            # atomic despite being iterable: iterating a dict would silently drop its
+            # values (keys only), and bytes would flatten into individual integers
+            if isinstance(obj, (str, bytes, dict, Quantity, np.ndarray, pl.Series, pl.Expr)):
+                yield obj
+                continue
+
+            if isinstance(obj, Iterable):
+                yield from _flatten(cast("Iterable[Any]", obj), depth + 1)  # pyrefly: ignore[redundant-cast]  # cast required by pyright
+                continue
+
             yield obj
-            continue
 
-        if isinstance(obj, Iterable):
-            yield from flatten(cast("Iterable[Any]", obj), max_depth=max_depth, _depth=_depth + 1)  # pyrefly: ignore[redundant-cast]  # cast required by pyright
-
-            continue
-
-        yield obj
+    yield from _flatten(container, 0)

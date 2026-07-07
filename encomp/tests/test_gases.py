@@ -12,7 +12,6 @@ from ..gases import (
     mass_to_normal_volume,
     normal_volume_to_actual_volume,
 )
-from ..misc import isinstance_types
 from ..units import Quantity as Q
 from ..utypes import (
     Density,
@@ -88,9 +87,11 @@ def test_gas_conversion() -> None:
     P = Q(1, "atm")
     T = Q(25, "degC")
 
-    assert isinstance_types(mass_from_actual_volume(V, (P, T)), Q[Mass])
+    assert_type(mass_from_actual_volume(V, (P, T)), Q[Mass, float])
+    assert_type(mass_from_actual_volume(V, "N"), Q[Mass, float])
 
-    assert isinstance_types(mass_to_actual_volume(m, (P, T)), Q[Volume])
+    assert_type(mass_to_actual_volume(m, (P, T)), Q[Volume, float])
+    assert_type(mass_to_actual_volume(m, "S"), Q[Volume, float])
 
     # the normal-volume side carries the NormalVolume dimensionality (Nm³)
     # (assert_type also verifies the runtime type via the monkeypatch above; a
@@ -98,9 +99,11 @@ def test_gas_conversion() -> None:
     nv = actual_volume_to_normal_volume(V, (P, T))
     assert_type(nv, Q[NormalVolume, Any])
     assert nv.check(Q(0, "Nm³"))
+    assert_type(actual_volume_to_normal_volume(V, "N"), Q[NormalVolume, Any])
 
     v_actual = normal_volume_to_actual_volume(nv, (P, T))
     assert_type(v_actual, Q[Volume, Any])
+    assert_type(normal_volume_to_actual_volume(nv, "S"), Q[Volume, Any])
 
     # round trip recovers the original value
     assert v_actual.to("liter").m == approx(V.m, rel=1e-9)

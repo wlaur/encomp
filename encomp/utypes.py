@@ -30,6 +30,24 @@ DimensionlessUnits = Literal[
     "%",
     "percent",
     "pct",
+    "mol%",
+    "mol-%",
+    "mole%",
+    "mole-%",
+    "kg%",
+    "kg-%",
+    "m3%",
+    "m3-%",
+    "m³%",
+    "m³-%",
+    "vol%",
+    "vol-%",
+    "volume%",
+    "volume-%",
+    "wt%",
+    "wt-%",
+    "weight%",
+    "weight-%",
     "-",
     "dimensionless",
 ]
@@ -169,6 +187,8 @@ TemperatureUnits = Literal[
 ]
 
 TemperatureDifferenceUnits = Literal[
+    "delta_K",
+    "ΔK",
     "delta_°C",
     "delta_degC",
     "Δ°C",

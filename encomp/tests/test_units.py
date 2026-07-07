@@ -103,7 +103,8 @@ def test_registry() -> None:
     assert len(set(map(id, us))) == 1
 
     # check that units from all objects can be combined
-    # NOTE: there is not typing for quantities created by this method
+    # NOTE: there is not typing for quantities created by this method, so this
+    # has to stay a runtime-only type assertion.
     q = 1 * cast(Any, UNIT_REGISTRY).kg / _DEFAULT_REGISTRY.s**2 / cast(Any, application_registry.get()).m
     assert isinstance_types(q, Q[Pressure, Any])
 
@@ -123,6 +124,12 @@ def test_define_dimensionality() -> None:
 
     with pytest.raises(ValueError, match="if_exists"):
         define_dimensionality(CUSTOM_DIMENSIONS[0], if_exists=cast(Any, "invalid"))
+
+    with pytest.raises(ValueError, match="if_exists"):
+        define_dimensionality("fresh_invalid_if_exists", if_exists=cast(Any, "invalid"))
+
+    with pytest.raises(DimensionalityRedefinitionError):
+        define_dimensionality("meter")
 
 
 def test_format() -> None:
@@ -284,13 +291,16 @@ def test_function_annotations() -> None:
 
     a = return_input(cast(Any, Q(25, "m")))
 
+    # The generic function is intentionally called through Any; the checker cannot
+    # prove the returned dimensionality, but runtime dispatch must.
     assert isinstance_types(a, Q[Length])
 
     # not possible to determine output dimensionality for this
     def divide_by_time(q: Q[DT, MT]) -> Q[Any, MT]:
         return q / Q(1, "h")
 
-    # this will be resolved to MassFlow at runtime
+    # The generic return type erases dimensionality; this will be resolved to
+    # MassFlow only at runtime.
     assert isinstance_types(divide_by_time(cast(Any, Q(25, "kg"))), Q[MassFlow])
 
 
@@ -331,6 +341,9 @@ def test_dimensionality_type_hierarchy() -> None:
 
         # the dimensionality type is preserved for add, sub and
         # mul, div with scalars and Q[Dimensionless]
+        # These use local dimensionality subclasses and runtime subclass
+        # compatibility; the static checker cannot express all of these
+        # metaclass-created relationships across the arithmetic operations.
 
         assert isinstance_types(s, Q[EstimatedLength])
         assert isinstance_types(s.to_root_units(), Q[EstimatedLength])
@@ -416,6 +429,8 @@ def test_type_eq() -> None:
     q_arr = Q([25], "m")
 
     assert isinstance(q, Q)
+    # This test is about isinstance_types narrowing behavior, so these are
+    # intentionally runtime checks rather than assert_type-only assertions.
     assert isinstance_types(q, Q[Length, float])
     assert isinstance_types(q, Q[Length, Any])
 
@@ -544,9 +559,26 @@ def test_magnitude_setter() -> None:
     qa = Q(np.array([1.0, 2.0]), "m")
     qa.m = cast(Any, [3.0, 4.0])  # list -> ndarray via constructor validation
     assert isinstance(qa.m, np.ndarray)
+    qa_m = cast("Numpy1DArray", cast(Any, qa).m)
+    assert qa_m.dtype == np.float64
+
+    qa.m = cast(Any, np.array([1, 2]))
+    qa_m = cast("Numpy1DArray", cast(Any, qa).m)
+    assert qa_m.dtype == np.float64
 
     with pytest.raises(TypeError, match="astype"):
         qa.m = cast(Any, 1.0)
+
+    with pytest.raises(ValueError, match="strings"):
+        q.m = cast(Any, "24")
+
+
+def test_subscripted_constructor_rejects_invalid_magnitudes() -> None:
+    invalid: list[Any] = ["24", None, [[1.0, 2.0], [3.0, 4.0]], ["1", "2"]]
+
+    for value in invalid:
+        with pytest.raises(ValueError):
+            Q[Mass](value, "kg")
 
 
 def test_Q() -> None:
@@ -561,14 +593,7 @@ def test_Q() -> None:
     Q(1, "cSt")
     Q([])
 
-    units = [
-        "Δ%",
-        "ΔK",
-        "ΔdegC",
-        "Δ℃",
-        "℃",
-        "Δ°C",
-    ]
+    units = ["Δ%", "ΔK", "ΔdegC", "Δ℃", "℃", "Δ°C"]
 
     for unit in units:
         Q(1, unit)
@@ -605,9 +630,7 @@ def test_Q() -> None:
     assert Q(12).check("")
     assert Q(1) == Q(100, "%")
     Q[Dimensionless, float](21)
-    assert isinstance_types(Q(21), Q[Dimensionless])
-    assert isinstance_types(Q(21), Q[Dimensionless, float])
-    assert isinstance_types(Q(21), Q[Dimensionless, Any])
+    assert_type(Q(21), Q[Dimensionless, float])
     assert Q(1) == Q(1.0)
 
     assert isinstance(Q(1, "meter").m, float)
@@ -671,6 +694,7 @@ def test_Q() -> None:
 
     # floating point math might make this off at the N:th decimal
     assert P2.m == approx(2, rel=1e-12)
+    # "feet_water" is a runtime Pint unit alias, not a literal overload.
     assert isinstance_types(P2, Q[Pressure])
     assert_type(Q(Q(2, "feet_water"), Q(2, "kPa").u), Q[Pressure, float])
     assert_type(
@@ -694,7 +718,12 @@ def test_Q() -> None:
     # percent or %
     Q(1.124124e-3, "").to("%").to("percent")
     Q(1.124124e-3).to("%").to("percent")
-    assert Q(1.0, "mol%").u == Q(1.0, "mol percent").u
+    for unit in ("mol%", "mol-%", "mole%", "kg%", "m3%", "m³%", "vol%", "wt%"):
+        q_percent = Q(50.0, unit)
+        # The loop variable is a runtime str union, so the checker cannot select
+        # each literal unit overload; this pins the parser semantics at runtime.
+        assert q_percent.check(Dimensionless)
+        assert q_percent == Q(50.0, "%")
 
     # np.ndarray magnitudes equality check
     assert (Q([1, 2, 3], "kg") == Q([1000, 2000, 3000], "g")).all()
@@ -784,14 +813,19 @@ def test_wraps() -> None:
         # this is incorrect, cannot add 1 to a dimensional Quantity
         return a * b**2 + 1
 
+    # UNIT_REGISTRY.wraps is typed as Any here; only runtime dimensionality can
+    # validate the wrapped result.
     assert isinstance_types(func(Q(1, "yd"), Q(20, "lbs")), Q[Mass])
     assert Q(1, "bar").check(Pressure)
 
 
 def test_numpy_integration() -> None:
-    assert isinstance_types(Q(np.linspace(0, 1), "kg"), Q[Mass])
+    assert_type(Q(np.linspace(0, 1), "kg"), Q[Mass, Numpy1DArray])
+    # np.linspace is not typed to preserve Quantity subclasses; the integration is
+    # implemented by runtime numpy hooks.
     assert isinstance_types(np.linspace(Q(0, "kg"), Q(1, "kg")), Q[Mass])
 
+    # Same numpy hook limitation as above.
     assert isinstance_types(np.linspace(Q(2), Q(25, "%")), Q[Dimensionless])
     assert isinstance_types(np.linspace(Q(2, "cm"), Q(25, "km")), Q[Length])
 
@@ -802,6 +836,7 @@ def test_numpy_integration() -> None:
     comp = q1 == q2
     assert comp.all()
 
+    # Iterating a Quantity is runtime behavior; the checker sees a broad iterator.
     assert isinstance_types(list(Q(np.linspace(0, 1), "degC")), list[Q[Temperature]])
 
 
@@ -896,6 +931,7 @@ def test_generic_dimensionality() -> None:
     assert Q[Pressure] is not Q[Temperature]
     assert Q[Pressure] != Q[Temperature]
 
+    # These assertions exercise isinstance_types support for generic class objects.
     assert isinstance_types([Q, Q[Pressure], Q[Temperature]], list[type[Q]])
 
     assert not isinstance_types([Q, Q[Pressure], Q[Temperature]], list[Q])
@@ -942,6 +978,7 @@ def test_dynamic_dimensionalities() -> None:
     assert isinstance(q1, type(q2))
     assert isinstance(q2, type(q1))
     assert isinstance(q2, Q)
+    # Dynamic dimensionality classes are created from unit algebra at runtime.
     assert not isinstance_types(q2, Q[Pressure])
 
     q3 = Q(25, "m*g*g/(K^2*K^2)")
@@ -951,6 +988,8 @@ def test_dynamic_dimensionalities() -> None:
 
 
 def test_instance_checks() -> None:
+    # This test intentionally exercises the runtime isinstance_types API rather
+    # than static inference.
     assert isinstance_types(Q(2), Q[Dimensionless])
     assert isinstance(Q(2), Q)
 
@@ -1010,6 +1049,8 @@ def test_instance_checks() -> None:
 
 
 def test_typed_dict() -> None:
+    # TypedDict is not a runtime class; these are runtime-helper tests, not
+    # static assert_type candidates.
     d = {
         "P": Q[Pressure, float](25, "bar"),
         "T": Q[Temperature, float](25, "degC"),
@@ -1229,11 +1270,11 @@ def test_literal_units() -> None:
 def test_indexing() -> None:
     qs = Q([1, 2, 3], "kg")
 
-    assert isinstance_types(qs, Q[Mass])
+    assert_type(qs, Q[Mass, Numpy1DArray])
 
     qi = qs[1]
 
-    assert isinstance_types(qi, Q[Mass])
+    assert_type(qi, Q[Mass, float])
     assert qi == Q(2, "kg")
 
 
@@ -1274,6 +1315,8 @@ def test_unit_compatibility() -> None:
     # the UNIT_REGISTRY registry object contains unit attributes
     # that can be multiplied and divided by a magnitude
     # to create Quantity instances
+    # The registry attributes are cast from Any; this path validates runtime
+    # construction from Pint's dynamic unit objects.
 
     assert isinstance_types(cast(Any, UNIT_REGISTRY).m * 1, Q[Length])
     assert isinstance_types(1 * cast(Any, UNIT_REGISTRY).m / cast(Any, UNIT_REGISTRY).s, Q[Velocity])
@@ -1284,6 +1327,8 @@ def test_unit_compatibility() -> None:
 
 
 def test_mul_rmul_initialization() -> None:
+    # These exercise Pint/numpy operator dispatch paths that are exposed through
+    # Any or numpy protocols rather than overloads.
     assert isinstance_types(cast(Any, UNIT_REGISTRY).m * np.array([1, 2]), Q[Length])
     # this returns array([<Quantity(1.0, 'meter')>, <Quantity(2.0, 'meter')>], dtype=object) instead
     # assert isinstance_types(np.array([1, 2]) * cast(Any, UNIT_REGISTRY).m, Q[Length])
@@ -1295,7 +1340,9 @@ def test_mul_rmul_initialization() -> None:
 def test_copy() -> None:
     q = Q(25, "m")
 
-    assert isinstance_types(q, Q[Length])
+    assert_type(q, Q[Length, float])
+    # Copy/deepcopy preserve the runtime subclass; their return paths are not
+    # modeled precisely enough for assert_type here.
     assert isinstance_types(q.__copy__(), Q[Length])
 
     assert isinstance_types(q.__deepcopy__(), Q[Length])
@@ -1309,6 +1356,7 @@ def test_pickle_preserves_dimensionality_type() -> None:
     dt = Q(5.0, "delta_degC").to("K")
     dt_roundtrip = pickle.loads(pickle.dumps(dt))
 
+    # pickle.loads returns Any, so dimensionality preservation is runtime-only.
     assert isinstance_types(dt_roundtrip, Q[TemperatureDifference])
     assert dt_roundtrip.u == Unit("K")
     assert dt_roundtrip == dt
@@ -1319,6 +1367,11 @@ def test_pickle_preserves_dimensionality_type() -> None:
     assert isinstance_types(hv_roundtrip, Q[HeatingValue])
     assert hv_roundtrip.u == Unit("kilojoule / kilogram")
     assert hv_roundtrip == hv
+
+    derived = Q(1.0, "m") * Q(1.0, "K")
+    derived_roundtrip = pickle.loads(pickle.dumps(derived))
+    assert derived_roundtrip.u == Unit("meter * kelvin")
+    assert derived_roundtrip == derived
 
 
 def test_pydantic_integration() -> None:
@@ -1360,11 +1413,11 @@ def test_temperature_difference() -> None:
         _ = Q(25, "K").to("delta_degC")
 
     T0 = Q(25, "K").asdim(TemperatureDifference).to("delta_degC")
-    assert isinstance_types(T0, Q[TemperatureDifference])
+    assert_type(T0, Q[TemperatureDifference, float])
     assert T0.m == approx(25.0)
 
     td_offset = Q(20, "degC").asdim(TemperatureDifference)
-    assert isinstance_types(td_offset, Q[TemperatureDifference])
+    assert_type(td_offset, Q[TemperatureDifference, float])
     assert td_offset.u == Unit("delta_degC")
     assert td_offset.to("K").m == approx(20.0)
     assert (Q(30, "degC") + td_offset).m == approx(50.0)
@@ -1372,19 +1425,29 @@ def test_temperature_difference() -> None:
     with pytest.raises(DimensionalityTypeError, match="delta unit"):
         Q[TemperatureDifference, float](5, "degC")
 
+    class CustomTemperatureDifference(TemperatureDifference):
+        dimensions = TemperatureDifference.dimensions
+
+    with pytest.raises(DimensionalityTypeError, match="delta unit"):
+        Q[CustomTemperatureDifference, float](5, "degC")
+
     T1 = Q(25, "degC")
     T2 = Q(35, "degC")
 
     dT1 = T1 - T2
     dT2 = T2 - T1
 
-    assert isinstance_types(dT1, Q[TemperatureDifference])
-    assert isinstance_types(dT2, Q[TemperatureDifference])
+    assert_type(dT1, Q[TemperatureDifference, float])
+    assert_type(dT2, Q[TemperatureDifference, float])
 
     assert dT1.u == Unit("delta_degC")
     assert dT2.u == Unit("delta_degC")
 
     assert (Q(25, "degF") - Q(30, "degF")).u == Unit("delta_degF")
+    assert_type(Q(1, "ΔK"), Q[TemperatureDifference, float])
+    assert Q(1, "ΔK").u == Unit("delta_K")
+    assert Q(1, "K").check(Temperature)
+    assert Q(1, "degRe").asdim(TemperatureDifference).u == Unit("delta_degRe")
 
     with pytest.raises(OffsetUnitCalculusError):
         _ = T1 + T2
@@ -1398,14 +1461,14 @@ def test_temperature_difference() -> None:
     with pytest.raises(OffsetUnitCalculusError):
         _ = T1 / 2
 
-    assert isinstance_types(dT1, Q[TemperatureDifference])
-    assert isinstance_types(dT1.to("delta_degF"), Q[TemperatureDifference])
+    assert_type(dT1, Q[TemperatureDifference, float])
+    assert_type(dT1.to("delta_degF"), Q[TemperatureDifference, float])
 
-    assert isinstance_types(dT2, Q[TemperatureDifference])
-    assert isinstance_types(dT2 + dT1, Q[TemperatureDifference])
+    assert_type(dT2, Q[TemperatureDifference, float])
+    assert_type(dT2 + dT1, Q[TemperatureDifference, float])
 
-    assert isinstance_types(T1 + dT1, Q[Temperature])
-    assert isinstance_types(dT1 + T1, Q[Temperature])
+    assert_type(T1 + dT1, Q[Temperature, float])
+    assert_type(dT1 + T1, Q[Temperature, float])
 
     with pytest.raises(DimensionalityTypeError):
         (T1 - T2).to("degC")
@@ -1414,11 +1477,11 @@ def test_temperature_difference() -> None:
     # and keeps the TemperatureDifference dimensionality; only offset scales
     # (degC, degF) are refused
     dk = (T1.to("K") - T2.to("K")).to("K")
-    assert isinstance_types(dk, Q[TemperatureDifference])
+    assert_type(dk, Q[TemperatureDifference, float])
     assert dk.m == approx(-10.0)
 
     dk2 = (T1 - T2).to("K")
-    assert isinstance_types(dk2, Q[TemperatureDifference])
+    assert_type(dk2, Q[TemperatureDifference, float])
     assert dk2.m == approx(-10.0)
 
     with pytest.raises(DimensionalityTypeError):
@@ -1428,12 +1491,12 @@ def test_temperature_difference() -> None:
     T2 = T1.to("K") - Q(100, "degC").to("K")
 
     dk3 = T2.to("K")
-    assert isinstance_types(dk3, Q[TemperatureDifference])
+    assert_type(dk3, Q[TemperatureDifference, float])
     assert dk3.m == approx(700.0)
 
     T2_ = T1.to("K") - Q(100, "delta_degC")
 
-    assert isinstance_types(T2_, Q[Temperature])
+    assert_type(T2_, Q[Temperature, float])
 
 
 def test_ordering_comparisons_across_dimensionalities() -> None:
@@ -1478,7 +1541,7 @@ def test_to_preserves_temperature_dimensionality() -> None:
 
     # .asdim() is the explicit, value-preserving escape hatch
     td = Q(300.0, "K").asdim(TemperatureDifference)
-    assert isinstance_types(td, Q[TemperatureDifference])
+    assert_type(td, Q[TemperatureDifference, float])
     assert td.to("delta_degC").m == approx(300.0)
     assert td.to("delta_degF").m == approx(540.0)
 
@@ -1499,6 +1562,8 @@ def test_inplace_add_sub_checks_dimensionality() -> None:
 
     td = Q(np.array([10.0]), "delta_degC")
     td += Q(np.array([20.0]), "degC")
+    # Augmented assignment changes dimensionality at runtime; the checker keeps
+    # the original variable type, so this specific assertion must be runtime-only.
     assert isinstance_types(td, Q[Temperature])
     assert td.u == Unit("degC")
     assert td.m == approx(np.array([30.0]))
@@ -1514,7 +1579,7 @@ def test_temperature_add_sub_preserves_unit() -> None:
     res = Q(300.0, "K") + Q(10.0, "delta_degC")
     assert res.u == Unit("K")
     assert res.m == approx(310.0)
-    assert isinstance_types(res, Q[Temperature])
+    assert_type(res, Q[Temperature, float])
 
     res = Q(10.0, "delta_degC") + Q(300.0, "K")
     assert res.u == Unit("K")
@@ -1571,7 +1636,7 @@ def test_temperature_difference_to_multiplicative_units() -> None:
     dt = Q(10.0, "delta_degC")
 
     k = dt.to("K")
-    assert isinstance_types(k, Q[TemperatureDifference])
+    assert_type(k, Q[TemperatureDifference, float])
     assert k.m == approx(10.0)
     assert k.u == Unit("K")
 
@@ -1583,13 +1648,15 @@ def test_temperature_difference_to_multiplicative_units() -> None:
 
     # to_base_units agrees with to_root_units (both express the ΔT in K)
     base = dt.to_base_units()
-    assert isinstance_types(base, Q[TemperatureDifference])
+    assert_type(base, Q[TemperatureDifference, float])
     assert base.m == approx(10.0)
     assert base.m == approx(dt.to_root_units().m)
 
     # in-place conversion keeps the dimensionality type too
     arr = Q(np.array([10.0, 20.0]), "delta_degC")
     arr.ito("K")
+    # In-place conversion preserves the runtime dimensionality, but pyrefly
+    # widens the value after .ito(), so this remains runtime-only.
     assert isinstance_types(arr, Q[TemperatureDifference])
     assert arr.m == approx(np.array([10.0, 20.0]))
 
@@ -1623,6 +1690,8 @@ def test_temperature_unit_inputs() -> None:
     ]:
         qty = Q(1, unit)
 
+        # The unit is a loop-time string, so the checker cannot select a single
+        # literal overload; this pins the runtime parser behavior.
         assert isinstance_types(qty, Q[Temperature]) or isinstance_types(qty, Q[TemperatureDifference])
         assert qty.check(Temperature)
         assert qty.check(TemperatureDifference)
@@ -1648,10 +1717,10 @@ def test_nested_quantity_input() -> None:
 
 def test_getitem() -> None:
     ms = Q([1.2, 1.3], "kg")
-    assert isinstance_types(ms, Q[Mass, np.ndarray])
+    assert_type(ms, Q[Mass, Numpy1DArray])
 
     m0 = ms[0]
-    assert isinstance_types(m0, Q[Mass, float])
+    assert_type(m0, Q[Mass, float])
 
 
 def test_class_getitem() -> None:
@@ -1900,20 +1969,20 @@ def test_unary_pos_neg() -> None:
     assert -Q(-1) == 1
 
     assert (-Q(25, "kg")).mt_name == "float"
-    assert isinstance_types(-Q(25, "kg"), Q[Mass, float])
-    assert isinstance_types(-1 * -Q(25, "kg"), Q[Mass, float])
-    assert isinstance_types(-Q(25, "kg") * 1, Q[Mass, float])
-    assert isinstance_types(-Q(25, "kg") * -1, Q[Mass, float])
-    assert isinstance_types(-(1 * -Q(25, "kg")), Q[Mass, float])
+    assert_type(-Q(25, "kg"), Q[Mass, float])
+    assert_type(-1 * -Q(25, "kg"), Q[Mass, float])
+    assert_type(-Q(25, "kg") * 1, Q[Mass, float])
+    assert_type(-Q(25, "kg") * -1, Q[Mass, float])
+    assert_type(-(1 * -Q(25, "kg")), Q[Mass, float])
 
     assert +Q(+1) == 1
 
     assert (+Q(25, "kg")).mt_name == "float"
-    assert isinstance_types(+Q(25, "kg"), Q[Mass, float])
-    assert isinstance_types(+1 * +Q(25, "kg"), Q[Mass, float])
-    assert isinstance_types(+Q(25, "kg") * 1, Q[Mass, float])
-    assert isinstance_types(+Q(25, "kg") * +1, Q[Mass, float])
-    assert isinstance_types(+(1 * +Q(25, "kg")), Q[Mass, float])
+    assert_type(+Q(25, "kg"), Q[Mass, float])
+    assert_type(+1 * +Q(25, "kg"), Q[Mass, float])
+    assert_type(+Q(25, "kg") * 1, Q[Mass, float])
+    assert_type(+Q(25, "kg") * +1, Q[Mass, float])
+    assert_type(+(1 * +Q(25, "kg")), Q[Mass, float])
 
 
 def test_dimensionless_division() -> None:
@@ -1924,26 +1993,51 @@ def test_dimensionless_division() -> None:
     assert_type(1 / Q(pl.col.test), Q[Dimensionless, pl.Expr])
 
 
+def test_in_place_operators_rebuild_subclass() -> None:
+    q_mul = Q(np.array([1.0, 2.0]), "kg")
+    q_mul *= Q(3.0, "m")
+    assert q_mul.u == Unit("kilogram * meter")
+    # Augmented assignment changes dimensionality at runtime; the checker keeps
+    # the original variable type, so this specific assertion must be runtime-only.
+    assert not isinstance_types(q_mul, Q[Mass])
+    assert (q_mul + Q(np.array([1.0, 1.0]), "kg*m") == Q(np.array([4.0, 7.0]), "kg*m")).all()
+
+    q_div = Q(np.array([2.0, 4.0]), "kg")
+    q_div /= Q(2.0, "s")
+    assert q_div.u == Unit("kilogram / second")
+    assert (q_div + Q(np.array([1.0, 1.0]), "kg/s") == Q(np.array([2.0, 3.0]), "kg/s")).all()
+
+    q_pow = Q(np.array([2.0, 3.0]), "m")
+    q_pow **= 2
+    # Same augmented-assignment limitation as above: runtime dimensionality changes.
+    assert isinstance_types(q_pow, Q[Area])
+    assert (q_pow == Q(np.array([4.0, 9.0]), "m²")).all()
+
+    q_floor = Q(np.array([5.0, 7.0]), "m")
+    q_floor //= Q(2.0, "m")
+    # Same augmented-assignment limitation as above: runtime dimensionality changes.
+    assert isinstance_types(q_floor, Q[Dimensionless])
+    assert (q_floor == Q(np.array([2.0, 3.0]))).all()
+
+
 def test_massflow_energypermass_power_mul() -> None:
     mf = Q(10, "kg/s")
     epm = Q(1000, "kJ/kg")
 
     result = mf * epm
-    assert isinstance_types(result, Q[Power])
+    assert_type(result, Q[Power, float])
     assert_type(mf * epm, Q[Power, float])
 
     # commutative
     result2 = epm * mf
-    assert isinstance_types(result2, Q[Power])
+    assert_type(result2, Q[Power, float])
     assert_type(epm * mf, Q[Power, float])
 
     # array magnitude types
     mf_arr = Q([10, 20], "kg/s")
-    assert isinstance_types(mf_arr * epm, Q[Power])
     assert_type(mf_arr * epm, Q[Power, Numpy1DArray])
 
     mf_series = Q(pl.Series([10, 20]), "kg/s")
-    assert isinstance_types(mf_series * epm, Q[Power])
     assert_type(mf_series * epm, Q[Power, pl.Series])
 
     mf_expr = Q(pl.col.test, "kg/s")
@@ -1951,7 +2045,6 @@ def test_massflow_energypermass_power_mul() -> None:
 
     # commutative with array types
     epm_arr = Q([1000, 2000], "kJ/kg")
-    assert isinstance_types(epm_arr * mf, Q[Power])
     assert_type(epm_arr * mf, Q[Power, Numpy1DArray])
 
 
@@ -1961,26 +2054,22 @@ def test_power_div_massflow_energypermass() -> None:
     epm = Q(1000, "kJ/kg")
 
     result1 = p / mf
-    assert isinstance_types(result1, Q[EnergyPerMass])
+    assert_type(result1, Q[EnergyPerMass, float])
     assert_type(p / mf, Q[EnergyPerMass, float])
 
     result2 = p / epm
-    assert isinstance_types(result2, Q[MassFlow])
+    assert_type(result2, Q[MassFlow, float])
     assert_type(p / epm, Q[MassFlow, float])
 
     # array magnitude types
     p_arr = Q([10000, 20000], "kW")
-    assert isinstance_types(p_arr / mf, Q[EnergyPerMass])
     assert_type(p_arr / mf, Q[EnergyPerMass, Numpy1DArray])
 
-    assert isinstance_types(p_arr / epm, Q[MassFlow])
     assert_type(p_arr / epm, Q[MassFlow, Numpy1DArray])
 
     p_series = Q(pl.Series([10000, 20000]), "kW")
-    assert isinstance_types(p_series / mf, Q[EnergyPerMass])
     assert_type(p_series / mf, Q[EnergyPerMass, pl.Series])
 
-    assert isinstance_types(p_series / epm, Q[MassFlow])
     assert_type(p_series / epm, Q[MassFlow, pl.Series])
 
     p_expr = Q(pl.col.test, "kW")

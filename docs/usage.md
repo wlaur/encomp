@@ -48,15 +48,17 @@ It is based on the `defaults_en.txt` file from `pint`, with minor modifications.
 Quantities can also be constructed from unit registry attributes:
 
 ```python
+from typing import Any, cast
+
 from encomp.units import UNIT_REGISTRY
 from encomp.units import Quantity as Q
 
 # the registry attributes are typed for use as Quantity units, not for
-# direct arithmetic, so these operations need pyrefly suppressions
-d = 50 * UNIT_REGISTRY.m  # pyrefly: ignore[unsupported-operation]
-v = d / UNIT_REGISTRY.s  # pyrefly: ignore[unsupported-operation]
+# direct arithmetic, so annotate intermediate values as dynamic.
+d: Any = cast(Any, 50 * UNIT_REGISTRY.m)
+v: Any = d / UNIT_REGISTRY.s
 
-mf = Q(25, UNIT_REGISTRY.kg / UNIT_REGISTRY.h)  # pyrefly: ignore[unsupported-operation]
+mf = Q(25, cast(Any, UNIT_REGISTRY.kg / UNIT_REGISTRY.h))
 ```
 
 ### Quantity types
@@ -157,10 +159,8 @@ Q(1, "delta_degC").check(Temperature)  # True
 # alternative using isinstance()
 # (parameterized isinstance is a runtime-only feature, hence the suppressions)
 
-# pyrefly: ignore[invalid-argument]
-isinstance(pressure, Q[Pressure])  # True
-# pyrefly: ignore[invalid-argument]
-isinstance(pressure, Q[Length])  # False
+isinstance(pressure, Q[Pressure])  # True  # pyright: ignore[reportArgumentType, reportUnnecessaryIsInstance]
+isinstance(pressure, Q[Length])  # False  # pyright: ignore[reportArgumentType, reportUnnecessaryIsInstance]
 
 # complex types must use isinstance_types
 # this function can also be used with simple types
@@ -182,7 +182,7 @@ from encomp.utypes import Length, Power, Pressure
 
 
 @typechecked
-def func(_p1: Q[Pressure]) -> tuple[Q[Length], Q[Power]]:
+def func(_p1: Q[Pressure, float]) -> tuple[Q[Length, float], Q[Power, float]]:
     return Q(1, "m"), Q(1, "kW")
 ```
 
@@ -356,7 +356,7 @@ from encomp.utypes import Pressure
 
 try:
     # a static type checker rejects this addition as well
-    Q(25, "bar") + Q(25, "m")  # pyrefly: ignore[unsupported-operation]
+    Q(25, "bar") + Q(25, "m")  # pyright: ignore[reportOperatorIssue]
 except DimensionalityError as e:
     print(f"Error: {e}")
 
@@ -376,6 +376,8 @@ except DimensionalityError as e:
 {py:class}`encomp.units.Quantity` (optionally with a dimensionality type parameter) works as a Pydantic field type.
 
 ```python
+from typing import Any, cast
+
 from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
 
 from encomp.units import Quantity as Q
@@ -386,10 +388,10 @@ class Model(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, validate_default=True)
 
     # a can be any dimensionality
-    a: Q
+    a: Q[Any, Any]
 
-    m: Q[Mass]
-    s: Q[Length]
+    m: Q[Mass, float]
+    s: Q[Length, float]
 
     # float is converted to Quantity[Dimensionless]
     r: Q[Dimensionless, float] = Q(0.5)
@@ -404,7 +406,7 @@ adapter = TypeAdapter(Q[Mass, float])
 adapter.validate_json(adapter.dump_json(Q(2.0, "kg")))
 
 try:
-    Model(a=Q(25, "cSt"), m=Q(25, "m"), s=Q(25, "cm"))
+    Model(a=Q(25, "cSt"), m=cast(Any, Q(25, "m")), s=Q(25, "cm"))
 except ValidationError as e:
     print(e.errors()[0]["type"])  # quantity_dimensionality
 ```
@@ -458,7 +460,7 @@ from encomp.units import Quantity as Q
 
 # input units are converted to SI
 Water(P=Q(30, "psi"), T=Q(250, "°F"))
-# <Water (Liquid), P=207 kPa, T=121.1 °C, D=942.2 kg/m³, V=0.2 cP>
+# <Water (Liquid), P=207 kPa, T=121.1 °C, D=942.2 kg/m³, V=0.23 cP>
 
 HumidAir(T=Q(25, "°C"), P=Q(2, "bar"), R=Q(25, "%"))
 # <HumidAir, P=200 kPa, T=25.0 °C, R=0.25, Vda=0.4 m³/kg, Vha=0.4 m³/kg, M=0.018 cP>
@@ -513,7 +515,7 @@ Water.describe("PCRIT")
 water = Water(T=Q(25, "°C"), P=Q(1, "atm"))
 
 critical = water.p_critical, water.PCRIT
-# (22064000.0 <Unit('pascal')>, 22064000.0 <Unit('pascal')>)
+# (<Quantity(22064.0, 'kilopascal')>, <Quantity(22064.0, 'kilopascal')>)
 ```
 
 :::{tip}
@@ -568,7 +570,7 @@ from encomp.units import Quantity as Q
 Water(T=Q(np.linspace(25, 50, 10), "°C"), P=Q(np.linspace(25, 50, 10), "bar"))
 # the repr shows only the head of each vector input
 # <Water (Liquid), P=[2500 2778 3056 ...] kPa, T=[25.0 27.8 30.6 ...] °C,
-# D=[998.1 997.5 996.8 ...] kg/m³, V=[0.9 0.8 0.8 ...] cP>
+# D=[998.1 997.5 996.8 ...] kg/m³, V=[0.89 0.84 0.79 ...] cP>
 
 # different phases
 phases = Water(T=Q(np.linspace(25, 500, 10), "°C"), P=Q(np.linspace(0.5, 10, 10), "bar")).PHASE
@@ -589,7 +591,7 @@ phase_names = Water.PHASES
 # it's repeated as an array
 Water(T=Q(np.linspace(25, 500, 10), "°C"), P=Q(5, "bar"))
 # <Water (Variable), P=[500 500 500 ...] kPa, T=[25.0 77.8 130.6 ...] °C,
-# D=[997.2 973.4 934.5 ...] kg/m³, V=[0.9 0.4 0.2 ...] cP>
+# D=[997.2 973.4 934.5 ...] kg/m³, V=[0.89 0.36 0.21 ...] cP>
 ```
 
 Missing or out-of-range results surface as `NaN` (for a numpy magnitude) or `null` (for a Polars magnitude), never as a zero or a raised exception, so a partly-invalid batch still returns the valid rows.
@@ -648,12 +650,14 @@ The following convenience methods are added to the `sp.Symbol` class:
 These methods return new `sp.Symbol` instances with the same assumptions (*positive*, *real*, *integer*, ...) as the original.
 
 ```python
+from typing import Any, cast
+
 from encomp.sympy import sp
 
 n = sp.Symbol("n", integer=True)
 
 # the _ method is added to sp.Symbol at runtime by encomp.sympy
-n_test = n._("test")  # pyrefly: ignore[missing-attribute]
+n_test: Any = cast(Any, n)._("test")
 str(n_test)
 # n_{\text{test}}
 
@@ -686,7 +690,7 @@ The class method {py:meth}`encomp.units.Quantity.from_expr` converts an expressi
 from encomp.sympy import sp
 from encomp.units import Quantity as Q
 
-x, y, z = sp.symbols("x, y, z")
+x, y, z = sp.symbols("x, y, z")  # pyright: ignore[reportUnknownMemberType]
 
 expr = 25 * x * y / z
 
@@ -711,7 +715,7 @@ import numpy as np
 from encomp.sympy import get_function, sp
 from encomp.units import Quantity as Q
 
-x, y, z = sp.symbols("x, y, z")
+x, y, z = sp.symbols("x, y, z")  # pyright: ignore[reportUnknownMemberType]
 
 expr = 25 * x * y / z
 
@@ -734,7 +738,7 @@ Quantity objects combine directly with Sympy symbols; the units are converted to
 from encomp.sympy import sp
 from encomp.units import Quantity as Q
 
-x, y, z = sp.symbols("x, y, z")
+x, y, z = sp.symbols("x, y, z")  # pyright: ignore[reportUnknownMemberType]
 
 # the type of the left object determines the output
 

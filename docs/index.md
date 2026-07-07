@@ -13,6 +13,7 @@ guide, example notebooks, and API reference are linked in the toctree below.
 :maxdepth: 3
 
 usage
+release-notes
 examples
 api
 ```

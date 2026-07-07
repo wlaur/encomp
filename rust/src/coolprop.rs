@@ -33,7 +33,7 @@
 use libloading::Library;
 use std::collections::HashSet;
 use std::ffi::{CString, c_char, c_double, c_long};
-use std::sync::{Mutex, RwLock};
+use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 const BUFLEN: c_long = 1024;
 
@@ -74,6 +74,20 @@ fn cstr(s: &str) -> Result<CString, CpError> {
 fn read_msg(buf: &[c_char]) -> String {
     let bytes: Vec<u8> = buf.iter().take_while(|&&c| c != 0).map(|&c| c as u8).collect();
     String::from_utf8_lossy(&bytes).into_owned()
+}
+
+fn lock_mutex<'a, T>(mutex: &'a Mutex<T>, name: &str) -> Result<MutexGuard<'a, T>, CpError> {
+    mutex.lock().map_err(|_| CpError(format!("{name} lock was poisoned")))
+}
+
+fn read_lock<'a, T>(lock: &'a RwLock<T>, name: &str) -> Result<RwLockReadGuard<'a, T>, CpError> {
+    lock.read()
+        .map_err(|_| CpError(format!("{name} read lock was poisoned")))
+}
+
+fn write_lock<'a, T>(lock: &'a RwLock<T>, name: &str) -> Result<RwLockWriteGuard<'a, T>, CpError> {
+    lock.write()
+        .map_err(|_| CpError(format!("{name} write lock was poisoned")))
 }
 
 /// A loaded libCoolProp + resolved C-API entry points. Cheap to share (`&`)
@@ -180,7 +194,7 @@ impl CoolProp {
     /// (backend, fluid-list) pair, while set_fractions / specify_phase are per-handle
     /// state with no global side effects -- so one warmup per (backend, fluid) covers
     /// every composition and phase of that config.
-    pub fn ensure_warmed_fluid(&self, backend: &str, fluid: &str) {
+    pub fn ensure_warmed_fluid(&self, backend: &str, fluid: &str) -> Result<(), CpError> {
         let key = format!("F\0{backend}\0{fluid}");
         self.ensure_warmed(&key, || {
             if let Ok(mut st) = self.state(backend, fluid)
@@ -189,16 +203,16 @@ impl CoolProp {
                 let mut out = [0.0f64];
                 let _ = st.update_and_1_out(pair, &[101_325.0], &[300.0], okey, &mut out);
             }
-        });
+        })
     }
 
     /// One-time warmup for the humid-air (HAPropsSI) path, so its global init runs
     /// single-threaded before the pool loops HAPropsSI. Keyed once (no per-fluid variation).
-    pub fn ensure_warmed_humid_air(&self) {
+    pub fn ensure_warmed_humid_air(&self) -> Result<(), CpError> {
         self.ensure_warmed("HA", || {
             let mut out = [0.0f64];
             let _ = self.ha_props_si_batch("W", "P", &[101_325.0], "T", &[293.15], "R", &[0.5], &mut out);
-        });
+        })
     }
 
     /// Run `warm` exactly once for `key`. Fast path: a shared read lock + membership test, so
@@ -207,16 +221,17 @@ impl CoolProp {
     /// init, and each new config's backend init completes before any parallel flash of it. No
     /// re-entrancy (warm never calls back here) and no lock-order cycle (warm takes only the
     /// separate handle_lock), so this cannot deadlock.
-    fn ensure_warmed(&self, key: &str, warm: impl FnOnce()) {
-        if self.warmed.read().unwrap().contains(key) {
-            return;
+    fn ensure_warmed(&self, key: &str, warm: impl FnOnce()) -> Result<(), CpError> {
+        if read_lock(&self.warmed, "CoolProp warmup registry")?.contains(key) {
+            return Ok(());
         }
-        let mut warmed = self.warmed.write().unwrap();
+        let mut warmed = write_lock(&self.warmed, "CoolProp warmup registry")?;
         if warmed.contains(key) {
-            return;
+            return Ok(());
         }
         warm();
         warmed.insert(key.to_string());
+        Ok(())
     }
 
     /// Batched humid air: loops the scalar HAPropsSI (no AbstractState handle, no
@@ -257,7 +272,7 @@ impl CoolProp {
         let mut err: c_long = 0;
         let mut msg = [0 as c_char; BUFLEN as usize];
         let handle = {
-            let _g = self.handle_lock.lock().unwrap();
+            let _g = lock_mutex(&self.handle_lock, "CoolProp handle table")?;
             // SAFETY: `b`/`f` are CStrings alive across the call; `err`/`msg` are
             // valid stack buffers (`msg` has BUFLEN bytes). The handle-table write
             // is serialised by `handle_lock` held here.
@@ -365,7 +380,7 @@ impl State<'_> {
 
 impl Drop for State<'_> {
     fn drop(&mut self) {
-        let _g = self.cp.handle_lock.lock().unwrap();
+        let _g = self.cp.handle_lock.lock().unwrap_or_else(|e| e.into_inner());
         let mut err: c_long = 0;
         let mut msg = [0 as c_char; BUFLEN as usize];
         // SAFETY: frees a handle we own exactly once (Drop runs once); the

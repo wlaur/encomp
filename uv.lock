@@ -495,7 +495,7 @@ wheels = [
 
 [[package]]
 name = "encomp"
-version = "1.6.0"
+version = "1.6.1"
 source = { editable = "." }
 dependencies = [
     { name = "coolprop" },
@@ -561,7 +561,7 @@ dev = [
     { name = "hvplot", specifier = ">=0.12.2" },
     { name = "hypothesis" },
     { name = "ipykernel", specifier = ">=7.1.0" },
-    { name = "maturin", specifier = ">=1.5,<2" },
+    { name = "maturin", specifier = ">=1.8.2,<2" },
     { name = "microsoft-python-type-stubs", git = "https://github.com/microsoft/python-type-stubs.git" },
     { name = "myst-parser" },
     { name = "nbsphinx" },

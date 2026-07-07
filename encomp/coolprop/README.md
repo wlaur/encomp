@@ -95,9 +95,9 @@ much slower per call (iterative solver). Still better than the Python path.
   (bumping `pyo3-polars` to the new Rust polars) is needed only if polars bumps the ffi
   ABI **major** — rare and announced. `self_check()` evaluates a known value at first use,
   so a genuinely incompatible polars surfaces as a clear error, never a silent wrong result.
-- **Version match**: CoolProp enum integers differ across versions; pin Python
-  `coolprop==8.0.0` to match the bundled Rust lib. The plugin resolves parameter
-  indices via CoolProp at runtime, never hardcoded.
+- **Version match**: CoolProp enum integers can differ across major versions. `encomp`
+  requires Python `coolprop>=8.0.0,<9`, while the bundled Rust lib is built at 8.0.0.
+  The plugin resolves parameter indices via CoolProp at runtime, never hardcoded.
 - **One property per node (no output batching).** Each `fluid(...)` / `humid_air(...)` is an
   independent plugin node, so selecting K properties of one state runs K flashes of it —
   Polars cannot reuse (CSE) the shared flash across opaque plugin nodes. Independent
@@ -122,7 +122,7 @@ via `.github/workflows/release.yml`:
 
 | target  | on this macOS host         | in CI                                  |
 |---------|----------------------------|----------------------------------------|
-| macOS   | yes (native)               | macos-13 (x86_64), macos-14 (arm64)    |
+| macOS   | yes (native)               | macos-14 (arm64)                       |
 | Linux   | yes, via Docker (manylinux)| ubuntu (x86_64) + ubuntu-arm (aarch64) |
 | Windows | no — needs Windows         | windows-latest (amd64)                 |
 

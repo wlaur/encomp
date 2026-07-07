@@ -1,8 +1,11 @@
-from typing import Any, overload
+from typing import Any, cast, overload
+
+import numpy as np
+import polars as pl
 
 from .misc import isinstance_types
 from .units import ExpectedDimensionalityError, Quantity
-from .utypes import MT, Density, Mass, MassFlow, Volume, VolumeFlow
+from .utypes import MT, Density, Mass, MassFlow, Numpy1DArray, Volume, VolumeFlow
 
 
 @overload
@@ -57,6 +60,19 @@ def convert_volume_mass(
 
     if not isinstance_types(rho, Quantity[Density, Any]):
         raise ExpectedDimensionalityError(f"rho must be a Quantity[Density], passed {rho!r} ({type(rho).__name__})")
+
+    rho_m = rho.to("kg/m³").m
+    if isinstance(rho_m, float):
+        if not np.isfinite(rho_m) or rho_m <= 0.0:
+            raise ValueError(f"rho must be finite and positive, got {rho!r}")
+    elif isinstance(rho_m, np.ndarray):
+        rho_arr = cast("Numpy1DArray", rho_m)
+        if bool(np.any(~np.isfinite(rho_arr) | (rho_arr <= 0.0))):
+            raise ValueError(f"rho must contain only finite positive values, got {rho!r}")
+    elif isinstance(rho_m, pl.Series):
+        valid = rho_m.is_finite() & (rho_m > 0.0)
+        if not valid.all():
+            raise ValueError(f"rho must contain only finite positive values, got {rho!r}")
 
     if isinstance_types(inp, Quantity[Mass, Any]):
         return (inp / rho).to_reduced_units().asdim(Volume)

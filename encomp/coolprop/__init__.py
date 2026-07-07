@@ -74,6 +74,7 @@ __all__ = [
     "lib_path",
     "lib_version",
     "resolve_fluid_spec",
+    "self_check",
 ]
 
 # Each name set is defined ONCE as a Literal (static typing) and exposed as a
@@ -456,6 +457,8 @@ def _resolve_pair(name1: str, name2: str) -> tuple[int, bool]:
     # CoolProp's generate_update_pair gives the canonical input_pairs index and
     # value order; the swap decision is value-independent, so resolve it once.
     pair, a, _ = _cp.generate_update_pair(_cp.get_parameter_index(name1), 1.0, _cp.get_parameter_index(name2), 2.0)
+    if int(pair) == 0:
+        raise ValueError(f"unsupported CoolProp input pair: {name1!r}, {name2!r}")
     return int(pair), (a == 2.0)
 
 
