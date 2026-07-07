@@ -96,6 +96,12 @@ def test_define_dimensionality() -> None:
     with pytest.raises(DimensionalityRedefinitionError):
         define_dimensionality(CUSTOM_DIMENSIONS[0])
 
+    # if_exists="warn" logs and keeps the existing definition instead of raising
+    define_dimensionality(CUSTOM_DIMENSIONS[0], if_exists="warn")
+
+    with pytest.raises(ValueError, match="if_exists"):
+        define_dimensionality(CUSTOM_DIMENSIONS[0], if_exists=cast(Any, "invalid"))
+
 
 def test_format() -> None:
     assert "{:.2f~P}".format(Q(25, "delta_degC") / Q(255, "m3")) == "0.10 Δ°C/m³"

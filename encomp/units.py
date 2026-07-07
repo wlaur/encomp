@@ -293,6 +293,10 @@ def define_dimensionality(name: str, symbol: str | None = None, if_exists: Liter
         Name of the dimensionality
     symbol : str | None, optional
         Optional (short) symbol, by default None
+    if_exists : Literal["raise", "warn"], optional
+        What to do when a dimensionality with this name is already defined:
+        ``"raise"`` (default) raises ``DimensionalityRedefinitionError``,
+        ``"warn"`` logs a warning and keeps the existing definition
     """
 
     if not name.isidentifier():
@@ -306,7 +310,10 @@ def define_dimensionality(name: str, symbol: str | None = None, if_exists: Liter
         if if_exists == "raise":
             raise DimensionalityRedefinitionError(msg)
         elif if_exists == "warn":
+            # the existing definition stays in place: defining it again on the
+            # registry (on_redefinition="raise") would raise RedefinitionError
             _LOGGER.warning(msg)
+            return
         else:
             raise ValueError(f"Invalid value: {if_exists=}")
 
