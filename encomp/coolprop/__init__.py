@@ -356,6 +356,24 @@ HumidAirInput = Literal[
 ]  # fmt: skip
 HUMID_AIR_INPUTS: frozenset[HumidAirInput] = frozenset(get_args(HumidAirInput))
 
+_HUMID_AIR_INPUT_ALIASES: tuple[tuple[HumidAirInput, ...], ...] = (
+    ("T", "Tdb", "T_db"),
+    ("B", "Twb", "T_wb", "WetBulb"),
+    ("D", "Tdp", "T_dp", "DewPoint"),
+    ("W", "Omega", "HumRat"),
+    ("R", "RH", "RelHum"),
+    ("H", "Hda", "Enthalpy"),
+    ("S", "Sda", "Entropy"),
+    ("V", "Vda"),
+    ("P",),
+    ("P_w",),
+    ("Y", "psi_w"),
+    ("Hha",),
+    ("Sha",),
+    ("Vha",),
+)
+_HUMID_AIR_INPUT_CANONICAL: dict[str, str] = {alias: group[0] for group in _HUMID_AIR_INPUT_ALIASES for alias in group}
+
 
 # TypeIs predicates (PEP 742): narrow a runtime ``str`` to the corresponding strict
 # Literal without a cast, in both branches (and reject unknown names). Use these
@@ -456,6 +474,16 @@ def _input_name(x: str | pl.Expr) -> str:
     # a state input identifies its property by NAME: the string itself, or the
     # output name of the expression (e.g. pl.col("P") or pl.col("p").alias("P")).
     return x if isinstance(x, str) else x.meta.output_name()
+
+
+def _reject_duplicate_input_keys(kind: str, keyed_names: tuple[tuple[str, int | str], ...]) -> None:
+    seen: dict[int | str, str] = {}
+
+    for name, key in keyed_names:
+        if previous := seen.get(key):
+            raise ValueError(f"{kind} inputs must be distinct; got {previous!r} and {name!r} for the same state input")
+
+        seen[key] = name
 
 
 def _phase_from_assumed(assume_phase: AssumedPhase) -> Phase:
@@ -582,6 +610,10 @@ def fluid(
                 f"(P, T, Q, D, H, S, U, ...); got {nm!r}. Alias the column, e.g. "
                 f'pl.col("pressure").alias("P").'
             )
+    _reject_duplicate_input_keys(
+        "fluid",
+        ((name1, _cp.get_parameter_index(name1)), (name2, _cp.get_parameter_index(name2))),
+    )
     pair_idx, swap = _resolve_pair(name1, name2)
     a, b = (input2, input1) if swap else (input1, input2)  # canonical order
     a_expr, b_expr = _as_expr(a), _as_expr(b)
@@ -632,6 +664,14 @@ def humid_air(
                 f"(T, P, R, W, B, ...); got {name!r}. Alias the column, e.g. "
                 f'pl.col("rel_hum").alias("R").'
             )
+    _reject_duplicate_input_keys(
+        "humid-air",
+        (
+            (name1, _HUMID_AIR_INPUT_CANONICAL[name1]),
+            (name2, _HUMID_AIR_INPUT_CANONICAL[name2]),
+            (name3, _HUMID_AIR_INPUT_CANONICAL[name3]),
+        ),
+    )
     e1, e2, e3 = _as_expr(input1), _as_expr(input2), _as_expr(input3)
     return register_plugin_function(
         plugin_path=_plugin_path(),

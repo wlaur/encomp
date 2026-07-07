@@ -333,6 +333,20 @@ def test_input_not_named_after_state_input_raises() -> None:
         cp.humid_air("W", pl.col("rel_hum"), "T", "P")
 
 
+def test_duplicate_state_inputs_raise() -> None:
+    with pytest.raises(ValueError, match="distinct"):
+        cp.fluid("DMASS", "P", "P")
+
+    with pytest.raises(ValueError, match="same state input"):
+        cp.fluid("DMASS", "D", "DMASS")
+
+    with pytest.raises(ValueError, match="distinct"):
+        cp.humid_air("W", "P", "P", "T")
+
+    with pytest.raises(ValueError, match="same state input"):
+        cp.humid_air("W", "P", "R", "RH")
+
+
 def test_fluid_composition_validation_matches_fluids() -> None:
     # bare cp.fluid reconciles name + composition the same way encomp.fluids.Fluid does
     with pytest.raises(ValueError, match="do not match"):  # name species != dict keys
