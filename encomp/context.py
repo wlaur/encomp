@@ -32,7 +32,7 @@ def working_dir(path: Path | str) -> Generator[None]:
 
 
 @contextmanager
-def temp_dir() -> Generator[None]:
+def temp_dir() -> Generator[Path]:
     """
     Context manager that changes the current working directory
     to a temporary directory. The temporary directory is deleted
@@ -42,10 +42,11 @@ def temp_dir() -> Generator[None]:
     cwd = Path.cwd()
 
     t_dir = tempfile.TemporaryDirectory()
+    path = Path(t_dir.name).resolve()
 
     try:
-        os.chdir(t_dir.name)
-        yield
+        os.chdir(path)
+        yield path
 
     finally:
         os.chdir(cwd)
