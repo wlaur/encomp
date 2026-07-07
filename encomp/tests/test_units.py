@@ -105,6 +105,9 @@ def test_define_dimensionality() -> None:
 
 def test_format() -> None:
     assert "{:.2f~P}".format(Q(25, "delta_degC") / Q(255, "m3")) == "0.10 Δ°C/m³"
+    assert f"{Q(25, 'meter'):D}" == "25.0 meter"
+    assert f"{Q(25, 'meter'):.2fD}" == "25.00 meter"
+    assert f"{Q(25, 'meter'):.2f}" == "25.00 m"
 
 
 @contextmanager

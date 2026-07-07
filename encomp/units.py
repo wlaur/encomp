@@ -364,6 +364,7 @@ class Quantity(
 
     # compact, Latex, HTML, Latex/siunitx formatting
     FORMATTING_SPECS = PINT_FORMATTING_SPECIFIERS
+    PINT_PRESENTATION_SPECS: ClassVar[tuple[str, ...]] = ("raw", "Lx", "D", "H", "P", "L", "C")
 
     _REGISTRY: ClassVar[UnitRegistry[Any]] = UNIT_REGISTRY
 
@@ -1231,8 +1232,13 @@ class Quantity(
 
         return self._pint_super.check(dimension)
 
+    @classmethod
+    def _has_pint_presentation_spec(cls, spec: str) -> bool:
+        spec_without_modifiers = spec.replace("~", "").replace("^", "")
+        return any(spec_without_modifiers.endswith(pint_spec) for pint_spec in cls.PINT_PRESENTATION_SPECS)
+
     def __format__(self, spec: str) -> str:
-        if not spec.endswith(Quantity.FORMATTING_SPECS):
+        if spec and not self._has_pint_presentation_spec(spec):
             spec = f"{spec}{self._REGISTRY.formatter.default_format}"
 
         return super().__format__(spec)
