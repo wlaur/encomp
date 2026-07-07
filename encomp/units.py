@@ -740,6 +740,11 @@ class Quantity(
 
         return self._call_subclass(copy.deepcopy(self._magnitude, memo), copy.deepcopy(self._units, memo))
 
+    def __reduce__(  # pyright: ignore[reportIncompatibleMethodOverride]  # pyrefly: ignore[bad-override]
+        self,
+    ) -> tuple[object, tuple[object, str, type[Dimensionality]]]:
+        return (_reconstruct_quantity, (self._magnitude, str(self.u._units), self.dt))
+
     @staticmethod
     def _cast_array_float(inp: np.ndarray) -> Numpy1DArray:
         # don't fail in case the array contains unsupported objects,
@@ -3003,6 +3008,10 @@ class Quantity(
         instance = cast(Any, subcls)(ret.m, ret.u)
 
         return cast("Quantity[Any, Any]", instance)
+
+
+def _reconstruct_quantity(magnitude: object, unit: str, dim: type[Dimensionality]) -> Quantity[Any, Any]:
+    return Quantity(cast(Any, magnitude), unit).asdim(dim)
 
 
 # register the Quantity and Unit implementations on the registry, so every object

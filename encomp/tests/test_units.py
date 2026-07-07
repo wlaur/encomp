@@ -1,6 +1,7 @@
 # pyright: reportConstantRedefinition=false
 
 import copy
+import pickle
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any, TypedDict, assert_never, assert_type, cast
@@ -34,6 +35,7 @@ from ..utypes import (
     Dimensionality,
     Dimensionless,
     EnergyPerMass,
+    HeatingValue,
     Length,
     LowerHeatingValue,
     Mass,
@@ -1235,6 +1237,22 @@ def test_copy() -> None:
 
     assert isinstance_types(copy.copy(q), Q[Length])
     assert isinstance_types(copy.deepcopy(q), Q[Length])
+
+
+def test_pickle_preserves_dimensionality_type() -> None:
+    dt = Q(5.0, "delta_degC").to("K")
+    dt_roundtrip = pickle.loads(pickle.dumps(dt))
+
+    assert isinstance_types(dt_roundtrip, Q[TemperatureDifference])
+    assert dt_roundtrip.u == Unit("K")
+    assert dt_roundtrip == dt
+
+    hv = Q(25.0, "kJ/kg").asdim(HeatingValue)
+    hv_roundtrip = pickle.loads(pickle.dumps(hv))
+
+    assert isinstance_types(hv_roundtrip, Q[HeatingValue])
+    assert hv_roundtrip.u == Unit("kilojoule / kilogram")
+    assert hv_roundtrip == hv
 
 
 def test_pydantic_integration() -> None:
