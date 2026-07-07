@@ -1004,7 +1004,19 @@ class Quantity(
 
     @m.setter
     def m(self, val: MT) -> None:
-        self._magnitude = val
+        # in-place magnitude replacement: validate like the constructor does, and
+        # require the magnitude type to stay unchanged -- switching the type in
+        # place would desync the instance from its Quantity[DT, MT] subclass
+        validated = self._validate_magnitude(val)
+
+        if type(validated) is not type(self._magnitude):
+            raise TypeError(
+                f"Cannot set a magnitude of type {type(validated).__name__} on a Quantity with "
+                f"{type(self._magnitude).__name__} magnitude, "
+                "construct a new Quantity or use .astype() to change the magnitude type"
+            )
+
+        self._magnitude = validated
 
     @property
     def mt(self) -> type[MT]:

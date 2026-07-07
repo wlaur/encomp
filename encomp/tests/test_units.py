@@ -491,6 +491,27 @@ def test_hash_eq_consistency() -> None:
     assert Q(50.0, "%") in {0.5: "half"}
 
 
+def test_magnitude_setter() -> None:
+    q = Q(1.0, "m")
+
+    # same-type replacement is validated like the constructor (int -> float)
+    q.m = cast(Any, 5)
+    assert isinstance(q.m, float)
+    assert q.m == 5.0
+
+    # switching the magnitude type in place would desync the instance from its
+    # Quantity[DT, MT] subclass -- refused, use .astype() / a new Quantity
+    with pytest.raises(TypeError, match="astype"):
+        q.m = cast(Any, [1.0, 2.0, 3.0])
+
+    qa = Q(np.array([1.0, 2.0]), "m")
+    qa.m = cast(Any, [3.0, 4.0])  # list -> ndarray via constructor validation
+    assert isinstance(qa.m, np.ndarray)
+
+    with pytest.raises(TypeError, match="astype"):
+        qa.m = cast(Any, 1.0)
+
+
 def test_Q() -> None:
     # test that Quantity objects can be constructed
     Q(1, "dimensionless")
