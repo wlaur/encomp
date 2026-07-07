@@ -581,6 +581,9 @@ def test_Q() -> None:
     assert isinstance(Q([2, 3.4], "meter").m, np.ndarray)
     assert isinstance(Q(np.array([2, 3.4]), "meter").m, np.ndarray)
 
+    with pytest.raises(TypeError, match="unit must be"):
+        Q(1.0, cast(Any, 5))
+
     Q(1, Q(2, "bar").u)
     Q(Q(2, "bar").to("kPa").m, "kPa")
 

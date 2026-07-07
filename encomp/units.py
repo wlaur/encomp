@@ -643,14 +643,15 @@ class Quantity(
 
     @staticmethod
     def _validate_unit(
-        unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | Quantity[DT, Any] | None,
+        unit: object,
     ) -> Unit[DT]:
         if unit is None:
             return Unit("dimensionless")
         elif isinstance(unit, Unit):
             return Unit(unit)
         elif isinstance(unit, Quantity):
-            return unit.u
+            qty = cast("Quantity[DT, Any]", unit)
+            return qty.u
         elif isinstance(unit, dict):
             # compatibility with internal pint API
             return Unit(Quantity._validate_unit(str(UnitsContainer(unit))))
