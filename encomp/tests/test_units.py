@@ -1266,6 +1266,15 @@ def test_temperature_difference() -> None:
     assert isinstance_types(T0, Q[TemperatureDifference])
     assert T0.m == approx(25.0)
 
+    td_offset = Q(20, "degC").asdim(TemperatureDifference)
+    assert isinstance_types(td_offset, Q[TemperatureDifference])
+    assert td_offset.u == Unit("delta_degC")
+    assert td_offset.to("K").m == approx(20.0)
+    assert (Q(30, "degC") + td_offset).m == approx(50.0)
+
+    with pytest.raises(DimensionalityTypeError, match="delta unit"):
+        Q[TemperatureDifference, float](5, "degC")
+
     T1 = Q(25, "degC")
     T2 = Q(35, "degC")
 

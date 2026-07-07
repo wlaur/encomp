@@ -972,6 +972,11 @@ class Quantity(
         valid_magnitude = cls._validate_magnitude(val)
         valid_unit = cls._validate_unit(unit)
 
+        if cls._dimensionality_type == TemperatureDifference and cls._is_offset_temperature_unit(valid_unit):
+            raise DimensionalityTypeError(
+                f"Cannot construct TemperatureDifference with offset unit {valid_unit}; use a delta unit instead"
+            )
+
         is_valid_subclass = True
 
         if cls._is_incomplete_dimensionality(cls._dimensionality_type):
@@ -1068,6 +1073,30 @@ class Quantity(
     @classmethod
     def _is_temperature_difference_unit(cls, unit: Unit[DT]) -> bool:
         return unit._units in cls.TEMPERATURE_DIFFERENCE_UCS
+
+    @classmethod
+    def _is_offset_temperature_unit(cls, unit: Unit[Any]) -> bool:
+        if unit.dimensionality != Temperature.dimensions:
+            return False
+
+        if cls._is_temperature_difference_unit(unit):
+            return False
+
+        registry = cast(Any, cls._REGISTRY)  # _is_multiplicative is a stable pint internal
+        return not all(registry._is_multiplicative(u) for u in unit._units)
+
+    @classmethod
+    def _as_temperature_difference_unit(cls, unit: Unit[Any]) -> Unit[TemperatureDifference]:
+        if unit._units == Unit("degC")._units:
+            return Unit("delta_degC")
+
+        if unit._units == Unit("degF")._units:
+            return Unit("delta_degF")
+
+        if cls._is_offset_temperature_unit(unit):
+            raise DimensionalityTypeError(f"Cannot reinterpret offset temperature unit {unit} as TemperatureDifference")
+
+        return cast("Unit[TemperatureDifference]", unit)
 
     def _check_temperature_compatibility(self, unit: Unit[DT]) -> None:
         if self._is_temperature_difference and unit._units not in self.TEMPERATURE_DIFFERENCE_UCS:
@@ -1653,8 +1682,12 @@ class Quantity(
                 f"{dim.dimensions}"
             )
 
+        unit: Unit[Any] = self.u
+        if dim == TemperatureDifference:
+            unit = self._as_temperature_difference_unit(unit)
+
         subcls = self._get_dimensional_subclass(dim, type(self.m))
-        return cast("Quantity[DT_, MT]", subcls(self.m, self.u))
+        return cast("Quantity[DT_, MT]", subcls(self.m, unit))
 
     def unknown(self) -> Quantity[UnknownDimensionality, MT]:
         return self.asdim(UnknownDimensionality)
