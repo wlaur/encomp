@@ -306,6 +306,7 @@ class TestUsageExamples:
         # Describe properties
         desc = Fluid.describe("Z")
         assert "Compressibility" in desc
+        assert "Humidity Ratio" in HumidAir.describe("W")
 
         # Property synonyms
         desc_pcrit = Water.describe("PCRIT")

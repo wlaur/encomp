@@ -584,13 +584,13 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         - http://www.coolprop.org/fluid_properties/PurePseudoPure.html#list-of-fluids
         - http://www.coolprop.org/fluid_properties/Mixtures.html#binary-pairs
         - http://www.coolprop.org/fluid_properties/Incompressibles.html#the-different-fluids
-        - table-of-inputs-outputs-to-hapropssi
+        - http://www.coolprop.org/fluid_properties/HumidAir.html#table-of-inputs-outputs-to-hapropssi
         - http://www.coolprop.org/coolprop/HighLevelAPI.html
         - http://www.coolprop.org/fluid_properties/HumidAir.html
 
 
         The names ``Water`` and ``HEOS::Water``
-        uses the formulation defined by IAPWS-95.
+        use the formulation defined by IAPWS-95.
         Use the name ``IF97::Water`` to instead use the slightly faster
         (but less accurate) IAPWS-97 formulation.
         In most cases, the difference between IAPWS-95 and IAPWS-97 is negligible.
@@ -1652,7 +1652,7 @@ class HumidAir(CoolPropFluid[MT]):
         ("Vha",): ("m³/kg", "Mixture volume per unit humid air"),
         ("W", "Omega", "HumRat"): (
             "dimensionless",
-            "Humidity Rat mass water per mass dry air",
+            "Humidity Ratio mass water per mass dry air",
         ),
         ("Z",): ("dimensionless", "Compressibility factor"),
     }
