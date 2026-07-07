@@ -27,8 +27,6 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "python-dotenv",
-    "fire",
     "pint>=0.25.2",
     "pydantic>=2",
     "pydantic-settings>=2",
