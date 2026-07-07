@@ -1,11 +1,12 @@
 [project]
 name = "encomp"
-version = "1.5.4"
+version = "1.6.0"
 description = "General-purpose library for engineering calculations"
 authors = [{ name = "William Laurén", email = "lauren.william.a@gmail.com" }]
 requires-python = ">=3.13"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 keywords = [
     "engineering",
     "thermodynamics",
@@ -21,21 +22,19 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering",
     "Topic :: Scientific/Engineering :: Physics",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
 ]
 dependencies = [
-    "python-dotenv",
-    "fire",
-    "pint>=0.25.2",
-    "pydantic",
-    "pydantic-settings",
-    "typeguard",
+    "pint>=0.25.3",
+    "pydantic>=2",
+    "pydantic-settings>=2",
+    "typeguard>=4",
     "typing-extensions",
-    "asttokens",
-    "numpy",
+    "numpy>=2.1",
     # The bundled Rust plugin is loaded over polars' plugin ABI (polars-ffi, major 0),
     # which the host dispatches on by *major* version -- stable across py-polars minors,
     # so the plugin is NOT pinned per minor. We only require the version the shipped wheel

@@ -5,7 +5,6 @@ Uses CoolProp as backend.
 
 import hashlib
 import logging
-import warnings
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable, Mapping
@@ -21,6 +20,8 @@ import numpy as np
 import polars as pl
 
 from .coolprop import (
+    FLUID_INPUTS,
+    HUMID_AIR_INPUTS,
     AssumedPhase,
     Backend,
     CName,
@@ -71,10 +72,6 @@ _LOGGER = logging.getLogger(__name__)
 _cp: Any = _CoolProp
 PropsSI: Callable[..., float | Numpy1DArray] = _cp.PropsSI
 HAPropsSI: Callable[..., float | Numpy1DArray] = _cp.HAPropsSI
-
-if SETTINGS.ignore_coolprop_warnings:
-    warnings.filterwarnings("ignore", message="CoolProp could not calculate")
-
 
 # Strict Literals for CoolProp property names, single source of truth in the
 # encomp.coolprop plugin (fluid + humid-air namespaces). The fluid-name / composition /
@@ -358,7 +355,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         ("DIPOLE_MOMENT", "dipole_moment"): ("C*m", "Dipole moment"),
         ("GAS_CONSTANT", "gas_constant"): ("J/mol/K", "Molar gas constant"),
         ("GMOLAR_RESIDUAL", "Gmolar_residual"): (
-            "J/mol/K",
+            "J/mol",
             "Residual molar Gibbs energy",
         ),
         ("GMOLAR", "Gmolar"): ("J/mol", "Molar specific Gibbs energy"),
@@ -368,7 +365,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             "J/mol",
             "Molar specific Helmholtz energy",
         ),
-        ("HMOLAR_RESIDUAL", "Hmolar_residual"): ("J/mol/K", "Residual molar enthalpy"),
+        ("HMOLAR_RESIDUAL", "Hmolar_residual"): ("J/mol", "Residual molar enthalpy"),
         ("ISENTROPIC_EXPANSION_COEFFICIENT", "isentropic_expansion_coefficient"): (
             "dimensionless",
             "Isentropic expansion coefficient",
@@ -441,6 +438,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     }
 
     ALL_PROPERTIES: set[CProperty] = set(flatten(list(PROPERTY_MAP)))
+    STATE_INPUTS: ClassVar[frozenset[str]] = frozenset(FLUID_INPUTS)
     REPR_PROPERTIES: tuple[tuple[CProperty, str], ...] = (
         ("P", ".0f"),
         ("T", ".1f"),
@@ -448,17 +446,26 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         ("V", ".2g"),
     )
 
-    # preferred return units
-    # key is the first name in the tuple used in PROPERTY_MAP
+    # Preferred public return units. Values are evaluated in CoolProp's canonical
+    # units from PROPERTY_MAP first, then converted here by canonical property key.
     RETURN_UNITS: dict[CProperty, UnitString] = {
         "P": "kPa",
+        "PCRIT": "kPa",
+        "PMAX": "kPa",
+        "PMIN": "kPa",
+        "PTRIPLE": "kPa",
+        "P_REDUCING": "kPa",
         "T": "°C",
+        "TCRIT": "°C",
         "TMAX": "°C",
         "TMIN": "°C",
         "TTRIPLE": "°C",
         "T_FREEZE": "°C",
+        "T_REDUCING": "°C",
         "V": "cP",
         "H": "kJ/kg",
+        "U": "kJ/kg",
+        "S": "kJ/kg/K",
         "C": "kJ/kg/K",
     }
 
@@ -577,13 +584,13 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         - http://www.coolprop.org/fluid_properties/PurePseudoPure.html#list-of-fluids
         - http://www.coolprop.org/fluid_properties/Mixtures.html#binary-pairs
         - http://www.coolprop.org/fluid_properties/Incompressibles.html#the-different-fluids
-        - table-of-inputs-outputs-to-hapropssi
+        - http://www.coolprop.org/fluid_properties/HumidAir.html#table-of-inputs-outputs-to-hapropssi
         - http://www.coolprop.org/coolprop/HighLevelAPI.html
         - http://www.coolprop.org/fluid_properties/HumidAir.html
 
 
         The names ``Water`` and ``HEOS::Water``
-        uses the formulation defined by IAPWS-95.
+        use the formulation defined by IAPWS-95.
         Use the name ``IF97::Water`` to instead use the slightly faster
         (but less accurate) IAPWS-97 formulation.
         In most cases, the difference between IAPWS-95 and IAPWS-97 is negligible.
@@ -602,7 +609,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             Examples:
 
                 - ``INCOMP::MITSW[0.05]``: seawater with 5 mass-percent salt.
-                - ``INCOMP::MPG[0.5]``: 50 % ethylene glycol
+                - ``INCOMP::MPG[0.5]``: 50 % propylene glycol
                 - ``INCOMP::T66``: Therminol 66 (https://www.therminol.com/product/71093438)
 
         """
@@ -646,6 +653,16 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 f"Invalid CoolProp property name{'s' if len(invalid) > 1 else ''}: "
                 f"{', '.join(invalid)}\n"
                 f"Valid names:\n{', '.join(sorted(cls.ALL_PROPERTIES))}"
+            )
+
+        output_only = [key for key in kwargs if key not in cls.STATE_INPUTS]
+
+        if len(output_only):
+            raise ValueError(
+                f"Invalid CoolProp state input{'s' if len(output_only) > 1 else ''}: "
+                f"{', '.join(output_only)}\n"
+                "These properties are outputs only and cannot fix a state.\n"
+                f"Valid state inputs:\n{', '.join(sorted(cls.STATE_INPUTS))}"
             )
 
     def _build_points(
@@ -692,13 +709,18 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         return matches
 
+    def _warn_coolprop_nan(self, prop: CProperty, msg: str) -> None:
+        if not SETTINGS.ignore_coolprop_warnings:
+            _LOGGER.warning(f'CoolProp could not calculate "{prop}" for fluid "{self.name}", output is NaN: {msg}')
+
     def check_exception(self, prop: CProperty, e: ValueError) -> None:
         msg = str(e)
 
         # this error occurs in case the input values are outside
         # the allowable range for this property
         # in this case the return value will be NaN, no exception is raised
-        if "No outputs were able to be calculated" in msg:
+        if "No outputs were able to be calculated" in msg or "is outside the range of validity" in msg:
+            self._warn_coolprop_nan(prop, msg)
             return
 
         # if CoolProp has not implemented prop as output, return NaN
@@ -713,7 +735,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 f"Fluid '{self.name}' could not be initialized, ensure that the name is a valid CoolProp fluid name"
             ) from e
 
-        _LOGGER.warning(f'CoolProp could not calculate "{prop}" for fluid "{self.name}", output is NaN: {msg}')
+        self._warn_coolprop_nan(prop, msg)
 
     # ------------------------------------------------------------------ #
     # Low-level AbstractState path. Used whenever an assumed phase and/or a
@@ -1262,6 +1284,12 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         return qty_formatted
 
+    def _repr_properties(self) -> str:
+        try:
+            return ", ".join(f"{p}={self._get_repr(p, fmt)}" for p, fmt in self.REPR_PROPERTIES)
+        except Exception as e:
+            return f"invalid: {e}"
+
 
 class Fluid(CoolPropFluid[MT]):
     def __init__(
@@ -1530,12 +1558,7 @@ class Fluid(CoolPropFluid[MT]):
         return self.get("M").asdim(MolarMass)
 
     def __repr__(self) -> str:
-        props: list[str] = []
-
-        for p, fmt in self.REPR_PROPERTIES:
-            props.append(f"{p}={self._get_repr(p, fmt)}")
-
-        props_str = ", ".join(props)
+        props_str = self._repr_properties()
 
         s = f'<{self.__class__.__name__} "{self.name}", {props_str}>'
 
@@ -1547,7 +1570,7 @@ class Water(Fluid[MT]):
         ("P", ".0f"),
         ("T", ".1f"),
         ("D", ".1f"),
-        ("V", ".1f"),
+        ("V", ".2g"),
     )
 
     def __init__(self, **kwargs: Unpack[FluidState[MT]]) -> None:
@@ -1582,11 +1605,14 @@ class Water(Fluid[MT]):
         self.points = [self.point_1, self.point_2]
 
     def __repr__(self) -> str:
-        repr_properties = self.REPR_PROPERTIES
+        try:
+            phase = self.phase
+        except Exception as e:
+            return f"<{self.__class__.__name__}, invalid: {e}>"
 
-        props_str = ", ".join(f"{p}={self._get_repr(p, fmt)}" for p, fmt in repr_properties)
+        props_str = self._repr_properties()
 
-        s = f"<{self.__class__.__name__} ({self.phase}), {props_str}>"
+        s = f"<{self.__class__.__name__} ({phase}), {props_str}>"
 
         return s
 
@@ -1595,6 +1621,7 @@ class HumidAir(CoolPropFluid[MT]):
     BACKEND = {"backend": HAPropsSI}
     _append_name_to_cp_inputs = False
     _evaluate_invalid_separately = True
+    STATE_INPUTS: ClassVar[frozenset[str]] = frozenset(HUMID_AIR_INPUTS)
 
     # unit and description for properties in function HAPropsSI
     PROPERTY_MAP: dict[tuple[CProperty, ...], tuple[str, str]] = {
@@ -1625,7 +1652,7 @@ class HumidAir(CoolPropFluid[MT]):
         ("Vha",): ("m³/kg", "Mixture volume per unit humid air"),
         ("W", "Omega", "HumRat"): (
             "dimensionless",
-            "Humidity Rat mass water per mass dry air",
+            "Humidity Ratio mass water per mass dry air",
         ),
         ("Z",): ("dimensionless", "Compressibility factor"),
     }
@@ -1758,7 +1785,7 @@ class HumidAir(CoolPropFluid[MT]):
         return self.get("Vha").asdim(MixtureVolumePerHumidAir)
 
     def __repr__(self) -> str:
-        props_str = ", ".join(f"{p}={self._get_repr(p, fmt)}" for p, fmt in self.REPR_PROPERTIES)
+        props_str = self._repr_properties()
 
         s = f"<{self.__class__.__name__}, {props_str}>"
 

@@ -203,7 +203,7 @@ def get_sol_expr(
 
     Parameters
     ----------
-    eqns : sp.Equality | list[sp.Equality]
+    equations : sp.Equality | list[sp.Equality]
         List of equations or a single equation
     symbol : sp.Symbol
         Symbol to solve for (isolate)
@@ -289,7 +289,7 @@ def get_lambda_kwargs(
 
     Returns
     -------
-    dict[str | Quantity | np.ndarray]
+    dict[str, Quantity | np.ndarray | float]
         Mapping from identifier to value
     """
 
@@ -471,7 +471,8 @@ def evaluate(
     Returns
     -------
     Quantity | np.ndarray
-        Value of the expression, Quantity if ``units=True`` otherwise float
+        Value of the expression. Returns a ``Quantity`` if ``units=True``;
+        otherwise returns the numeric magnitude as ``float`` or ``np.ndarray``.
     """
 
     fcn = get_function(e, units=units)
@@ -671,7 +672,7 @@ class Symbol(sp.Symbol):
 
         .. code:: none
 
-            {prefix}^{prefix_sub}_{prefix_sup}{symbol}_{suffix_sub}^{suffix_sup}{suffix}
+            {prefix}^{prefix_sup}_{prefix_sub}{symbol}_{suffix_sub}^{suffix_sup}{suffix}
 
         ``symbol`` is the input symbol.
         The ``prefix`` and ``suffix`` parts are added without ``_`` or ``^``.
@@ -785,13 +786,13 @@ class Symbol(sp.Symbol):
 
     def _(self, x: str) -> Self:
         """
-        Add subscript ``x`.
+        Add subscript ``x``.
         """
         return self.append(x, where="sub")
 
     def __(self, x: str) -> Self:
         """
-        Add superscript ``x`.
+        Add superscript ``x``.
         """
         return self.append(x, where="sup")
 

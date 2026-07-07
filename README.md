@@ -24,13 +24,19 @@ Every physical quantity in `encomp` carries a magnitude, a unit, and a dimension
 
 The remaining modules (`encomp.gases`, `encomp.conversion`, `encomp.constants`, ...) implement process-engineering and thermodynamics calculations.
 
+## Versioning and stability
+
+`encomp` uses semantic versioning for documented public APIs. Public APIs are the documented modules and objects in the API reference; private helpers, tests, notebooks, generated docs, and Rust internals may change in any release. The top-level `encomp` package intentionally exposes only `__version__`; import library APIs from their submodules.
+
+`encomp.sympy` is legacy and soft-deprecated. It remains available for existing users, but new code should avoid depending on its `sympy.Symbol` monkey-patching and helper wrappers because the module is planned for removal in a future major release.
+
 ## Installation
 
 ```bash
 pip install encomp
 ```
 
-`encomp` ships as a single per-platform wheel that bundles the compiled Rust plugin and the CoolProp shared library, so there is nothing to build. Wheels are provided for Windows (x86_64), Linux (x86_64 and arm64) and macOS (Apple Silicon only -- Intel Macs would need a source build). For a development checkout, see [Tests](#tests).
+`encomp` ships as a single per-platform wheel that bundles the compiled Rust plugin and the CoolProp shared library, so supported platforms have nothing to build. Wheels are provided for Windows (x86_64), Linux (x86_64 and arm64), and macOS (Apple Silicon only). Unsupported platforms, including Intel Macs, need a build from the git repository; see [Tests](#tests).
 
 ## The `Quantity` class
 
@@ -227,7 +233,7 @@ from encomp.units import Quantity as Q
 Fluid("water", P=Q(25, "bar"), T=Q(550, "°C"))
 # <Fluid "water", P=2500 kPa, T=550.0 °C, D=6.7 kg/m³, V=0.031 cP>
 
-# note that the CoolProp property "Q" (vapor quality) has the same name as the class
+# note that the CoolProp property "Q" (vapor quality) has the same name as the alias for the Quantity class
 # the Water class has a slightly different string representation
 Water(Q=Q(0.5), T=Q(170, "degC"))
 # <Water (Two-phase), P=792 kPa, T=170.0 °C, D=8.2 kg/m³, V=nan cP>
@@ -314,6 +320,7 @@ Each `fluid(...)` / `humid_air(...)` is an independent plugin node, so selecting
 
 ## Symbolic math
 
+`encomp.sympy` is legacy and soft-deprecated; it is planned for removal in a future major release.
 To load additional methods for the `sympy.Symbol` class, import Sympy via the `encomp.sympy` module. The `_` / `__` methods add typeset sub- and superscripts, and quantities combine directly with symbols:
 
 ```python
@@ -328,23 +335,28 @@ n._("H_2O").__("out")  # n_{\text{H}_2\text{O}}^{\text{out}}, keeps the integer 
 
 x, y, z = sp.symbols("x, y, z")
 result_expr = (25 * x * y / z).subs({x: Q(235, "yard"), y: Q(2, "m²"), z: Q(0.4, "m³/kg")})
-Q.from_expr(result_expr)  # 26860.5 kg
+Q.from_expr(result_expr)  # ≈ 26860.5 kg
 ```
 
 For array magnitudes, convert the expression to a NumPy-aware function with `encomp.sympy.get_function`.
 
 ## Tests
 
-Install the development dependencies with `uv sync --all-extras --all-groups`, then run
+Development checkouts build the native CoolProp plugin locally. Install Rust, CMake, git, and a C++ compiler, then from the repository root run:
 
 ```bash
-pytest
+python scripts/build_libcoolprop.py
+uv sync --all-extras --all-groups
+uv run pytest
 ```
+
+See `encomp/coolprop/README.md` for the plugin build details.
 
 ## Settings
 
 The attributes of `encomp.settings.Settings` are overridden with a file named `.env` in the current working directory.
 Attribute names are prefixed with `ENCOMP_`.
+Settings are loaded when `encomp.settings` is imported; for runtime changes to quantity and unit rendering, use `encomp.units.set_quantity_format()`.
 
 ## Documentation
 

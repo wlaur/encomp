@@ -48,18 +48,36 @@ def test_convert_gas_volume() -> None:
     ret2 = convert_gas_volume(Q(1, "m3/s"), "S", (Q(2, "bar"), Q(25, "degC")))
     assert_type(ret2, Q[VolumeFlow, float])
 
+    with pytest.raises(ValueError, match=r"condition_1.*'N'.*'S'"):
+        convert_gas_volume(Q(1, "m3"), cast(Any, "n"), "N")
+
+    with pytest.raises(ValueError, match=r"condition_1.*'N'.*'S'"):
+        convert_gas_volume(Q(1, "m3"), cast(Any, "NS"), "N")
+
+    with pytest.raises(TypeError, match=r"condition_2.*pressure, temperature"):
+        convert_gas_volume(Q(1, "m3"), "N", cast(Any, (Q(1, "bar"),)))
+
+    with pytest.raises(TypeError, match=r"condition_2.*pressure, temperature"):
+        convert_gas_volume(Q(1, "m3"), "N", cast(Any, (Q(25, "degC"), Q(1, "bar"))))
+
+    with pytest.raises(TypeError, match="normal_volume_to_actual_volume"):
+        convert_gas_volume(cast(Any, Q(100.0, "Nm³")), "N", (Q(2, "bar"), Q(25, "degC")))
+
+    with pytest.raises(TypeError, match="normal_volume_to_actual_volume"):
+        convert_gas_volume(cast(Any, Q(100.0, "Nm³/h")), "N", (Q(2, "bar"), Q(25, "degC")))
+
 
 def test_ideal_gas_density() -> None:
-    # ideal_gas_density ties T/P/M to one magnitude TypeVar (its body does arithmetic
+    # ideal_gas_density ties P/T/M to one magnitude TypeVar (its body does arithmetic
     # across all three), so a mixed array/scalar call cannot be typed: the scalar P/M
     # args are cast (needed for both checkers), and pyrefly additionally cannot solve
     # the shared constrained TypeVar across multiple arguments at all
     assert_type(  # pyrefly: ignore[assert-type]
-        ideal_gas_density(Q(25, "degC"), Q(12, "bar"), Q(12, "g/mol")),  # pyrefly: ignore[bad-specialization]
+        ideal_gas_density(Q(12, "bar"), Q(25, "degC"), Q(12, "g/mol")),  # pyrefly: ignore[bad-specialization]
         Q[Density, float],
     )
 
-    ret = ideal_gas_density(Q([25, 26], "degC"), cast(Any, Q(12, "bar")), cast(Any, Q(12, "g/mol")))  # pyrefly: ignore[bad-argument-type, bad-specialization]
+    ret = ideal_gas_density(cast(Any, Q(12, "bar")), Q([25, 26], "degC"), cast(Any, Q(12, "g/mol")))  # pyrefly: ignore[bad-argument-type, bad-specialization]
     assert_type(ret, Q[Density, Numpy1DArray])  # pyrefly: ignore[assert-type]
 
 

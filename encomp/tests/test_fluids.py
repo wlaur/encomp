@@ -12,7 +12,17 @@ import pytest
 from encomp import coolprop as encomp_coolprop
 
 from .. import utypes as ut
-from ..fluids import CoolPropFluid, Fluid, FluidState, HumidAir, HumidAirState, Water, clear_expr_evaluation_cache
+from ..fluids import (
+    CoolPropFluid,
+    CProperty,
+    Fluid,
+    FluidState,
+    HumidAir,
+    HumidAirState,
+    Water,
+    clear_expr_evaluation_cache,
+)
+from ..settings import SETTINGS
 from ..units import Quantity as Q
 from ..utypes import DT, Density, SpecificEntropy
 
@@ -56,6 +66,9 @@ def test_Fluid() -> None:
     water = Fluid("water", P=Q(2, "bar"), T=Q(25, "°C"))
     assert water.T.u == Q.get_unit("degC")
     assert water.T.m == 25
+    water.HMOLAR_RESIDUAL.to("J/mol")
+    water.GMOLAR_RESIDUAL.to("J/mol")
+    water.SMOLAR_RESIDUAL.to("J/mol/K")
 
     HumidAir(T=Q(25, "degC"), P=Q(125, "kPa"), R=Q(0.2, "dimensionless"))
 
@@ -158,6 +171,75 @@ def test_Fluid() -> None:
         Fluid("water", T=Q([np.nan, np.nan], "°C"), P=Q([], "bar")).H
 
 
+def test_fluid_return_units_are_normalized() -> None:
+    water = Fluid("water", P=Q(2, "bar"), T=Q(25, "degC"))
+
+    expected_units: dict[CProperty, str] = {
+        "P": "kPa",
+        "PCRIT": "kPa",
+        "PMAX": "kPa",
+        "PMIN": "kPa",
+        "PTRIPLE": "kPa",
+        "P_REDUCING": "kPa",
+        "T": "degC",
+        "TCRIT": "degC",
+        "TMAX": "degC",
+        "TMIN": "degC",
+        "TTRIPLE": "degC",
+        "T_REDUCING": "degC",
+        "H": "kJ/kg",
+        "U": "kJ/kg",
+        "S": "kJ/kg/K",
+        "C": "kJ/kg/K",
+    }
+
+    for prop, unit in expected_units.items():
+        expected_unit = Q.get_unit(unit)
+        assert water.get(prop).u == expected_unit
+        assert getattr(water, prop).u == expected_unit
+
+    assert water.get("p_critical").u == Q.get_unit("kPa")
+
+
+def test_ignore_coolprop_warnings_gates_logger(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fluid = Fluid("water", P=Q(1.0, "bar"), T=Q(25.0, "degC"))
+
+    monkeypatch.setattr(SETTINGS, "ignore_coolprop_warnings", True)
+    with caplog.at_level(logging.WARNING, logger="encomp.fluids"):
+        fluid.check_exception("D", ValueError("unexpected backend failure"))
+
+    assert "CoolProp could not calculate" not in caplog.text
+
+    caplog.clear()
+    monkeypatch.setattr(SETTINGS, "ignore_coolprop_warnings", False)
+    with caplog.at_level(logging.WARNING, logger="encomp.fluids"):
+        fluid.check_exception("D", ValueError("unexpected backend failure"))
+
+    assert 'CoolProp could not calculate "D"' in caplog.text
+
+
+def test_humid_air_out_of_range_logs_warning(caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+    humid_air = HumidAir(T=Q(25, "degC"), P=Q(1, "bar"), R=Q(1.5, ""))
+
+    monkeypatch.setattr(SETTINGS, "ignore_coolprop_warnings", False)
+    with caplog.at_level(logging.WARNING, logger="encomp.fluids"):
+        value = humid_air.W
+
+    assert np.isnan(float(value.m))
+    assert 'CoolProp could not calculate "W" for fluid "Humid air"' in caplog.text
+    assert "outside the range of validity" in caplog.text
+
+    caplog.clear()
+    monkeypatch.setattr(SETTINGS, "ignore_coolprop_warnings", True)
+    with caplog.at_level(logging.WARNING, logger="encomp.fluids"):
+        value = humid_air.W
+
+    assert np.isnan(float(value.m))
+    assert "CoolProp could not calculate" not in caplog.text
+
+
 def test_incorrect_inputs() -> None:
     # NOTE: the name cannot be checked until CoolProp is actually
     # called, so the name is not validated in __init__
@@ -187,14 +269,32 @@ def test_incorrect_inputs() -> None:
     with pytest.raises(ValueError):
         Water(P=Q(cast(Any, p), "bar"))
 
+    with pytest.raises(ValueError, match=r"Invalid CoolProp state input.*VISCOSITY"):
+        Fluid("water", **cast(Any, {"T": Q(25, "degC"), "VISCOSITY": Q(1, "cP")}))
+
+    with pytest.raises(ValueError, match=r"Invalid CoolProp state input.*Visc"):
+        HumidAir(**cast(Any, {"T": Q(25, "degC"), "P": Q(1, "bar"), "Visc": Q(1, "cP")}))
+
     with pytest.raises(AttributeError):
         Fluid("water", P=Q(2, "bar"), T=Q(25, "°C")).THIS_ATTRIBUTE_DOES_NOT_EXIST
+
+
+def test_invalid_fluid_repr_does_not_raise() -> None:
+    invalid = Fluid(cast(Any, "Watr"), P=Q(2, "bar"), T=Q(25, "degC"))
+
+    text = repr(invalid)
+
+    assert text.startswith('<Fluid "Watr", invalid:')
+    assert "could not be initialized" in text
 
 
 def test_Water() -> None:
     water_single = Water(T=Q(25, "°C"), P=Q(5, "bar"))
 
     repr(water_single)
+    steam_repr = repr(Water(P=Q(1, "bar"), T=Q(110, "degC")))
+    assert "V=0.0 cP" not in steam_repr
+    assert "V=0.013 cP" in steam_repr
 
     water_multi = Water(T=Q(np.linspace(25, 50), "°C"), P=Q(5, "bar"))
 

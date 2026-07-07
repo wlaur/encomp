@@ -58,7 +58,8 @@ def test_get_args() -> None:
 def test_decorate() -> None:
     n = cast(Symbol, sp.Symbol("n"))
 
-    n.decorate(prefix=r"\sum", prefix_sub="2", suffix_sup="i", suffix=r"\ldots")
+    decorated = n.decorate(prefix=r"\sum", prefix_sub="2", suffix_sup="i", suffix=r"\ldots")
+    assert str(decorated) == r"{\sum}_{2}n^{i}{\ldots}"
     n._("H_2O").__("out")
 
 

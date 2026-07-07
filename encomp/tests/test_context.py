@@ -34,8 +34,8 @@ def test_quantity_format_aliases() -> None:
 def test_temp_dir() -> None:
     orig_cwd = Path.cwd()
 
-    with temp_dir():
-        temp = Path.cwd()
+    with temp_dir() as temp:
+        assert Path.cwd() == temp
 
         assert temp != orig_cwd
 

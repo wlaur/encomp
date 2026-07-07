@@ -1,6 +1,11 @@
 # pyright: reportConstantRedefinition=false
 
 import copy
+import inspect
+import pickle
+import subprocess
+import sys
+import warnings
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any, TypedDict, assert_never, assert_type, cast
@@ -8,8 +13,8 @@ from typing import Any, TypedDict, assert_never, assert_type, cast
 import numpy as np
 import polars as pl
 import pytest
-from pint.errors import OffsetUnitCalculusError
-from pydantic import BaseModel, ConfigDict
+from pint.errors import OffsetUnitCalculusError, UnitStrippedWarning
+from pydantic import BaseModel, ConfigDict, ValidationError
 from typeguard import typechecked
 
 from ..conversion import convert_volume_mass
@@ -25,6 +30,7 @@ from ..units import (
     Quantity,
     Unit,
     define_dimensionality,
+    set_quantity_format,
 )
 from ..units import Quantity as Q
 from ..utypes import (
@@ -34,6 +40,7 @@ from ..utypes import (
     Dimensionality,
     Dimensionless,
     EnergyPerMass,
+    HeatingValue,
     Length,
     LowerHeatingValue,
     Mass,
@@ -69,6 +76,21 @@ def _assert_type(val: object, typ: type) -> None:
 assert_type.__code__ = _assert_type.__code__
 
 
+def test_core_quantity_api_has_docstrings() -> None:
+    documented_api = (
+        Quantity,
+        Quantity.to,
+        Quantity.ito,
+        Quantity.check,
+        Quantity.asdim,
+        Quantity.astype,
+        set_quantity_format,
+    )
+
+    for obj in documented_api:
+        assert inspect.getdoc(obj)
+
+
 def test_registry() -> None:
     import pint
     from pint import application_registry
@@ -96,9 +118,18 @@ def test_define_dimensionality() -> None:
     with pytest.raises(DimensionalityRedefinitionError):
         define_dimensionality(CUSTOM_DIMENSIONS[0])
 
+    # if_exists="warn" logs and keeps the existing definition instead of raising
+    define_dimensionality(CUSTOM_DIMENSIONS[0], if_exists="warn")
+
+    with pytest.raises(ValueError, match="if_exists"):
+        define_dimensionality(CUSTOM_DIMENSIONS[0], if_exists=cast(Any, "invalid"))
+
 
 def test_format() -> None:
     assert "{:.2f~P}".format(Q(25, "delta_degC") / Q(255, "m3")) == "0.10 Δ°C/m³"
+    assert f"{Q(25, 'meter'):D}" == "25.0 meter"
+    assert f"{Q(25, 'meter'):.2fD}" == "25.00 meter"
+    assert f"{Q(25, 'meter'):.2f}" == "25.00 m"
 
 
 @contextmanager
@@ -108,6 +139,12 @@ def _reset_dimensionality_registry() -> Generator[None]:
     import importlib
 
     from .. import utypes
+
+    utypes_classes_orig = {
+        name: value
+        for name, value in vars(utypes).items()
+        if isinstance(value, type) and getattr(value, "__module__", None) == utypes.__name__
+    }
 
     # this does not completely reload the module,
     # since there are multiple references to encomp.utypes
@@ -134,6 +171,8 @@ def _reset_dimensionality_registry() -> Generator[None]:
         # will have issues with isinstance() and issubclass()
         cast(Any, Dimensionality)._registry = _registry_orig
         cast(Any, Dimensionality)._registry_reversed = _registry_reversed_orig
+        for name, value in utypes_classes_orig.items():
+            setattr(utypes, name, value)
 
         # clear existing mapping from dimensionality subclass name to Quantity subclass
         # this will be dynamically rebuilt
@@ -328,15 +367,19 @@ def test_dimensionality_type_hierarchy() -> None:
 
         s_arr = Q([25], "m")
         s_arr_first = s_arr[0]
+        s_arr_slice = s_arr[0:1]
 
         assert_type(s_arr, Q[Length, Numpy1DArray])
         assert_type(s_arr_first, Q[Length, float])
+        assert_type(s_arr_slice, Q[Length, Numpy1DArray])
 
         s_series = Q(pl.Series([25]), "m")
         s_series_first = s_series[0]
+        s_series_slice = s_series[0:1]
 
         assert_type(s_series, Q[Length, pl.Series])
         assert_type(s_series_first, Q[Length, float])
+        assert_type(s_series_slice, Q[Length, pl.Series])
 
         s_arr = Q([25], "m").asdim(EstimatedLength)
         s_arr_first = s_arr[0]
@@ -476,6 +519,35 @@ def test_hash_eq_consistency() -> None:
     with pytest.raises(TypeError, match="unhashable"):
         hash(Q(np.array([1.0, 2.0]), "m"))
 
+    # dimensionless quantities compare equal to plain numbers, so they must also
+    # hash like them: {0.5, Q(0.5, "")} is ONE element, and dict lookups with a
+    # plain-number key find the Quantity entry (and vice versa)
+    assert Q(0.5, "") == 0.5
+    assert hash(Q(0.5, "")) == hash(0.5)
+    assert len({0.5, Q(0.5, "")}) == 1
+    assert Q(50.0, "%") in {0.5: "half"}
+
+
+def test_magnitude_setter() -> None:
+    q = Q(1.0, "m")
+
+    # same-type replacement is validated like the constructor (int -> float)
+    q.m = cast(Any, 5)
+    assert isinstance(q.m, float)
+    assert q.m == 5.0
+
+    # switching the magnitude type in place would desync the instance from its
+    # Quantity[DT, MT] subclass -- refused, use .astype() / a new Quantity
+    with pytest.raises(TypeError, match="astype"):
+        q.m = cast(Any, [1.0, 2.0, 3.0])
+
+    qa = Q(np.array([1.0, 2.0]), "m")
+    qa.m = cast(Any, [3.0, 4.0])  # list -> ndarray via constructor validation
+    assert isinstance(qa.m, np.ndarray)
+
+    with pytest.raises(TypeError, match="astype"):
+        qa.m = cast(Any, 1.0)
+
 
 def test_Q() -> None:
     # test that Quantity objects can be constructed
@@ -545,6 +617,9 @@ def test_Q() -> None:
     assert isinstance(Q([3.4, 2], "meter").m, np.ndarray)
     assert isinstance(Q([2, 3.4], "meter").m, np.ndarray)
     assert isinstance(Q(np.array([2, 3.4]), "meter").m, np.ndarray)
+
+    with pytest.raises(TypeError, match="unit must be"):
+        Q(1.0, cast(Any, 5))
 
     Q(1, Q(2, "bar").u)
     Q(Q(2, "bar").to("kPa").m, "kPa")
@@ -619,6 +694,7 @@ def test_Q() -> None:
     # percent or %
     Q(1.124124e-3, "").to("%").to("percent")
     Q(1.124124e-3).to("%").to("percent")
+    assert Q(1.0, "mol%").u == Q(1.0, "mol percent").u
 
     # np.ndarray magnitudes equality check
     assert (Q([1, 2, 3], "kg") == Q([1000, 2000, 3000], "g")).all()
@@ -634,6 +710,16 @@ def test_Q() -> None:
     assert (Q(2, "bar") == Q(vals, "bar").to("kPa")).any()
 
     assert not (Q(5, "bar") == Q(vals, "bar").to("kPa")).any()
+
+
+def test_quantity_plus_minus_uses_uncertainties() -> None:
+    measured = cast(Any, Q(10, "m")).plus_minus(0.5)
+    magnitude = measured.m
+
+    assert magnitude.__class__.__module__.startswith("uncertainties.")
+    assert magnitude.nominal_value == 10.0
+    assert magnitude.std_dev == 0.5
+    assert measured.u == Q.get_unit("m")
 
 
 def test_custom_units() -> None:
@@ -719,11 +805,52 @@ def test_numpy_integration() -> None:
     assert isinstance_types(list(Q(np.linspace(0, 1), "degC")), list[Q[Temperature]])
 
 
+def test_units_import_does_not_install_warning_filter() -> None:
+    code = """
+import warnings
+from pint.errors import UnitStrippedWarning
+
+warnings.simplefilter("error", UnitStrippedWarning)
+import encomp.units  # noqa: F401
+
+bad_filters = [
+    filt for filt in warnings.filters
+    if filt[0] == "ignore" and filt[2] is UnitStrippedWarning
+]
+raise SystemExit(1 if bad_filters else 0)
+"""
+
+    completed = subprocess.run([sys.executable, "-c", code], check=False, capture_output=True, text=True)
+
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_unit_stripped_warning_suppression_is_scoped_to_quantity_array() -> None:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", UnitStrippedWarning)
+        np.asarray(Q(1.0, "m"))
+
+    assert not caught
+
+
 def test_check() -> None:
     assert Q(25, "kg").check(Mass)
+    assert Q(25, "m").check("[length]")
+    assert not Q(25, "kg").check("[length]")
 
     assert Q(25, "kg").check(Q(25, "g"))
     assert Q(25, "kg").check(Q([25, 25], "g"))
+
+    epm = Q(1.0, "kJ/kg").asdim(EnergyPerMass)
+    hv = Q(1.0, "kJ/kg").asdim(LowerHeatingValue)
+
+    assert hv.check("kJ/kg")
+    assert hv.check(Q(1.0, "J/kg"))
+    assert hv.check(EnergyPerMass)
+    assert hv.check(epm)
+
+    with pytest.raises(DimensionalityTypeError):
+        _ = cast(Any, hv) + epm
 
 
 def test_typechecked() -> None:
@@ -1178,6 +1305,22 @@ def test_copy() -> None:
     assert isinstance_types(copy.deepcopy(q), Q[Length])
 
 
+def test_pickle_preserves_dimensionality_type() -> None:
+    dt = Q(5.0, "delta_degC").to("K")
+    dt_roundtrip = pickle.loads(pickle.dumps(dt))
+
+    assert isinstance_types(dt_roundtrip, Q[TemperatureDifference])
+    assert dt_roundtrip.u == Unit("K")
+    assert dt_roundtrip == dt
+
+    hv = Q(25.0, "kJ/kg").asdim(HeatingValue)
+    hv_roundtrip = pickle.loads(pickle.dumps(hv))
+
+    assert isinstance_types(hv_roundtrip, Q[HeatingValue])
+    assert hv_roundtrip.u == Unit("kilojoule / kilogram")
+    assert hv_roundtrip == hv
+
+
 def test_pydantic_integration() -> None:
     class Model(BaseModel):
         # a can be any dimensionality
@@ -1196,7 +1339,7 @@ def test_pydantic_integration() -> None:
 
     Model(a=Q(25, "cSt").asdim(UnknownDimensionality), m=Q(25, "kg"), s=Q(25, "cm"))
 
-    with pytest.raises(ExpectedDimensionalityError):
+    with pytest.raises(ValidationError):
         Model(
             a=Q(25, "cSt").asdim(UnknownDimensionality),
             m=cast(Any, Q(25, "kg/day").asdim(MassFlow)),
@@ -1219,6 +1362,15 @@ def test_temperature_difference() -> None:
     T0 = Q(25, "K").asdim(TemperatureDifference).to("delta_degC")
     assert isinstance_types(T0, Q[TemperatureDifference])
     assert T0.m == approx(25.0)
+
+    td_offset = Q(20, "degC").asdim(TemperatureDifference)
+    assert isinstance_types(td_offset, Q[TemperatureDifference])
+    assert td_offset.u == Unit("delta_degC")
+    assert td_offset.to("K").m == approx(20.0)
+    assert (Q(30, "degC") + td_offset).m == approx(50.0)
+
+    with pytest.raises(DimensionalityTypeError, match="delta unit"):
+        Q[TemperatureDifference, float](5, "degC")
 
     T1 = Q(25, "degC")
     T2 = Q(35, "degC")
@@ -1333,6 +1485,27 @@ def test_to_preserves_temperature_dimensionality() -> None:
     # non-temperature -> delta unit stays a plain dimensionality error
     with pytest.raises(DimensionalityError):
         _ = Q(1.0, "m").to("delta_degC")
+
+
+def test_inplace_add_sub_checks_dimensionality() -> None:
+    epm = Q(1.0, "kJ/kg").asdim(EnergyPerMass)
+    hv = Q(2.0, "kJ/kg").asdim(LowerHeatingValue)
+
+    with pytest.raises(DimensionalityTypeError):
+        epm += hv
+
+    with pytest.raises(DimensionalityTypeError):
+        epm -= hv
+
+    td = Q(np.array([10.0]), "delta_degC")
+    td += Q(np.array([20.0]), "degC")
+    assert isinstance_types(td, Q[Temperature])
+    assert td.u == Unit("degC")
+    assert td.m == approx(np.array([30.0]))
+
+    td = Q(np.array([10.0]), "delta_degC")
+    with pytest.raises(DimensionalityTypeError):
+        td -= Q(np.array([20.0]), "degC")
 
 
 def test_temperature_add_sub_preserves_unit() -> None:
@@ -1451,8 +1624,8 @@ def test_temperature_unit_inputs() -> None:
         qty = Q(1, unit)
 
         assert isinstance_types(qty, Q[Temperature]) or isinstance_types(qty, Q[TemperatureDifference])
-        assert qty.check(Temperature) or qty.check(TemperatureDifference)
-        assert not (qty.check(Temperature) and qty.check(TemperatureDifference))
+        assert qty.check(Temperature)
+        assert qty.check(TemperatureDifference)
 
         # this will automatically be converted to delta_temperature per length,
         # even if the input is temperature (not delta_temperature)
@@ -1529,14 +1702,14 @@ def test_check_temperature_difference() -> None:
     assert Q(1, "degC").check(Q(12, "degC"))
     assert Q(1, "degC").check(Q(12, "degC").u)
 
-    assert not Q(1, "delta_degC").check(Q(12, "degC"))
-    assert not Q(1, "delta_degC").check(Q(12, "degC").u)
+    assert Q(1, "delta_degC").check(Q(12, "degC"))
+    assert Q(1, "delta_degC").check(Q(12, "degC").u)
 
     assert Q(1, "delta_degC").check(Q(12, "delta_degC"))
     assert Q(1, "delta_degC").check(Q(12, "delta_degC").u)
 
-    assert not Q(1, "delta_degC").check(Q(12, "degC"))
-    assert not Q(1, "delta_degC").check(Q(12, "degC").u)
+    with pytest.raises(DimensionalityTypeError):
+        _ = cast(Any, Q(1, "delta_degC")) - Q(12, "degC")
 
 
 def test_complex_units() -> None:

@@ -2,6 +2,12 @@
 
 This guide covers the main `encomp` modules: units, fluids, and symbolic math.
 
+## Versioning and stability
+
+`encomp` uses semantic versioning for documented public APIs. Public APIs are the documented modules and objects in the API reference; private helpers, tests, notebooks, generated docs, and Rust internals may change in any release. The top-level `encomp` package intentionally exposes only `__version__`; import library APIs from their submodules.
+
+`encomp.sympy` is legacy and soft-deprecated. It remains available for existing users, but new code should avoid depending on its `sympy.Symbol` monkey-patching and helper wrappers because the module is planned for removal in a future major release.
+
 ## The Quantity class
 
 A {py:class}`encomp.units.Quantity` stores the *magnitude*, *unit* and *dimensionality* of a physical quantity.
@@ -33,6 +39,8 @@ pressure = Q(1, "bar")
 # pressure_kpa is a new Quantity instance
 pressure_kpa = pressure.to("kPa")
 ```
+
+For measured values with uncertainty, `Quantity.plus_minus()` keeps the unit and stores an `uncertainties` magnitude.
 
 The unit definition file (`encomp/defs/units.txt`) lists the accepted unit names.
 It is based on the `defaults_en.txt` file from `pint`, with minor modifications.
@@ -116,10 +124,13 @@ The typed constructor does not *validate* the dimensionality at runtime -- it *r
 `Q[Length](1, "kg")` returns a `Quantity[Mass, float]`: the dimensionality of the created
 object is always determined by the unit. This is by design (`pint` constructs arithmetic
 results through `self.__class__(...)` with new dimensionalities, so the constructor must
-accept them). Dimensionality *enforcement* happens in the static type checker and at the
+accept them). Use {py:meth}`encomp.units.Quantity.check` for physical-dimensionality
+checks. Semantic dimensionality enforcement happens in the static type checker and at
 explicit runtime boundaries: `isinstance()` / {py:func}`encomp.misc.isinstance_types`,
-{py:meth}`encomp.units.Quantity.check`, `typeguard.typechecked` functions and Pydantic
-model fields (which raise `ExpectedDimensionalityError` for a mismatch).
+`typeguard.typechecked` functions, Pydantic model fields (which raise
+`pydantic.ValidationError`), and direct `.asdim()` calls (which raise
+`ExpectedDimensionalityError` for a mismatch). Arithmetic also checks semantic
+compatibility and may reject two quantities with the same physical dimensions.
 :::
 
 Check the dimensionality of a quantity with `isinstance()` or {py:meth}`encomp.units.Quantity.check`.
@@ -128,7 +139,7 @@ For parameterized types like `list[Quantity[Pressure]]`, use {py:func}`encomp.mi
 ```python
 from encomp.misc import isinstance_types
 from encomp.units import Quantity as Q
-from encomp.utypes import Length, Pressure
+from encomp.utypes import Length, Pressure, Temperature, TemperatureDifference
 
 pressure = Q(1, "bar")
 
@@ -137,6 +148,11 @@ pressure.check("meter")  # False
 
 pressure.check(Pressure)  # True
 pressure.check("psi")  # True
+pressure.check("[pressure]")  # True
+
+# check() compares physical dimensions only, not semantic sibling classes
+Q(1, "degC").check(TemperatureDifference)  # True
+Q(1, "delta_degC").check(Temperature)  # True
 
 # alternative using isinstance()
 # (parameterized isinstance is a runtime-only feature, hence the suppressions)
@@ -207,9 +223,9 @@ from encomp.units import Quantity as Q
 
 type(Q([1, 2, 3], "kg").m)  # numpy.ndarray
 
-arr = np.linspace(0, 1)
+arr = np.linspace(0, 1, 6)
 Q(arr, "bar")
-# [0.0 0.0204 0.0408 ... 0.9795 1.0] bar
+# [0.0 0.2 0.4 0.6000000000000001 0.8 1.0] bar
 ```
 
 ### Quantities with expression magnitudes
@@ -243,6 +259,10 @@ from encomp.units import Quantity as Q
 Temperature units need extra care.
 A temperature *difference* in a degree scale is written with the prefix `delta_` (only needed when defining the difference directly).
 Temperature ({py:class}`encomp.utypes.Temperature`) and temperature difference ({py:class}`encomp.utypes.TemperatureDifference`) are distinct dimensionalities and deliberately not interchangeable: a difference cannot silently be used as an absolute temperature.
+Do not use {py:meth}`encomp.units.Quantity.check` to distinguish these two cases:
+it compares physical dimensions, and both classes share `[temperature]`. Use
+`isinstance()` / {py:func}`encomp.misc.isinstance_types`, typed function boundaries,
+Pydantic fields, or arithmetic/conversion errors for the semantic distinction.
 
 ```python
 from pint.errors import OffsetUnitCalculusError
@@ -260,7 +280,7 @@ except DimensionalityTypeError as e:
     # Cannot convert Δ°C (dimensionality TemperatureDifference)
     # to °C (dimensionality Temperature)
 
-Q(25, "degC") - Q(36, "degC")  # -11 Δ°C
+Q(25, "degC") - Q(36, "degC")  # -11.0 Δ°C
 
 # multiplying with an offset unit (°C) is ambiguous
 try:
@@ -271,12 +291,12 @@ except OffsetUnitCalculusError as e:
 # this is not the result we're after, °C is offset by 273.15 K
 Q(4.19, "kJ/kg/K") * Q(5, "°C").to("K")  # 1165.4485 kJ/kg
 
-Q(4.19, "kJ/kg/K") * Q(5, "delta_degC")  # 20.95 Δ°C·kJ/K/kg
-Q(4.19, "kJ/kg/K") * Q(5, "K")  # 20.95 kJ/kg
+Q(4.19, "kJ/kg/K") * Q(5, "delta_degC")  # ≈ 20.95 Δ°C·kJ/K/kg
+Q(4.19, "kJ/kg/K") * Q(5, "K")  # ≈ 20.95 kJ/kg
 
 # the units Δ°C and K don't cancel out automatically,
 # use the to() method to convert to the desired output unit
-(Q(4.19, "kJ/kg/K") * Q(5, "delta_degC")).to("kJ/kg")  # 20.95 kJ/kg
+(Q(4.19, "kJ/kg/K") * Q(5, "delta_degC")).to("kJ/kg")  # ≈ 20.95 kJ/kg
 ```
 
 :::{note}
@@ -341,7 +361,7 @@ except DimensionalityError as e:
     print(f"Error: {e}")
 
 try:
-    Q[Pressure](25, "m")
+    Q(25, "m").asdim(Pressure)
 except DimensionalityError as e:
     print(f"Error: {e}")
 
@@ -356,7 +376,7 @@ except DimensionalityError as e:
 {py:class}`encomp.units.Quantity` (optionally with a dimensionality type parameter) works as a Pydantic field type.
 
 ```python
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
 
 from encomp.units import Quantity as Q
 from encomp.utypes import Dimensionless, Length, Mass
@@ -375,21 +395,25 @@ class Model(BaseModel):
     r: Q[Dimensionless, float] = Q(0.5)
 
 
-# if the input dimensionality does not match the type hint,
-# encomp.units.ExpectedDimensionalityError is raised
 model = Model(a=Q(25, "cSt"), m=Q(25, "kg"), s=Q(25, "cm"))
 
 # Quantity fields round-trip through JSON, including the magnitude type
 Model.model_validate_json(model.model_dump_json())
+
+adapter = TypeAdapter(Q[Mass, float])
+adapter.validate_json(adapter.dump_json(Q(2.0, "kg")))
+
+try:
+    Model(a=Q(25, "cSt"), m=Q(25, "m"), s=Q(25, "cm"))
+except ValidationError as e:
+    print(e.errors()[0]["type"])  # quantity_dimensionality
 ```
 
 :::{note}
-`ExpectedDimensionalityError` inherits from `pint.errors.DimensionalityError` (a
-`TypeError` subclass), so Pydantic does **not** wrap it into a `pydantic.ValidationError`:
-a dimensionality mismatch propagates directly out of model construction, and a model with
-several invalid fields fails on the first one instead of collecting all errors. Catch
-`ExpectedDimensionalityError` (or `pint.errors.DimensionalityError`) around model
-construction rather than `pydantic.ValidationError`.
+Pydantic model and {py:class}`pydantic.TypeAdapter` validation wraps quantity input errors
+in {py:class}`pydantic.ValidationError`, using error types such as
+`quantity_dimensionality`, `quantity_magnitude_type`, and `quantity_validation`. This lets
+Pydantic attach field locations and collect multiple invalid fields in one exception.
 :::
 
 ## The Fluid class
@@ -399,8 +423,9 @@ The abstract base class {py:class}`encomp.fluids.CoolPropFluid` implements the C
 All inputs and outputs are {py:class}`encomp.units.Quantity` instances.
 
 Pass the CoolProp fluid name and the fixed points (for example *P, T*) to the constructor.
-Not every combination of input parameters can fix the state: with an invalid input pair, every property evaluates to `nan` and CoolProp emits a warning, but no exception is raised.
-An invalid property *name*, on the other hand, raises `ValueError`.
+Not every combination of input values can fix the state: with an invalid state, derived properties evaluate to `nan` and `encomp.fluids` logs a warning, but no exception is raised.
+Set `ENCOMP_IGNORE_COOLPROP_WARNINGS=true` (the default) to suppress these calculation warnings, or `false` to emit them through Python logging.
+An invalid property *name* or output-only state input, on the other hand, raises `ValueError`.
 
 ```python
 from typing import Any
@@ -411,15 +436,14 @@ from encomp.units import Quantity as Q
 Fluid("toluene", T=Q(25, "°C"), P=Q(2, "bar"))
 # <Fluid "toluene", P=200 kPa, T=25.0 °C, D=862.3 kg/m³, V=0.55 cP>
 
-# PCRIT cannot be used to fix the state: it is an output-only property, not one
-# of the FluidState inputs, so a static type checker rejects it at the call
-# site (the inputs are routed through Any here to show the runtime behavior)
-state: Any = {"D": Q(500, "kg/m³"), "PCRIT": Q(1, "bar")}
+# Q is vapor quality. The property name is a valid state input, but values
+# outside 0-1 cannot fix a physical state.
+state: Any = {"P": Q(1, "bar"), "Q": Q(2)}
 
 invalid_inputs = Fluid("water", **state)
-# <Fluid "water", P=nan kPa, T=nan °C, D=nan kg/m³, V=nan cP>
+# <Fluid "water", P=100 kPa, T=nan °C, D=nan kg/m³, V=nan cP>
 
-# every property is nan (CoolProp emits a warning about the invalid input pair)
+# derived properties are nan (and may log a warning about the invalid state)
 temperature = invalid_inputs.T  # nan °C
 ```
 
@@ -557,6 +581,8 @@ phase_names = Water.PHASES
 #  3.0: 'Supercritical liquid',
 #  2.0: 'Supercritical gas',
 #  1.0: 'Supercritical fluid',
+#  4.0: 'Critical point',
+#  7.0: 'Unknown',
 #  8.0: 'Not imposed'}
 
 # when one input is constant (float, int, single element array),
@@ -608,6 +634,7 @@ The API mirrors {py:class}`encomp.fluids.Fluid`: any CoolProp input pair is supp
 
 ## Sympy functionality
 
+`encomp.sympy` is legacy and soft-deprecated; it is planned for removal in a future major release.
 To load additional methods for the `sympy.Symbol` class, import Sympy via the {py:mod}`encomp.sympy` module.
 
 ### Typesetting
@@ -666,7 +693,7 @@ expr = 25 * x * y / z
 result_expr = expr.subs({x: Q(235, "yard"), y: Q(2, "m²"), z: Q(0.4, "m³/kg")})
 
 result_qty = Q.from_expr(result_expr)
-# 26860.5 kg
+# ≈ 26860.5 kg
 ```
 
 {py:meth}`encomp.units.Quantity.from_expr` raises `KeyError` if residual symbols in the expression are not SI units.
@@ -698,7 +725,7 @@ result_qty = fcn(
         z: Q(0.4, "m³/kg"),
     }
 )
-# [26860.5 95726.25] kg
+# ≈ [26860.5 95726.25] kg
 ```
 
 Quantity objects combine directly with Sympy symbols; the units are converted to their symbolic representations by the `Quantity._sympy_` method (the hook `sympy.sympify` looks for).
