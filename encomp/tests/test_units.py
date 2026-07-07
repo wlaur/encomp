@@ -1,6 +1,7 @@
 # pyright: reportConstantRedefinition=false
 
 import copy
+import inspect
 import pickle
 import subprocess
 import sys
@@ -29,6 +30,7 @@ from ..units import (
     Quantity,
     Unit,
     define_dimensionality,
+    set_quantity_format,
 )
 from ..units import Quantity as Q
 from ..utypes import (
@@ -72,6 +74,21 @@ def _assert_type(val: object, typ: type) -> None:
 
 
 assert_type.__code__ = _assert_type.__code__
+
+
+def test_core_quantity_api_has_docstrings() -> None:
+    documented_api = (
+        Quantity,
+        Quantity.to,
+        Quantity.ito,
+        Quantity.check,
+        Quantity.asdim,
+        Quantity.astype,
+        set_quantity_format,
+    )
+
+    for obj in documented_api:
+        assert inspect.getdoc(obj)
 
 
 def test_registry() -> None:

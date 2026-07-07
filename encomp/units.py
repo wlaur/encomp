@@ -251,6 +251,12 @@ UNIT_REGISTRY.formatter.default_format = SETTINGS.default_unit_format
 
 
 def set_quantity_format(fmt: str = "compact") -> None:
+    """Set the process-wide default format used when rendering quantities and units.
+
+    ``"compact"``/``"normal"`` select Pint's compact pretty format (``"~P"``);
+    ``"siunitx"`` selects the LaTeX siunitx format (``"~Lx"``). Any value in
+    :attr:`Quantity.FORMATTING_SPECS` can also be passed directly.
+    """
     fmt_aliases = {"compact": "~P", "normal": "~P", "siunitx": "~Lx"}
 
     if fmt in fmt_aliases:
@@ -348,6 +354,20 @@ class Quantity(
     Generic[DT, MT],
     metaclass=_QuantityMeta,
 ):
+    """Physical quantity with a magnitude, unit, dimensionality, and magnitude type.
+
+    ``Quantity`` extends Pint's quantity type with runtime dimensionality subclasses
+    (for example ``Quantity[Pressure, float]``) and magnitude containers such as
+    ``float``, numpy arrays, Polars ``Series`` and Polars ``Expr``. Construction
+    validates that the unit's physical dimensions match the requested dimensionality
+    subclass.
+
+    Absolute temperature and temperature-difference quantities deliberately remain
+    separate dimensionality types even though both have Pint dimension
+    ``[temperature]``. Use :meth:`to` for unit conversion and :meth:`asdim` only for
+    explicit semantic reinterpretation between compatible dimensionality classes.
+    """
+
     # constants
     NORMAL_M3_VARIANTS = ("nm³", "Nm³", "nm3", "Nm3", "nm**3", "Nm**3", "nm^3", "Nm^3")
     TEMPERATURE_DIFFERENCE_UCS = (Unit("delta_degC")._units, Unit("delta_degF")._units)
@@ -1189,6 +1209,15 @@ class Quantity(
     def to(
         self, unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | Quantity[DT, Any]
     ) -> Quantity[DT, MT]:
+        """Return a new quantity converted to ``unit``.
+
+        The returned quantity keeps this quantity's dimensionality type. The target
+        may be a unit string, :class:`Unit`, :class:`UnitsContainer`, dict accepted by
+        Pint, or another quantity whose unit should be used. Absolute temperatures
+        cannot be converted to delta temperature units, and temperature differences
+        cannot be converted to offset temperature units; use :meth:`asdim` when that
+        reinterpretation is intentional.
+        """
         valid_unit = self._to_unit(unit)
         self._check_temperature_compatibility(valid_unit)
 
@@ -1212,6 +1241,13 @@ class Quantity(
         return converted
 
     def ito(self, unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number]) -> None:
+        """Convert this quantity in place to ``unit``.
+
+        Like :meth:`to`, this preserves the dimensionality type and applies the same
+        temperature-vs-temperature-difference checks. Integer numpy magnitudes may be
+        copied to floating point before conversion so unit scaling cannot fail due to
+        integer casting rules.
+        """
         # NOTE: this method cannot convert the dimensionality type
         # (temperature <-> temperature difference is refused by
         # _check_temperature_compatibility in both directions)
@@ -1730,6 +1766,15 @@ class Quantity(
         return getattr(self.m, "ndim", 0)
 
     def asdim(self, other: type[DT_] | Quantity[DT_, MT]) -> Quantity[DT_, MT]:
+        """Return this quantity reinterpreted as another dimensionality class.
+
+        ``other`` can be a dimensionality class or another quantity whose
+        dimensionality should be used. This is not a unit conversion: it succeeds only
+        when the source and target have the same physical dimensions. For
+        ``TemperatureDifference``, offset temperature units such as ``degC`` are
+        rewritten to their delta units (``delta_degC``) so the result cannot be
+        confused with an absolute temperature.
+        """
         if isinstance(other, Quantity):
             dim = other._dimensionality_type
             assert dim is not None
@@ -1779,6 +1824,13 @@ class Quantity(
     def astype(self, magnitude_type: type[MT_] | MagnitudeTypeName) -> Quantity[DT, MT_]: ...
 
     def astype(self, magnitude_type: type[Any] | MagnitudeTypeName) -> Quantity[Any, Any]:
+        """Return this quantity with its magnitude converted to another container type.
+
+        ``magnitude_type`` accepts ``float``, numpy array, Polars ``Series``,
+        Polars ``Expr``, or the corresponding string names. Units and dimensionality
+        are unchanged. Converting to ``pl.Expr`` is only defined for scalar quantities,
+        which become a literal expression.
+        """
         if isinstance(magnitude_type, str):
             magnitude_type = self._get_magnitude_type_from_name(magnitude_type)
 
