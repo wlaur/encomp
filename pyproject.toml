@@ -5,7 +5,8 @@ description = "General-purpose library for engineering calculations"
 authors = [{ name = "William Laurén", email = "lauren.william.a@gmail.com" }]
 requires-python = ">=3.13"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 keywords = [
     "engineering",
     "thermodynamics",
