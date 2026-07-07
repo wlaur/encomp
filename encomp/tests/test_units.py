@@ -657,6 +657,7 @@ def test_Q() -> None:
     # percent or %
     Q(1.124124e-3, "").to("%").to("percent")
     Q(1.124124e-3).to("%").to("percent")
+    assert Q(1.0, "mol%").u == Q(1.0, "mol percent").u
 
     # np.ndarray magnitudes equality check
     assert (Q([1, 2, 3], "kg") == Q([1000, 2000, 3000], "g")).all()

@@ -1263,7 +1263,6 @@ class Quantity(
             "℉": "degF",
             # Δ% should maybe be its own unit, but this is not implemented for now
             "Δ%": "%",
-            "%": "percent",
             "‰": "permille",
             "r/min": "rpm",
             # ΔK does not really make sense, it's not an offset scale
@@ -1274,6 +1273,9 @@ class Quantity(
         for old, new in replacements.items():
             if old in unit:
                 unit = unit.replace(old, new)
+
+        unit = re.sub(r"(?<=[A-Za-z0-9_])%", " percent", unit)
+        unit = unit.replace("%", "percent")
 
         # add ** between letters and numbers if they
         # are right next to each other and if the number is at a word boundary
