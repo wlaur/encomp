@@ -140,6 +140,12 @@ def _reset_dimensionality_registry() -> Generator[None]:
 
     from .. import utypes
 
+    utypes_classes_orig = {
+        name: value
+        for name, value in vars(utypes).items()
+        if isinstance(value, type) and getattr(value, "__module__", None) == utypes.__name__
+    }
+
     # this does not completely reload the module,
     # since there are multiple references to encomp.utypes
     utypes_reloaded = importlib.reload(utypes)
@@ -165,6 +171,8 @@ def _reset_dimensionality_registry() -> Generator[None]:
         # will have issues with isinstance() and issubclass()
         cast(Any, Dimensionality)._registry = _registry_orig
         cast(Any, Dimensionality)._registry_reversed = _registry_reversed_orig
+        for name, value in utypes_classes_orig.items():
+            setattr(utypes, name, value)
 
         # clear existing mapping from dimensionality subclass name to Quantity subclass
         # this will be dynamically rebuilt
