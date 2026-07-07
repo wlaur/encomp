@@ -30,7 +30,10 @@ Checks per block:
   A subprocess (not in-process ``exec``) is required for the ``typeguard`` examples --
   ``@typechecked`` instruments by re-reading the module source, which does not exist for
   exec'd strings -- and the temporary cwd lets blocks create scratch files (e.g. the
-  ``.env`` example) without touching the repo.
+  ``.env`` example) without touching the repo. Native ``encomp.coolprop`` plugin
+  examples are also linted and type-checked here, but their execution is skipped when
+  the compiled extension is not present in this source-only environment; wheel CI runs
+  the plugin self-check and the full test suite against the built wheels.
 
 There is deliberately no opt-out: a snippet that cannot run as written (for example one
 that demonstrates an exception) shows the failure with ``try: ... except SomeError:``
@@ -48,6 +51,7 @@ import re
 import shutil
 import subprocess
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
@@ -92,6 +96,13 @@ _SKIP_DIRS = {
     "temp",
 }
 _SKIP_FILES = {"REVIEW.md"}
+_COOLPROP_PLUGIN_MARKERS = (
+    "from encomp import coolprop",
+    "from encomp.coolprop import",
+    "import encomp.coolprop",
+    "cp.fluid(",
+    "cp.humid_air(",
+)
 
 
 def _doc_files(root: Path) -> list[Path]:
@@ -114,6 +125,20 @@ def _blocks() -> list[tuple[str, str]]:
             line = text[: m.start()].count("\n") + 1
             cases.append((f"{md.relative_to(ROOT)}:{line}", code))
     return cases
+
+
+def _requires_coolprop_plugin(code: str) -> bool:
+    return any(marker in code for marker in _COOLPROP_PLUGIN_MARKERS)
+
+
+@lru_cache(maxsize=1)
+def _coolprop_plugin_available() -> bool:
+    try:
+        from encomp import coolprop as cp
+    except Exception:
+        return False
+
+    return cp.self_check()
 
 
 _CASES = _blocks()
@@ -160,6 +185,9 @@ def test_doc_block_typechecks(code: str, tmp_path: Path) -> None:
 @pytest.mark.parametrize("code", _CODES, ids=_IDS)
 def test_doc_block_runs(code: str, tmp_path: Path) -> None:
     assert ROOT is not None  # narrowed by the module-level skipif
+    if _requires_coolprop_plugin(code) and not _coolprop_plugin_available():
+        pytest.skip("compiled encomp.coolprop plugin is not available")
+
     block = tmp_path / "block.py"
     block.write_text(code)
     env = {
