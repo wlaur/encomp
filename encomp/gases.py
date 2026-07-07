@@ -172,6 +172,12 @@ def convert_gas_volume(
         Volume or volume flow :math:`V_2` at condition 2, in the units of ``V1``
     """
 
+    if isinstance_types(V1, Quantity[NormalVolume, Any]) or isinstance_types(V1, Quantity[NormalVolumeFlow, Any]):
+        raise TypeError(
+            "convert_gas_volume() only accepts actual Volume or VolumeFlow inputs; "
+            "use normal_volume_to_actual_volume() for NormalVolume or NormalVolumeFlow inputs"
+        )
+
     P1, T1 = _resolve_gas_condition(condition_1, "condition_1")
     P2, T2 = _resolve_gas_condition(condition_2, "condition_2")
 

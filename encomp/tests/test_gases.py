@@ -60,6 +60,12 @@ def test_convert_gas_volume() -> None:
     with pytest.raises(TypeError, match=r"condition_2.*pressure, temperature"):
         convert_gas_volume(Q(1, "m3"), "N", cast(Any, (Q(25, "degC"), Q(1, "bar"))))
 
+    with pytest.raises(TypeError, match="normal_volume_to_actual_volume"):
+        convert_gas_volume(cast(Any, Q(100.0, "Nm³")), "N", (Q(2, "bar"), Q(25, "degC")))
+
+    with pytest.raises(TypeError, match="normal_volume_to_actual_volume"):
+        convert_gas_volume(cast(Any, Q(100.0, "Nm³/h")), "N", (Q(2, "bar"), Q(25, "degC")))
+
 
 def test_ideal_gas_density() -> None:
     # ideal_gas_density ties T/P/M to one magnitude TypeVar (its body does arithmetic
