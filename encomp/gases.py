@@ -35,9 +35,47 @@ from .utypes import (
 
 R = CONSTANTS.R
 
+type GasCondition = tuple[Quantity[Pressure, Any], Quantity[Temperature, Any]]
+type GasConditionInput = GasCondition | Literal["N", "S"]
+
+_N_S_CONDITIONS: dict[Literal["N", "S"], GasCondition] = {
+    "N": (
+        CONSTANTS.normal_conditions_pressure,
+        CONSTANTS.normal_conditions_temperature,
+    ),
+    "S": (
+        CONSTANTS.standard_conditions_pressure,
+        CONSTANTS.standard_conditions_temperature,
+    ),
+}
+
 # multiplying/dividing by this converts between the actual-volume and normal-volume
 # dimensionalities without changing the magnitude (Nm³ = normal * m³)
 _NORMAL = Quantity(1.0, "normal")
+
+
+def _resolve_gas_condition(condition: object, name: str) -> GasCondition:
+    if isinstance(condition, str):
+        if condition in _N_S_CONDITIONS:
+            return _N_S_CONDITIONS[condition]
+
+        raise ValueError(f"{name} must be 'N', 'S', or a (pressure, temperature) tuple, got {condition!r}")
+
+    if not isinstance(condition, tuple):
+        raise TypeError(f"{name} must be 'N', 'S', or a (pressure, temperature) tuple, got {condition!r}")
+
+    condition_tuple = cast("tuple[object, ...]", condition)
+    if len(condition_tuple) != 2:
+        raise TypeError(f"{name} must be 'N', 'S', or a (pressure, temperature) tuple, got {condition!r}")
+
+    P, T = condition_tuple
+
+    if not isinstance_types(P, Quantity[Pressure, Any]) or not isinstance_types(T, Quantity[Temperature, Any]):
+        raise TypeError(
+            f"{name} must be 'N', 'S', or a (pressure, temperature) tuple, got ({type(P).__name__}, {type(T).__name__})"
+        )
+
+    return P, T
 
 
 def ideal_gas_density(
@@ -83,8 +121,8 @@ def ideal_gas_density(
 @overload
 def convert_gas_volume(
     V1: Quantity[Volume, MT],
-    condition_1: (tuple[Quantity[Pressure, Any], Quantity[Temperature, Any]] | Literal["N", "S"]) = "N",
-    condition_2: (tuple[Quantity[Pressure, Any], Quantity[Temperature, Any]] | Literal["N", "S"]) = "N",
+    condition_1: GasConditionInput = "N",
+    condition_2: GasConditionInput = "N",
     fluid_name: str = "Air",
 ) -> Quantity[Volume, MT]: ...
 
@@ -92,16 +130,16 @@ def convert_gas_volume(
 @overload
 def convert_gas_volume(
     V1: Quantity[VolumeFlow, MT],
-    condition_1: (tuple[Quantity[Pressure, Any], Quantity[Temperature, Any]] | Literal["N", "S"]) = "N",
-    condition_2: (tuple[Quantity[Pressure, Any], Quantity[Temperature, Any]] | Literal["N", "S"]) = "N",
+    condition_1: GasConditionInput = "N",
+    condition_2: GasConditionInput = "N",
     fluid_name: str = "Air",
 ) -> Quantity[VolumeFlow, MT]: ...
 
 
 def convert_gas_volume(
     V1: Quantity[Volume, Any] | Quantity[VolumeFlow, Any],
-    condition_1: (tuple[Quantity[Pressure, Any], Quantity[Temperature, Any]] | Literal["N", "S"]) = "N",
-    condition_2: (tuple[Quantity[Pressure, Any], Quantity[Temperature, Any]] | Literal["N", "S"]) = "N",
+    condition_1: GasConditionInput = "N",
+    condition_2: GasConditionInput = "N",
     fluid_name: str = "Air",
 ) -> Quantity[Volume, Any] | Quantity[VolumeFlow, Any]:
     """
@@ -134,25 +172,8 @@ def convert_gas_volume(
         Volume or volume flow :math:`V_2` at condition 2, in the units of ``V1``
     """
 
-    n_s_conditions = {
-        "N": (
-            CONSTANTS.normal_conditions_pressure,
-            CONSTANTS.normal_conditions_temperature,
-        ),
-        "S": (
-            CONSTANTS.standard_conditions_pressure,
-            CONSTANTS.standard_conditions_temperature,
-        ),
-    }
-
-    if condition_1 in ("N", "S"):
-        condition_1 = n_s_conditions[condition_1]
-
-    if condition_2 in ("N", "S"):
-        condition_2 = n_s_conditions[condition_2]
-
-    P1, T1 = condition_1
-    P2, T2 = condition_2
+    P1, T1 = _resolve_gas_condition(condition_1, "condition_1")
+    P2, T2 = _resolve_gas_condition(condition_2, "condition_2")
 
     Z1 = Fluid(fluid_name, T=T1, P=P1).Z
     Z2 = Fluid(fluid_name, T=T2, P=P2).Z

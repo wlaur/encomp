@@ -48,6 +48,18 @@ def test_convert_gas_volume() -> None:
     ret2 = convert_gas_volume(Q(1, "m3/s"), "S", (Q(2, "bar"), Q(25, "degC")))
     assert_type(ret2, Q[VolumeFlow, float])
 
+    with pytest.raises(ValueError, match=r"condition_1.*'N'.*'S'"):
+        convert_gas_volume(Q(1, "m3"), cast(Any, "n"), "N")
+
+    with pytest.raises(ValueError, match=r"condition_1.*'N'.*'S'"):
+        convert_gas_volume(Q(1, "m3"), cast(Any, "NS"), "N")
+
+    with pytest.raises(TypeError, match=r"condition_2.*pressure, temperature"):
+        convert_gas_volume(Q(1, "m3"), "N", cast(Any, (Q(1, "bar"),)))
+
+    with pytest.raises(TypeError, match=r"condition_2.*pressure, temperature"):
+        convert_gas_volume(Q(1, "m3"), "N", cast(Any, (Q(25, "degC"), Q(1, "bar"))))
+
 
 def test_ideal_gas_density() -> None:
     # ideal_gas_density ties T/P/M to one magnitude TypeVar (its body does arithmetic
