@@ -36,7 +36,7 @@ from typing import (
 import numpy as np
 import pint
 import polars as pl
-from pint.errors import DimensionalityError
+from pint.errors import DimensionalityError, UnitStrippedWarning
 from pint.facets.measurement.objects import MeasurementQuantity
 from pint.facets.nonmultiplicative.objects import NonMultiplicativeQuantity
 from pint.facets.numpy.quantity import NumpyQuantity
@@ -156,13 +156,6 @@ MagnitudeTypeName = Literal[
     "pl.Series",
     "pl.Expr",
 ]
-
-if SETTINGS.ignore_ndarray_unit_stripped_warning:
-    warnings.filterwarnings(
-        "ignore",
-        message="The unit of the quantity is stripped when downcasting to ndarray.",
-    )
-
 
 # custom errors inherit from pint.errors.DimensionalityError
 # (which inherits from TypeError)
@@ -456,6 +449,15 @@ class Quantity(
                 f"Quantity with {self._get_magnitude_type_name(type(self._magnitude))} magnitude "
                 'cannot be converted to a numpy array, use the ".m" property to access the polars object'
             )
+
+        if SETTINGS.ignore_ndarray_unit_stripped_warning:
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    category=UnitStrippedWarning,
+                    message="The unit of the quantity is stripped when downcasting to ndarray.",
+                )
+                return self._pint_super.__array__(t)
 
         return self._pint_super.__array__(t)
 

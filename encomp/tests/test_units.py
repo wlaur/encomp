@@ -2,6 +2,9 @@
 
 import copy
 import pickle
+import subprocess
+import sys
+import warnings
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any, TypedDict, assert_never, assert_type, cast
@@ -9,7 +12,7 @@ from typing import Any, TypedDict, assert_never, assert_type, cast
 import numpy as np
 import polars as pl
 import pytest
-from pint.errors import OffsetUnitCalculusError
+from pint.errors import OffsetUnitCalculusError, UnitStrippedWarning
 from pydantic import BaseModel, ConfigDict, ValidationError
 from typeguard import typechecked
 
@@ -765,6 +768,34 @@ def test_numpy_integration() -> None:
     assert comp.all()
 
     assert isinstance_types(list(Q(np.linspace(0, 1), "degC")), list[Q[Temperature]])
+
+
+def test_units_import_does_not_install_warning_filter() -> None:
+    code = """
+import warnings
+from pint.errors import UnitStrippedWarning
+
+warnings.simplefilter("error", UnitStrippedWarning)
+import encomp.units  # noqa: F401
+
+bad_filters = [
+    filt for filt in warnings.filters
+    if filt[0] == "ignore" and filt[2] is UnitStrippedWarning
+]
+raise SystemExit(1 if bad_filters else 0)
+"""
+
+    completed = subprocess.run([sys.executable, "-c", code], check=False, capture_output=True, text=True)
+
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_unit_stripped_warning_suppression_is_scoped_to_quantity_array() -> None:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", UnitStrippedWarning)
+        np.asarray(Q(1.0, "m"))
+
+    assert not caught
 
 
 def test_check() -> None:
