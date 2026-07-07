@@ -328,7 +328,7 @@ n._("H_2O").__("out")  # n_{\text{H}_2\text{O}}^{\text{out}}, keeps the integer 
 
 x, y, z = sp.symbols("x, y, z")
 result_expr = (25 * x * y / z).subs({x: Q(235, "yard"), y: Q(2, "m²"), z: Q(0.4, "m³/kg")})
-Q.from_expr(result_expr)  # 26860.5 kg
+Q.from_expr(result_expr)  # ≈ 26860.5 kg
 ```
 
 For array magnitudes, convert the expression to a NumPy-aware function with `encomp.sympy.get_function`.

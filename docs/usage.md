@@ -274,7 +274,7 @@ except DimensionalityTypeError as e:
     # Cannot convert Δ°C (dimensionality TemperatureDifference)
     # to °C (dimensionality Temperature)
 
-Q(25, "degC") - Q(36, "degC")  # -11 Δ°C
+Q(25, "degC") - Q(36, "degC")  # -11.0 Δ°C
 
 # multiplying with an offset unit (°C) is ambiguous
 try:
@@ -285,12 +285,12 @@ except OffsetUnitCalculusError as e:
 # this is not the result we're after, °C is offset by 273.15 K
 Q(4.19, "kJ/kg/K") * Q(5, "°C").to("K")  # 1165.4485 kJ/kg
 
-Q(4.19, "kJ/kg/K") * Q(5, "delta_degC")  # 20.95 Δ°C·kJ/K/kg
-Q(4.19, "kJ/kg/K") * Q(5, "K")  # 20.95 kJ/kg
+Q(4.19, "kJ/kg/K") * Q(5, "delta_degC")  # ≈ 20.95 Δ°C·kJ/K/kg
+Q(4.19, "kJ/kg/K") * Q(5, "K")  # ≈ 20.95 kJ/kg
 
 # the units Δ°C and K don't cancel out automatically,
 # use the to() method to convert to the desired output unit
-(Q(4.19, "kJ/kg/K") * Q(5, "delta_degC")).to("kJ/kg")  # 20.95 kJ/kg
+(Q(4.19, "kJ/kg/K") * Q(5, "delta_degC")).to("kJ/kg")  # ≈ 20.95 kJ/kg
 ```
 
 :::{note}
@@ -686,7 +686,7 @@ expr = 25 * x * y / z
 result_expr = expr.subs({x: Q(235, "yard"), y: Q(2, "m²"), z: Q(0.4, "m³/kg")})
 
 result_qty = Q.from_expr(result_expr)
-# 26860.5 kg
+# ≈ 26860.5 kg
 ```
 
 {py:meth}`encomp.units.Quantity.from_expr` raises `KeyError` if residual symbols in the expression are not SI units.
@@ -718,7 +718,7 @@ result_qty = fcn(
         z: Q(0.4, "m³/kg"),
     }
 )
-# [26860.5 95726.25] kg
+# ≈ [26860.5 95726.25] kg
 ```
 
 Quantity objects combine directly with Sympy symbols; the units are converted to their symbolic representations by the `Quantity._sympy_` method (the hook `sympy.sympify` looks for).
