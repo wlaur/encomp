@@ -398,6 +398,12 @@ class Quantity(
         # equal may still hash differently -- an inherent limit of tolerant equality, the same
         # way hash(0.1 + 0.2) != hash(0.3); exact equality (the common case) is now consistent.
         root = self.to_root_units()
+
+        # __eq__ also answers True against plain numbers (Q(0.5, "") == 0.5), so a
+        # dimensionless quantity must hash like its root-unit magnitude (as pint does)
+        if root.dimensionless:
+            return hash(root.m)
+
         return hash((root.m, root.u))
 
     def __getattr__(self, item: str) -> Any:  # noqa: ANN401

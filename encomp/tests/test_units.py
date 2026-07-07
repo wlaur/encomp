@@ -482,6 +482,14 @@ def test_hash_eq_consistency() -> None:
     with pytest.raises(TypeError, match="unhashable"):
         hash(Q(np.array([1.0, 2.0]), "m"))
 
+    # dimensionless quantities compare equal to plain numbers, so they must also
+    # hash like them: {0.5, Q(0.5, "")} is ONE element, and dict lookups with a
+    # plain-number key find the Quantity entry (and vice versa)
+    assert Q(0.5, "") == 0.5
+    assert hash(Q(0.5, "")) == hash(0.5)
+    assert len({0.5, Q(0.5, "")}) == 1
+    assert Q(50.0, "%") in {0.5: "half"}
+
 
 def test_Q() -> None:
     # test that Quantity objects can be constructed
