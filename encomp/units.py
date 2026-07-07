@@ -1811,6 +1811,9 @@ class Quantity(
 
         return self._call_subclass(ret.m, ret.u)
 
+    def __iadd__(self, other: Any) -> Any:  # noqa: ANN401
+        return cast("Quantity[Any, Any]", cast(Any, self).__add__(other))
+
     @overload
     def __radd__(self: Quantity[Dimensionless, MT], other: float) -> Quantity[Dimensionless, MT]: ...
     @overload
@@ -1869,6 +1872,9 @@ class Quantity(
             return subcls(ret.m, ret.u)
 
         return self._call_subclass(ret.m, ret.u)
+
+    def __isub__(self, other: Any) -> Any:  # noqa: ANN401
+        return cast("Quantity[Any, Any]", cast(Any, self).__sub__(other))
 
     @overload
     def __rsub__(self: Quantity[Dimensionless, MT], other: float) -> Quantity[Dimensionless, MT]: ...

@@ -1390,6 +1390,27 @@ def test_to_preserves_temperature_dimensionality() -> None:
         _ = Q(1.0, "m").to("delta_degC")
 
 
+def test_inplace_add_sub_checks_dimensionality() -> None:
+    epm = Q(1.0, "kJ/kg").asdim(EnergyPerMass)
+    hv = Q(2.0, "kJ/kg").asdim(LowerHeatingValue)
+
+    with pytest.raises(DimensionalityTypeError):
+        epm += hv
+
+    with pytest.raises(DimensionalityTypeError):
+        epm -= hv
+
+    td = Q(np.array([10.0]), "delta_degC")
+    td += Q(np.array([20.0]), "degC")
+    assert isinstance_types(td, Q[Temperature])
+    assert td.u == Unit("degC")
+    assert td.m == approx(np.array([30.0]))
+
+    td = Q(np.array([10.0]), "delta_degC")
+    with pytest.raises(DimensionalityTypeError):
+        td -= Q(np.array([20.0]), "degC")
+
+
 def test_temperature_add_sub_preserves_unit() -> None:
     # T ± ΔT keeps the temperature operand's original unit (the value is the
     # same absolute temperature either way; only the display unit differs)
