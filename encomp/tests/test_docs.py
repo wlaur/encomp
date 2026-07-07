@@ -102,6 +102,7 @@ _COOLPROP_PLUGIN_MARKERS = (
     "import encomp.coolprop",
     "cp.fluid(",
     "cp.humid_air(",
+    "Q(pl.col(",
 )
 
 
