@@ -2018,9 +2018,17 @@ class Quantity(
             raise DimensionalityComparisonError(f"Cannot compare {self} with {other}") from e
 
         try:
-            return getattr(self._pint_super, op)(other)
+            ret = getattr(self._pint_super, op)(other)
         except (ValueError, DimensionalityError) as e:
             raise DimensionalityComparisonError(str(e)) from e
+
+        if op in ("__ge__", "__le__"):
+            equal = cast(Any, self).__eq__(other)
+            ret = ret | equal
+            if isinstance(ret, np.bool):
+                return bool(cast(Any, ret))
+
+        return cast("bool | Numpy1DBoolArray | pl.Series | pl.Expr", ret)
 
     @overload
     def __gt__(self: Quantity[Dimensionless, float], other: float) -> bool: ...

@@ -84,3 +84,10 @@ def test_comparisons() -> None:
     assert_type(Q(pl.col.asd, "kg") < Q(pl.col.asd, "g"), pl.Expr)
     assert_type(Q(pl.col.asd, "kg") == Q(pl.col.asd, "g"), pl.Expr)
     assert_type(Q(pl.col.asd, "kg") != Q(pl.col.asd, "g"), pl.Expr)
+
+    near_high = Q(1.0 + 5e-10, "m")
+    near_low = Q(1.0, "m")
+    assert near_high == near_low
+    assert near_high > near_low
+    assert near_high <= near_low
+    assert near_low >= near_high
