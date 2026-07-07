@@ -34,6 +34,8 @@ pressure = Q(1, "bar")
 pressure_kpa = pressure.to("kPa")
 ```
 
+For measured values with uncertainty, `Quantity.plus_minus()` keeps the unit and stores an `uncertainties` magnitude.
+
 The unit definition file (`encomp/defs/units.txt`) lists the accepted unit names.
 It is based on the `defaults_en.txt` file from `pint`, with minor modifications.
 

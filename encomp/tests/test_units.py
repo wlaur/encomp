@@ -704,6 +704,16 @@ def test_Q() -> None:
     assert not (Q(5, "bar") == Q(vals, "bar").to("kPa")).any()
 
 
+def test_quantity_plus_minus_uses_uncertainties() -> None:
+    measured = cast(Any, Q(10, "m")).plus_minus(0.5)
+    magnitude = measured.m
+
+    assert magnitude.__class__.__module__.startswith("uncertainties.")
+    assert magnitude.nominal_value == 10.0
+    assert magnitude.std_dev == 0.5
+    assert measured.u == Q.get_unit("m")
+
+
 def test_custom_units() -> None:
     assert_type(Q(1, "kilogram"), Q[UnknownDimensionality, float])
     assert Q(1, "kg") == Q(1, "kilogram")
