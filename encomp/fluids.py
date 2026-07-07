@@ -1271,6 +1271,12 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         return qty_formatted
 
+    def _repr_properties(self) -> str:
+        try:
+            return ", ".join(f"{p}={self._get_repr(p, fmt)}" for p, fmt in self.REPR_PROPERTIES)
+        except Exception as e:
+            return f"invalid: {e}"
+
 
 class Fluid(CoolPropFluid[MT]):
     def __init__(
@@ -1539,12 +1545,7 @@ class Fluid(CoolPropFluid[MT]):
         return self.get("M").asdim(MolarMass)
 
     def __repr__(self) -> str:
-        props: list[str] = []
-
-        for p, fmt in self.REPR_PROPERTIES:
-            props.append(f"{p}={self._get_repr(p, fmt)}")
-
-        props_str = ", ".join(props)
+        props_str = self._repr_properties()
 
         s = f'<{self.__class__.__name__} "{self.name}", {props_str}>'
 
@@ -1591,11 +1592,14 @@ class Water(Fluid[MT]):
         self.points = [self.point_1, self.point_2]
 
     def __repr__(self) -> str:
-        repr_properties = self.REPR_PROPERTIES
+        try:
+            phase = self.phase
+        except Exception as e:
+            return f"<{self.__class__.__name__}, invalid: {e}>"
 
-        props_str = ", ".join(f"{p}={self._get_repr(p, fmt)}" for p, fmt in repr_properties)
+        props_str = self._repr_properties()
 
-        s = f"<{self.__class__.__name__} ({self.phase}), {props_str}>"
+        s = f"<{self.__class__.__name__} ({phase}), {props_str}>"
 
         return s
 
@@ -1768,7 +1772,7 @@ class HumidAir(CoolPropFluid[MT]):
         return self.get("Vha").asdim(MixtureVolumePerHumidAir)
 
     def __repr__(self) -> str:
-        props_str = ", ".join(f"{p}={self._get_repr(p, fmt)}" for p, fmt in self.REPR_PROPERTIES)
+        props_str = self._repr_properties()
 
         s = f"<{self.__class__.__name__}, {props_str}>"
 

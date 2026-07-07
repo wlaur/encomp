@@ -220,6 +220,15 @@ def test_incorrect_inputs() -> None:
         Fluid("water", P=Q(2, "bar"), T=Q(25, "°C")).THIS_ATTRIBUTE_DOES_NOT_EXIST
 
 
+def test_invalid_fluid_repr_does_not_raise() -> None:
+    invalid = Fluid(cast(Any, "Watr"), P=Q(2, "bar"), T=Q(25, "degC"))
+
+    text = repr(invalid)
+
+    assert text.startswith('<Fluid "Watr", invalid:')
+    assert "could not be initialized" in text
+
+
 def test_Water() -> None:
     water_single = Water(T=Q(25, "°C"), P=Q(5, "bar"))
 
