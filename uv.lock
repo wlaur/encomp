@@ -545,7 +545,7 @@ requires-dist = [
     { name = "asttokens" },
     { name = "coolprop", specifier = ">=8.0.0,<9" },
     { name = "numpy", specifier = ">=2.1" },
-    { name = "pint", specifier = ">=0.25.2" },
+    { name = "pint", specifier = ">=0.25.3" },
     { name = "polars", specifier = ">=1.42" },
     { name = "pydantic", specifier = ">=2" },
     { name = "pydantic-settings", specifier = ">=2" },
