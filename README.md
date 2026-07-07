@@ -30,7 +30,7 @@ The remaining modules (`encomp.gases`, `encomp.conversion`, `encomp.constants`, 
 pip install encomp
 ```
 
-`encomp` ships as a single per-platform wheel that bundles the compiled Rust plugin and the CoolProp shared library, so there is nothing to build. Wheels are provided for Windows (x86_64), Linux (x86_64 and arm64) and macOS (Apple Silicon only -- Intel Macs would need a source build). For a development checkout, see [Tests](#tests).
+`encomp` ships as a single per-platform wheel that bundles the compiled Rust plugin and the CoolProp shared library, so supported platforms have nothing to build. Wheels are provided for Windows (x86_64), Linux (x86_64 and arm64), and macOS (Apple Silicon only). Unsupported platforms, including Intel Macs, need a build from the git repository; see [Tests](#tests).
 
 ## The `Quantity` class
 
