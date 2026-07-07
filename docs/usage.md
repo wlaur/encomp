@@ -355,7 +355,7 @@ except DimensionalityError as e:
     print(f"Error: {e}")
 
 try:
-    Q[Pressure](25, "m")
+    Q(25, "m").asdim(Pressure)
 except DimensionalityError as e:
     print(f"Error: {e}")
 
@@ -417,9 +417,9 @@ The abstract base class {py:class}`encomp.fluids.CoolPropFluid` implements the C
 All inputs and outputs are {py:class}`encomp.units.Quantity` instances.
 
 Pass the CoolProp fluid name and the fixed points (for example *P, T*) to the constructor.
-Not every combination of input parameters can fix the state: with an invalid input pair, every property evaluates to `nan` and `encomp.fluids` logs a warning, but no exception is raised.
+Not every combination of input values can fix the state: with an invalid state, derived properties evaluate to `nan` and `encomp.fluids` logs a warning, but no exception is raised.
 Set `ENCOMP_IGNORE_COOLPROP_WARNINGS=true` (the default) to suppress these calculation warnings, or `false` to emit them through Python logging.
-An invalid property *name*, on the other hand, raises `ValueError`.
+An invalid property *name* or output-only state input, on the other hand, raises `ValueError`.
 
 ```python
 from typing import Any
@@ -430,15 +430,14 @@ from encomp.units import Quantity as Q
 Fluid("toluene", T=Q(25, "°C"), P=Q(2, "bar"))
 # <Fluid "toluene", P=200 kPa, T=25.0 °C, D=862.3 kg/m³, V=0.55 cP>
 
-# PCRIT cannot be used to fix the state: it is an output-only property, not one
-# of the FluidState inputs, so a static type checker rejects it at the call
-# site (the inputs are routed through Any here to show the runtime behavior)
-state: Any = {"D": Q(500, "kg/m³"), "PCRIT": Q(1, "bar")}
+# Q is vapor quality. The property name is a valid state input, but values
+# outside 0-1 cannot fix a physical state.
+state: Any = {"P": Q(1, "bar"), "Q": Q(2)}
 
 invalid_inputs = Fluid("water", **state)
-# <Fluid "water", P=nan kPa, T=nan °C, D=nan kg/m³, V=nan cP>
+# <Fluid "water", P=100 kPa, T=nan °C, D=nan kg/m³, V=nan cP>
 
-# every property is nan (and may log a warning about the invalid input pair)
+# derived properties are nan (and may log a warning about the invalid state)
 temperature = invalid_inputs.T  # nan °C
 ```
 
