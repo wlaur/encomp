@@ -86,8 +86,7 @@ jobs:
       - uses: actions/download-artifact@v8.0.1
         with:
           path: wheelhouse
-          pattern: wheels-*
-          merge-multiple: true
+          name: wheels-${{ matrix.os }}
       - name: Install the prebuilt wheel + run the full suite
         shell: bash
         run: |
