@@ -337,15 +337,19 @@ def test_dimensionality_type_hierarchy() -> None:
 
         s_arr = Q([25], "m")
         s_arr_first = s_arr[0]
+        s_arr_slice = s_arr[0:1]
 
         assert_type(s_arr, Q[Length, Numpy1DArray])
         assert_type(s_arr_first, Q[Length, float])
+        assert_type(s_arr_slice, Q[Length, Numpy1DArray])
 
         s_series = Q(pl.Series([25]), "m")
         s_series_first = s_series[0]
+        s_series_slice = s_series[0:1]
 
         assert_type(s_series, Q[Length, pl.Series])
         assert_type(s_series_first, Q[Length, float])
+        assert_type(s_series_slice, Q[Length, pl.Series])
 
         s_arr = Q([25], "m").asdim(EstimatedLength)
         s_arr_first = s_arr[0]

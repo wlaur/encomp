@@ -2867,14 +2867,19 @@ class Quantity(
     @overload
     def __getitem__(self: Quantity[DT, pl.Series], index: int) -> Quantity[DT, float]: ...  # pyrefly: ignore[bad-override]
     @overload
+    def __getitem__(self: Quantity[DT, pl.Series], index: slice) -> Quantity[DT, pl.Series]: ...
+    @overload
     def __getitem__(self: Quantity[DT, Numpy1DArray], index: int) -> Quantity[DT, float]: ...
-    def __getitem__(self, index: int) -> Quantity[Any, Any]:
-        ret = cast("Quantity[DT, float]", self._pint_super.__getitem__(index))
+    @overload
+    def __getitem__(self: Quantity[DT, Numpy1DArray], index: slice) -> Quantity[DT, Numpy1DArray]: ...
+    def __getitem__(self, index: int | slice) -> Quantity[Any, Any]:
+        ret = cast("Quantity[DT, Any]", self._pint_super.__getitem__(index))
 
-        subcls = self._get_dimensional_subclass(self.dt, type(ret.m))
+        magnitude_type = cast("type[Any]", type(ret.m))
+        subcls = self._get_dimensional_subclass(self.dt, self._get_magnitude_type_safe(magnitude_type))
         instance = cast(Any, subcls)(ret.m, ret.u)
 
-        return cast("Quantity[DT, float]", instance)
+        return cast("Quantity[Any, Any]", instance)
 
 
 # register the Quantity and Unit implementations on the registry, so every object
