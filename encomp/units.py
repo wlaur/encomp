@@ -739,6 +739,11 @@ class Quantity(
             return cast("MT", float(val))
         else:
             arr = np.array(val)
+            if len(arr.shape) == 0:
+                raise TypeError(
+                    "magnitude must be a numeric scalar, sympy atom, Polars object, "
+                    f"or 1-dimensional sequence of real numbers; got {type(val).__name__}"
+                )
             if len(arr.shape) != 1:
                 raise ValueError(f"Only 1-dimensional sequences can be used as magnitude, got shape {arr.shape}")
             return cast("MT", Quantity._cast_array_float(arr))
