@@ -119,7 +119,8 @@ results through `self.__class__(...)` with new dimensionalities, so the construc
 accept them). Use {py:meth}`encomp.units.Quantity.check` for physical-dimensionality
 checks. Semantic dimensionality enforcement happens in the static type checker and at
 explicit runtime boundaries: `isinstance()` / {py:func}`encomp.misc.isinstance_types`,
-`typeguard.typechecked` functions and Pydantic model fields (which raise
+`typeguard.typechecked` functions, Pydantic model fields (which raise
+`pydantic.ValidationError`), and direct `.asdim()` calls (which raise
 `ExpectedDimensionalityError` for a mismatch). Arithmetic also checks semantic
 compatibility and may reject two quantities with the same physical dimensions.
 :::
@@ -367,7 +368,7 @@ except DimensionalityError as e:
 {py:class}`encomp.units.Quantity` (optionally with a dimensionality type parameter) works as a Pydantic field type.
 
 ```python
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
 
 from encomp.units import Quantity as Q
 from encomp.utypes import Dimensionless, Length, Mass
@@ -386,21 +387,25 @@ class Model(BaseModel):
     r: Q[Dimensionless, float] = Q(0.5)
 
 
-# if the input dimensionality does not match the type hint,
-# encomp.units.ExpectedDimensionalityError is raised
 model = Model(a=Q(25, "cSt"), m=Q(25, "kg"), s=Q(25, "cm"))
 
 # Quantity fields round-trip through JSON, including the magnitude type
 Model.model_validate_json(model.model_dump_json())
+
+adapter = TypeAdapter(Q[Mass, float])
+adapter.validate_json(adapter.dump_json(Q(2.0, "kg")))
+
+try:
+    Model(a=Q(25, "cSt"), m=Q(25, "m"), s=Q(25, "cm"))
+except ValidationError as e:
+    print(e.errors()[0]["type"])  # quantity_dimensionality
 ```
 
 :::{note}
-`ExpectedDimensionalityError` inherits from `pint.errors.DimensionalityError` (a
-`TypeError` subclass), so Pydantic does **not** wrap it into a `pydantic.ValidationError`:
-a dimensionality mismatch propagates directly out of model construction, and a model with
-several invalid fields fails on the first one instead of collecting all errors. Catch
-`ExpectedDimensionalityError` (or `pint.errors.DimensionalityError`) around model
-construction rather than `pydantic.ValidationError`.
+Pydantic model and {py:class}`pydantic.TypeAdapter` validation wraps quantity input errors
+in {py:class}`pydantic.ValidationError`, using error types such as
+`quantity_dimensionality`, `quantity_magnitude_type`, and `quantity_validation`. This lets
+Pydantic attach field locations and collect multiple invalid fields in one exception.
 :::
 
 ## The Fluid class

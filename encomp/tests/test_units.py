@@ -9,7 +9,7 @@ import numpy as np
 import polars as pl
 import pytest
 from pint.errors import OffsetUnitCalculusError
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
 from typeguard import typechecked
 
 from ..conversion import convert_volume_mass
@@ -1255,7 +1255,7 @@ def test_pydantic_integration() -> None:
 
     Model(a=Q(25, "cSt").asdim(UnknownDimensionality), m=Q(25, "kg"), s=Q(25, "cm"))
 
-    with pytest.raises(ExpectedDimensionalityError):
+    with pytest.raises(ValidationError):
         Model(
             a=Q(25, "cSt").asdim(UnknownDimensionality),
             m=cast(Any, Q(25, "kg/day").asdim(MassFlow)),

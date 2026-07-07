@@ -275,9 +275,7 @@ class TestUsageExamples:
 
     def test_pydantic_integration(self) -> None:
         """Test Pydantic integration"""
-        from pydantic import BaseModel
-
-        from ..units import ExpectedDimensionalityError
+        from pydantic import BaseModel, ValidationError
 
         class Model(BaseModel):
             a: Q[Any, Any]
@@ -291,8 +289,8 @@ class TestUsageExamples:
         assert isinstance_types(model.m, Q[Mass])
         assert isinstance_types(model.s, Q[Length])
 
-        # Invalid dimensionality raises ExpectedDimensionalityError
-        with pytest.raises(ExpectedDimensionalityError):
+        # Invalid dimensionality raises a Pydantic validation error
+        with pytest.raises(ValidationError):
             Model(a=Q(25, "kg"), m=cast(Any, Q(25, "m")), s=Q(25, "cm"))
 
     def test_fluid_search_describe(self) -> None:

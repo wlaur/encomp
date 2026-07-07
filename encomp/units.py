@@ -46,7 +46,7 @@ from pint.registry import LazyRegistry, UnitRegistry
 from pint.util import UnitsContainer
 from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
 from pydantic.json_schema import JsonSchemaValue
-from pydantic_core import core_schema
+from pydantic_core import PydanticCustomError, core_schema
 
 from .settings import PINT_FORMATTING_SPECIFIERS, SETTINGS
 from .utypes import (
@@ -479,7 +479,7 @@ class Quantity(
         raise TypeError(f"Invalid magnitude type: {mt}, expected one of float, np.ndarray, pl.Series, pl.Expr")
 
     @staticmethod
-    def _get_magnitude_type_name(mt: type) -> MagnitudeTypeName:
+    def _get_magnitude_type_name(mt: object) -> MagnitudeTypeName:
         origin = get_origin(mt)
 
         if mt is np.ndarray or origin is np.ndarray:
@@ -1437,7 +1437,7 @@ class Quantity(
         ) -> dict[str, Any]:
             mag = qty.magnitude
 
-            val: float | int | list[float]
+            val: float | int | list[Any]
 
             if isinstance(mag, float | int):
                 val = mag
@@ -1449,6 +1449,11 @@ class Quantity(
             elif isinstance(mag, pl.Series):
                 val = mag.to_list()
                 magnitude_type = f"pl.Series:{mag.dtype}"
+            elif isinstance(mag, pl.Expr):
+                raise ValueError(
+                    "Cannot serialize Quantity with pl.Expr magnitude: a Polars expression holds no data; "
+                    "materialize it first"
+                )
             elif isinstance(mag, list):
                 val = [float(x) for x in cast("list[Any]", mag)]  # pyrefly: ignore[redundant-cast]  # cast required by pyright
                 magnitude_type = "list"
@@ -1456,12 +1461,12 @@ class Quantity(
                 raise ValueError(f"Unknown magnitude type {type(mag)}: {mag}")
 
             return {
-                "unit": str(qty.u),
+                "unit": str(qty.u._units),
                 "value": val,
                 "magnitude_type": magnitude_type,
             }
 
-        ser_schema = core_schema.plain_serializer_function_ser_schema(_serialize, info_arg=True)
+        ser_schema = core_schema.plain_serializer_function_ser_schema(_serialize, info_arg=True, when_used="json")
 
         return core_schema.json_or_python_schema(
             json_schema=python_schema,
@@ -1484,7 +1489,6 @@ class Quantity(
                     "anyOf": [
                         {"type": "number"},
                         {"type": "array", "items": {"type": "number"}},
-                        {"type": "null"},
                     ]
                 },
                 "magnitude_type": {
@@ -1500,65 +1504,116 @@ class Quantity(
         }
 
     @classmethod
+    def _pydantic_polars_dtype(cls, dtype_str: str) -> type[pl.DataType]:
+        dtype = getattr(pl, dtype_str, None)
+
+        if not isinstance(dtype, type) or not issubclass(dtype, pl.DataType):
+            raise ValueError(f"Unknown Polars Series dtype: '{dtype_str}'")
+
+        return dtype
+
+    @classmethod
+    def _pydantic_magnitude_from_payload(cls, val: Any, magnitude_type: str) -> Any:  # noqa: ANN401
+        if magnitude_type.startswith("np.ndarray"):
+            try:
+                _, dtype_str, _ = magnitude_type.split(":", 2)
+            except ValueError as e:
+                raise ValueError(f"Invalid np.ndarray magnitude_type {magnitude_type!r}") from e
+
+            return np.array(val, dtype=np.dtype(dtype_str))
+
+        if magnitude_type.startswith("pl.Series"):
+            try:
+                _, dtype_str = magnitude_type.split(":", 1)
+            except ValueError as e:
+                raise ValueError(f"Invalid pl.Series magnitude_type {magnitude_type!r}") from e
+
+            return pl.Series(val, dtype=cls._pydantic_polars_dtype(dtype_str))
+
+        if magnitude_type == "list":
+            return val
+
+        if magnitude_type == "int":
+            return int(val)
+
+        if magnitude_type == "float":
+            return float(val)
+
+        raise ValueError(f"Unknown magnitude_type {magnitude_type!r}")
+
+    @classmethod
+    def _pydantic_build_quantity(cls, qty: Any) -> Quantity[Any, Any]:  # noqa: ANN401
+        if isinstance(qty, dict) and "value" in qty and "magnitude_type" in qty:
+            val = cast(Any, qty["value"])
+            magnitude_type = cast(str, qty["magnitude_type"])
+            magnitude = cls._pydantic_magnitude_from_payload(val, magnitude_type)
+            unit = cast(str | None, cast("dict[str, Any]", qty).get("unit"))
+            return cast("Quantity[Any, Any]", cls(cast(MT, magnitude), unit=unit))
+
+        return cast("Quantity[Any, Any]", qty if isinstance(qty, Quantity) else cls(cast(Any, qty)))
+
+    @classmethod
+    def _pydantic_enforce_dimensionality(cls, qty: Quantity[Any, Any]) -> None:
+        if issubclass(cls, cls.get_unknown_dimensionality_subclass()):
+            return
+
+        if cls._is_incomplete_dimensionality(cls._dimensionality_type):
+            return
+
+        expected = cls._dimensionality_type
+        actual = qty._dimensionality_type
+
+        dimensions_match = actual.dimensions == expected.dimensions
+        type_matches = issubclass(actual, expected) or issubclass(expected, actual)
+
+        if dimensions_match and type_matches:
+            return
+
+        raise PydanticCustomError(
+            "quantity_dimensionality",
+            "Quantity dimensionality {actual} does not match expected {expected}",
+            {"actual": actual.__name__, "expected": expected.__name__},
+        )
+
+    @classmethod
+    def _pydantic_enforce_magnitude_type(cls, qty: Quantity[Any, Any]) -> None:
+        expected_mt = cast(object, getattr(cls, "_magnitude_type", None))
+
+        if expected_mt is None or expected_mt is Any or isinstance(expected_mt, TypeVar):
+            return
+
+        expected = cls._get_magnitude_type_name(expected_mt)
+        actual = cls._get_magnitude_type_name(cast(object, type(qty.m)))
+
+        if actual == expected:
+            return
+
+        raise PydanticCustomError(
+            "quantity_magnitude_type",
+            "Quantity magnitude type {actual} does not match expected {expected}",
+            {"actual": actual, "expected": expected},
+        )
+
+    @classmethod
     def validate(
         cls,
         qty: Any,  # noqa: ANN401
         info: Any,  # noqa: ANN401, ARG003
     ) -> Quantity[DT, MT]:
-        if isinstance(qty, dict) and "value" in qty and "magnitude_type" in qty:
-            val = cast(Any, qty["value"])
-            magnitude_type = cast(Literal["int", "float", "list"] | str, qty["magnitude_type"])
+        try:
+            ret = cls._pydantic_build_quantity(qty)
+            cls._pydantic_enforce_dimensionality(ret)
+            cls._pydantic_enforce_magnitude_type(ret)
+        except PydanticCustomError:
+            raise
+        except Exception as e:
+            raise PydanticCustomError(
+                "quantity_validation",
+                "Invalid quantity: {error}",
+                {"error": str(e)},
+            ) from e
 
-            if magnitude_type.startswith("np.ndarray"):
-                _, dtype_str, _ = magnitude_type.split(":", 2)
-                arr = np.array(val, dtype=np.dtype(dtype_str))
-                magnitude = arr
-            elif magnitude_type.startswith("pl.Series"):
-                _, dtype_str = magnitude_type.split(":", 1)
-
-                dtype: type[pl.DataType]
-
-                match dtype_str:
-                    case "Float32":
-                        dtype = pl.Float32
-                    case "Float64":
-                        dtype = pl.Float64
-                    case "Int64":
-                        dtype = pl.Int64
-                    case "Int32":
-                        dtype = pl.Int32
-                    case "Int16":
-                        dtype = pl.Int16
-                    case _:
-                        raise ValueError(f"Unknown Polars Series dtype: '{dtype_str}'")
-
-                magnitude = pl.Series(val, dtype=dtype)
-            elif magnitude_type == "list":
-                magnitude = val
-            elif magnitude_type == "int":
-                magnitude = int(val)
-            elif magnitude_type == "float":
-                magnitude = float(val)
-            else:
-                raise TypeError(f"Unknown magnitude_type {magnitude_type!r}")
-
-            unit = cast(str | None, cast("dict[str, Any]", qty).get("unit"))
-            ret = cls(cast(MT, magnitude), unit=unit)
-        else:
-            ret = cast("Quantity[DT, MT]", qty if isinstance(qty, Quantity) else cls(cast(Any, qty)))
-
-        if isinstance(ret, cls):
-            return ret
-
-        if issubclass(cls, cls.get_unknown_dimensionality_subclass()):
-            return ret
-
-        if cls._is_incomplete_dimensionality(cls._dimensionality_type):
-            return ret
-
-        raise ExpectedDimensionalityError(
-            f"Value {ret} ({type(ret).__name__}) does not match expected dimensionality {cls.__name__}"
-        )
+        return cast("Quantity[DT, MT]", ret)
 
     def check_compatibility(self, other: Quantity[Any, Any] | float) -> None:
         if not isinstance(other, Quantity):
