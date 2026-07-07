@@ -227,7 +227,7 @@ from encomp.units import Quantity as Q
 Fluid("water", P=Q(25, "bar"), T=Q(550, "°C"))
 # <Fluid "water", P=2500 kPa, T=550.0 °C, D=6.7 kg/m³, V=0.031 cP>
 
-# note that the CoolProp property "Q" (vapor quality) has the same name as the class
+# note that the CoolProp property "Q" (vapor quality) has the same name as the alias for the Quantity class
 # the Water class has a slightly different string representation
 Water(Q=Q(0.5), T=Q(170, "degC"))
 # <Water (Two-phase), P=792 kPa, T=170.0 °C, D=8.2 kg/m³, V=nan cP>
