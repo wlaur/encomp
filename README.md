@@ -335,11 +335,15 @@ For array magnitudes, convert the expression to a NumPy-aware function with `enc
 
 ## Tests
 
-Install the development dependencies with `uv sync --all-extras --all-groups`, then run
+Development checkouts build the native CoolProp plugin locally. Install Rust, CMake, git, and a C++ compiler, then from the repository root run:
 
 ```bash
-pytest
+python scripts/build_libcoolprop.py
+uv sync --all-extras --all-groups
+uv run pytest
 ```
+
+See `encomp/coolprop/README.md` for the plugin build details.
 
 ## Settings
 
