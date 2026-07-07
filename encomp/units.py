@@ -657,8 +657,15 @@ class Quantity(
         elif isinstance(unit, UnitsContainer):
             # compatibility with internal pint API
             return Unit(Quantity._validate_unit(str(unit)))
-        else:
+        elif isinstance(unit, str):
             return cast("Unit[DT]", Unit(cast(Any, Quantity._REGISTRY.parse_units(Quantity.correct_unit(unit)))))
+        else:
+            # e.g. swapped (val, unit) arguments, or a unit object from a foreign
+            # pint registry -- fail with the accepted types instead of a bare
+            # AttributeError from str-only parsing
+            raise TypeError(
+                f"unit must be a str, Unit, UnitsContainer, dict, Quantity or None, got {type(unit).__name__}: {unit!r}"
+            )
 
     @staticmethod
     def _validate_magnitude(val: MT | Sequence[float]) -> MT:
