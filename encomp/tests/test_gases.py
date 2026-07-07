@@ -68,16 +68,16 @@ def test_convert_gas_volume() -> None:
 
 
 def test_ideal_gas_density() -> None:
-    # ideal_gas_density ties T/P/M to one magnitude TypeVar (its body does arithmetic
+    # ideal_gas_density ties P/T/M to one magnitude TypeVar (its body does arithmetic
     # across all three), so a mixed array/scalar call cannot be typed: the scalar P/M
     # args are cast (needed for both checkers), and pyrefly additionally cannot solve
     # the shared constrained TypeVar across multiple arguments at all
     assert_type(  # pyrefly: ignore[assert-type]
-        ideal_gas_density(Q(25, "degC"), Q(12, "bar"), Q(12, "g/mol")),  # pyrefly: ignore[bad-specialization]
+        ideal_gas_density(Q(12, "bar"), Q(25, "degC"), Q(12, "g/mol")),  # pyrefly: ignore[bad-specialization]
         Q[Density, float],
     )
 
-    ret = ideal_gas_density(Q([25, 26], "degC"), cast(Any, Q(12, "bar")), cast(Any, Q(12, "g/mol")))  # pyrefly: ignore[bad-argument-type, bad-specialization]
+    ret = ideal_gas_density(cast(Any, Q(12, "bar")), Q([25, 26], "degC"), cast(Any, Q(12, "g/mol")))  # pyrefly: ignore[bad-argument-type, bad-specialization]
     assert_type(ret, Q[Density, Numpy1DArray])  # pyrefly: ignore[assert-type]
 
 

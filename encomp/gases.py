@@ -79,8 +79,8 @@ def _resolve_gas_condition(condition: object, name: str) -> GasCondition:
 
 
 def ideal_gas_density(
-    T: Quantity[Temperature, MT],
     P: Quantity[Pressure, MT],
+    T: Quantity[Temperature, MT],
     M: Quantity[MolarMass, MT],
 ) -> Quantity[Density, MT]:
     """
@@ -98,10 +98,10 @@ def ideal_gas_density(
 
     Parameters
     ----------
-    T : Quantity[Temperature, MT]
-        Temperature of the gas
     P : Quantity[Pressure, MT]
         Absolute pressure of the gas
+    T : Quantity[Temperature, MT]
+        Temperature of the gas
     M : Quantity[MolarMass, MT]
         Molar mass of the gas
 
