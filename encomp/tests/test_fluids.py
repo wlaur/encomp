@@ -12,7 +12,16 @@ import pytest
 from encomp import coolprop as encomp_coolprop
 
 from .. import utypes as ut
-from ..fluids import CoolPropFluid, Fluid, FluidState, HumidAir, HumidAirState, Water, clear_expr_evaluation_cache
+from ..fluids import (
+    CoolPropFluid,
+    CProperty,
+    Fluid,
+    FluidState,
+    HumidAir,
+    HumidAirState,
+    Water,
+    clear_expr_evaluation_cache,
+)
 from ..settings import SETTINGS
 from ..units import Quantity as Q
 from ..utypes import DT, Density, SpecificEntropy
@@ -160,6 +169,36 @@ def test_Fluid() -> None:
 
     with pytest.raises(ValueError):
         Fluid("water", T=Q([np.nan, np.nan], "°C"), P=Q([], "bar")).H
+
+
+def test_fluid_return_units_are_normalized() -> None:
+    water = Fluid("water", P=Q(2, "bar"), T=Q(25, "degC"))
+
+    expected_units: dict[CProperty, str] = {
+        "P": "kPa",
+        "PCRIT": "kPa",
+        "PMAX": "kPa",
+        "PMIN": "kPa",
+        "PTRIPLE": "kPa",
+        "P_REDUCING": "kPa",
+        "T": "degC",
+        "TCRIT": "degC",
+        "TMAX": "degC",
+        "TMIN": "degC",
+        "TTRIPLE": "degC",
+        "T_REDUCING": "degC",
+        "H": "kJ/kg",
+        "U": "kJ/kg",
+        "S": "kJ/kg/K",
+        "C": "kJ/kg/K",
+    }
+
+    for prop, unit in expected_units.items():
+        expected_unit = Q.get_unit(unit)
+        assert water.get(prop).u == expected_unit
+        assert getattr(water, prop).u == expected_unit
+
+    assert water.get("p_critical").u == Q.get_unit("kPa")
 
 
 def test_ignore_coolprop_warnings_gates_logger(

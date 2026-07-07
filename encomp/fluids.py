@@ -446,17 +446,26 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         ("V", ".2g"),
     )
 
-    # preferred return units
-    # key is the first name in the tuple used in PROPERTY_MAP
+    # Preferred public return units. Values are evaluated in CoolProp's canonical
+    # units from PROPERTY_MAP first, then converted here by canonical property key.
     RETURN_UNITS: dict[CProperty, UnitString] = {
         "P": "kPa",
+        "PCRIT": "kPa",
+        "PMAX": "kPa",
+        "PMIN": "kPa",
+        "PTRIPLE": "kPa",
+        "P_REDUCING": "kPa",
         "T": "°C",
+        "TCRIT": "°C",
         "TMAX": "°C",
         "TMIN": "°C",
         "TTRIPLE": "°C",
         "T_FREEZE": "°C",
+        "T_REDUCING": "°C",
         "V": "cP",
         "H": "kJ/kg",
+        "U": "kJ/kg",
+        "S": "kJ/kg/K",
         "C": "kJ/kg/K",
     }
 
