@@ -575,6 +575,8 @@ phase_names = Water.PHASES
 #  3.0: 'Supercritical liquid',
 #  2.0: 'Supercritical gas',
 #  1.0: 'Supercritical fluid',
+#  4.0: 'Critical point',
+#  7.0: 'Unknown',
 #  8.0: 'Not imposed'}
 
 # when one input is constant (float, int, single element array),
