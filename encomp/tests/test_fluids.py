@@ -198,6 +198,9 @@ def test_Water() -> None:
     water_single = Water(T=Q(25, "°C"), P=Q(5, "bar"))
 
     repr(water_single)
+    steam_repr = repr(Water(P=Q(1, "bar"), T=Q(110, "degC")))
+    assert "V=0.0 cP" not in steam_repr
+    assert "V=0.013 cP" in steam_repr
 
     water_multi = Water(T=Q(np.linspace(25, 50), "°C"), P=Q(5, "bar"))
 

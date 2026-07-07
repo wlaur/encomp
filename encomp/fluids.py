@@ -1547,7 +1547,7 @@ class Water(Fluid[MT]):
         ("P", ".0f"),
         ("T", ".1f"),
         ("D", ".1f"),
-        ("V", ".1f"),
+        ("V", ".2g"),
     )
 
     def __init__(self, **kwargs: Unpack[FluidState[MT]]) -> None:
