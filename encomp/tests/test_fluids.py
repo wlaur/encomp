@@ -220,6 +220,26 @@ def test_ignore_coolprop_warnings_gates_logger(
     assert 'CoolProp could not calculate "D"' in caplog.text
 
 
+def test_humid_air_out_of_range_logs_warning(caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+    humid_air = HumidAir(T=Q(25, "degC"), P=Q(1, "bar"), R=Q(1.5, ""))
+
+    monkeypatch.setattr(SETTINGS, "ignore_coolprop_warnings", False)
+    with caplog.at_level(logging.WARNING, logger="encomp.fluids"):
+        value = humid_air.W
+
+    assert np.isnan(float(value.m))
+    assert 'CoolProp could not calculate "W" for fluid "Humid air"' in caplog.text
+    assert "outside the range of validity" in caplog.text
+
+    caplog.clear()
+    monkeypatch.setattr(SETTINGS, "ignore_coolprop_warnings", True)
+    with caplog.at_level(logging.WARNING, logger="encomp.fluids"):
+        value = humid_air.W
+
+    assert np.isnan(float(value.m))
+    assert "CoolProp could not calculate" not in caplog.text
+
+
 def test_incorrect_inputs() -> None:
     # NOTE: the name cannot be checked until CoolProp is actually
     # called, so the name is not validated in __init__

@@ -709,13 +709,18 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         return matches
 
+    def _warn_coolprop_nan(self, prop: CProperty, msg: str) -> None:
+        if not SETTINGS.ignore_coolprop_warnings:
+            _LOGGER.warning(f'CoolProp could not calculate "{prop}" for fluid "{self.name}", output is NaN: {msg}')
+
     def check_exception(self, prop: CProperty, e: ValueError) -> None:
         msg = str(e)
 
         # this error occurs in case the input values are outside
         # the allowable range for this property
         # in this case the return value will be NaN, no exception is raised
-        if "No outputs were able to be calculated" in msg:
+        if "No outputs were able to be calculated" in msg or "is outside the range of validity" in msg:
+            self._warn_coolprop_nan(prop, msg)
             return
 
         # if CoolProp has not implemented prop as output, return NaN
@@ -730,8 +735,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 f"Fluid '{self.name}' could not be initialized, ensure that the name is a valid CoolProp fluid name"
             ) from e
 
-        if not SETTINGS.ignore_coolprop_warnings:
-            _LOGGER.warning(f'CoolProp could not calculate "{prop}" for fluid "{self.name}", output is NaN: {msg}')
+        self._warn_coolprop_nan(prop, msg)
 
     # ------------------------------------------------------------------ #
     # Low-level AbstractState path. Used whenever an assumed phase and/or a
