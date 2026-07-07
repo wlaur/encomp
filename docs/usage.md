@@ -2,6 +2,12 @@
 
 This guide covers the main `encomp` modules: units, fluids, and symbolic math.
 
+## Versioning and stability
+
+`encomp` uses semantic versioning for documented public APIs. Public APIs are the documented modules and objects in the API reference; private helpers, tests, notebooks, generated docs, and Rust internals may change in any release. The top-level `encomp` package intentionally exposes only `__version__`; import library APIs from their submodules.
+
+`encomp.sympy` is legacy and soft-deprecated. It remains available for existing users, but new code should avoid depending on its `sympy.Symbol` monkey-patching and helper wrappers because the module is planned for removal in a future major release.
+
 ## The Quantity class
 
 A {py:class}`encomp.units.Quantity` stores the *magnitude*, *unit* and *dimensionality* of a physical quantity.
@@ -628,6 +634,7 @@ The API mirrors {py:class}`encomp.fluids.Fluid`: any CoolProp input pair is supp
 
 ## Sympy functionality
 
+`encomp.sympy` is legacy and soft-deprecated; it is planned for removal in a future major release.
 To load additional methods for the `sympy.Symbol` class, import Sympy via the {py:mod}`encomp.sympy` module.
 
 ### Typesetting

@@ -24,6 +24,12 @@ Every physical quantity in `encomp` carries a magnitude, a unit, and a dimension
 
 The remaining modules (`encomp.gases`, `encomp.conversion`, `encomp.constants`, ...) implement process-engineering and thermodynamics calculations.
 
+## Versioning and stability
+
+`encomp` uses semantic versioning for documented public APIs. Public APIs are the documented modules and objects in the API reference; private helpers, tests, notebooks, generated docs, and Rust internals may change in any release. The top-level `encomp` package intentionally exposes only `__version__`; import library APIs from their submodules.
+
+`encomp.sympy` is legacy and soft-deprecated. It remains available for existing users, but new code should avoid depending on its `sympy.Symbol` monkey-patching and helper wrappers because the module is planned for removal in a future major release.
+
 ## Installation
 
 ```bash
@@ -314,6 +320,7 @@ Each `fluid(...)` / `humid_air(...)` is an independent plugin node, so selecting
 
 ## Symbolic math
 
+`encomp.sympy` is legacy and soft-deprecated; it is planned for removal in a future major release.
 To load additional methods for the `sympy.Symbol` class, import Sympy via the `encomp.sympy` module. The `_` / `__` methods add typeset sub- and superscripts, and quantities combine directly with symbols:
 
 ```python
