@@ -358,7 +358,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         ("DIPOLE_MOMENT", "dipole_moment"): ("C*m", "Dipole moment"),
         ("GAS_CONSTANT", "gas_constant"): ("J/mol/K", "Molar gas constant"),
         ("GMOLAR_RESIDUAL", "Gmolar_residual"): (
-            "J/mol/K",
+            "J/mol",
             "Residual molar Gibbs energy",
         ),
         ("GMOLAR", "Gmolar"): ("J/mol", "Molar specific Gibbs energy"),
@@ -368,7 +368,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             "J/mol",
             "Molar specific Helmholtz energy",
         ),
-        ("HMOLAR_RESIDUAL", "Hmolar_residual"): ("J/mol/K", "Residual molar enthalpy"),
+        ("HMOLAR_RESIDUAL", "Hmolar_residual"): ("J/mol", "Residual molar enthalpy"),
         ("ISENTROPIC_EXPANSION_COEFFICIENT", "isentropic_expansion_coefficient"): (
             "dimensionless",
             "Isentropic expansion coefficient",

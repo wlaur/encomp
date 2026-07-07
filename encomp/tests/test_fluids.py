@@ -56,6 +56,9 @@ def test_Fluid() -> None:
     water = Fluid("water", P=Q(2, "bar"), T=Q(25, "°C"))
     assert water.T.u == Q.get_unit("degC")
     assert water.T.m == 25
+    water.HMOLAR_RESIDUAL.to("J/mol")
+    water.GMOLAR_RESIDUAL.to("J/mol")
+    water.SMOLAR_RESIDUAL.to("J/mol/K")
 
     HumidAir(T=Q(25, "degC"), P=Q(125, "kPa"), R=Q(0.2, "dimensionless"))
 
