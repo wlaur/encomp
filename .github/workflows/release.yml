@@ -4,12 +4,14 @@ name: encomp release
 # + bundled libCoolProp, all in one wheel) for macOS / Linux / Windows, run the full
 # test suite against each wheel on Python 3.13 and 3.14, and publish to PyPI on a tag.
 #
-#   typecheck     -> pyright (strict) + pyrefly, the required-green checkers
-#                    (ty is advisory and intentionally not gated)
-#   build-wheels  -> one wheel per OS/arch (abi3 cp313 => runs on 3.13+)
-#   test          -> install each prebuilt wheel + run pytest, every OS x py
-#   publish       -> only on a `v*` tag, after all tests pass, via PyPI Trusted
-#                    Publishing (OIDC -- no token/secret stored anywhere)
+#   typecheck      -> pyright (strict) + pyrefly, the required-green checkers
+#                     (ty is advisory and intentionally not gated)
+#   build-wheels   -> one wheel per OS/arch (abi3 cp313 => runs on 3.13+)
+#   test           -> install each prebuilt wheel + run pytest, every OS x py
+#   publish        -> only on a `v*` tag, after all tests pass, via PyPI Trusted
+#                     Publishing (OIDC -- no token/secret stored anywhere)
+#   github-release -> after a successful publish, create the GitHub Release for
+#                     the tag with auto-generated notes
 on:
   workflow_dispatch:
   # no paths filter: the checks below are REQUIRED by branch protection, and a required
@@ -122,3 +124,19 @@ jobs:
           pattern: wheels-*
           merge-multiple: true
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    # only after PyPI succeeded, so the Release never announces a version that
+    # failed to publish (skipped automatically on PR runs, like publish itself)
+    name: create GitHub release
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write               # create the release; kept out of the publish job
+    steps:
+      - name: Create the GitHub Release with auto-generated notes
+        # notes are generated against the previous release, same format as the
+        # manually created releases up to v1.5.4
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
