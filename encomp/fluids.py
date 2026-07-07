@@ -602,7 +602,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             Examples:
 
                 - ``INCOMP::MITSW[0.05]``: seawater with 5 mass-percent salt.
-                - ``INCOMP::MPG[0.5]``: 50 % ethylene glycol
+                - ``INCOMP::MPG[0.5]``: 50 % propylene glycol
                 - ``INCOMP::T66``: Therminol 66 (https://www.therminol.com/product/71093438)
 
         """
