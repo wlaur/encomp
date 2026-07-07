@@ -20,6 +20,8 @@ import numpy as np
 import polars as pl
 
 from .coolprop import (
+    FLUID_INPUTS,
+    HUMID_AIR_INPUTS,
     AssumedPhase,
     Backend,
     CName,
@@ -436,6 +438,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     }
 
     ALL_PROPERTIES: set[CProperty] = set(flatten(list(PROPERTY_MAP)))
+    STATE_INPUTS: ClassVar[frozenset[str]] = frozenset(FLUID_INPUTS)
     REPR_PROPERTIES: tuple[tuple[CProperty, str], ...] = (
         ("P", ".0f"),
         ("T", ".1f"),
@@ -641,6 +644,16 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 f"Invalid CoolProp property name{'s' if len(invalid) > 1 else ''}: "
                 f"{', '.join(invalid)}\n"
                 f"Valid names:\n{', '.join(sorted(cls.ALL_PROPERTIES))}"
+            )
+
+        output_only = [key for key in kwargs if key not in cls.STATE_INPUTS]
+
+        if len(output_only):
+            raise ValueError(
+                f"Invalid CoolProp state input{'s' if len(output_only) > 1 else ''}: "
+                f"{', '.join(output_only)}\n"
+                "These properties are outputs only and cannot fix a state.\n"
+                f"Valid state inputs:\n{', '.join(sorted(cls.STATE_INPUTS))}"
             )
 
     def _build_points(
@@ -1591,6 +1604,7 @@ class HumidAir(CoolPropFluid[MT]):
     BACKEND = {"backend": HAPropsSI}
     _append_name_to_cp_inputs = False
     _evaluate_invalid_separately = True
+    STATE_INPUTS: ClassVar[frozenset[str]] = frozenset(HUMID_AIR_INPUTS)
 
     # unit and description for properties in function HAPropsSI
     PROPERTY_MAP: dict[tuple[CProperty, ...], tuple[str, str]] = {

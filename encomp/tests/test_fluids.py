@@ -210,6 +210,12 @@ def test_incorrect_inputs() -> None:
     with pytest.raises(ValueError):
         Water(P=Q(cast(Any, p), "bar"))
 
+    with pytest.raises(ValueError, match=r"Invalid CoolProp state input.*VISCOSITY"):
+        Fluid("water", **cast(Any, {"T": Q(25, "degC"), "VISCOSITY": Q(1, "cP")}))
+
+    with pytest.raises(ValueError, match=r"Invalid CoolProp state input.*Visc"):
+        HumidAir(**cast(Any, {"T": Q(25, "degC"), "P": Q(1, "bar"), "Visc": Q(1, "cP")}))
+
     with pytest.raises(AttributeError):
         Fluid("water", P=Q(2, "bar"), T=Q(25, "°C")).THIS_ATTRIBUTE_DOES_NOT_EXIST
 
