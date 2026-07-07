@@ -116,10 +116,12 @@ The typed constructor does not *validate* the dimensionality at runtime -- it *r
 `Q[Length](1, "kg")` returns a `Quantity[Mass, float]`: the dimensionality of the created
 object is always determined by the unit. This is by design (`pint` constructs arithmetic
 results through `self.__class__(...)` with new dimensionalities, so the constructor must
-accept them). Dimensionality *enforcement* happens in the static type checker and at the
+accept them). Use {py:meth}`encomp.units.Quantity.check` for physical-dimensionality
+checks. Semantic dimensionality enforcement happens in the static type checker and at
 explicit runtime boundaries: `isinstance()` / {py:func}`encomp.misc.isinstance_types`,
-{py:meth}`encomp.units.Quantity.check`, `typeguard.typechecked` functions and Pydantic
-model fields (which raise `ExpectedDimensionalityError` for a mismatch).
+`typeguard.typechecked` functions and Pydantic model fields (which raise
+`ExpectedDimensionalityError` for a mismatch). Arithmetic also checks semantic
+compatibility and may reject two quantities with the same physical dimensions.
 :::
 
 Check the dimensionality of a quantity with `isinstance()` or {py:meth}`encomp.units.Quantity.check`.
@@ -128,7 +130,7 @@ For parameterized types like `list[Quantity[Pressure]]`, use {py:func}`encomp.mi
 ```python
 from encomp.misc import isinstance_types
 from encomp.units import Quantity as Q
-from encomp.utypes import Length, Pressure
+from encomp.utypes import Length, Pressure, Temperature, TemperatureDifference
 
 pressure = Q(1, "bar")
 
@@ -137,6 +139,11 @@ pressure.check("meter")  # False
 
 pressure.check(Pressure)  # True
 pressure.check("psi")  # True
+pressure.check("[pressure]")  # True
+
+# check() compares physical dimensions only, not semantic sibling classes
+Q(1, "degC").check(TemperatureDifference)  # True
+Q(1, "delta_degC").check(Temperature)  # True
 
 # alternative using isinstance()
 # (parameterized isinstance is a runtime-only feature, hence the suppressions)
@@ -243,6 +250,10 @@ from encomp.units import Quantity as Q
 Temperature units need extra care.
 A temperature *difference* in a degree scale is written with the prefix `delta_` (only needed when defining the difference directly).
 Temperature ({py:class}`encomp.utypes.Temperature`) and temperature difference ({py:class}`encomp.utypes.TemperatureDifference`) are distinct dimensionalities and deliberately not interchangeable: a difference cannot silently be used as an absolute temperature.
+Do not use {py:meth}`encomp.units.Quantity.check` to distinguish these two cases:
+it compares physical dimensions, and both classes share `[temperature]`. Use
+`isinstance()` / {py:func}`encomp.misc.isinstance_types`, typed function boundaries,
+Pydantic fields, or arithmetic/conversion errors for the semantic distinction.
 
 ```python
 from pint.errors import OffsetUnitCalculusError

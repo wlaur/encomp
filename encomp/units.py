@@ -48,7 +48,6 @@ from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
 from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import core_schema
 
-from .misc import isinstance_types
 from .settings import PINT_FORMATTING_SPECIFIERS, SETTINGS
 from .utypes import (
     BASE_SI_UNITS,
@@ -1172,6 +1171,9 @@ class Quantity(
             for key in set(src_dim.keys()) | set(dst_dim.keys())
         )
 
+    def _check_dimensionality(self, dimensions: UnitsContainer) -> bool:
+        return self._units_containers_equal(self.dimensionality, dimensions)
+
     def _to_unit(
         self, unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | Quantity[DT, Any]
     ) -> Unit[DT]:
@@ -1236,35 +1238,42 @@ class Quantity(
         self,
         dimension: Quantity[Any, Any] | UnitsContainer | Unit[DT_] | Unit | str | Dimensionality | type[Dimensionality],
     ) -> bool:
-        if isinstance(dimension, type) and dimension == TemperatureDifference:
-            return self.check("delta_degC")
+        """
+        Return whether this quantity has the same physical dimensions as ``dimension``.
 
-        if isinstance(dimension, type) and dimension == Temperature:
-            return self.check("degC")
-
+        This intentionally compares dimensions, not semantic dimensionality classes:
+        ``Temperature`` and ``TemperatureDifference`` both have ``[temperature]``,
+        and sibling energy-per-mass classes share ``[energy] / [mass]``. Use
+        ``isinstance``/``isinstance_types`` or ``check_compatibility`` when that
+        semantic distinction matters.
+        """
         if isinstance(dimension, Quantity):
-            return self.dt == dimension._dimensionality_type
-
-        if isinstance(dimension, str):
-            return self.check(self._validate_unit(dimension))
+            return self._check_dimensionality(dimension.dimensionality)
 
         if isinstance(dimension, Unit):
-            # it's not possible to know if an instance of Unit is Temperature or TemperatureDifference
-            # until it is used to construct a Quantity
-            unit_qty = Quantity(1.0, dimension)
+            return self._check_dimensionality(dimension.dimensionality)
 
-            if isinstance_types(unit_qty, Quantity[TemperatureDifference]):
-                unit_qty = Quantity(1.0, dimension).asdim(TemperatureDifference)
+        if isinstance(dimension, UnitsContainer):
+            return self._check_dimensionality(dimension)
 
-            return self.check(unit_qty)
+        if isinstance(dimension, str):
+            if dimension.strip().startswith("["):
+                return bool(self._pint_super.check(dimension.strip()))
 
-        if hasattr(dimension, "dimensions"):
-            _dims = getattr(dimension, "dimensions", None)
-            if _dims is None:
-                raise TypeError(f"Attribute 'dimensions' is missing or None: {dimension}")
-            return self._pint_super.check(cast(UnitsContainer, _dims))
+            return self.check(self._validate_unit(dimension))
 
-        if isinstance(dimension, (Dimensionality, type, PlainQuantity)):
+        dimension_any = cast(Any, dimension)
+
+        if isinstance(dimension_any, type):
+            if not issubclass(dimension_any, Dimensionality):
+                raise TypeError(f"Invalid type for dimension: {dimension} ({type(dimension)})")
+
+            return self._check_dimensionality(dimension_any.dimensions)
+
+        if isinstance(dimension_any, Dimensionality):
+            return self._check_dimensionality(dimension_any.dimensions)
+
+        if isinstance(dimension_any, PlainQuantity):
             raise TypeError(f"Invalid type for dimension: {dimension} ({type(dimension)})")
 
         return self._pint_super.check(dimension)
@@ -1613,16 +1622,16 @@ class Quantity(
         other: Quantity[TemperatureDifference, Any] | Quantity[Temperature, Any],
         operator: Literal["add", "sub"],
     ) -> Quantity[Temperature, MT]:
-        if self.check(Temperature):
-            assert other.check(TemperatureDifference)
+        if self.dt == Temperature:
+            assert other._dimensionality_type == TemperatureDifference
             v1 = self.to("degC").m
             v2 = other.to("delta_degC").m
 
             val = v1 + v2 if operator == "add" else v1 - v2
             temperature_unit = self.u
         else:
-            assert self.check(TemperatureDifference)
-            assert other.check(Temperature)
+            assert self.dt == TemperatureDifference
+            assert other._dimensionality_type == Temperature
 
             v1 = self.to("delta_degC").m
             v2 = other.to("degC").m
@@ -1799,8 +1808,8 @@ class Quantity(
             if not isinstance(other, Quantity):
                 raise e
 
-            self_is_temp_or_diff_temp = self.check(Temperature) or self.check(TemperatureDifference)
-            other_is_temp_or_diff_temp = other.check(Temperature) or other.check(TemperatureDifference)
+            self_is_temp_or_diff_temp = self.dt in (Temperature, TemperatureDifference)
+            other_is_temp_or_diff_temp = other._dimensionality_type in (Temperature, TemperatureDifference)
 
             if self_is_temp_or_diff_temp and other_is_temp_or_diff_temp:
                 return self._temperature_difference_add_sub(other, "add")
@@ -1859,7 +1868,7 @@ class Quantity(
 
             # only Temperature - TemperatureDifference is meaningful here; the
             # reverse (ΔT - T) is not a temperature and stays an error
-            if self.check(Temperature) and other.check(TemperatureDifference):
+            if self.dt == Temperature and other._dimensionality_type == TemperatureDifference:
                 return self._temperature_difference_add_sub(other, "sub")
 
             raise e

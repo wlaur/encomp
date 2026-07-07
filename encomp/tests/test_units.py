@@ -767,9 +767,22 @@ def test_numpy_integration() -> None:
 
 def test_check() -> None:
     assert Q(25, "kg").check(Mass)
+    assert Q(25, "m").check("[length]")
+    assert not Q(25, "kg").check("[length]")
 
     assert Q(25, "kg").check(Q(25, "g"))
     assert Q(25, "kg").check(Q([25, 25], "g"))
+
+    epm = Q(1.0, "kJ/kg").asdim(EnergyPerMass)
+    hv = Q(1.0, "kJ/kg").asdim(LowerHeatingValue)
+
+    assert hv.check("kJ/kg")
+    assert hv.check(Q(1.0, "J/kg"))
+    assert hv.check(EnergyPerMass)
+    assert hv.check(epm)
+
+    with pytest.raises(DimensionalityTypeError):
+        _ = cast(Any, hv) + epm
 
 
 def test_typechecked() -> None:
@@ -1527,8 +1540,8 @@ def test_temperature_unit_inputs() -> None:
         qty = Q(1, unit)
 
         assert isinstance_types(qty, Q[Temperature]) or isinstance_types(qty, Q[TemperatureDifference])
-        assert qty.check(Temperature) or qty.check(TemperatureDifference)
-        assert not (qty.check(Temperature) and qty.check(TemperatureDifference))
+        assert qty.check(Temperature)
+        assert qty.check(TemperatureDifference)
 
         # this will automatically be converted to delta_temperature per length,
         # even if the input is temperature (not delta_temperature)
@@ -1605,14 +1618,14 @@ def test_check_temperature_difference() -> None:
     assert Q(1, "degC").check(Q(12, "degC"))
     assert Q(1, "degC").check(Q(12, "degC").u)
 
-    assert not Q(1, "delta_degC").check(Q(12, "degC"))
-    assert not Q(1, "delta_degC").check(Q(12, "degC").u)
+    assert Q(1, "delta_degC").check(Q(12, "degC"))
+    assert Q(1, "delta_degC").check(Q(12, "degC").u)
 
     assert Q(1, "delta_degC").check(Q(12, "delta_degC"))
     assert Q(1, "delta_degC").check(Q(12, "delta_degC").u)
 
-    assert not Q(1, "delta_degC").check(Q(12, "degC"))
-    assert not Q(1, "delta_degC").check(Q(12, "degC").u)
+    with pytest.raises(DimensionalityTypeError):
+        _ = cast(Any, Q(1, "delta_degC")) - Q(12, "degC")
 
 
 def test_complex_units() -> None:
