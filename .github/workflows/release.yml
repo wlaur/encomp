@@ -71,7 +71,7 @@ jobs:
         run: python scripts/build_libcoolprop.py
       - run: cargo fmt --manifest-path rust/Cargo.toml -- --check
       - run: cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
-      - run: cargo test --manifest-path rust/Cargo.toml
+      - run: PYO3_PYTHON="$(which python)" cargo test --manifest-path rust/Cargo.toml --no-default-features
 
   build-wheels:
     name: build ${{ matrix.os }}
