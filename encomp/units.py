@@ -136,6 +136,21 @@ from .utypes import (
     VolumeUnits,
 )
 
+__all__ = [
+    "CUSTOM_DIMENSIONS",
+    "UNIT_REGISTRY",
+    "DimensionalityComparisonError",
+    "DimensionalityError",
+    "DimensionalityRedefinitionError",
+    "DimensionalityTypeError",
+    "ExpectedDimensionalityError",
+    "Quantity",
+    "Unit",
+    "UnitStrippedWarning",
+    "define_dimensionality",
+    "set_quantity_format",
+]
+
 if TYPE_CHECKING:
     import sympy as sp
 else:
@@ -180,19 +195,19 @@ class _DimensionalityError(DimensionalityError):
 
 
 class ExpectedDimensionalityError(_DimensionalityError):
-    pass
+    """Raised when a quantity cannot be reinterpreted as a requested dimensionality."""
 
 
 class DimensionalityTypeError(_DimensionalityError):
-    pass
+    """Raised when two semantic dimensionality classes are not compatible."""
 
 
 class DimensionalityComparisonError(_DimensionalityError):
-    pass
+    """Raised when an ordering comparison has incompatible dimensionality."""
 
 
 class DimensionalityRedefinitionError(ValueError):
-    pass
+    """Raised when defining a dimensionality that already exists."""
 
 
 # keep track of user-created dimensions
@@ -266,7 +281,7 @@ def set_quantity_format(fmt: str = "compact") -> None:
     if fmt not in Quantity.FORMATTING_SPECS:
         raise ValueError(
             f'Cannot set default format to "{fmt}", '
-            f"fmt is one of {Quantity.FORMATTING_SPECS} "
+            f"fmt must be one of {Quantity.FORMATTING_SPECS} "
             "or alias compact: ~P, siunitx: ~Lx"
         )
 
@@ -722,12 +737,12 @@ class Quantity(
             return cast("MT", float(val))
         elif isinstance(val, np.ndarray):
             if len(val.shape) != 1:
-                raise ValueError(f"Only 1-dimensional Numpy arrays can be used as magnitude, got shape {val.shape}")
+                raise ValueError(f"Only 1-dimensional NumPy arrays can be used as magnitude, got shape {val.shape}")
             return cast("MT", Quantity._cast_array_float(val))
         elif isinstance(val, (pl.Series, pl.Expr)):
             return val
         elif hasattr(val, "is_Atom"):
-            # implicit way of checking if the value is a sympy symbol without having to import Sympy
+            # implicit way of checking if the value is a sympy symbol without having to import SymPy
             # (must come before the numbers.Real check: sympy Float/Integer register as Real,
             # but a sympy magnitude must be kept symbolic)
             return cast("MT", val)
@@ -750,6 +765,8 @@ class Quantity(
 
     @classmethod
     def get_unit(cls, unit_name: AllUnits | str) -> Unit:
+        """Parse ``unit_name`` with the encomp unit registry and return a :class:`Unit`."""
+
         return Unit(cast(Any, cls._REGISTRY.parse_units(unit_name)))
 
     def get_subclass(self, dt: type[DT_], mt: type[MT_]) -> type[Quantity[DT_, MT_]]:
@@ -1088,6 +1105,8 @@ class Quantity(
 
     @property
     def m(self) -> MT:
+        """Magnitude value stored in this quantity."""
+
         return self._magnitude
 
     @m.setter
@@ -1104,10 +1123,19 @@ class Quantity(
                 "construct a new Quantity or use .astype() to change the magnitude type"
             )
 
+        if (
+            isinstance(self._magnitude, Sized)
+            and isinstance(validated, Sized)
+            and len(validated) != len(self._magnitude)
+        ):
+            raise ValueError(f"Cannot replace magnitude of length {len(self._magnitude)} with length {len(validated)}")
+
         self._magnitude = validated
 
     @property
     def mt(self) -> type[MT]:
+        """Concrete magnitude container type for this quantity."""
+
         # _magnitude_type is set on the magnitude-specific subclass, but pint
         # builds results via self.__class__(...), which resolves to the
         # magnitude-agnostic dimension-only subclass (where it is None). that is
@@ -1118,18 +1146,26 @@ class Quantity(
 
     @property
     def mt_name(self) -> MagnitudeTypeName:
+        """String name for this quantity's magnitude container type."""
+
         return self._get_magnitude_type_name(self.mt)
 
     @property
     def units(self) -> Unit[DT]:
+        """Quantity unit as an encomp :class:`Unit` instance."""
+
         return Unit(super().units)
 
     @property
     def u(self) -> Unit[DT]:
+        """Short alias for :attr:`units`."""
+
         return self.units
 
     @property
     def dt(self) -> type[DT]:
+        """Dimensionality class associated with this quantity."""
+
         return cast(type[DT], self._dimensionality_type)
 
     @property
@@ -1220,14 +1256,20 @@ class Quantity(
         return mt
 
     def to_reduced_units(self) -> Quantity[DT, MT]:
+        """Return a copy with units reduced by canceling common factors."""
+
         ret = cast("Quantity[DT, MT]", self._pint_super.to_reduced_units())
         return ret
 
     def to_root_units(self) -> Quantity[DT, MT]:
+        """Return a copy converted to Pint root units."""
+
         ret = cast("Quantity[DT, MT]", super().to_root_units())
         return ret
 
     def to_base_units(self) -> Quantity[DT, MT]:
+        """Return a copy converted to base SI units."""
+
         self._check_temperature_compatibility(Unit("kelvin"))
         ret = super().to_base_units()
         return cast("Quantity[DT, MT]", ret)
@@ -1380,6 +1422,13 @@ class Quantity(
 
     @staticmethod
     def correct_unit(unit: str) -> str:
+        """Normalize supported unit spelling variants before Pint parses them.
+
+        Notably, ``Nm3``/``nm3`` forms are interpreted as normal cubic meters
+        (``normal_cubic_meter``), not nanometers cubed. Use ``nanometer**3``
+        when a nanoscale volume is intended.
+        """
+
         unit = unit.strip()
 
         if unit == "-":
@@ -1473,6 +1522,13 @@ class Quantity(
 
     @classmethod
     def from_expr(cls, expr: sp.Basic) -> Quantity[DT, float]:
+        """Create a scalar quantity from a SymPy expression containing SI unit symbols.
+
+        The expression is expected to use the symbols produced by
+        :meth:`Quantity._sympy_`. Residual symbols that are not known unit
+        symbols raise ``KeyError``.
+        """
+
         # this needs to be populated here to account for custom dimensions
         cls._populate_dimension_symbol_map()
 
@@ -1504,7 +1560,10 @@ class Quantity(
             powers_dict = cast(dict[sp.Basic, float], _as_powers_dict()).items()
 
             for symbol, power in powers_dict:
-                s = cls._dimension_symbol_map[symbol]
+                try:
+                    s = cls._dimension_symbol_map[symbol]
+                except KeyError as e:
+                    raise KeyError(f"Expression contains unknown unit symbol: {symbol}") from e
                 unit_i = cast("Unit[Any]", unit_i * s**power)
 
             unit = cast("Unit[Any]", unit * unit_i)
@@ -1800,7 +1859,7 @@ class Quantity(
         elif isinstance(self.m, np.ndarray):
             return cast("Quantity[DT, MT]", self.__class__(np.round(self.m, ndigits), self.u))
         else:
-            raise NotImplementedError(f"__round__ is not implemented for magnitude type {type(self.m)}")
+            raise TypeError(f"round() is not supported for magnitude type {type(self.m)}")
 
     @property
     def is_scalar(self) -> bool:
@@ -1898,10 +1957,13 @@ class Quantity(
                 "only scalar (float) quantities can be converted to pl.Expr"
             )
         elif magnitude_type is float:
-            if isinstance(m, Iterable):
-                return cast("Quantity[DT, Any]", self.get_subclass(dt, np.ndarray)([float(n) for n in m], u))
-            else:
+            if isinstance(m, float):
                 return cast("Quantity[DT, Any]", self.get_subclass(dt, float)(float(cast(Any, m)), u))
+
+            raise TypeError(
+                f"Cannot convert magnitude with type {type(m)} to float; "
+                "only scalar (float) quantities can be converted to float"
+            )
         elif magnitude_type is np.ndarray or magnitude_type_origin is np.ndarray:
             _m = [m] if not isinstance(m, Iterable) else m
             vals = np.array(_m)

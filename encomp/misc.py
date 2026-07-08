@@ -1,9 +1,13 @@
+"""Small runtime typing and source-inspection helpers used by encomp."""
+
 import ast
 from types import UnionType
 from typing import Any, TypeIs, Union, cast, get_args, get_origin
 
 from typeguard import TypeCheckError, check_type
 from typing_extensions import TypeForm
+
+__all__ = ["isinstance_types", "name_assignments"]
 
 
 def _is_quantity_subclass(expected: object) -> bool:
@@ -13,6 +17,15 @@ def _is_quantity_subclass(expected: object) -> bool:
 
 
 def isinstance_types[T](obj: Any, expected: TypeForm[T]) -> TypeIs[T]:  # noqa: ANN401
+    """Return whether ``obj`` conforms to a runtime type form.
+
+    This is the project-wide replacement for ``isinstance`` when the expected
+    type may be parameterized, such as ``list[Quantity[Pressure]]`` or
+    ``Quantity[Mass, float]``. It delegates general type forms to
+    :func:`typeguard.check_type` and handles ``Quantity`` subclasses directly
+    so dimensionality and magnitude parameters are both respected.
+    """
+
     from .units import Quantity
     from .utypes import UnknownDimensionality
 
@@ -76,6 +89,8 @@ def isinstance_types[T](obj: Any, expected: TypeForm[T]) -> TypeIs[T]:  # noqa: 
 
 
 def name_assignments(src: str) -> list[tuple[str, str]]:
+    """Return simple ``name = ...`` assignments found in Python source text."""
+
     assigned_names: list[tuple[str, str]] = []
 
     tree = ast.parse(src)

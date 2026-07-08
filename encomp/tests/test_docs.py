@@ -1,6 +1,6 @@
 """Every ``python`` code block in the docs must be self-contained: it carries its own
-imports, is clean under ``ruff check``, type-checks under ``pyright``, and runs without
-error in isolation.
+imports, is clean under ``ruff check``, type-checks under ``pyright`` and ``pyrefly``,
+and runs without error in isolation.
 
 This guards the documentation against drift -- a renamed API, a missing import, or a
 snippet that only worked as a continuation of an earlier block all fail here. The block
@@ -16,15 +16,14 @@ Checks per block:
 - ``ruff check`` under the repo's full ruff config (run with cwd at the repo root), so each
   block is held to the same ruleset as the source (imports, naming, bugbear, ...) with no
   per-block exceptions -- ``F401`` (unused import) and ``F821`` (undefined name) both gate.
-- ``pyright`` against the repo config (``--project`` is passed explicitly so temp files
-  are checked with the same strict settings as the source tree). A type error in an
-  example is a real defect to fix -- ``Q(1, "bar")`` infers
-  ``Quantity[Pressure, float]``, so a correct block is clean. Blocks that demonstrate
-  runtime-only dynamic behavior (parameterized ``isinstance``, the sympy ``_``/``__``
-  methods added at import time, deliberately-invalid operations shown inside
-  ``try``/``except``) carry explicit ``# pyright: ignore[...]`` comments. The test
-  disables ``reportUnusedExpression`` for snippets because docs naturally include
-  REPL-style expressions followed by comments showing their value.
+- ``pyright`` and ``pyrefly`` against the repo config. A type error in an example is a
+  real defect to fix -- ``Q(1, "bar")`` infers ``Quantity[Pressure, float]``, so a
+  correct block is clean. Blocks that demonstrate runtime-only dynamic behavior
+  (parameterized ``isinstance``, the sympy ``_``/``__`` methods added at import time,
+  deliberately-invalid operations shown inside ``try``/``except``) carry explicit
+  checker comments. The pyright test disables ``reportUnusedExpression`` for snippets
+  because docs naturally include REPL-style expressions followed by comments showing
+  their value.
 - execution as a real script: the block is written to a file and run in a fresh
   interpreter with a temporary working directory, exactly as a reader would run it.
   A subprocess (not in-process ``exec``) is required for the ``typeguard`` examples --
@@ -74,6 +73,7 @@ def _tool(name: str) -> str | None:
 ROOT = _repo_root()
 _RUFF = _tool("ruff")
 _PYRIGHT = _tool("pyright")
+_PYREFLY = _tool("pyrefly")
 
 pytestmark = pytest.mark.skipif(
     ROOT is None, reason="docs sources not on disk (installed wheel) -- source-tree check only"
@@ -181,6 +181,22 @@ def test_doc_block_typechecks(code: str, tmp_path: Path) -> None:
         cwd=ROOT,  # resolve `encomp` via the project venv
     )
     assert proc.returncode == 0, f"pyright failed:\n{proc.stdout}{proc.stderr}"
+
+
+@pytest.mark.skipif(_PYREFLY is None, reason="pyrefly not installed")
+@pytest.mark.parametrize("code", _CODES, ids=_IDS)
+def test_doc_block_typechecks_pyrefly(code: str, tmp_path: Path) -> None:
+    assert _PYREFLY is not None  # narrowed by the skipif above
+    assert ROOT is not None  # narrowed by the module-level skipif
+    block = tmp_path / "block.py"
+    block.write_text(code)
+    proc = subprocess.run(
+        [_PYREFLY, "check", "--config", str(ROOT / "pyproject.toml"), str(block)],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+    assert proc.returncode == 0, f"pyrefly failed:\n{proc.stdout}{proc.stderr}"
 
 
 @pytest.mark.parametrize("code", _CODES, ids=_IDS)

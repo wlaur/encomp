@@ -1,3 +1,5 @@
+"""Helpers for chunking and flattening common Python containers."""
+
 from collections.abc import Iterable, Iterator, Sequence
 from typing import Any, cast, overload
 
@@ -5,6 +7,8 @@ import numpy as np
 import polars as pl
 
 from .units import Quantity
+
+__all__ = ["divide_chunks", "flatten"]
 
 
 @overload
@@ -24,11 +28,15 @@ def divide_chunks(container: np.ndarray, N: int) -> Iterator[np.ndarray]: ...
 
 
 def divide_chunks(container: Any, N: int) -> Any:
+    """Yield slices of ``container`` with at most ``N`` elements each.
+
+    Empty containers yield no chunks. ``N`` must be positive. The returned
+    chunks preserve the container's slicing behavior, so lists produce lists,
+    tuples produce tuples, and numpy arrays produce arrays.
+    """
+
     # validate eagerly: a generator body would defer these errors to the first
     # next() call, far from the call site
-    if not len(container):
-        raise ValueError("Cannot chunk empty container")
-
     if N < 1:
         raise ValueError(f"Chunk size must be at least 1, passed {N}")
 
@@ -40,6 +48,13 @@ def divide_chunks(container: Any, N: int) -> Any:
 
 
 def flatten(container: Iterable[Any], max_depth: int | None = None) -> Iterator[Any]:
+    """Yield nested iterable contents as a flat stream.
+
+    Strings, bytes, dictionaries, ``Quantity`` instances, numpy arrays and
+    Polars objects are treated as atomic values rather than recursively
+    iterated.
+    """
+
     def _flatten(items: Iterable[Any], depth: int) -> Iterator[Any]:
         if max_depth is not None and depth >= max_depth:
             yield items

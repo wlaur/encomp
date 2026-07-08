@@ -12,8 +12,9 @@ Gas-condition literals use the values in :data:`encomp.constants.CONSTANTS`:
 ``"N"`` means normal conditions (0 °C, 1 atm) and ``"S"`` means standard
 conditions (15 °C, 1 atm).
 
-.. todo::
-    Implement for humid air
+.. note::
+    Humid-air-specific conversions are not implemented here; use
+    :class:`encomp.fluids.HumidAir` for humid-air properties.
 """
 
 from typing import Any, Literal, cast, overload
@@ -37,7 +38,20 @@ from .utypes import (
     VolumeFlow,
 )
 
-R = CONSTANTS.R
+__all__ = [
+    "GasCondition",
+    "GasConditionInput",
+    "actual_volume_to_normal_volume",
+    "convert_gas_volume",
+    "ideal_gas_density",
+    "mass_from_actual_volume",
+    "mass_from_normal_volume",
+    "mass_to_actual_volume",
+    "mass_to_normal_volume",
+    "normal_volume_to_actual_volume",
+]
+
+_R = CONSTANTS.R
 
 type GasCondition = tuple[Quantity[Pressure, Any], Quantity[Temperature, Any]]
 type GasConditionInput = GasCondition | Literal["N", "S"]
@@ -117,7 +131,7 @@ def ideal_gas_density(
 
     # directly from ideal gas law
     # override the inferred type here since it's sure to be Density
-    rho = (P * M) / (R * T.to("K").unknown())
+    rho = (P * M) / (_R * T.to("K").unknown())
 
     return rho.to("kg/m³").asdim(Density)
 

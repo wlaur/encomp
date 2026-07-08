@@ -1,7 +1,7 @@
 [project]
 name = "encomp"
 version = "1.6.1"
-description = "General-purpose library for engineering calculations"
+description = "General-purpose library for engineering computations"
 authors = [{ name = "William Laurén", email = "lauren.william.a@gmail.com" }]
 requires-python = ">=3.13"
 readme = "README.md"
@@ -14,15 +14,20 @@ keywords = [
     "physical-quantities",
     "symbolic-math",
     "fluids",
-    "calculations",
+    "computations",
 ]
 classifiers = [
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Rust",
     "Topic :: Scientific/Engineering",
     "Topic :: Scientific/Engineering :: Physics",
     "Topic :: Software Development :: Libraries :: Python Modules",
@@ -242,9 +247,8 @@ python-version = "3.13"
 
 [tool.ty.rules]
 # ty's default rule set is already effectively strict; these are the rules
-# that are not error-by-default, elevated here so `ty check` runs fully strict.
-# ty remains advisory in CI while the tool is moving quickly; these local
-# elevations document the intended strictness for manual `ty check` runs.
+# that are not error-by-default, elevated here so manual `ty check` runs use
+# the intended strictness. ty is intentionally local-only for now.
 redundant-cast = "error"
 possibly-missing-attribute = "error"
 unsupported-dynamic-base = "error"

@@ -1,6 +1,12 @@
 # encomp
 
-<img src="https://raw.githubusercontent.com/wlaur/encomp/main/docs/img/logo.png" alt="encomp logo" width="150">
+[![PyPI](https://img.shields.io/pypi/v/encomp.svg)](https://pypi.org/project/encomp/)
+[![Python versions](https://img.shields.io/pypi/pyversions/encomp.svg)](https://pypi.org/project/encomp/)
+[![CI](https://github.com/wlaur/encomp/actions/workflows/release.yml/badge.svg)](https://github.com/wlaur/encomp/actions/workflows/release.yml)
+[![Documentation](https://readthedocs.org/projects/encomp/badge/?version=latest)](https://encomp.readthedocs.io)
+[![License](https://img.shields.io/pypi/l/encomp.svg)](https://github.com/wlaur/encomp/blob/main/LICENSE)
+
+<img src="https://raw.githubusercontent.com/wlaur/encomp/v1.6.1/docs/img/logo.png" alt="encomp logo" width="150">
 
 > General-purpose library for *en*gineering *comp*utations.
 
@@ -18,11 +24,11 @@ Every physical quantity in `encomp` carries a magnitude, a unit, and a dimension
 
 - **CoolProp as Polars expressions** (`encomp.coolprop`). Properties evaluate as native Polars expression plugins written in Rust, so independent properties in one `select` / `with_columns` run in parallel without holding the GIL. See [Parallel CoolProp evaluation with Polars](#parallel-coolprop-evaluation-with-polars).
 
-- **Symbolic math with units** (`encomp.sympy`) extends [Sympy](https://pypi.org/project/sympy/): typeset sub- and superscripts, convert expressions or systems to NumPy functions, combine quantities directly with symbols.
+- **Symbolic math with units** (`encomp.sympy`) extends [SymPy](https://pypi.org/project/sympy/): typeset sub- and superscripts, convert expressions or systems to NumPy functions, combine quantities directly with symbols.
 
 - **Serialization and settings.** `Quantity` fields work as [Pydantic](https://pypi.org/project/pydantic/) model types (JSON round-trip, dimensionality validation). Library behavior is configured from an `.env` file.
 
-The remaining modules (`encomp.gases`, `encomp.conversion`, `encomp.constants`, ...) implement process-engineering and thermodynamics calculations.
+The remaining modules (`encomp.gases`, `encomp.conversion`, `encomp.constants`, ...) implement process-engineering and thermodynamics computations.
 
 ## Versioning and stability
 
@@ -36,7 +42,7 @@ The remaining modules (`encomp.gases`, `encomp.conversion`, `encomp.constants`, 
 pip install encomp
 ```
 
-`encomp` ships as a single per-platform wheel that bundles the compiled Rust plugin and the CoolProp shared library, so supported platforms have nothing to build. Wheels are provided for Windows (x86_64), Linux (x86_64 and arm64), and macOS (Apple Silicon only). Unsupported platforms, including Intel Macs, need a build from the git repository; see [Tests](#tests).
+`encomp` ships as a single per-platform wheel that bundles the compiled Rust plugin and the CoolProp shared library, so supported platforms have nothing to build. Wheels are provided for Windows (x86_64), Linux (x86_64 and arm64), and macOS (Apple Silicon only). PyPI does not publish an sdist; unsupported platforms, including Intel Macs, need a build from the git repository; see [Tests](#tests).
 
 ## The `Quantity` class
 
@@ -69,8 +75,10 @@ The dimensionality can also be given explicitly, using a subclass of `encomp.uty
 
 Common dimensionalities are defined in the `encomp.utypes` module.
 A newly created dimensionality gets a class name of the form `Dimensionality[...]` (for example `Quantity[Dimensionality[[mass] ** 2 / [length] ** 3]]`).
+The second type parameter is the magnitude container. It defaults to `Numpy1DArray`, so annotate scalar quantities explicitly as `Quantity[Pressure, float]` (or `Q[Pressure, float]`).
 
 ```python
+from encomp.misc import isinstance_types
 from encomp.units import ExpectedDimensionalityError
 from encomp.units import Quantity as Q
 from encomp.utypes import MassFlow, Volume
@@ -91,8 +99,8 @@ rho = m / V  # Quantity[Density, float]
 m_ = Q(25, "kg/week")  # Quantity[UnknownDimensionality, float]
 
 # at runtime, the dimensionality of m_ is evaluated to MassFlow;
-# Q[MassFlow] is a real class, but parameterized isinstance is a runtime-only feature
-assert isinstance(m_, Q[MassFlow])  # pyright: ignore[reportArgumentType]
+# use isinstance_types for parameterized Quantity checks in type-checked code
+assert isinstance_types(m_, Q[MassFlow])
 
 # these operations (Mass**2 divided by Volume) are not explicitly defined as overloads
 # at runtime, the type will be evaluated to
@@ -253,6 +261,8 @@ Fluid("HEOS::CO2[0.7]&O2[0.3]", P=Q(10, "bar"), T=Q(300, "K"))
 Fluid("HEOS", P=Q(10, "bar"), T=Q(300, "K"), composition={"CO2": 0.7, "O2": 0.3}).assume_phase("gas")
 ```
 
+Incompressible fluid names such as `INCOMP::MEG[0.5]` and `INCOMP::MPG[0.5]` are aqueous ethylene-glycol and propylene-glycol solutions; the bracketed fraction is the concentration on CoolProp's documented basis, not the mole fraction used by `composition`.
+
 The `HumidAir` class requires three input points (`R` means relative humidity):
 
 ```python
@@ -313,14 +323,14 @@ Benchmarks (CoolProp 8.0, 14-thread pool):
 | --- | --- | --- |
 | single property `D`, 1M rows | ~2.1x | also ~2x faster than vectorized `PropsSI` |
 | 4 independent properties, one `collect()`, 1M rows | ~4.6x | `map_batches` is serial on the GIL; the plugin runs ~4 cores |
-| 8 enthalpy calculations, 1M rows | ~4.9x | ~6 cores vs 1, roughly half the peak memory |
+| 8 enthalpy evaluations, 1M rows | ~4.9x | ~6 cores vs 1, roughly half the peak memory |
 
 Each `fluid(...)` / `humid_air(...)` is an independent plugin node, so selecting *K* properties of one state runs *K* flashes of it — Polars cannot reuse the shared flash across opaque plugin nodes. Independent properties still parallelize, so this is total work, not wall-clock. See `encomp/coolprop/README.md` for the design, thread-safety model, and caveats.
 
 ## Symbolic math
 
 `encomp.sympy` is legacy and soft-deprecated; it is planned for removal in a future major release.
-To load additional methods for the `sympy.Symbol` class, import Sympy via the `encomp.sympy` module. The `_` / `__` methods add typeset sub- and superscripts, and quantities combine directly with symbols:
+To load additional methods for the `sympy.Symbol` class, import SymPy via the `encomp.sympy` module. The `_` / `__` methods add typeset sub- and superscripts, and quantities combine directly with symbols:
 
 ```python
 from typing import Any, cast

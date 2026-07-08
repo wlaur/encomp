@@ -28,8 +28,7 @@ def _coolprop_version() -> str:
     so the ``input_pairs`` enum index encomp computes on the Python side stays valid for
     the bundled library.
 
-    Parsed with a regex rather than ``tomllib``: cibuildwheel's ``before-all`` runs this
-    under the manylinux image's system ``python``, which predates 3.11 and has no tomllib."""
+    Parsed with a small regex because only one dependency spec is needed here."""
     text = (PROJECT / "pyproject.toml").read_text()
     match = re.search(r"""["']coolprop\s*(?:==|>=)\s*([\w.]+)""", text)
     if match:
@@ -106,9 +105,7 @@ def main() -> None:
         sys.exit(f"libCoolProp not found under {build}")
     PKG.mkdir(parents=True, exist_ok=True)
     for stale in candidates:  # drop any other-platform lib so the wheel ships only this one
-        old = PKG / stale
-        if old.exists():  # not Path.unlink(missing_ok=...): the before-all python may be < 3.8
-            old.unlink()
+        (PKG / stale).unlink(missing_ok=True)
     dest = PKG / found.name
     shutil.copy2(found, dest)
     print(f"bundled {found} -> {dest}", flush=True)

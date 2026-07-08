@@ -1,5 +1,7 @@
 [package]
 name = "encomp_coolprop"
+# Private Rust extension crate version; the published Python distribution version is
+# single-sourced in ../pyproject.toml.
 version = "0.1.0"
 edition = "2024"
 

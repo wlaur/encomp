@@ -62,6 +62,8 @@
 #### PREFIXES ####
 
 # decimal prefixes
+quecto- = 1e-30 = q-
+ronto- = 1e-27 = r-
 yocto- = 1e-24 = y-
 zepto- = 1e-21 = z-
 atto- =  1e-18 = a-
@@ -70,7 +72,7 @@ pico- =  1e-12 = p-
 nano- =  1e-9  = n-
 # The micro (U+00B5) and Greek mu (U+03BC) are both valid prefixes,
 # and they often use the same glyph.
-micro- = 1e-6  = µ- = μ- = u-
+micro- = 1e-6  = µ- = μ- = u- = mu- = mc-
 milli- = 1e-3  = m-
 centi- = 1e-2  = c-
 deci- =  1e-1  = d-
@@ -84,6 +86,8 @@ peta- =  1e15  = P-
 exa- =   1e18  = E-
 zetta- = 1e21  = Z-
 yotta- = 1e24  = Y-
+ronna- = 1e27 = R-
+quetta- = 1e30 = Q-
 
 # binary_prefixes
 kibi- = 2**10 = Ki-
@@ -118,6 +122,7 @@ count = []
 currency = [currency]
 normal = [normal]
 
+
 #### CONSTANTS ####
 
 @import constants.txt
@@ -128,27 +133,13 @@ normal = [normal]
 # Conversion factors are exact (except when noted),
 # although floating-point conversion may introduce inaccuracies
 
-percent = 1 / 100 = _ = pct = procent
-permille = 1 / 1000 = permil = promille
-ppm = 1 / 1000000
-
-# NOTE: these are only approximate, don't use for currency conversion
-SEK = 1 * currency
-EUR = 10 * currency
-USD = 10 * currency
-
-# named normal cubic meter so normal volumes display compactly as Nm³
-# (Quantity.correct_unit rewrites the Nm3/nm³/... input variants to this unit)
-normal_cubic_meter = normal * meter ** 3 = Nm³
-
-
 # Angle
 turn = 2 * π * radian = _ = revolution = cycle = circle
 degree = π / 180 * radian = deg = arcdeg = arcdegree = angular_degree
 arcminute = degree / 60 = arcmin = arc_minute = angular_minute
 arcsecond = arcminute / 60 = arcsec = arc_second = angular_second
 milliarcsecond = 1e-3 * arcsecond = mas
-grade = π / 200 * radian = grad = gon
+grade = π / 200 * radian = grad = gon = gradian
 mil = π / 32000 * radian
 
 # Solid angle
@@ -162,6 +153,21 @@ byte = 8 * bit = B = octet
 # byte = 8 * bit = _ = octet
 ## NOTE: B (byte) symbol can conflict with Bell
 
+# Dimensionless ratios
+percent = 0.01 = % = pct = procent
+permille = 0.001 = ‰ = permil = promille   # NOTE: ‰ = U+2030 (PER MILLE SIGN)
+ppm = 1e-6
+strain = 1 = ε = ϵ     # NOTE: ε = U+03B5 (GREEK SMALL LETTER EPSILON), ϵ = U+03F5 (GREEK LUNATE EPSILON SYMBOL)
+
+# NOTE: these are only approximate, don't use for currency conversion
+SEK = 1 * currency
+EUR = 10 * currency
+USD = 10 * currency
+
+# named normal cubic meter so normal volumes display compactly as Nm³
+# (Quantity.correct_unit rewrites the Nm3/nm³/... input variants to this unit)
+normal_cubic_meter = normal * meter ** 3 = Nm³
+
 # Length
 angstrom = 1e-10 * meter = Å = ångström = Å
 micron = micrometer = µ = μ
@@ -171,9 +177,6 @@ astronomical_unit = 149597870700 * meter = au  # since Aug 2012
 parsec = 1 / tansec * astronomical_unit = pc
 nautical_mile = 1852 * meter = nmi
 bohr = hbar / (alpha * m_e * c) = a_0 = a0 = bohr_radius = atomic_unit_of_length = a_u_length
-x_unit_Cu = K_alpha_Cu_d_220 * d_220 / 1537.4 = Xu_Cu
-x_unit_Mo = K_alpha_Mo_d_220 * d_220 / 707.831 = Xu_Mo
-angstrom_star = K_alpha_W_d_220 * d_220 / 0.2090100 = Å_star
 planck_length = (hbar * gravitational_constant / c ** 3) ** 0.5
 
 # Mass
@@ -189,9 +192,9 @@ planck_mass = (hbar * c / gravitational_constant) ** 0.5
 minute = 60 * second = min
 hour = 60 * minute = h = hr
 day = 24 * hour = d
-week = 7 * day = wk = w
+week = 7 * day = wk
 fortnight = 2 * week
-year = 365.25 * day = a = yr = julian_year = y
+year = 365.25 * day = a = yr = julian_year
 month = year / 12
 
 # decade = 10 * year
@@ -218,7 +221,7 @@ planck_time = (hbar * gravitational_constant / c ** 5) ** 0.5
 degree_Celsius = kelvin; offset: 273.15 = °C = celsius = degC = degreeC
 degree_Rankine = 5 / 9 * kelvin; offset: 0 = °R = rankine = degR = degreeR
 degree_Fahrenheit = 5 / 9 * kelvin; offset: 233.15 + 200 / 9 = °F = fahrenheit = degF = degreeF
-degree_Reaumur = 4 / 5 * kelvin; offset: 273.15 = °Re = reaumur = degRe = degreeRe = degree_Réaumur = réaumur
+degree_Reaumur = 5 / 4 * kelvin; offset: 273.15 = °Re = reaumur = degRe = degreeRe = degree_Réaumur = réaumur
 atomic_unit_of_temperature = E_h / k = a_u_temp
 planck_temperature = (hbar * c ** 5 / gravitational_constant / k ** 2) ** 0.5
 
@@ -231,7 +234,7 @@ hectare = 100 * are = ha
 
 # Volume
 [volume] = [length] ** 3
-liter = decimeter ** 3 = l = L = litre
+liter = decimeter ** 3 = l = L = ℓ = litre
 cubic_centimeter = centimeter ** 3 = cc
 lambda = microliter = λ
 stere = meter ** 3
@@ -250,7 +253,7 @@ reciprocal_centimeter = 1 / cm = cm_1 = kayser
 # Velocity
 [velocity] = [length] / [time]
 [speed] = [velocity]
-knot = nautical_mile / hour = kt = knot_international = international_knot
+knot = nautical_mile / hour = kn = kt = knot_international = international_knot
 mile_per_hour = mile / hour = mph = MPH
 kilometer_per_hour = kilometer / hour = kph = KPH = kmh = KMH
 kilometer_per_second = kilometer / second = kps
@@ -264,13 +267,14 @@ sverdrup = 1e6 * meter ** 3 / second = sv
 # Acceleration
 [acceleration] = [velocity] / [time]
 galileo = centimeter / second ** 2 = Gal
+meter_per_second_squared = meter / second ** 2
 
 # Force
 [force] = [mass] * [acceleration]
 newton = kilogram * meter / second ** 2 = N
 dyne = gram * centimeter / second ** 2 = dyn
-force_kilogram = g_0 * kilogram = kgf = kilogram_force = pond
-force_gram = g_0 * gram = gf = gram_force
+force_kilogram = g_0 * kilogram = kgf = kilogram_force
+force_gram = g_0 * gram = gf = gram_force = pond
 force_metric_ton = g_0 * metric_ton = tf = metric_ton_force = force_t = t_force
 atomic_unit_of_force = E_h / a_0 = a_u_force
 
@@ -279,7 +283,7 @@ atomic_unit_of_force = E_h / a_0 = a_u_force
 joule = newton * meter = J
 erg = dyne * centimeter
 watt_hour = watt * hour = Wh = watthour
-electron_volt = e * volt = eV
+electron_volt = e * volt = eV = electronvolt
 rydberg = ℎ * c * R_inf = Ry
 hartree = 2 * rydberg = E_h = Eh = hartree_energy = atomic_unit_of_energy = a_u_energy
 calorie = 4.184 * joule = cal = thermochemical_calorie = cal_th
@@ -311,7 +315,7 @@ conventional_watt_90 = K_J90 ** 2 * R_K90 / (K_J ** 2 * R_K) * watt = W_90
 # Momentum
 [momentum] = [length] * [mass] / [time]
 
-# Density (as auxiliary for pressure)
+# Density
 [density] = [mass] / [volume]
 mercury = 13.5951 * kilogram / liter = Hg = Hg_0C = Hg_32F = conventional_mercury
 water = 1.0 * kilogram / liter = H2O = conventional_water
@@ -328,15 +332,27 @@ technical_atmosphere = kilogram * g_0 / centimeter ** 2 = at
 torr = atm / 760
 pound_force_per_square_inch = force_pound / inch ** 2 = psi
 kip_per_square_inch = kip / inch ** 2 = ksi
-millimeter_Hg = millimeter * Hg * g_0 = mmHg = mm_Hg = millimeter_Hg_0C
-centimeter_Hg = centimeter * Hg * g_0 = cmHg = cm_Hg = centimeter_Hg_0C
-inch_Hg = inch * Hg * g_0 = inHg = in_Hg = inch_Hg_32F
-inch_Hg_60F = inch * Hg_60F * g_0
-inch_H2O_39F = inch * water_39F * g_0
-inch_H2O_60F = inch * water_60F * g_0
-foot_H2O = foot * water * g_0 = ftH2O = feet_H2O = feet_water = foot_water = ft_H2O = ft_water
-centimeter_H2O = centimeter * water * g_0 = cmH2O = cm_H2O
-meter_H2O = cmH2O * 100 = m_H2O = mH2O = mh2o = mH20 = meter_water = m_water
+meter_H2O = meter * conventional_water_density * g_0 = mH2O = m_H2O = mh2o = meter_water = m_water
+meter_H2O_4C = meter * water_density_4C * g_0 = mH2O_4C = m_H2O_4C
+meter_H2O_60F = meter * water_density_60F * g_0 = mH2O_60F = m_H2O_60F
+inch_H2O = inch * conventional_water_density * g_0 = inH2O = in_H2O = inchesH2O = inches_H2O
+inch_H2O_4C = inch * water_density_4C * g_0 = inH2O_4C = in_H2O_4C = inchesH2O_4C = inches_H2O_4C
+inch_H2O_60F = inch * water_density_60F * g_0 = inH2O_60F = in_H2O_60F = inchesH2O_60F = inches_H2O_60F
+foot_H2O = foot * conventional_water_density * g_0 = ftH2O = ft_H2O = feetH2O = feet_H2O = foot_water = feet_water
+foot_H2O_4C = foot * water_density_4C * g_0 = ftH2O_4C = ft_H2O_4C = feetH2O_4C = feet_H2O_4C
+foot_H2O_60F = foot * water_density_60F * g_0 = ftH2O_60F = ft_H2O_60F = feetH2O_60F = feet_H2O_60F
+meter_Hg = meter * conventional_mercury_density * g_0 = mHg = m_Hg
+meter_Hg_0C = meter * mercury_density_0C * g_0 = mHg_0C = m_Hg_0C
+meter_Hg_32F = meter * mercury_density_32F * g_0 = mHg_32F = m_Hg_32F
+meter_Hg_60F = meter * mercury_density_60F * g_0 = mHg_60F = m_Hg_60F
+inch_Hg = inch * conventional_mercury_density * g_0 = inHg = in_Hg = inchesHg = inches_Hg
+inch_Hg_0C = inch * mercury_density_0C * g_0 = inHg_0C = in_Hg_0C = inchesHg_0C = inches_Hg_0C
+inch_Hg_32F = inch * mercury_density_32F * g_0 = inHg_32F = in_Hg_32F = inchesHg_32F = inches_Hg_32F
+inch_Hg_60F = inch * mercury_density_60F * g_0 = inHg_60F = in_Hg_60F = inchesHg_60F = inches_Hg_60F
+foot_Hg = foot * conventional_mercury_density * g_0 = ftHg = ft_Hg = feetHg = feet_Hg
+foot_Hg_0C = foot * mercury_density_0C * g_0 = ftHg_0C = ft_Hg_0C = feetHg_0C = feet_Hg_0C
+foot_Hg_32F = foot * mercury_density_32F * g_0 = ftHg_32F = ft_Hg_32F = feetHg_32F = feet_Hg_32F
+foot_Hg_60F = foot * mercury_density_60F * g_0 = ftHg_60F = ft_Hg_60F = feetHg_60F = feet_Hg_60F
 sound_pressure_level = 20e-6 * pascal = SPL
 
 # Valve constants
@@ -442,8 +458,16 @@ conventional_volt_90 = K_J90 / K_J * volt = V_90
 [electric_field] = [electric_potential] / [length]
 atomic_unit_of_electric_field = e * k_C / a_0 ** 2 = a_u_electric_field
 
+# Electric field gradient
+[electric_field_gradient] = [energy] / [area] / [charge]
+atomic_unit_of_electric_field_gradient = E_h / a_0 ** 2 / e = a_u_efg
+
 # Electric displacement field
 [electric_displacement_field] = [charge] / [area]
+
+# Reduced electric field
+[reduced_electric_field] = [electric_field] * [area]
+townsend =  1e-21 * V * m^2 = Td
 
 # Resistance
 [resistance] = [electric_potential] / [current]
@@ -460,6 +484,9 @@ conventional_ohm_90 = R_K / R_K90 * ohm = Ω_90 = ohm_90
 [conductance] = [current] / [electric_potential]
 siemens = ampere / volt = S = mho
 absiemens = 1e9 * siemens = abS = abmho
+
+# Conductivity
+[conductivity] = [conductance]/[length]
 
 # Capacitance
 [capacitance] = [charge] / [electric_potential]
@@ -505,12 +532,28 @@ buckingham = debye * angstrom
 bohr_magneton = e * hbar / (2 * m_e) = µ_B = mu_B
 nuclear_magneton = e * hbar / (2 * m_p) = µ_N = mu_N
 
+# Refractive index
+[refractive_index] = []
+refractive_index_unit = [] = RIU
+
+# Absorbance
+[absorbance] = []
+absorbance_unit = [] = AU
+
+# Membrane filtration flux
+LMH = L / m**2 / h
+[membrane_flux] = [volume] / [area] / [time]
+
+# Membrane filtration permeability
+[membrane_permeability] = [membrane_flux] / [pressure]
+
 # Logaritmic Unit Definition
 #  Unit = scale; logbase; logfactor
 #  x_dB = [logfactor] * log( x_lin / [scale] ) / log( [logbase] )
 
 # Logaritmic Units of dimensionless quantity: [ https://en.wikipedia.org/wiki/Level_(logarithmic_quantity) ]
 
+decibelwatt = watt; logbase: 10; logfactor: 10 = dBW
 decibelmilliwatt = 1e-3 watt; logbase: 10; logfactor: 10 = dBm
 decibelmicrowatt = 1e-6 watt; logbase: 10; logfactor: 10 = dBu
 
@@ -601,11 +644,11 @@ neper = 1 ; logbase: 2.71828182845904523536028747135266249775724709369995; logfa
 @end
 
 @group Avoirdupois
-    dram = pound / 256 = dr = avoirdupois_dram = avdp_dram = drachm
+    dram = pound / 256 = dr = avoirdupois_dram = avdp_dram
     ounce = pound / 16 = oz = avoirdupois_ounce = avdp_ounce
     pound = 7e3 * grain = lb = avoirdupois_pound = avdp_pound
     stone = 14 * pound
-    quarter = 28 * stone
+    quarter = 28 * pound
     bag = 94 * pound
     hundredweight = 100 * pound = cwt = short_hundredweight
     long_hundredweight = 112 * pound
@@ -616,7 +659,7 @@ neper = 1 ; logbase: 2.71828182845904523536028747135266249775724709369995; logfa
 
     force_ounce = g_0 * ounce = ozf = ounce_force
     force_pound = g_0 * pound = lbf = pound_force
-    force_ton = g_0 * ton = _ = ton_force = force_short_ton = short_ton_force
+    force_ton = g_0 * US_ton = _ = ton_force = force_short_ton = short_ton_force
     force_long_ton = g_0 * long_ton = _ = long_ton_force
     kip = 1e3 * force_pound
     poundal = pound * foot / second ** 2 = pdl
@@ -641,7 +684,7 @@ neper = 1 ; logbase: 2.71828182845904523536028747135266249775724709369995; logfa
 
 @group Apothecary
     scruple = 20 * grain
-    apothecary_dram = 3 * scruple = ap_dr
+    apothecary_dram = 3 * scruple = ap_dr = apothecary_drachm = drachm
     apothecary_ounce = 8 * apothecary_dram = ap_oz
     apothecary_pound = 12 * apothecary_ounce = ap_lb
 @end
@@ -678,6 +721,21 @@ neper = 1 ; logbase: 2.71828182845904523536028747135266249775724709369995; logfa
     pixels_per_inch = pixel / inch = dots_per_inch = PPI = ppi = DPI = printers_dpi
     bits_per_pixel = bit / pixel = bpp
 @end
+
+# The textile group from Pint defines "Nm" as number_meter (km/kg). In encomp,
+# Nm3/Nm³/nm3 are normal cubic meter spellings, so keep textile units disabled
+# rather than letting a torque-looking "Nm" parse as a textile unit.
+# @group Textile
+#     tex = gram / kilometer = Tt
+#     dtex = decitex
+#     denier = gram / (9 * kilometer) = den
+#     jute = pound / (14400 * yard) = Tj
+#     aberdeen = jute = Ta
+#     RKM  = gf / tex
+#
+#     number_english = 840 * yard / pound = Ne = NeC = ECC
+#     number_meter = kilometer / kilogram = Nm
+# @end
 
 
 #### CGS ELECTROMAGNETIC UNITS ####
@@ -829,6 +887,12 @@ neper = 1 ; logbase: 2.71828182845904523536028747135266249775724709369995; logfa
     [substance] / [volume] -> [substance] / [mass]: value / solvent_mass * volume
 
 @end
+
+# @context textile
+#     # Allow switching between Direct count system (i.e. tex) and
+#     # Indirect count system (i.e. Ne, Nm)
+#     [mass] / [length] <-> [length] / [mass]: 1 / value
+# @end
 
 
 #### SYSTEMS OF UNITS ####

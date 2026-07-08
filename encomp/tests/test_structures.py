@@ -78,8 +78,7 @@ def test_divide_chunks_errors() -> None:
     with pytest.raises(ValueError):
         divide_chunks([1, 2, 3], -5)
 
-    with pytest.raises(ValueError):
-        divide_chunks(cast("list[Any]", []), 2)
+    assert list(divide_chunks(cast("list[Any]", []), 2)) == []
 
 
 def test_flatten_atomic_types() -> None:

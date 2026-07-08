@@ -142,7 +142,7 @@ autodoc_default_options = {
 # Disable numpydoc autosummary to avoid stub file warnings
 numpydoc_show_class_members = False
 
-todo_include_todos = True
+todo_include_todos = False
 
 pygments_style = "sphinx"
 pygments_dark_style = "monokai"
@@ -151,7 +151,7 @@ pygments_dark_style = "monokai"
 # output -- _static/logo.svg comes from the img/ entry in html_static_path above
 # NOTE: the .ipynb suffix is not included in the names
 nbsphinx_thumbnails = {
-    "notebooks/getting_started": "_static/logo.svg",
+    "notebooks/getting-started": "_static/logo.svg",
 }
 
 add_module_names = False
@@ -174,7 +174,8 @@ suppress_warnings = [
     "docutils",
 ]
 
-nbsphinx_allow_errors = True
+nbsphinx_execute = "always"
+nbsphinx_allow_errors = False
 
 nbsphinx_requirejs_path = ""
 nbsphinx_requirejs_options = {}
