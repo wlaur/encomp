@@ -130,6 +130,13 @@ def test_docs_have_blocks() -> None:
     assert len(_CASES) > 20, f"expected many doc code blocks, found {len(_CASES)}"
 
 
+def test_doc_block_discovery_covers_public_docs() -> None:
+    """Public Markdown docs must remain in the checked block set."""
+    covered = {case_id.split(":", 1)[0] for case_id in _IDS}
+    assert {"README.md", "docs/usage.md"} <= covered
+    assert not any(case_id.startswith("_coolprop_build/") for case_id in _IDS)
+
+
 @pytest.mark.skipif(_RUFF is None, reason="ruff not installed")
 @pytest.mark.parametrize("code", _CODES, ids=_IDS)
 def test_doc_block_lints(code: str, tmp_path: Path) -> None:
