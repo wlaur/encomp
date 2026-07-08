@@ -3,7 +3,7 @@ Contains settings used elsewhere in the library.
 """
 
 from pathlib import Path
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import FilePath
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -11,7 +11,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 PACKAGE_ROOT = Path(__file__).parent.resolve()
 
 PintFormattingSpecifier = Literal["~P", "~L", "~H", "~Lx"]
-PINT_FORMATTING_SPECIFIERS = ("~P", "~L", "~H", "~Lx")
+PINT_FORMATTING_SPECIFIERS = get_args(PintFormattingSpecifier)
+
+__all__ = ["PACKAGE_ROOT", "PINT_FORMATTING_SPECIFIERS", "SETTINGS", "PintFormattingSpecifier", "Settings"]
 
 
 class Settings(BaseSettings):
@@ -41,13 +43,13 @@ class Settings(BaseSettings):
         fail with a ``ValidationError`` -- even in an unrelated project.
 
     * ``UNITS``: path to a file with unit definitions for ``pint``
-    * ``TYPESET_SYMBOL_SCRIPTS``: whether to typeset Sympy symbol sub- and superscripts
+    * ``TYPESET_SYMBOL_SCRIPTS``: whether to typeset SymPy symbol sub- and superscripts
     * ``IGNORE_NDARRAY_UNIT_STRIPPED_WARNING``: whether to suppress the ``pint`` warning
-      when converting Quantity to Numpy array.
+      when converting Quantity to NumPy array.
     * ``IGNORE_COOLPROP_WARNINGS``: whether to suppress warnings
       from the CoolProp backend
     * ``AUTOCONVERT_OFFSET_TO_BASEUNIT``: whether to automatically convert
-      offset units in calculations.
+      offset units in computations.
       If this is False, °C must be converted to K before multiplication (for example)
     * ``DEFAULT_UNIT_FORMAT``: default unit format for ``Quantity`` objects:
       one of ``~P`` (compact), ``~L`` (Latex), ``~H`` (HTML),

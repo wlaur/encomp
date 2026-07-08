@@ -7,11 +7,14 @@ Some commonly used derived dimensionalities (like density) are defined for conve
 
 from __future__ import annotations
 
+import logging
 from typing import Literal, TypeVar, cast, get_origin
 
 import numpy as np
 import polars as pl
 from pint.util import UnitsContainer
+
+_LOGGER = logging.getLogger(__name__)
 
 BASE_SI_UNITS = (
     "m",
@@ -122,12 +125,8 @@ CurrencyPerTimeUnits = Literal[
     "EUR/d",
     "SEK/day",
     "EUR/day",
-    "SEK/w",
-    "EUR/w",
     "SEK/week",
     "EUR/week",
-    "SEK/y",
-    "EUR/y",
     "SEK/yr",
     "EUR/yr",
     "SEK/year",
@@ -166,9 +165,7 @@ TimeUnits = Literal[
     "hour",
     "d",
     "day",
-    "w",
     "week",
-    "y",
     "yr",
     "a",
     "year",
@@ -206,6 +203,7 @@ SubstanceUnits = Literal[
 
 MolarMassUnits = Literal[
     "g/mol",
+    "kg/mol",
     "kg/kmol",
 ]
 
@@ -219,7 +217,7 @@ CurrentUnits = Literal[
     "mA",
 ]
 
-LuminosityUnits = Literal["lm"]
+LuminosityUnits = Literal["cd", "lm"]
 
 AreaUnits = Literal[
     "m2",
@@ -290,12 +288,9 @@ MassFlowUnits = Literal[
     "t/hr",
     "t/d",
     "ton/day",
-    "t/w",
     "ton/week",
-    "t/y",
     "t/a",
     "t/year",
-    "ton/y",
     "ton/a",
     "ton/year",
 ]
@@ -401,23 +396,15 @@ PowerUnits = Literal[
     "TW",
     "mW",
     "kWh/d",
-    "kWh/w",
-    "kWh/y",
     "kWh/yr",
     "kWh/year",
     "MWh/d",
-    "MWh/w",
-    "MWh/y",
     "MWh/yr",
     "MWh/year",
     "GWh/d",
-    "GWh/w",
-    "GWh/y",
     "GWh/yr",
     "GWh/year",
     "TWh/d",
-    "TWh/w",
-    "TWh/y",
     "TWh/yr",
     "TWh/year",
 ]
@@ -565,6 +552,8 @@ AllUnits = (
 
 
 def get_registered_units() -> dict[str, tuple[str, ...]]:
+    """Return the literal unit spellings registered for each known dimensionality."""
+
     ret: dict[str, tuple[str, ...]] = {}
 
     for k, v in globals().items():
@@ -614,6 +603,11 @@ class Dimensionality(metaclass=_DimensionalityMeta):
     The ``dimensions`` class attribute defines the dimensions
     of the dimensionality using an instance of
     ``pint.unit.UnitsContainer``.
+
+    Distinctness is registry-relative: if another dimensionality with the same
+    dimensions is registered later, :meth:`is_distinct` for those dimensions may
+    change. Define custom dimensionalities at import time and use globally
+    unique class names in library code.
     """
 
     # set _distinct to False for dimensionalities that are not distinct
@@ -660,6 +654,12 @@ class Dimensionality(metaclass=_DimensionalityMeta):
                     "this name already exists and the dimensions do "
                     f"not match: {cls.dimensions} != {existing.dimensions}"
                 )
+
+            _LOGGER.warning(
+                "Dimensionality subclass %s with dimensions %s already exists; keeping the first registered class",
+                cls.__name__,
+                cls.dimensions,
+            )
 
             # don't create a new subclass with the same name
             return
@@ -1089,3 +1089,119 @@ class MixtureVolumePerDryAir(IndistinctDimensionality):
 
 class MixtureVolumePerHumidAir(IndistinctDimensionality):
     dimensions = _VolumeUC / _MassUC
+
+
+__all__ = [
+    "BASE_SI_UNITS",
+    "DT",
+    "DT_",
+    "MT",
+    "MT_",
+    "AllUnits",
+    "Area",
+    "AreaUnits",
+    "Currency",
+    "CurrencyPerEnergy",
+    "CurrencyPerEnergyUnits",
+    "CurrencyPerMass",
+    "CurrencyPerMassUnits",
+    "CurrencyPerTime",
+    "CurrencyPerTimeUnits",
+    "CurrencyPerVolume",
+    "CurrencyPerVolumeUnits",
+    "CurrencyUnits",
+    "Current",
+    "CurrentUnits",
+    "Density",
+    "DensityUnits",
+    "Dimensionality",
+    "Dimensionless",
+    "DimensionlessUnits",
+    "DynamicViscosity",
+    "DynamicViscosityUnits",
+    "Energy",
+    "EnergyPerMass",
+    "EnergyPerMassUnits",
+    "EnergyUnits",
+    "Force",
+    "ForceUnits",
+    "Frequency",
+    "HeatTransferCoefficient",
+    "HeatTransferCoefficientUnits",
+    "HeatingValue",
+    "HigherHeatingValue",
+    "IndistinctDimensionality",
+    "KinematicViscosity",
+    "KinematicViscosityUnits",
+    "Length",
+    "LengthUnits",
+    "LowerHeatingValue",
+    "Luminosity",
+    "LuminosityUnits",
+    "Mass",
+    "MassFlow",
+    "MassFlowUnits",
+    "MassPerEnergy",
+    "MassPerNormalVolume",
+    "MassUnits",
+    "MixtureEnthalpyPerDryAir",
+    "MixtureEnthalpyPerHumidAir",
+    "MixtureEntropyPerDryAir",
+    "MixtureEntropyPerHumidAir",
+    "MixtureVolumePerDryAir",
+    "MixtureVolumePerHumidAir",
+    "MolarDensity",
+    "MolarMass",
+    "MolarMassUnits",
+    "MolarSpecificEnthalpy",
+    "MolarSpecificEntropy",
+    "MolarSpecificInternalEnergy",
+    "Normal",
+    "NormalTemperature",
+    "NormalVolume",
+    "NormalVolumeFlow",
+    "NormalVolumeFlowUnits",
+    "NormalVolumePerMass",
+    "NormalVolumePerMassUnits",
+    "NormalVolumeUnits",
+    "Numpy1DArray",
+    "Numpy1DBoolArray",
+    "Power",
+    "PowerPerArea",
+    "PowerPerLength",
+    "PowerPerTemperature",
+    "PowerPerVolume",
+    "PowerUnits",
+    "Pressure",
+    "PressureUnits",
+    "SpecificEnthalpy",
+    "SpecificEntropy",
+    "SpecificHeatCapacity",
+    "SpecificHeatCapacityUnits",
+    "SpecificHeatPerDryAir",
+    "SpecificHeatPerHumidAir",
+    "SpecificInternalEnergy",
+    "SpecificVolume",
+    "SpecificVolumeUnits",
+    "Substance",
+    "SubstancePerMass",
+    "SubstancePerMassUnits",
+    "SubstanceUnits",
+    "Temperature",
+    "TemperatureDifference",
+    "TemperatureDifferenceUnits",
+    "TemperatureUnits",
+    "ThermalConductivity",
+    "ThermalConductivityUnits",
+    "Time",
+    "TimeUnits",
+    "UnitsContainer",
+    "UnknownDimensionality",
+    "Velocity",
+    "VelocityUnits",
+    "Volume",
+    "VolumeFlow",
+    "VolumeFlowUnits",
+    "VolumeUnits",
+    "get_registered_units",
+]

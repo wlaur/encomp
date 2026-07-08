@@ -43,7 +43,8 @@ pressure_kpa = pressure.to("kPa")
 For measured values with uncertainty, `Quantity.plus_minus()` keeps the unit and stores an `uncertainties` magnitude.
 
 The unit definition file (`encomp/defs/units.txt`) lists the accepted unit names.
-It is based on the `defaults_en.txt` file from `pint`, with minor modifications.
+It is based on the `default_en.txt` file from `pint`, with minor modifications.
+The `Nm3`/`Nm³`/`nm3` spellings mean *normal cubic meter*, not nanometer cubed; use `nanometer**3` for nanoscale volumes.
 
 Quantities can also be constructed from unit registry attributes:
 
@@ -54,11 +55,13 @@ from encomp.units import UNIT_REGISTRY
 from encomp.units import Quantity as Q
 
 # the registry attributes are typed for use as Quantity units, not for
-# direct arithmetic, so annotate intermediate values as dynamic.
-d: Any = cast(Any, 50 * UNIT_REGISTRY.m)
-v: Any = d / UNIT_REGISTRY.s
+# direct arithmetic, so use a dynamic alias when doing registry arithmetic.
+ureg: Any = cast(Any, UNIT_REGISTRY)
 
-mf = Q(25, cast(Any, UNIT_REGISTRY.kg / UNIT_REGISTRY.h))
+d = 50 * ureg.m
+v = d / ureg.s
+
+mf = Q(25, ureg.kg / ureg.h)
 ```
 
 ### Quantity types
@@ -91,12 +94,16 @@ The type parameter is the subclass itself, not an instance: `Q[Power]` works, `Q
 :::
 
 Subclasses for common dimensionalities are defined in {py:mod}`encomp.utypes`.
+The second type parameter is the magnitude container. It defaults to
+`Numpy1DArray`, so scalar annotations should include `float` explicitly.
 
 ```python
 from encomp.units import Quantity as Q
 from encomp.utypes import Dimensionality, Length, Power, Pressure
 
 Q[Pressure, float]  # subclass with dimensionality pressure and magnitude float
+pressure_scalar: Q[Pressure, float] = Q(1, "bar")
+pressure_vector: Q[Pressure] = Q([1, 2], "bar")
 
 pressure_dims = Pressure.dimensions  # <UnitsContainer({'[length]': -1, '[mass]': 1, '[time]': -2})>
 
@@ -135,8 +142,8 @@ explicit runtime boundaries: `isinstance()` / {py:func}`encomp.misc.isinstance_t
 compatibility and may reject two quantities with the same physical dimensions.
 :::
 
-Check the dimensionality of a quantity with `isinstance()` or {py:meth}`encomp.units.Quantity.check`.
-For parameterized types like `list[Quantity[Pressure]]`, use {py:func}`encomp.misc.isinstance_types` instead of `isinstance()`.
+Check the physical dimensionality of a quantity with {py:meth}`encomp.units.Quantity.check`.
+For semantic dimensionality checks and parameterized types like `list[Quantity[Pressure]]`, use {py:func}`encomp.misc.isinstance_types`.
 
 ```python
 from encomp.misc import isinstance_types
@@ -156,15 +163,10 @@ pressure.check("[pressure]")  # True
 Q(1, "degC").check(TemperatureDifference)  # True
 Q(1, "delta_degC").check(Temperature)  # True
 
-# alternative using isinstance()
-# (parameterized isinstance is a runtime-only feature, hence the suppressions)
+# isinstance_types works with simple Quantity types and nested containers
 
-isinstance(pressure, Q[Pressure])  # True  # pyright: ignore[reportArgumentType, reportUnnecessaryIsInstance]
-isinstance(pressure, Q[Length])  # False  # pyright: ignore[reportArgumentType, reportUnnecessaryIsInstance]
-
-# complex types must use isinstance_types
-# this function can also be used with simple types
-
+isinstance_types(pressure, Q[Pressure])  # True
+isinstance_types(pressure, Q[Length])  # False
 isinstance_types([pressure, pressure], list[Q[Pressure]])  # True
 isinstance_types({1: Q(2, "m"), 2: Q(25, "cm")}, dict[int, Q[Length]])  # True
 
@@ -187,6 +189,10 @@ def func(_p1: Q[Pressure, float]) -> tuple[Q[Length, float], Q[Power, float]]:
 ```
 
 `typeguard.TypeCheckError` is raised if the arguments or the return value have incorrect dimensionalities.
+
+Scalar `Quantity` equality is tolerant (`rtol=1e-9`, `atol=1e-12`) and compares after unit conversion, so values that differ only by tiny floating-point noise may compare equal. Hashing is supported for float magnitudes and uses root units; vector magnitudes are unhashable.
+
+Pickling preserves the dimensionality class for module-global dimensionalities. Dynamically generated dimensionalities round-trip by deriving the dimensionality from the stored unit.
 
 ### Custom base dimensionalities
 
@@ -214,7 +220,7 @@ M_O2 = Q(32, "g/mol")
 
 ### Quantities with vector magnitudes
 
-Lists, Numpy arrays and Polars Series objects can also be used as magnitude.
+Lists, NumPy arrays and Polars Series objects can also be used as magnitude.
 
 ```python
 import numpy as np
@@ -347,6 +353,8 @@ Use `pint.errors.DimensionalityError` to catch all unit-related errors.
 This error can also be imported from the {py:mod}`encomp.units` module.
 
 ```python
+from typing import Any, cast
+
 from encomp.units import DimensionalityError
 from encomp.units import Quantity as Q
 from encomp.utypes import Pressure
@@ -355,8 +363,9 @@ from encomp.utypes import Pressure
 # from pint.errors import DimensionalityError
 
 try:
-    # a static type checker rejects this addition as well
-    Q(25, "bar") + Q(25, "m")  # pyright: ignore[reportOperatorIssue]
+    # a static type checker rejects this addition; the cast lets the runtime
+    # error-handling path be demonstrated.
+    Q(25, "bar") + cast(Any, Q(25, "m"))
 except DimensionalityError as e:
     print(f"Error: {e}")
 
@@ -423,6 +432,7 @@ Pydantic attach field locations and collect multiple invalid fields in one excep
 The {py:class}`encomp.fluids.Fluid` class represents a fluid at a fixed point.
 The abstract base class {py:class}`encomp.fluids.CoolPropFluid` implements the CoolProp interface and documents the fluid and property names.
 All inputs and outputs are {py:class}`encomp.units.Quantity` instances.
+Input keyword names are checked statically, but the dimensionality of each input quantity is validated at runtime when the property is evaluated.
 
 Pass the CoolProp fluid name and the fixed points (for example *P, T*) to the constructor.
 Not every combination of input values can fix the state: with an invalid state, derived properties evaluate to `nan` and `encomp.fluids` logs a warning, but no exception is raised.
@@ -541,8 +551,10 @@ For an incompressible mixture, the concentration is carried in the name instead,
 from encomp.fluids import Fluid
 from encomp.units import Quantity as Q
 
-Fluid("INCOMP::MEG[0.5]", P=Q(1, "bar"), T=Q(20, "°C"))  # 50 % ethylene glycol
+Fluid("INCOMP::MEG[0.5]", P=Q(1, "bar"), T=Q(20, "°C"))  # aqueous 50 % ethylene glycol
 ```
+
+The `MEG` and `MPG` CoolProp incompressible names are aqueous monoethylene-glycol and monopropylene-glycol solutions. Their bracketed fractions are solution concentrations on CoolProp's documented basis, not the mole fractions used by `composition`.
 
 The {py:meth}`encomp.fluids.Fluid.assume_phase` method pins the phase, skipping CoolProp's phase-stability search, which dominates the cost for the HEOS/GERG mixture backends. It is a *speed* tool, not a validation tool: forcing a phase the fluid is not actually in returns `NaN` or a non-physical metastable root rather than raising.
 
@@ -559,7 +571,7 @@ density = Fluid("HEOS::CO2[0.7]&O2[0.3]", P=Q(10, "bar"), T=Q(300, "K")).assume_
 ### Using vector inputs
 
 CoolProp evaluates vector inputs in a single backend call.
-The inputs are {py:class}`encomp.units.Quantity` instances with one-dimensional Numpy arrays as magnitude, all of the same length (or a single scalar, which is repeated).
+The inputs are {py:class}`encomp.units.Quantity` instances with vector magnitudes: one-dimensional NumPy arrays or `pl.Series`, all of the same length (or a single scalar, which is repeated).
 
 ```python
 import numpy as np
@@ -599,7 +611,7 @@ Missing or out-of-range results surface as `NaN` (for a numpy magnitude) or `nul
 ### Parallel evaluation with Polars
 
 {py:class}`encomp.fluids.Fluid` properties also accept `Quantity`-wrapped Polars expressions (`pl.Expr`) and return a `pl.Expr`. Independent property nodes in one `select` / `with_columns` / `collect()` (eager or lazy) are evaluated in parallel by the `encomp.coolprop` plugin -- a native Rust extension over the CoolProp C-API that runs without holding the GIL.
-`pl.Expr` (lazy) inputs are evaluated exclusively through this plugin (there is no `map_batches` fallback). Eager `float` / numpy / `pl.Series` inputs use the Python CoolProp path, except arrays of at least `EAGER_PLUGIN_MIN_SIZE` (1000) elements, which also route through the plugin (results are bit-identical when the installed `coolprop` matches the bundled build, 8.0.0).
+`pl.Expr` (lazy) inputs are evaluated exclusively through this plugin (there is no `map_batches` fallback). Eager `float` / NumPy / `pl.Series` inputs use the Python CoolProp path, except vector magnitudes of at least `EAGER_PLUGIN_MIN_SIZE` (1000) elements, which also route through the plugin (results are bit-identical when the installed `coolprop` matches the bundled build, 8.0.0).
 
 ```python
 import polars as pl
@@ -634,10 +646,10 @@ df.select(
 
 The API mirrors {py:class}`encomp.fluids.Fluid`: any CoolProp input pair is supported (in any order), the fluid is given by `name` (with the backend folded in, e.g. `name="HEOS::CarbonDioxide"`), mixtures via a `composition={species: mole fraction}` dict, and a fixed phase via `assume_phase="gas"`. See the `encomp.coolprop` package README in the repository for the full design and thread-safety model.
 
-## Sympy functionality
+## SymPy functionality
 
 `encomp.sympy` is legacy and soft-deprecated; it is planned for removal in a future major release.
-To load additional methods for the `sympy.Symbol` class, import Sympy via the {py:mod}`encomp.sympy` module.
+To load additional methods for the `sympy.Symbol` class, import SymPy via the {py:mod}`encomp.sympy` module.
 
 ### Typesetting
 
@@ -683,7 +695,7 @@ The `decorate` method offers more control:
 
 ### Integration with quantities
 
-Quantities can be substituted into Sympy expressions; the units are converted to Sympy symbols automatically.
+Quantities can be substituted into SymPy expressions; the units are converted to SymPy symbols automatically.
 The class method {py:meth}`encomp.units.Quantity.from_expr` converts an expression back to a quantity.
 
 ```python
@@ -703,10 +715,10 @@ result_qty = Q.from_expr(result_expr)
 {py:meth}`encomp.units.Quantity.from_expr` raises `KeyError` if residual symbols in the expression are not SI units.
 
 :::{warning}
-Sympy integration only works with the seven SI dimensionalities, not with dimensionalities defined via {py:func}`encomp.units.define_dimensionality`.
+SymPy integration only works with the seven SI dimensionalities, not with dimensionalities defined via {py:func}`encomp.units.define_dimensionality`.
 :::
 
-{py:meth}`encomp.units.Quantity.from_expr` does not support Numpy array magnitudes.
+{py:meth}`encomp.units.Quantity.from_expr` does not support NumPy array magnitudes.
 Convert the expression to a function with {py:func}`encomp.sympy.get_function` instead:
 
 ```python
@@ -732,7 +744,7 @@ result_qty = fcn(
 # ≈ [26860.5 95726.25] kg
 ```
 
-Quantity objects combine directly with Sympy symbols; the units are converted to their symbolic representations by the `Quantity._sympy_` method (the hook `sympy.sympify` looks for).
+Quantity objects combine directly with SymPy symbols; the units are converted to their symbolic representations by the `Quantity._sympy_` method (the hook `sympy.sympify` looks for).
 
 ```python
 from encomp.sympy import sp
@@ -756,6 +768,6 @@ x + y / Q(25, "kW")
 # x + 4.0e-5*\text{s}**3*y/(\text{kg}*\text{m}**2)
 ```
 
-:::{todo}
-This behavior is not encoded in the type hints.
+:::{note}
+This SymPy dispatch behavior is runtime-only and is not fully encoded in the type hints.
 :::

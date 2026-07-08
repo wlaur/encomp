@@ -1,6 +1,6 @@
 """Every ``python`` code block in the docs must be self-contained: it carries its own
-imports, is clean under ``ruff check``, type-checks under ``pyright``, and runs without
-error in isolation.
+imports, is clean under ``ruff check``, type-checks under ``pyright`` and ``pyrefly``,
+and runs without error in isolation.
 
 This guards the documentation against drift -- a renamed API, a missing import, or a
 snippet that only worked as a continuation of an earlier block all fail here. The block
@@ -16,24 +16,23 @@ Checks per block:
 - ``ruff check`` under the repo's full ruff config (run with cwd at the repo root), so each
   block is held to the same ruleset as the source (imports, naming, bugbear, ...) with no
   per-block exceptions -- ``F401`` (unused import) and ``F821`` (undefined name) both gate.
-- ``pyright`` against the repo config (``--project`` is passed explicitly so temp files
-  are checked with the same strict settings as the source tree). A type error in an
-  example is a real defect to fix -- ``Q(1, "bar")`` infers
-  ``Quantity[Pressure, float]``, so a correct block is clean. Blocks that demonstrate
-  runtime-only dynamic behavior (parameterized ``isinstance``, the sympy ``_``/``__``
-  methods added at import time, deliberately-invalid operations shown inside
-  ``try``/``except``) carry explicit ``# pyright: ignore[...]`` comments. The test
-  disables ``reportUnusedExpression`` for snippets because docs naturally include
-  REPL-style expressions followed by comments showing their value.
+- ``pyright`` and ``pyrefly`` against the repo config. A type error in an example is a
+  real defect to fix -- ``Q(1, "bar")`` infers ``Quantity[Pressure, float]``, so a
+  correct block is clean. Blocks that demonstrate runtime-only dynamic behavior
+  (parameterized ``isinstance``, the sympy ``_``/``__`` methods added at import time,
+  deliberately-invalid operations shown inside ``try``/``except``) carry explicit
+  checker comments. The pyright test disables ``reportUnusedExpression`` for snippets
+  because docs naturally include REPL-style expressions followed by comments showing
+  their value.
 - execution as a real script: the block is written to a file and run in a fresh
   interpreter with a temporary working directory, exactly as a reader would run it.
   A subprocess (not in-process ``exec``) is required for the ``typeguard`` examples --
   ``@typechecked`` instruments by re-reading the module source, which does not exist for
   exec'd strings -- and the temporary cwd lets blocks create scratch files (e.g. the
   ``.env`` example) without touching the repo. Native ``encomp.coolprop`` plugin
-  examples are also linted and type-checked here, but their execution is skipped when
-  the compiled extension is not present in this source-only environment; wheel CI runs
-  the plugin self-check and the full test suite against the built wheels.
+  examples execute too; source-tree CI builds the compiled extension before running
+  this module, and wheel CI runs the plugin self-check and the full test suite against
+  the built wheels.
 
 There is deliberately no opt-out: a snippet that cannot run as written (for example one
 that demonstrates an exception) shows the failure with ``try: ... except SomeError:``
@@ -51,7 +50,6 @@ import re
 import shutil
 import subprocess
 import sys
-from functools import lru_cache
 from pathlib import Path
 
 import pytest
@@ -74,6 +72,7 @@ def _tool(name: str) -> str | None:
 ROOT = _repo_root()
 _RUFF = _tool("ruff")
 _PYRIGHT = _tool("pyright")
+_PYREFLY = _tool("pyrefly")
 
 pytestmark = pytest.mark.skipif(
     ROOT is None, reason="docs sources not on disk (installed wheel) -- source-tree check only"
@@ -86,6 +85,7 @@ _PYRIGHT_PREFIX = "# pyright: reportUnusedExpression=false\n"
 _SKIP_DIRS = {
     ".venv",
     "_build",
+    "_coolprop_build",
     "node_modules",
     ".git",
     "site-packages",
@@ -96,14 +96,6 @@ _SKIP_DIRS = {
     "temp",
 }
 _SKIP_FILES = {"REVIEW.md"}
-_COOLPROP_PLUGIN_MARKERS = (
-    "from encomp import coolprop",
-    "from encomp.coolprop import",
-    "import encomp.coolprop",
-    "cp.fluid(",
-    "cp.humid_air(",
-    "Q(pl.col(",
-)
 
 
 def _doc_files(root: Path) -> list[Path]:
@@ -128,20 +120,6 @@ def _blocks() -> list[tuple[str, str]]:
     return cases
 
 
-def _requires_coolprop_plugin(code: str) -> bool:
-    return any(marker in code for marker in _COOLPROP_PLUGIN_MARKERS)
-
-
-@lru_cache(maxsize=1)
-def _coolprop_plugin_available() -> bool:
-    try:
-        from encomp import coolprop as cp
-    except Exception:
-        return False
-
-    return cp.self_check()
-
-
 _CASES = _blocks()
 _IDS = [case_id for case_id, _ in _CASES]
 _CODES = [code for _, code in _CASES]
@@ -150,6 +128,13 @@ _CODES = [code for _, code in _CASES]
 def test_docs_have_blocks() -> None:
     # tripwire: if extraction silently finds nothing, the checks below vacuously pass
     assert len(_CASES) > 20, f"expected many doc code blocks, found {len(_CASES)}"
+
+
+def test_doc_block_discovery_covers_public_docs() -> None:
+    """Public Markdown docs must remain in the checked block set."""
+    covered = {case_id.split(":", 1)[0] for case_id in _IDS}
+    assert {"README.md", "docs/usage.md"} <= covered
+    assert not any(case_id.startswith("_coolprop_build/") for case_id in _IDS)
 
 
 @pytest.mark.skipif(_RUFF is None, reason="ruff not installed")
@@ -183,12 +168,25 @@ def test_doc_block_typechecks(code: str, tmp_path: Path) -> None:
     assert proc.returncode == 0, f"pyright failed:\n{proc.stdout}{proc.stderr}"
 
 
+@pytest.mark.skipif(_PYREFLY is None, reason="pyrefly not installed")
+@pytest.mark.parametrize("code", _CODES, ids=_IDS)
+def test_doc_block_typechecks_pyrefly(code: str, tmp_path: Path) -> None:
+    assert _PYREFLY is not None  # narrowed by the skipif above
+    assert ROOT is not None  # narrowed by the module-level skipif
+    block = tmp_path / "block.py"
+    block.write_text(code)
+    proc = subprocess.run(
+        [_PYREFLY, "check", "--config", str(ROOT / "pyproject.toml"), str(block)],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+    assert proc.returncode == 0, f"pyrefly failed:\n{proc.stdout}{proc.stderr}"
+
+
 @pytest.mark.parametrize("code", _CODES, ids=_IDS)
 def test_doc_block_runs(code: str, tmp_path: Path) -> None:
     assert ROOT is not None  # narrowed by the module-level skipif
-    if _requires_coolprop_plugin(code) and not _coolprop_plugin_available():
-        pytest.skip("compiled encomp.coolprop plugin is not available")
-
     block = tmp_path / "block.py"
     block.write_text(code)
     env = {

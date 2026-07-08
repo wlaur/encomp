@@ -27,6 +27,7 @@ import importlib.util
 import logging
 import math
 import sys
+import warnings
 from functools import cache, lru_cache
 from pathlib import Path
 from typing import Any, Literal, TypeIs, get_args
@@ -704,11 +705,22 @@ def lib_version() -> str:
 
 
 @lru_cache(maxsize=1)
-def self_check() -> bool:
-    """True if the plugin loads and evaluates one known value correctly (cached)."""
+def _self_check_cached() -> bool:
     try:
         df = pl.DataFrame({"P": [50e5], "T": [400.0]})
         v = df.select(fluid("DMASS", "P", "T", name="IF97::Water"))[0, 0]
         return v is not None and abs(v - 939.906) < 1.0
     except Exception:
         return False
+
+
+def self_check() -> bool:
+    """True if the plugin loads and evaluates one known value correctly (cached)."""
+    ok = _self_check_cached()
+    if not ok:
+        warnings.warn(
+            "encomp.coolprop plugin self_check failed; the cached failed result will be reused in this process",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    return ok

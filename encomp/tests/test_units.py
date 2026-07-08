@@ -566,6 +566,9 @@ def test_magnitude_setter() -> None:
     qa_m = cast("Numpy1DArray", cast(Any, qa).m)
     assert qa_m.dtype == np.float64
 
+    with pytest.raises(ValueError, match="length"):
+        qa.m = cast(Any, np.array([1.0, 2.0, 3.0]))
+
     with pytest.raises(TypeError, match="astype"):
         qa.m = cast(Any, 1.0)
 
@@ -763,6 +766,17 @@ def test_custom_units() -> None:
     assert Q(1, "ton") == Q(1, "Ton") == Q(1, "TON") == Q(1, "tonne") == Q(1, "metric_ton") == Q(1000, "kg")
 
     assert Q(1, "US_ton") == Q(907.1847400000001, "kg")
+    assert Q(1, "short_ton") == Q(1, "US_ton")
+    assert Q(1, "short_ton_force").to("N").m == approx(8896.443230521, rel=1e-12)
+    assert Q(1, "quarter").to("kg").m == approx(12.70058636, rel=1e-12)
+    assert Q(1, "pond").to("N").m == approx(0.00980665, rel=1e-12)
+    assert Q(80, "degRe").to("degC").m == approx(100.0, rel=1e-12)
+
+    assert not Q(1, "mH20").check(Pressure)
+    with pytest.raises(Exception):  # noqa: B017
+        Q(1, "w")
+    with pytest.raises(Exception):  # noqa: B017
+        Q(1, "y")
 
     assert (
         Q(1, "ton/hour")
@@ -827,6 +841,22 @@ def test_numpy_integration() -> None:
 
     # Same numpy hook limitation as above.
     assert isinstance_types(np.linspace(Q(2), Q(25, "%")), Q[Dimensionless])
+
+
+def test_quantity_nan_inf_and_empty_array_arithmetic() -> None:
+    vals = Q(np.array([np.nan, np.inf, -np.inf, 1.0]), "m")
+    doubled = vals * 2
+
+    assert np.isnan(doubled.m[0])
+    assert np.isposinf(doubled.m[1])
+    assert np.isneginf(doubled.m[2])
+    assert doubled.m[3] == 2.0
+
+    empty = Q(np.array([]), "kg")
+    result = empty + Q(np.array([]), "kg")
+
+    assert isinstance(result.m, np.ndarray)
+    assert result.m.shape == (0,)
     assert isinstance_types(np.linspace(Q(2, "cm"), Q(25, "km")), Q[Length])
 
     with pytest.raises(DimensionalityError):
@@ -1295,6 +1325,9 @@ def test_round() -> None:
     assert q_r2.m[0] == 25.1
     assert q_r2.m[1] == 25.1
 
+    with pytest.raises(TypeError, match="round"):
+        round(Q([25.12312312312], "kg/s").astype(pl.Series), 1)
+
 
 def test_abs() -> None:
     q = Q(-25, "kg/s")
@@ -1751,6 +1784,12 @@ def test_astype() -> None:
 
     with pytest.raises(TypeError):
         Q([1, 2, 3]).astype(pl.Expr)
+
+    with pytest.raises(TypeError, match="scalar"):
+        Q([1, 2, 3]).astype(float)
+
+    with pytest.raises(TypeError, match="scalar"):
+        Q([1, 2, 3]).astype("float")
 
 
 def test_single_element_array_magnitude() -> None:

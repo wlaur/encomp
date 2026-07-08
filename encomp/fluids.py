@@ -69,6 +69,20 @@ from .utypes import (
 
 _LOGGER = logging.getLogger(__name__)
 
+__all__ = [
+    "EAGER_PLUGIN_MIN_SIZE",
+    "CProperty",
+    "CoolPropFluid",
+    "Fluid",
+    "FluidPhase",
+    "FluidState",
+    "HumidAir",
+    "HumidAirState",
+    "UnitString",
+    "Water",
+    "clear_expr_evaluation_cache",
+]
+
 _cp: Any = _CoolProp
 PropsSI: Callable[..., float | Numpy1DArray] = _cp.PropsSI
 HAPropsSI: Callable[..., float | Numpy1DArray] = _cp.HAPropsSI
@@ -79,6 +93,19 @@ HAPropsSI: Callable[..., float | Numpy1DArray] = _cp.HAPropsSI
 # live there too; the ones used here are imported above.
 CProperty = FluidParam | HumidAirParam
 UnitString = Annotated[str, "Unit string"]
+FluidPhase = Literal[
+    "Liquid",
+    "Gas",
+    "Two-phase",
+    "Supercritical liquid",
+    "Supercritical gas",
+    "Supercritical fluid",
+    "Critical point",
+    "Unknown",
+    "Not imposed",
+    "Variable",
+    "N/A",
+]
 
 
 class FluidState(TypedDict, Generic[MT], total=False):  # noqa: UP046
@@ -296,7 +323,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         "was unable to find a solution for",
     )
 
-    PHASES: dict[float, str] = {
+    PHASES: dict[float, FluidPhase] = {
         0.0: "Liquid",
         5.0: "Gas",
         6.0: "Two-phase",
@@ -475,6 +502,13 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         if not candidates:
             return cast(type[MT], float)
+
+        if len(set(candidates)) > 1:
+            names = ", ".join(sorted(t.__name__ for t in set(candidates)))
+            raise TypeError(
+                f"Mixed vector magnitude containers are not supported for one fluid state: {names}. "
+                "Use one container type for all vector inputs."
+            )
 
         magnitude_type = candidates[0]
 
@@ -1409,7 +1443,7 @@ class Fluid(CoolPropFluid[MT]):
         return self
 
     @property
-    def phase(self) -> str:
+    def phase(self) -> FluidPhase:
         if any(isinstance(n[1].m, pl.Expr) for n in self.points):
             return "Unknown"
 
@@ -1626,6 +1660,12 @@ class Water(Fluid[MT]):
 
 
 class HumidAir(CoolPropFluid[MT]):
+    """Humid-air wrapper around CoolProp's ``HAPropsSI`` function.
+
+    ``HumidAir.M`` follows CoolProp's humid-air naming and returns dynamic
+    viscosity. This differs from ``Fluid.M``, which returns molar mass.
+    """
+
     BACKEND = {"backend": HAPropsSI}
     _append_name_to_cp_inputs = False
     _evaluate_invalid_separately = True

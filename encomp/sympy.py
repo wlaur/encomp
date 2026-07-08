@@ -1,7 +1,7 @@
 # pyright: reportUnknownVariableType=false, reportUnknownParameterType=false, reportUnknownMemberType=false, reportUnknownArgumentType=false, reportMissingTypeArgument=false, reportMissingTypeStubs=false
 """
 Imports and extends the ``sympy`` library for symbolic mathematics.
-Contains tools for converting Sympy expressions to Python modules and functions.
+Contains tools for converting SymPy expressions to Python modules and functions.
 """
 
 import keyword
@@ -19,11 +19,30 @@ from .settings import SETTINGS
 from .units import Quantity
 from .utypes import Numpy1DArray
 
+__all__ = [
+    "Symbol",
+    "evaluate",
+    "get_args",
+    "get_function",
+    "get_lambda",
+    "get_lambda_kwargs",
+    "get_lambda_matrix",
+    "get_sol_expr",
+    "recursive_subs",
+    "simplify_exponents",
+    "sp",
+    "substitute_unknowns",
+    "symbols",
+    "to_identifier",
+    "typeset",
+    "typeset_chemical",
+]
+
 
 @lru_cache
-def to_identifier(s: sp.Symbol | str) -> str:
+def to_identifier(s: object) -> str:
     """
-    Converts a Sympy symbol to a valid Python identifier.
+    Converts a SymPy symbol to a valid Python identifier.
     This function will only remove special characters.
 
     The Latex command ``\\text{}`` is replaced with ``T``. This is
@@ -32,7 +51,7 @@ def to_identifier(s: sp.Symbol | str) -> str:
 
     Parameters
     ----------
-    s : sp.Symbol | str
+    s : object
         Input symbol or string representation
 
     Returns
@@ -41,36 +60,37 @@ def to_identifier(s: sp.Symbol | str) -> str:
         Valid Python identifier created from the input symbol
     """
 
-    # assume that input strings are already identifiers
     if isinstance(s, str):
-        return s
+        s_text = s
+    else:
+        name = getattr(s, "name", None)
+        if not isinstance(name, str):
+            raise TypeError(f"Expected a SymPy symbol or string, got {type(s).__name__}")
+        s_text = name
+    s_orig = s_text
 
-    s = s.name
-
-    s_orig = s
-
-    s = s.replace(",", "_")
-    s = s.replace("^", "__")
-    s = s.replace("'", "prime")
+    s_text = s_text.replace(",", "_")
+    s_text = s_text.replace("^", "__")
+    s_text = s_text.replace("'", "prime")
 
     # collapse the LaTeX \text{...} token (used to distinguish "\text{m}" from "m") to "T".
     # anchored to the backslash so a plain symbol merely CONTAINING "text" (e.g. "context")
     # is not corrupted
-    s = s.replace(r"\text", "T")
+    s_text = s_text.replace(r"\text", "T")
 
     # remove all non-alphanumeric or _
-    s = re.sub(r"\W+", "", s)
+    s_text = re.sub(r"\W+", "", s_text)
 
     # a Python keyword (e.g. "lambda", "class") is a valid identifier syntactically but
     # cannot be used as a variable/parameter name -- suffix it so it can. handles all
     # keywords, not just "lambda", and does not corrupt names that merely contain one
-    if keyword.iskeyword(s):
-        s = f"{s}_"
+    if keyword.iskeyword(s_text):
+        s_text = f"{s_text}_"
 
-    if not s.isidentifier():
-        raise ValueError(f"Symbol could not be converted to a valid Python identifer: {s_orig}")
+    if not s_text.isidentifier():
+        raise ValueError(f"Symbol could not be converted to a valid Python identifier: {s_orig}")
 
-    return s
+    return s_text
 
 
 @lru_cache
@@ -108,7 +128,7 @@ def get_args(e: sp.Basic) -> list[str]:
 def recursive_subs(e: sp.Basic, replacements: list[tuple[sp.Symbol, sp.Basic]]) -> sp.Basic:
     """
     Substitute the expressions in ``replacements`` recursively.
-    This might not be necessary in all cases, Sympy's builtin
+    This might not be necessary in all cases, SymPy's builtin
     ``subs()`` method should also do this recursively.
 
     .. note::
@@ -139,16 +159,13 @@ def recursive_subs(e: sp.Basic, replacements: list[tuple[sp.Symbol, sp.Basic]]) 
         else:
             e = new_e
 
-    if new_e is None:
-        raise ValueError(f"Could not substitute, {e=}, {replacements=}")
-
-    return new_e
+    raise ValueError(f"Recursive substitution did not converge for {e=}, {replacements=}")
 
 
 def simplify_exponents(e: sp.Basic) -> sp.Basic:
     """
     Simplifies an expression by combining float and int exponents.
-    This is not done automatically by Sympy.
+    This is not done automatically by SymPy.
 
     Adapted from
     https://stackoverflow.com/questions/54243832/sympy-wont-simplify-or-expand-exponential-with-decimals
@@ -156,7 +173,7 @@ def simplify_exponents(e: sp.Basic) -> sp.Basic:
     Parameters
     ----------
     e : sp.Basic
-        A Sympy expression, potentially containing mixed float and int exponents
+        A SymPy expression, potentially containing mixed float and int exponents
 
     Returns
     -------
@@ -167,7 +184,7 @@ def simplify_exponents(e: sp.Basic) -> sp.Basic:
     def rewrite(expr: sp.Basic, new_args: tuple[sp.Basic, ...]) -> sp.Basic:
         new_args_list = list(new_args)
         pow_val = new_args_list[1]
-        pow_val_int = int(cast(Any, new_args_list[1]))
+        pow_val_int = round(float(cast(Any, new_args_list[1])))
 
         if cast(Any, pow_val).epsilon_eq(pow_val_int):
             new_args_list[1] = sp.Integer(pow_val_int)
@@ -196,7 +213,7 @@ def get_sol_expr(
 ) -> sp.Basic | None:
     """
     Wrapper around ``sp.solve`` that returns the solution expression
-    for a *single* symbol, or None in case Sympy
+    for a *single* symbol, or None in case SymPy
     could not solve for the specified symbol.
     Only considers equations in the input list that actually contains the symbol.
     Prefers to use equations that contain ``symbol`` on the LHS.
@@ -249,7 +266,7 @@ def get_sol_expr(
     # try to solve all relevant (i.e. containing the requested symbol) equations instead
     # use dict=True to avoid inconsistent return types from sp.solve
     # make sure to define the assumptions correctly for all symbols, otherwise the
-    # Sympy solver might not be able to find an explicit solution
+    # SymPy solver might not be able to find an explicit solution
     sol = sp.solve(equations, symbol, dict=True)
 
     if not sol:
@@ -262,7 +279,7 @@ def get_sol_expr(
     # hopefully, there is only be a single key in this dict
     # (quadratic equations might have multiple solutions, etc...)
     # sort with default_sort_key to keep the output consistent
-    # Sympy might otherwise order expressions randomly
+    # SymPy might otherwise order expressions randomly
     return cast(sp.Basic, sorted(sol.values(), key=default_sort_key)[0])
 
 

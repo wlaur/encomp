@@ -1,11 +1,12 @@
-name: encomp release
+name: encomp CI/release
 
 # Build the encomp wheels (pure-Python modules + the compiled CoolProp Polars plugin
 # + bundled libCoolProp, all in one wheel) for macOS / Linux / Windows, run the full
 # test suite against each wheel on Python 3.13 and 3.14, and publish to PyPI on a tag.
 #
-#   typecheck      -> pyright (strict) + pyrefly, plus source-only doc/static tests
-#                     (ty is advisory and intentionally not gated)
+#   typecheck      -> ruff, pyright (strict) + pyrefly, docs build, plus
+#                     source-only doc/static tests (ty is local-only and intentionally not gated)
+#   rust           -> cargo fmt, clippy, and in-crate tests
 #   build-wheels   -> one wheel per OS/arch (abi3 cp313 => runs on 3.13+)
 #   test           -> install each prebuilt wheel + run pytest, every OS x py
 #   publish        -> only on a `v*` tag, after all tests pass, via PyPI Trusted
@@ -30,21 +31,51 @@ concurrency:
 
 jobs:
   typecheck:
-    # static analysis only: deps come from the lockfile, the project itself is NOT
-    # built (--no-install-project skips the maturin/Rust build -- the checkers
-    # analyze the source tree, and the compiled plugin is loaded by file path at
-    # runtime, never imported, so it is not needed for type checking)
+    # Static source checks run before building the project. The executable docs
+    # checks then install the compiled plugin too, so README/usage snippets and
+    # notebooks exercise the same public API users get from wheels.
     name: typecheck (pyright + pyrefly)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7.0.0
-      - uses: astral-sh/setup-uv@v8.2.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
         with:
           python-version: "3.13"
       - run: uv sync --locked --no-install-project
+      - run: uv run --no-sync ruff check encomp scripts
       - run: uv run --no-sync pyright
       - run: uv run --no-sync pyrefly check
+      - name: Build and install the compiled CoolProp plugin for docs execution
+        run: |
+          python -m pip install cmake
+          uv run --no-sync python scripts/build_libcoolprop.py
+          uv run --no-sync maturin develop --release
       - run: uv run --no-sync pytest encomp/tests/test_docs.py encomp/tests/test_static_typing.py -q
+      - name: Install notebook rendering dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc
+      - run: uv run --no-sync sphinx-build -W -b html docs docs/_build/html
+
+  rust:
+    name: rust fmt/clippy/test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.13"
+      - name: Install Rust components and CoolProp build dependency
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup component add rustfmt clippy
+          python -m pip install cmake
+      - name: Build bundled CoolProp library
+        run: python scripts/build_libcoolprop.py
+      - run: cargo fmt --manifest-path rust/Cargo.toml -- --check
+      - run: cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
+      - run: PYO3_PYTHON="$(which python)" cargo test --manifest-path rust/Cargo.toml --no-default-features
 
   build-wheels:
     name: build ${{ matrix.os }}
@@ -58,13 +89,13 @@ jobs:
           - macos-14           # macOS arm64 (Apple Silicon; Intel x86_64 intentionally unsupported)
           - windows-latest     # Windows x86_64
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Build wheels
-        uses: pypa/cibuildwheel@v4.1.0
+        uses: pypa/cibuildwheel@a0a973acdc9e7b7f8b04ac5c80e6883a5a102615 # v4.1.0
         with:
           package-dir: .
           output-dir: wheelhouse
-      - uses: actions/upload-artifact@v7.0.1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wheels-${{ matrix.os }}
           path: wheelhouse/*.whl
@@ -80,10 +111,10 @@ jobs:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-14, windows-latest]
         python: ["3.13", "3.14"]
     steps:
-      - uses: actions/setup-python@v6.3.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ matrix.python }}
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: wheelhouse
           name: wheels-${{ matrix.os }}
@@ -100,7 +131,7 @@ jobs:
 
   publish:
     name: publish to PyPI
-    needs: [typecheck, build-wheels, test]
+    needs: [typecheck, rust, build-wheels, test]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment: pypi               # configure the Trusted Publisher against this env
@@ -108,7 +139,7 @@ jobs:
       id-token: write               # OIDC -> PyPI; no API token/secret is used
       contents: read                # checkout below reads pyproject.toml to guard the tag
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Verify the tag matches the pyproject version
         # the wheels carry the version from pyproject.toml; refuse to publish under a tag
         # that disagrees (e.g. tagging v1.5.1 while pyproject still says 1.5.0)
@@ -119,12 +150,12 @@ jobs:
             exit 1
           fi
           echo "tag $GITHUB_REF_NAME matches pyproject version $version"
-      - uses: actions/download-artifact@v8.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: dist
           pattern: wheels-*
           merge-multiple: true
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
 
   github-release:
     # only after PyPI succeeded, so the Release never announces a version that

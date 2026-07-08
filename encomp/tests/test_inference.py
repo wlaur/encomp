@@ -364,6 +364,7 @@ def test_inference_dimensional_derived_units() -> None:
     assert_type(Q(pl.Series([1.0])) / Q(0.5, "s"), Q[ut.UnknownDimensionality, pl.Series])
 
     # MolarMass = Mass / Substance
+    assert_type(Q(0.018, "kg/mol"), Q[ut.MolarMass, float])
     assert_type(Q(18.0, "g") / Q(1.0, "mol"), Q[ut.UnknownDimensionality, float])
     assert_type(Q([18.0, 44.0], "g") / Q(1.0, "mol"), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
     assert_type(Q(pl.lit(18.0), "g") / Q(1.0, "mol"), Q[ut.UnknownDimensionality, pl.Expr])

@@ -535,6 +535,13 @@ def test_polars_fluids() -> None:
     w_series_const_T = Water(P=Q(pl.Series([1, 2, 3]), "bar"), T=Q(150, "degC"))
     assert_type(w_series_const_T.D, Q[ut.Density, pl.Series])  # pyrefly: ignore[assert-type]
 
+    mixed_container = Water(
+        P=Q(np.array([1.0, 2.0, 3.0]), "bar"),
+        T=cast(Any, Q(pl.Series([150.0, 250.0, 350.0]), "degC")),
+    )
+    with pytest.raises(TypeError, match="Mixed vector magnitude containers"):
+        mixed_container.D
+
     assert pl.select(Water(P=Q(pl.lit(5), "bar"), T=Q(pl.lit(250), "degC")).D.m).item(0, 0) == approx(2.107798)
 
     w_expr = Water(P=Q(pl.lit(5), "bar"), T=Q(pl.col.T, "degC"))

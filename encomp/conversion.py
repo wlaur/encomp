@@ -1,3 +1,5 @@
+"""Conversions between related engineering quantity dimensionalities."""
+
 from typing import Any, cast, overload
 
 import numpy as np
@@ -6,6 +8,8 @@ import polars as pl
 from .misc import isinstance_types
 from .units import ExpectedDimensionalityError, Quantity
 from .utypes import MT, Density, Mass, MassFlow, Numpy1DArray, Volume, VolumeFlow
+
+__all__ = ["convert_volume_mass"]
 
 
 @overload
@@ -47,7 +51,9 @@ def convert_volume_mass(
     inp : M | V
         Input mass or volume (or flow)
     rho : Quantity[Density, MT], optional
-        Density, by default 997 kg/m³
+        Density, by default 997 kg/m³. Float, numpy array, and Polars Series
+        magnitudes are validated as finite and positive; Polars Expr inputs
+        are deferred and cannot be data-validated here.
 
     Returns
     -------

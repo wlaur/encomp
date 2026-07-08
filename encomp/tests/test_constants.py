@@ -2,7 +2,7 @@ from typing import assert_type
 
 from ..constants import CONSTANTS
 from ..units import Quantity
-from ..utypes import Pressure
+from ..utypes import Pressure, Temperature
 
 
 def _assert_type(val: object, typ: type) -> None:
@@ -17,3 +17,6 @@ assert_type.__code__ = _assert_type.__code__
 
 def test_CONSTANTS() -> None:
     assert_type(CONSTANTS.normal_conditions_pressure, Quantity[Pressure, float])
+    assert_type(CONSTANTS.normal_conditions_temperature, Quantity[Temperature, float])
+    assert_type(CONSTANTS.standard_conditions_pressure, Quantity[Pressure, float])
+    assert_type(CONSTANTS.standard_conditions_temperature, Quantity[Temperature, float])
