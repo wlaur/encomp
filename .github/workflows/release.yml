@@ -48,6 +48,8 @@ jobs:
       - run: uv run --no-sync pyrefly check
       - run: uv run --no-sync pytest encomp/tests/test_docs.py encomp/tests/test_static_typing.py -q
       - run: uv run --no-sync sphinx-build -W -b html docs docs/_build/html
+        env:
+          PYTHONPATH: ${{ github.workspace }}
 
   rust:
     name: rust fmt/clippy/test
