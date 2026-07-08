@@ -85,6 +85,7 @@ _PYRIGHT_PREFIX = "# pyright: reportUnusedExpression=false\n"
 _SKIP_DIRS = {
     ".venv",
     "_build",
+    "_coolprop_build",
     "node_modules",
     ".git",
     "site-packages",
