@@ -51,6 +51,10 @@ jobs:
           uv run --no-sync python scripts/build_libcoolprop.py
           uv run --no-sync maturin develop --release
       - run: uv run --no-sync pytest encomp/tests/test_docs.py encomp/tests/test_static_typing.py -q
+      - name: Install notebook rendering dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc
       - run: uv run --no-sync sphinx-build -W -b html docs docs/_build/html
 
   rust:
