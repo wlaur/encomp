@@ -104,3 +104,22 @@ def test_isinstance_types_quantity_union() -> None:
     # a union of concrete dimensionalities still narrows correctly
     assert _check(Q[Mass] | Q[Power])
     assert not _check(Q[Power] | Q[Temperature])
+
+
+def test_isinstance_types_non_quantity_union() -> None:
+    # a union of plain (non-Quantity) types is dispatched through isinstance where
+    # possible, and falls back to member-wise checks for parameterized generics that
+    # isinstance cannot evaluate directly
+    def _check(obj: object, expected: object) -> bool:
+        return isinstance_types(obj, cast(Any, expected))
+
+    # plain union: handled by a direct isinstance against the UnionType
+    assert _check(5, int | str)
+    assert _check("x", int | str)
+    assert not _check(5.0, int | str)
+
+    # a union containing a parameterized generic: isinstance(obj, list[int] | dict)
+    # raises TypeError, so isinstance_types decomposes the union member-wise instead
+    assert _check([1, 2, 3], list[int] | dict[str, int])
+    assert _check({"a": 1}, list[int] | dict[str, int])
+    assert not _check((1, 2), list[int] | dict[str, int])

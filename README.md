@@ -6,7 +6,7 @@
 [![Documentation](https://readthedocs.org/projects/encomp/badge/?version=latest)](https://encomp.readthedocs.io)
 [![License](https://img.shields.io/pypi/l/encomp.svg)](https://github.com/wlaur/encomp/blob/main/LICENSE)
 
-<img src="https://raw.githubusercontent.com/wlaur/encomp/v1.6.2/docs/img/logo.png" alt="encomp logo" width="150">
+<img src="https://raw.githubusercontent.com/wlaur/encomp/v1.6.3/docs/img/logo.png" alt="encomp logo" width="150">
 
 > General-purpose library for *en*gineering *comp*utations.
 
@@ -362,12 +362,23 @@ uv run pytest
 
 See `encomp/coolprop/README.md` for the plugin build details.
 
+The test suite ships inside the wheel, so an installed `encomp` doubles as its own post-install smoke test (it needs only `pytest` and `hypothesis`):
+
+```bash
+pip install encomp pytest hypothesis
+python -m pytest --pyargs encomp.tests
+```
+
 ## Settings
 
 The attributes of `encomp.settings.Settings` are overridden with a file named `.env` in the current working directory.
 Attribute names are prefixed with `ENCOMP_`.
 Settings are loaded when `encomp.settings` is imported; for runtime changes to quantity and unit rendering, use `encomp.units.set_quantity_format()`.
 
+Because the `.env` file is resolved relative to the current working directory, a stray `.env` that sets an invalid `ENCOMP_*` value (for example `ENCOMP_UNITS` pointing at a missing file) makes `import encomp` fail with a `pydantic.ValidationError`, even in an unrelated project. Remove or correct the offending value; unrelated keys in the `.env` are ignored.
+
 ## Documentation
 
 The usage guide, example notebooks, and API reference are at [encomp.readthedocs.io](https://encomp.readthedocs.io).
+
+Release notes for each version are published as [GitHub Releases](https://github.com/wlaur/encomp/releases).

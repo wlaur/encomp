@@ -1,5 +1,6 @@
 from typing import Any, assert_type, cast
 
+import polars as pl
 import pytest
 
 from ..conversion import convert_volume_mass
@@ -46,3 +47,19 @@ def test_convert_volume_mass() -> None:
 
     with pytest.raises(ExpectedDimensionalityError, match="inp"):
         convert_volume_mass(cast(Any, Q(25, "m/s")))
+
+
+def test_convert_volume_mass_polars_series_density() -> None:
+    # a Polars-Series density is validated element-wise (finite and strictly positive),
+    # mirroring the scalar/ndarray guards
+    mass = Q(pl.Series([2.0, 4.0]), "kg")
+
+    vol = convert_volume_mass(mass, rho=Q(pl.Series([1000.0, 2000.0]), "kg/m³"))
+    assert_type(vol, Q[Volume, pl.Series])
+    assert vol.to("m³").m.to_list() == [0.002, 0.002]
+
+    with pytest.raises(ValueError, match="positive"):
+        convert_volume_mass(mass, rho=Q(pl.Series([1000.0, -1.0]), "kg/m³"))
+
+    with pytest.raises(ValueError, match="positive"):
+        convert_volume_mass(mass, rho=Q(pl.Series([1000.0, float("nan")]), "kg/m³"))

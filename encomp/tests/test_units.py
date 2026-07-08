@@ -324,13 +324,16 @@ def test_dimensionality_type_hierarchy() -> None:
         class EstimatedDistance(EstimatedLength):
             dimensions = Length.dimensions
 
-        # the Estimation subtype cannot be used directly
-        # it's possible to create the subclass, but not create an instance
+        # the intermediate Estimation subtype cannot carry an instance: the typed
+        # constructor redirects rather than validates, so the dimensionality is taken
+        # from the unit. Q[Estimation](25, "m") therefore produces a plain Quantity[Length]
+        # -- the Estimation marker is dropped, not raised on (documented redirect semantics).
         EstimatedQuantity = Q[Estimation, float]
 
-        # TODO: this does not currently work
-        # with pytest.raises(TypeError):
-        EstimatedQuantity(25, "m")
+        redirected = EstimatedQuantity(25, "m")
+        assert type(redirected) is Q[Length, float]
+        # the intermediate Estimation marker is dropped, not preserved
+        assert not issubclass(cast(Any, redirected)._dimensionality_type, Estimation)
 
         # these quantities are not compatible with normal Length/Mass
         s = Q[EstimatedLength, float](25, "m")
@@ -406,12 +409,12 @@ def test_dimensionality_type_hierarchy() -> None:
         assert_type(s_series, Q[EstimatedLength, pl.Series])
         assert_type(s_series_first, Q[EstimatedLength, float])
 
-        # these quantities are not compatible with normal Length/Mass
-        # TODO: use a more specific exception here
-        with pytest.raises(Exception):  # noqa: B017
+        # these quantities are not compatible with normal Length/Mass: adding a
+        # semantically distinct dimensionality with the same physical dimensions raises
+        with pytest.raises(DimensionalityTypeError):
             _ = cast(Any, s) + Q(25, "m")
 
-        with pytest.raises(Exception):  # noqa: B017
+        with pytest.raises(DimensionalityTypeError):
             _ = m + Q(25, "kg")
 
         # EstimatedDistance is a direct subclass of EstimatedLength, so this works
@@ -917,6 +920,19 @@ def test_check() -> None:
     with pytest.raises(DimensionalityTypeError):
         _ = cast(Any, hv) + epm
 
+    # check() also accepts a Dimensionality *instance* (not only the class), comparing
+    # physical dimensions
+    assert Q(25, "m").check(Length())
+    assert not Q(25, "m").check(Pressure())
+
+    # a raw pint quantity (a PlainQuantity that is not an encomp Quantity) is rejected:
+    # its dimensionality is ambiguous as a check target, so it raises rather than guess
+    import pint
+
+    plain: Any = cast(Any, pint.UnitRegistry()).Quantity(1.0, "meter")
+    with pytest.raises(TypeError, match="Invalid type for dimension"):
+        Q(25, "m").check(plain)
+
 
 def test_typechecked() -> None:
     @typechecked
@@ -1194,18 +1210,18 @@ def test_compatibility() -> None:
 
     q3 = Q[IncompatibleFraction, float](0.2)
 
-    # TODO: use more specific exception here
-
-    with pytest.raises(Exception):  # noqa: B017
+    # IncompatibleFraction shares Dimensionless's physical dimensions but is a distinct
+    # semantic dimensionality, so adding it to a Dimensionless quantity is rejected
+    with pytest.raises(DimensionalityTypeError):
         _ = q3 + q1
 
-    with pytest.raises(Exception):  # noqa: B017
+    with pytest.raises(DimensionalityTypeError):
         _ = q3 + q2
 
-    with pytest.raises(Exception):  # noqa: B017
+    with pytest.raises(DimensionalityTypeError):
         _ = q1 + q3
 
-    with pytest.raises(Exception):  # noqa: B017
+    with pytest.raises(DimensionalityTypeError):
         _ = q2 + q3
 
     s = Q(25, "m")
@@ -1225,10 +1241,10 @@ def test_compatibility() -> None:
     _ = d + d2
     _ = d2 - d
 
-    with pytest.raises(Exception):  # noqa: B017
+    with pytest.raises(DimensionalityTypeError):
         _ = s + d
 
-    with pytest.raises(Exception):  # noqa: B017
+    with pytest.raises(DimensionalityTypeError):
         _ = d - s
 
     assert str(round((Q(25, "MSEK/GWh") * Q(25, "kWh")).to_reduced_units(), 8)) == "0.000625 MSEK"

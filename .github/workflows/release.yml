@@ -6,6 +6,8 @@ name: encomp CI/release
 #
 #   typecheck      -> ruff, pyright (strict) + pyrefly, docs build, plus
 #                     source-only doc/static tests (ty is local-only and intentionally not gated)
+#   docs-rtd       -> rebuild the docs in a ReadTheDocs-equivalent environment (no project
+#                     install, no compiled plugin) so an RTD-only break fails the PR
 #   rust           -> cargo fmt, clippy, and in-crate tests
 #   build-wheels   -> one wheel per OS/arch (abi3 cp313 => runs on 3.13+)
 #   test           -> install each prebuilt wheel + run pytest, every OS x py
@@ -56,6 +58,34 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y pandoc
       - run: uv run --no-sync sphinx-build -W -b html docs docs/_build/html
+
+  docs-rtd:
+    # Reproduce the ReadTheDocs build so an RTD-only breakage fails the PR instead of
+    # silently landing (finding: v1.6.2 docs never published because RTD builds broke at
+    # merge and nothing gated them). RTD runs `uv sync --no-install-project`, so the
+    # project and its compiled plugin are NOT installed: autodoc imports encomp from
+    # source (conf.py adds the repo root to sys.path) and the notebooks render their
+    # committed outputs (conf.py sets nbsphinx_execute="never" when READTHEDOCS is set)
+    # rather than executing against a plugin that isn't there. The `typecheck` job above
+    # is the complement -- it installs the plugin and executes the notebooks, gating their
+    # correctness. Keep this job's steps in sync with .readthedocs.yaml.
+    name: docs (ReadTheDocs parity)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          python-version: "3.13"
+      - name: Install pandoc (nbsphinx needs it to render notebooks; present on RTD images)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc
+      - name: Sync docs tooling WITHOUT installing the project (mirrors .readthedocs.yaml)
+        run: uv sync --locked --all-extras --all-groups --no-install-project
+      - name: Build the docs exactly as ReadTheDocs does (fail on warning)
+        env:
+          READTHEDOCS: "True"
+        run: uv run --no-sync python -m sphinx -T -W --keep-going -b html docs docs/_build/html
 
   rust:
     name: rust fmt/clippy/test
@@ -131,7 +161,7 @@ jobs:
 
   publish:
     name: publish to PyPI
-    needs: [typecheck, rust, build-wheels, test]
+    needs: [typecheck, docs-rtd, rust, build-wheels, test]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment: pypi               # configure the Trusted Publisher against this env

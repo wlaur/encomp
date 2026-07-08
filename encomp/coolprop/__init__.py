@@ -694,8 +694,9 @@ def humid_air(
     ).alias(output)  # name the result after the computed property, not the first input
 
 
+@lru_cache(maxsize=1)
 def lib_version() -> str:
-    """CoolProp version of the bundled library."""
+    """CoolProp version of the bundled library (cached; the bundled lib never changes)."""
     import ctypes
 
     lib = ctypes.CDLL(lib_path())

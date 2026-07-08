@@ -288,6 +288,28 @@ def test_incorrect_inputs() -> None:
         Fluid("water", P=Q(2, "bar"), T=Q(25, "°C")).THIS_ATTRIBUTE_DOES_NOT_EXIST
 
 
+def test_wrong_number_of_fixed_points() -> None:
+    # a two-point fluid needs exactly two state inputs; a humid-air state needs three.
+    # These cardinality checks run in __init__, before any CoolProp call.
+    with pytest.raises(ValueError, match="Exactly two fixed points"):
+        Fluid("water", **cast(Any, {"P": Q(1, "bar")}))
+
+    with pytest.raises(ValueError, match="Exactly two fixed points"):
+        Fluid("water", **cast(Any, {"P": Q(1, "bar"), "T": Q(300, "K"), "D": Q(1, "kg/m³")}))
+
+    with pytest.raises(ValueError, match="Exactly two fixed points"):
+        Water(**cast(Any, {"P": Q(1, "bar")}))
+
+    with pytest.raises(ValueError, match="Exactly three fixed points"):
+        HumidAir(**cast(Any, {"P": Q(1, "bar"), "T": Q(25, "degC")}))
+
+
+def test_describe_rejects_unknown_property() -> None:
+    # describe()/search() surface the property catalog; an unknown name is a ValueError
+    with pytest.raises(ValueError, match="not a valid CoolProp property name"):
+        Fluid.describe(cast(Any, "not_a_real_property"))
+
+
 def test_invalid_fluid_repr_does_not_raise() -> None:
     invalid = Fluid(cast(Any, "Watr"), P=Q(2, "bar"), T=Q(25, "degC"))
 

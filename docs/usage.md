@@ -67,7 +67,7 @@ mf = Q(25, ureg.kg / ureg.h)
 ### Quantity types
 
 Each dimensionality is a unique subclass of {py:class}`encomp.units.Quantity`.
-The base class itself cannot be instantiated, since it would have no dimensionality at all (a *dimensionless* quantity still has a dimensionality of *1*).
+Every instance is one of these dimensionality subclasses; a plain `Quantity` instance never exists. Calling `Quantity(...)` still works -- the constructor redirects to the subclass matching the unit (a bare number is *dimensionless*, which is itself a dimensionality, of *1*).
 
 ```python
 from encomp.units import Quantity as Q
@@ -196,8 +196,13 @@ Pickling preserves the dimensionality class for module-global dimensionalities. 
 
 ### Custom base dimensionalities
 
-By default, the seven SI dimensionalities (and common combinations of these) are defined, along with some commonly used media (*water*, *air*, *fuel*).
-Additionally, the *normal* dimensionality (used to represent normal volume) and *currency* are defined.
+By default, the seven SI dimensionalities (and common combinations of these) are defined.
+The only *custom* base dimensionalities defined out of the box are *normal* (used to represent normal volume) and *currency*.
+Media dimensionalities such as *dry_air* or *fuel* are not predefined -- create them yourself with {py:func}`encomp.units.define_dimensionality`, as shown below.
+
+:::{warning}
+Do not use *water* as a media tag: `water` is inherited from `pint` as a density unit (`1 kg/liter`), so a unit like `"kg water"` silently parses to `[mass]²/[length]³` instead of raising. Pick an unambiguous name (for example `H2O`) and define it explicitly.
+:::
 
 {py:func}`encomp.units.define_dimensionality` defines a new base dimensionality with a single unit of the same name.
 If the dimensionality already exists, {py:class}`encomp.units.DimensionalityRedefinitionError` is raised.

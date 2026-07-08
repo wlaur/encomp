@@ -150,3 +150,17 @@ def test_normal_volume_legacy_plain_inputs() -> None:
     m_typed = mass_from_normal_volume(nv)
     m_legacy = mass_from_normal_volume(legacy)
     assert m_legacy.to("kg").m == approx(m_typed.to("kg").m, rel=1e-9)
+
+
+def test_convert_gas_volume_rejects_invalid_condition_type() -> None:
+    # a condition that is neither a recognised string ("N"/"S") nor a
+    # (pressure, temperature) tuple is a TypeError, naming the offending argument
+    with pytest.raises(TypeError, match="condition_1"):
+        convert_gas_volume(Q(1.0, "m³"), cast(Any, 123), "N")
+
+    with pytest.raises(TypeError, match="condition_2"):
+        convert_gas_volume(Q(1.0, "m³"), "N", cast(Any, object()))
+
+    # an unrecognised string condition is a ValueError, not a TypeError
+    with pytest.raises(ValueError, match="must be 'N', 'S'"):
+        convert_gas_volume(Q(1.0, "m³"), cast(Any, "X"), "N")

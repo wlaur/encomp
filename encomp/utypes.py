@@ -173,6 +173,18 @@ TimeUnits = Literal[
     "us",
 ]
 
+# Frequency is the inverse of Time (1 / [time]); it participates in the reciprocal
+# overloads (1 / Time -> Frequency and 1 / Frequency -> Time) so it also gets literal
+# unit spellings, letting Q(50, "Hz") infer Frequency statically like any base dimensionality.
+FrequencyUnits = Literal[
+    "Hz",
+    "kHz",
+    "MHz",
+    "GHz",
+    "rpm",
+    "1/s",
+]
+
 TemperatureUnits = Literal[
     "degC",
     "°C",
@@ -521,6 +533,7 @@ AllUnits = (
     | LengthUnits
     | MassUnits
     | TimeUnits
+    | FrequencyUnits
     | TemperatureUnits
     | TemperatureDifferenceUnits
     | SubstanceUnits
@@ -1126,6 +1139,7 @@ __all__ = [
     "Force",
     "ForceUnits",
     "Frequency",
+    "FrequencyUnits",
     "HeatTransferCoefficient",
     "HeatTransferCoefficientUnits",
     "HeatingValue",

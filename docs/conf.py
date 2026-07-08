@@ -11,6 +11,7 @@
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 
 
+import os
 import sys
 import tomllib
 from pathlib import Path
@@ -174,7 +175,14 @@ suppress_warnings = [
     "docutils",
 ]
 
-nbsphinx_execute = "always"
+# Execute the example notebooks where the compiled plugin is importable (local dev and
+# CI, which run after `maturin develop`). On ReadTheDocs the project is installed with
+# --no-install-project (.readthedocs.yaml) and nbsphinx runs each notebook in a separate
+# Jupyter kernel that inherits neither conf.py's sys.path insert nor the compiled plugin,
+# so `import encomp` fails there -- render the committed cell outputs instead. CI's
+# `sphinx-build -W` remains the notebook-correctness gate. See CoolProp plugin notes in
+# encomp/coolprop/README.md and the getting-started notebook's committed outputs.
+nbsphinx_execute = "never" if os.environ.get("READTHEDOCS") else "always"
 nbsphinx_allow_errors = False
 
 nbsphinx_requirejs_path = ""
