@@ -85,6 +85,7 @@ from .utypes import (
     Force,
     ForceUnits,
     Frequency,
+    FrequencyUnits,
     HeatTransferCoefficient,
     HeatTransferCoefficientUnits,
     KinematicViscosity,
@@ -862,6 +863,8 @@ class Quantity(
     @overload
     def __new__(cls, val: Sequence[float], unit: TimeUnits) -> Quantity[Time, Numpy1DArray]: ...
     @overload
+    def __new__(cls, val: Sequence[float], unit: FrequencyUnits) -> Quantity[Frequency, Numpy1DArray]: ...
+    @overload
     def __new__(cls, val: Sequence[float], unit: TemperatureUnits) -> Quantity[Temperature, Numpy1DArray]: ...
     @overload
     def __new__(
@@ -959,6 +962,8 @@ class Quantity(
     def __new__(cls, val: MT, unit: MassUnits) -> Quantity[Mass, MT]: ...
     @overload
     def __new__(cls, val: MT, unit: TimeUnits) -> Quantity[Time, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: FrequencyUnits) -> Quantity[Frequency, MT]: ...
     @overload
     def __new__(cls, val: MT, unit: TemperatureUnits) -> Quantity[Temperature, MT]: ...
     @overload

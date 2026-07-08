@@ -500,3 +500,14 @@ def test_thread_count_parity() -> None:
         digests[threads] = digest
 
     assert len(set(digests.values())) == 1, f"results differ across thread counts: {digests}"
+
+
+def test_fluid_rejects_unknown_assume_phase() -> None:
+    # assume_phase is a Literal statically, but an out-of-range value passed dynamically
+    # is rejected up front (while building the expression), before any evaluation
+    with pytest.raises(ValueError, match="unknown assumed phase"):
+        cp.fluid("DMASS", "P", "T", assume_phase=cast(Any, "bogus"))
+
+    # a valid assumed phase builds an expression as usual
+    expr = cp.fluid("DMASS", "P", "T", name="HEOS::Water", assume_phase="gas")
+    assert isinstance(expr, pl.Expr)

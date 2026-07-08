@@ -10,6 +10,7 @@ from ..utypes import (
     Dimensionless,
     Energy,
     EnergyPerMass,
+    Frequency,
     Length,
     Mass,
     MassFlow,
@@ -17,6 +18,7 @@ from ..utypes import (
     Numpy1DArray,
     Numpy1DBoolArray,
     Power,
+    Time,
     UnknownDimensionality,
     Velocity,
     Volume,
@@ -559,3 +561,17 @@ def test_div_known_unknown_all_magnitude_types() -> None:
     assert_type(Q([10.0, 20.0], "kg") / q_unknown, Q[UnknownDimensionality, Numpy1DArray])
     assert_type(Q(pl.Series([10.0, 20.0]), "kg") / q_unknown, Q[UnknownDimensionality, pl.Series])
     assert_type(Q(pl.col("mass"), "kg") / q_unknown, Q[UnknownDimensionality, pl.Expr])
+
+
+def test_frequency_units_infer_statically() -> None:
+    # Frequency (1 / [time]) is now statically constructible from its own unit literals,
+    # so it no longer falls back to UnknownDimensionality like other derived dimensions.
+    assert_type(Q(50, "Hz"), Q[Frequency, float])
+    assert_type(Q(1.0, "kHz"), Q[Frequency, float])
+    assert_type(Q(1.0, "1/s"), Q[Frequency, float])
+    assert_type(Q([1.0, 2.0], "rpm"), Q[Frequency, Numpy1DArray])
+    assert_type(Q(pl.Series([1.0, 2.0]), "MHz"), Q[Frequency, pl.Series])
+
+    # the reciprocal overloads round-trip Time <-> Frequency
+    assert_type(1 / Q(1.0, "s"), Q[Frequency, float])
+    assert_type(1 / Q(1.0, "Hz"), Q[Time, float])

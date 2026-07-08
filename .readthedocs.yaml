@@ -18,9 +18,15 @@ build:
       post_install:
          # --no-install-project: install the dependencies + doc tooling (Sphinx, myst-parser,
          # nbsphinx, ...) but do NOT build the Rust extension. conf.py adds the repo root to
-         # sys.path, and importing the encomp modules for autodoc never loads the compiled
-         # plugin (Polars loads it lazily only when an expression is evaluated), so the docs
-         # build without a Rust toolchain or the bundled CoolProp library.
+         # sys.path, so autodoc imports the encomp modules from source without loading the
+         # compiled plugin (Polars loads it lazily only when an expression is evaluated), so
+         # autodoc builds without a Rust toolchain or the bundled CoolProp library.
+         #
+         # The example notebooks are a separate matter: nbsphinx executes each in its own
+         # Jupyter kernel that gets neither the sys.path insert nor an installed encomp, so
+         # they are NOT executed on RTD (conf.py sets nbsphinx_execute="never" when
+         # READTHEDOCS is set) -- their committed outputs are rendered instead. CI executes
+         # the notebooks against the real plugin, which is the notebook-correctness gate.
          - UV_PROJECT_ENVIRONMENT=$READTHEDOCS_VIRTUALENV_PATH uv sync --all-extras --all-groups --no-install-project --link-mode=copy
 
 python:

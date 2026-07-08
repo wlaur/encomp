@@ -1608,12 +1608,8 @@ class Fluid(CoolPropFluid[MT]):
 
 
 class Water(Fluid[MT]):
-    REPR_PROPERTIES: tuple[tuple[CProperty, str], ...] = (
-        ("P", ".0f"),
-        ("T", ".1f"),
-        ("D", ".1f"),
-        ("V", ".2g"),
-    )
+    # REPR_PROPERTIES is inherited unchanged from CoolPropFluid (P, T, D, V); only the
+    # __repr__ header differs (it shows the phase). HumidAir overrides it, Water does not.
 
     def __init__(self, **kwargs: Unpack[FluidState[MT]]) -> None:
         """
