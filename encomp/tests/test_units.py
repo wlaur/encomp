@@ -14,9 +14,9 @@ from typing import Any, TypedDict, assert_never, assert_type, cast
 import numpy as np
 import polars as pl
 import pytest
-from pint.errors import OffsetUnitCalculusError, UnitStrippedWarning
+from pint.errors import OffsetUnitCalculusError, UndefinedUnitError, UnitStrippedWarning
 from pydantic import BaseModel, ConfigDict, ValidationError
-from typeguard import typechecked
+from typeguard import TypeCheckError, typechecked
 
 from ..conversion import convert_volume_mass
 from ..misc import isinstance_types
@@ -720,7 +720,9 @@ def test_Q() -> None:
         dimensions = Length.dimensions * Length.dimensions * Length.dimensions / Temperature.dimensions
 
     Q[Custom, float](1, "m³/K")
-    with pytest.raises(Exception):  # noqa: B017
+    # dividing two Dimensionality classes is not how a derived dimensionality is built:
+    # combine their `dimensions` UnitsContainers instead
+    with pytest.raises(TypeError):
         cast(Any, Q)[cast(Any, Pressure) / Area, float](1, "bar/m")
 
     # percent or %
@@ -778,9 +780,10 @@ def test_custom_units() -> None:
     assert Q(80, "degRe").to("degC").m == approx(100.0, rel=1e-12)
 
     assert not Q(1, "mH20").check(Pressure)
-    with pytest.raises(Exception):  # noqa: B017
+    # "w" and "y" are not units ("W" and "yr" are); pint refuses rather than guessing
+    with pytest.raises(UndefinedUnitError):
         Q(1, "w")
-    with pytest.raises(Exception):  # noqa: B017
+    with pytest.raises(UndefinedUnitError):
         Q(1, "y")
 
     assert (
@@ -945,7 +948,7 @@ def test_typechecked() -> None:
 
     assert func_a(Q(2, "degC")) == Q(2, "bar")
 
-    with pytest.raises(Exception):  # noqa: B017
+    with pytest.raises(TypeCheckError):
         func_a(cast(Any, Q(2, "meter")))
 
     @typechecked
@@ -956,7 +959,7 @@ def test_typechecked() -> None:
     assert func_b(Q(2, "psi")) == Q(2, "psi")
     assert func_b(Q(2, "mmHg")) == Q(2, "mmHg")
 
-    with pytest.raises(Exception):  # noqa: B017
+    with pytest.raises(TypeCheckError):
         func_a(cast(Any, Q(2, "meter")))
 
     @typechecked
@@ -967,7 +970,7 @@ def test_typechecked() -> None:
 
     func_c(cast(Any, Q(2, "degC")))
 
-    with pytest.raises(Exception):  # noqa: B017
+    with pytest.raises(TypeCheckError):
         func_c(cast(Any, Q([2], "meter")))
 
 

@@ -363,7 +363,7 @@ def test_Water() -> None:
 
     repr(water_mixed_phase)
 
-    with pytest.raises(Exception):  # noqa: B017
+    with pytest.raises(ValueError, match="All inputs must have the same size"):
         # mismatching sizes
         # must access an attribute before it's actually evaluated
         Water(T=Q(np.linspace(25, 500, 10), "°C"), P=Q(np.linspace(0.5, 10, 50), "bar")).P
