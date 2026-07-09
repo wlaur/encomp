@@ -4,7 +4,23 @@ from typing import Any, cast
 import numpy as np
 import pytest
 
-from ..sympy import Symbol, get_args, get_function, get_lambda_matrix, sp, symbols, to_identifier
+from ..sympy import (
+    Symbol,
+    get_args,
+    get_function,
+    get_lambda,
+    get_lambda_kwargs,
+    get_lambda_matrix,
+    get_sol_expr,
+    recursive_subs,
+    simplify_exponents,
+    sp,
+    substitute_unknowns,
+    symbols,
+    to_identifier,
+    typeset,
+    typeset_chemical,
+)
 from ..units import Quantity as Q
 
 
@@ -158,3 +174,115 @@ def test_get_function() -> None:
             z: Q(0.4, "m³/kg"),
         }
     )
+
+
+def test_cached_helpers_return_a_fresh_list() -> None:
+    # get_args and get_lambda are cached; the cached value is a tuple, so a caller that mutates
+    # the returned list cannot poison the cache for every later call
+    x, y, z = sp.symbols("x, y, z")  # pyright: ignore[reportUnknownMemberType]
+    expr = 25 * x * y / z
+
+    args = get_args(expr)
+    assert args == ["x", "y", "z"]
+
+    args.append("INJECTED")
+    assert get_args(expr) == ["x", "y", "z"]
+    assert get_args(expr) is not get_args(expr)
+
+    lambda_args = get_lambda(expr)[1]
+    lambda_args.append("INJECTED")
+    assert get_lambda(expr)[1] == ["x", "y", "z"]
+
+    # the expensive part is still cached
+    assert get_lambda(expr)[0] is get_lambda(expr)[0]
+
+
+def test_decorate_braces_a_decoration_equal_to_the_symbol_name() -> None:
+    # the base symbol is the only unbraced part, identified by position: a decoration whose
+    # typeset form happens to equal the symbol's own name must still be braced
+    x = cast(Any, sp.Symbol("x"))
+
+    assert str(x.decorate(prefix="x")) == "{x}x"
+    assert str(x.decorate(suffix_sub="x")) == "x_{x}"
+    assert str(x.decorate(suffix="x")) == "x{x}"
+
+    # the ordinary case is unchanged, and assumptions survive
+    n = cast(Any, sp.Symbol("n", integer=True))
+    assert (
+        str(n.decorate(prefix=r"\sum", prefix_sub="2", suffix_sup="i", suffix=r"\ldots")) == r"{\sum}_{2}n^{i}{\ldots}"
+    )
+    assert n.decorate(prefix="a").assumptions0["integer"]
+
+
+def test_typeset() -> None:
+    # single lower-case letter keeps the math font; anything longer gets \text{}
+    assert typeset("a") == "a"
+    assert typeset("A") == r"\text{A}"
+    assert typeset("water") == r"\text{water}"
+    assert typeset("H_2O") == r"\text{H}_2\text{O}"
+
+    # parts are split on commas
+    assert typeset("a,b") == "a,b"
+    assert typeset("") == ""
+
+
+def test_typeset_chemical() -> None:
+    assert typeset_chemical("H_2SO_4") == r"\text{H}_2\text{SO}_4"
+    assert typeset_chemical("CO_2") == r"\text{CO}_2"
+
+
+def test_simplify_exponents() -> None:
+    x = sp.Symbol("x")
+
+    # a float exponent that is an integer value is rewritten as an Integer
+    assert simplify_exponents(x**2.0) == x**2
+    assert simplify_exponents(x) == x
+
+    # a genuinely fractional exponent is left alone
+    assert simplify_exponents(x**2.5) == x**2.5
+
+
+def test_recursive_subs() -> None:
+    x, y, z = sp.symbols("x, y, z")  # pyright: ignore[reportUnknownMemberType]
+
+    # substitutions are applied until the expression stops changing
+    assert recursive_subs(x + y, [(y, z), (z, sp.Integer(2))]) == x + 2
+
+    with pytest.raises(ValueError, match="did not converge"):
+        recursive_subs(x, [(x, x + 1)])
+
+
+def test_get_sol_expr() -> None:
+    x, y = sp.symbols("x, y")  # pyright: ignore[reportUnknownMemberType]
+    # sympy's Eq is typed as a general Relational
+    equation: Any = sp.Eq(x, y + 1)
+
+    assert get_sol_expr(equation, x) == y + 1
+    assert get_sol_expr(equation, y) == x - 1
+
+    # a symbol that does not appear in any equation cannot be solved for
+    assert get_sol_expr(equation, sp.Symbol("z")) is None
+
+
+def test_substitute_unknowns() -> None:
+    x, y, z = sp.symbols("x, y, z")  # pyright: ignore[reportUnknownMemberType]
+    equations: Any = [sp.Eq(x, y + 1), sp.Eq(y, z * 2)]
+
+    # x is expressed in terms of the only known symbol, z
+    assert substitute_unknowns(x, {z}, equations) == 2 * z + 1
+
+
+def test_get_lambda_kwargs() -> None:
+    x, y = sp.symbols("x, y")  # pyright: ignore[reportUnknownMemberType]
+    # dict is invariant, so the concrete Quantity[Length, float] values need the declared type
+    value_map: Any = {x: Q(1.0, "m"), y: Q(2.0, "m")}
+
+    # units=False strips the unit, leaving the base-unit magnitude
+    assert get_lambda_kwargs(value_map, ["x", "y"]) == {"x": 1.0, "y": 2.0}
+
+    # only the requested parameters are included
+    assert get_lambda_kwargs(value_map, ["x"]) == {"x": 1.0}
+
+    # units=True keeps the Quantity
+    with_units = get_lambda_kwargs(value_map, ["x"], units=True)
+    assert with_units["x"] == Q(1.0, "m")

@@ -225,7 +225,14 @@ _EXPR_EVALUATION_CACHE_LOCK = Lock()
 
 
 def clear_expr_evaluation_cache() -> None:
-    """Drop the cache of constructed CoolProp ``pl.Expr`` nodes."""
+    """Drop the cache of constructed CoolProp ``pl.Expr`` nodes.
+
+    Repeated evaluations of the same property, on the same fluid and inputs, return the
+    *identical* expression object, so callers that deduplicate expressions by ``id()``
+    see one node instead of many. Clearing the cache never changes a result; it only
+    releases the cached nodes. Useful when benchmarking expression construction, or to
+    free the (bounded) cache in a long-lived process that builds many distinct fluids.
+    """
 
     with _EXPR_EVALUATION_CACHE_LOCK:
         _EXPR_EVALUATION_CACHE.clear()
@@ -996,6 +1003,15 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     def evaluate_single(self, output: CProperty, *points: tuple[CProperty, float]) -> float:
         """Evaluate ``output`` for scalar inputs through the CoolProp backend, returning ``NaN`` on an invalid state."""
 
+        # A non-finite input cannot fix a state, and CoolProp does not reliably say so: it
+        # returns 0.0 ("Liquid") for PropsSI("PHASE", "T", nan, ...), the -1 single-phase
+        # sentinel for "Q", a finite constant for state-independent outputs like TCRIT, and
+        # HAPropsSI echoes an input straight back. Mask the input here, exactly as
+        # evaluate_multiple, _lowlevel_loop_constant and _rust_eager already do, so the
+        # scalar path cannot disagree with the vector/plugin paths.
+        if not all(np.isfinite(value) for _, value in points):
+            return np.nan
+
         inputs = list(flatten(points))
 
         if self._append_name_to_cp_inputs:
@@ -1236,14 +1252,12 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 f"{qty.u} ({qty.dimensionality})"
             ) from e
 
-        if isinstance(m, (float, int, pl.Expr)):
-            return m
-        elif isinstance(m, pl.Series):
+        # a Quantity magnitude is float / ndarray / pl.Series / pl.Expr (a list input is
+        # converted to an ndarray at construction, and .to() preserves the container)
+        if isinstance(m, pl.Series):
             return m.to_numpy()
-        elif isinstance(m, list):
-            return np.array(m)
-        else:
-            return m
+
+        return m
 
     def get(
         self,
@@ -1468,12 +1482,20 @@ class Fluid(CoolPropFluid[MT]):
         phase_idx_val = phase_idx.m
 
         if isinstance(phase_idx_val, np.ndarray):
-            if len(set(phase_idx_val)) == 1:
-                phase_idx_val_element = float(phase_idx_val[0])
-                return self.PHASES.get(phase_idx_val_element, "N/A")
+            # a NaN row is an invalid state, not a phase, so the phase is judged on the rows that
+            # have one. Reducing over the raw array would instead count each NaN as its own
+            # distinct phase, since nan != nan
+            finite = cast("Numpy1DArray", phase_idx_val[np.isfinite(phase_idx_val)])
 
-            else:
-                return "Variable"
+            if finite.size == 0:
+                return "N/A"
+
+            unique = np.unique(finite)
+
+            if unique.size == 1:
+                return self.PHASES.get(float(unique[0]), "N/A")
+
+            return "Variable"
 
         elif isinstance(phase_idx_val, float | int):
             return self.PHASES.get(float(phase_idx_val), "N/A")

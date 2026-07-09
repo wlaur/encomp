@@ -18,6 +18,7 @@ import re
 import sys
 import warnings
 from collections.abc import Iterable, Iterator, Sequence, Sized
+from inspect import isclass
 from types import UnionType
 from typing import (
     TYPE_CHECKING,
@@ -48,6 +49,7 @@ from pint.util import UnitsContainer
 from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
 from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import PydanticCustomError, core_schema
+from typeguard import TypeCheckError, TypeCheckMemo, checker_lookup_functions
 
 from .settings import PINT_FORMATTING_SPECIFIERS, SETTINGS
 from .utypes import (
@@ -174,6 +176,40 @@ def _ensure_sympy() -> None:
 
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _is_close(
+    a: float | Numpy1DArray,
+    b: float | Numpy1DArray,
+    rtol: float,
+    atol: float,
+) -> Any:  # noqa: ANN401
+    """Symmetric closeness test for float / ndarray magnitudes.
+
+    Implements the same predicate as ``math.isclose`` and ``polars`` ``is_close``::
+
+        |a - b| <= max(rtol * max(|a|, |b|), atol)
+
+    so that every magnitude type answers identically. ``np.isclose`` is deliberately not used:
+    it evaluates the asymmetric ``atol + rtol * |b|``, treating ``b`` as a reference value, and
+    an equality operator must be symmetric. The exact-equality term keeps ``+-inf`` close to
+    itself, matching both the stdlib and polars.
+    """
+
+    a_arr = np.asarray(a, dtype=np.float64)
+    b_arr = np.asarray(b, dtype=np.float64)
+
+    with np.errstate(invalid="ignore"):
+        # an infinite operand makes the tolerance infinite too, and `inf <= inf` would then call
+        # any finite value close to infinity -- so the band applies only where both sides are
+        # finite. NaN is never close to anything, including itself. inf is close only to itself,
+        # via the exact-equality term (which also short-circuits the `inf - inf` NaN)
+        tolerance = np.maximum(rtol * np.maximum(np.abs(a_arr), np.abs(b_arr)), atol)
+        finite = np.isfinite(a_arr) & np.isfinite(b_arr)
+        close = (np.abs(a_arr - b_arr) <= tolerance) & finite
+
+    return close | (a_arr == b_arr)
+
 
 DimensionalityTypeName = Annotated[str, "Dimensionality name"]
 MagnitudeTypeName = Literal[
@@ -431,7 +467,9 @@ class Quantity(
         Unit("delta_degRe")._units,
     )
 
-    # used for float and numpy array comparison
+    # Tolerance for == / != and the ordering operators, applied identically to every magnitude
+    # type: two values are equal when |a - b| <= max(rtol * max(|a|, |b|), atol). This is the
+    # math.isclose / polars is_close predicate; see the module-level _is_close.
     rtol: float = 1e-9
     atol: float = 1e-12
 
@@ -579,6 +617,41 @@ class Quantity(
             return "pl.Expr"
         else:
             raise TypeError(f"Invalid magnitude type: {mt} (origin {origin})")
+
+    @classmethod
+    def _check_comparable_magnitudes(cls, m: object, other_m: object) -> None:
+        # The numpy world and the polars world do not compare elementwise against each other:
+        # numpy raises an opaque ufunc-loop TypeError, polars an equally opaque dtype error, and
+        # pl.Expr silently lifts an ndarray into a literal. None of these combinations is in the
+        # typed API (the __eq__/__gt__/... overloads pair a magnitude type with itself or with a
+        # scalar), so reject them here with an actionable message instead
+        if cls._is_mixed_container(m, other_m):
+            raise TypeError(
+                f"Cannot compare a Quantity with {cls._describe_magnitude(m)} magnitude to one with "
+                f"{cls._describe_magnitude(other_m)} magnitude; convert one side first, "
+                'e.g. with .astype("pl.Series") or .astype("ndarray")'
+            )
+
+    @staticmethod
+    def _is_mixed_container(m: object, other_m: object) -> bool:
+        polars_types = (pl.Series, pl.Expr)
+
+        return (isinstance(m, np.ndarray) and isinstance(other_m, polars_types)) or (
+            isinstance(m, polars_types) and isinstance(other_m, np.ndarray)
+        )
+
+    @staticmethod
+    def _describe_magnitude(value: object) -> str:
+        if isinstance(value, np.ndarray):
+            return "ndarray"
+
+        if isinstance(value, pl.Series):
+            return "pl.Series"
+
+        if isinstance(value, pl.Expr):
+            return "pl.Expr"
+
+        return type(value).__name__
 
     @staticmethod
     def _get_magnitude_type_from_name(mt_name: MagnitudeTypeName) -> type:
@@ -2288,9 +2361,10 @@ class Quantity(
 
         m = self.m
         other_m = cast(float | Numpy1DArray | pl.Series | pl.Expr, cast(Any, other).to(self.u).m)
+        self._check_comparable_magnitudes(m, other_m)
 
         if isinstance(m, (float, int, np.ndarray)) and isinstance(other_m, (float, int, np.ndarray)):
-            ret = np.isclose(cast(Any, m), cast(Any, other_m), self.rtol, self.atol)
+            ret = _is_close(cast(Any, m), cast(Any, other_m), self.rtol, self.atol)
 
             if isinstance(ret, np.bool):
                 return bool(cast(Any, ret))
@@ -2373,9 +2447,10 @@ class Quantity(
 
         m = self.m
         other_m = cast(float | Numpy1DArray | pl.Series | pl.Expr, cast(Any, other).to(self.u).m)
+        self._check_comparable_magnitudes(m, other_m)
 
         if isinstance(m, (float, int, np.ndarray)) and isinstance(other_m, (float, int, np.ndarray)):
-            ret = ~np.isclose(cast(Any, m), cast(Any, other_m), self.rtol, self.atol)
+            ret = ~_is_close(cast(Any, m), cast(Any, other_m), self.rtol, self.atol)
 
             if isinstance(ret, np.bool):
                 return bool(cast(Any, ret))
@@ -2403,6 +2478,24 @@ class Quantity(
         other: Quantity[Any, Any] | float,
         op: Literal["__gt__", "__ge__", "__lt__", "__le__"],
     ) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:
+        # Tolerant __eq__ is not optional: unit conversion is lossy, so Q(1, "L") and
+        # Q(1000, "cm³") differ in the last bit and an exact __eq__ would call them unequal.
+        # Given that, closeness is not transitive -- a == b and b == c does not imply a == c --
+        # and only two of these three can hold at once:
+        #
+        #   (1) __eq__ is tolerant
+        #   (2) the operators agree pairwise: a == b implies not (a > b), and a > b implies
+        #       not (a <= b)
+        #   (3) __lt__ is a strict WEAK order, which sorted()/min()/max() need to be exact
+        #       on every input
+        #
+        # encomp keeps (1) and (2). Quantities within (rtol, atol) are ties, so __lt__ is a
+        # strict PARTIAL order: irreflexive, asymmetric and transitive, but ties do not chain.
+        # sorted()/min() are therefore exact unless the data contains a tolerance *chain* --
+        # each adjacent pair within tolerance, the endpoints not -- which spans less than the
+        # width at which the library already declares the values equal. Sort on the raw
+        # magnitudes (`key=lambda q: q.to(unit).m`) when a strict total order is required.
+        #
         # ordering across dimensionality types has no correct answer (e.g. Temperature
         # vs TemperatureDifference share [temperature] but must not order), so it
         # raises -- unlike __eq__, which can answer False for incompatible operands
@@ -2411,16 +2504,26 @@ class Quantity(
         except DimensionalityTypeError as e:
             raise DimensionalityComparisonError(f"Cannot compare {self} with {other}") from e
 
+        if isinstance(other, Quantity):
+            self._check_comparable_magnitudes(self.m, other.m)
+
         try:
             ret = getattr(self._pint_super, op)(other)
         except (ValueError, DimensionalityError) as e:
             raise DimensionalityComparisonError(str(e)) from e
 
-        if op in ("__ge__", "__le__"):
-            equal = cast(Any, self).__eq__(other)
-            ret = ret | equal
-            if isinstance(ret, np.bool):
-                return bool(cast(Any, ret))
+        # __eq__ is tolerant (rtol, atol), so every ordering operator must agree with it or the
+        # five relations do not form an ordering. pint compares exactly, so fold the tolerance in
+        # here: the non-strict operators absorb equality, the strict ones exclude it. Without the
+        # strict side, `a > b` and `a <= b` were both True for operands equal within tolerance,
+        # which breaks sorted()/bisect and any code assuming `a > b` implies `not (a <= b)`.
+        equal = cast(Any, self).__eq__(other)
+        not_equal = (not equal) if isinstance(equal, bool) else ~equal
+
+        ret = (ret | equal) if op in ("__ge__", "__le__") else (ret & not_equal)
+
+        if isinstance(ret, np.bool):
+            return bool(cast(Any, ret))
 
         return cast("bool | Numpy1DBoolArray | pl.Series | pl.Expr", ret)
 
@@ -3586,6 +3689,40 @@ def _reconstruct_quantity(magnitude: object, unit: str, dim: type[Dimensionality
         return qty
     return qty.asdim(dim)
 
+
+def _quantity_typeguard_checker(
+    value: Any,  # noqa: ANN401
+    origin_type: Any,  # noqa: ANN401
+    args: tuple[Any, ...],
+    memo: TypeCheckMemo,  # noqa: ARG001
+) -> None:
+    # imported here rather than at module scope: encomp.misc resolves encomp.units lazily,
+    # and this keeps the dependency one-directional
+    from .misc import isinstance_types
+
+    annotation = origin_type[args] if args else origin_type
+
+    if not isinstance_types(value, annotation):
+        raise TypeCheckError(f"is not an instance of {annotation.__module__}.{annotation.__qualname__}")
+
+
+def _quantity_typeguard_lookup(
+    origin_type: Any,  # noqa: ANN401
+    args: tuple[Any, ...],  # noqa: ARG001
+    extras: tuple[Any, ...],  # noqa: ARG001
+) -> Any:  # noqa: ANN401
+    if isclass(origin_type) and issubclass(origin_type, Quantity):
+        return _quantity_typeguard_checker
+
+    return None
+
+
+# Teach typeguard how to check a Quantity, so `@typechecked` and the nested type forms that
+# isinstance_types hands to check_type both compare dimensionality AND magnitude type instead of
+# falling back to a plain isinstance. isinstance is not enough: Quantity[UnknownDimensionality] --
+# the runtime class behind Q[Any, Any] -- is a *sibling* of every concrete dimensionality rather
+# than a base, so `isinstance(Q(1, "bar"), Q[Any, Any])` is False.
+checker_lookup_functions.insert(0, _quantity_typeguard_lookup)
 
 # register the Quantity and Unit implementations on the registry, so every object
 # created through it (results of pint-internal operations, parse_units output) is

@@ -93,7 +93,6 @@ def to_identifier(s: object) -> str:
     return s_text
 
 
-@lru_cache
 def get_args(e: sp.Basic) -> list[str]:
     """
     Returns a sorted list of identifiers for
@@ -112,6 +111,13 @@ def get_args(e: sp.Basic) -> list[str]:
         Sorted list of identifiers for each free symbol
     """
 
+    # a fresh list per call: the cache holds a tuple, so a caller that mutates the result
+    # cannot corrupt it
+    return list(_get_args(e))
+
+
+@lru_cache
+def _get_args(e: sp.Basic) -> tuple[str, ...]:
     symbols = e.free_symbols
     identifiers = sorted(map(to_identifier, symbols))
     # to_identifier is a lossy per-symbol mapping, so two DISTINCT symbols can collapse to the
@@ -122,7 +128,7 @@ def get_args(e: sp.Basic) -> list[str]:
             f"Symbols in {e} map to colliding identifiers {identifiers}; "
             "rename the symbols so their to_identifier() forms are distinct"
         )
-    return identifiers
+    return tuple(identifiers)
 
 
 def recursive_subs(e: sp.Basic, replacements: list[tuple[sp.Symbol, sp.Basic]]) -> sp.Basic:
@@ -334,15 +340,14 @@ def get_lambda(e: sp.Basic, *, to_str: Literal[True]) -> tuple[str, list[str]]: 
 
 
 @overload
-def get_lambda(e: sp.Basic, *, to_str: Literal[False]) -> tuple[Callable, list[str]]: ...
+def get_lambda(e: sp.Basic, *, to_str: Literal[False]) -> tuple[Callable[..., Any], list[str]]: ...
 
 
 @overload
-def get_lambda(e: sp.Basic) -> tuple[Callable, list[str]]: ...
+def get_lambda(e: sp.Basic) -> tuple[Callable[..., Any], list[str]]: ...
 
 
-@lru_cache
-def get_lambda(e: sp.Basic, *, to_str: bool = False) -> tuple[Callable | str, list[str]]:
+def get_lambda(e: sp.Basic, *, to_str: bool = False) -> tuple[Callable[..., Any] | str, list[str]]:
     """
     Converts the input expression to a lambda function
     with valid identifiers as parameter names.
@@ -357,11 +362,18 @@ def get_lambda(e: sp.Basic, *, to_str: bool = False) -> tuple[Callable | str, li
 
     Returns
     -------
-    tuple[Callable | str, list[str]]
+    tuple[Callable[..., Any] | str, list[str]]
         The lambda function (or string representation) and the list
         of parameters to the function
     """
 
+    # a fresh parameter list per call, for the same reason as get_args
+    fcn, args = _get_lambda(e, to_str=to_str)
+    return fcn, list(args)
+
+
+@lru_cache
+def _get_lambda(e: sp.Basic, *, to_str: bool = False) -> tuple[Callable[..., Any] | str, tuple[str, ...]]:
     # sorted list of function parameters (as valid identifiers)
     args = get_args(e)
 
@@ -372,7 +384,7 @@ def get_lambda(e: sp.Basic, *, to_str: bool = False) -> tuple[Callable | str, li
     _lambda_func = lambdastr if to_str else lambdify
     fcn = _lambda_func(args, e_identifiers, dummify=False)
 
-    return fcn, args
+    return fcn, tuple(args)
 
 
 def get_lambda_matrix(M: sp.MutableDenseMatrix) -> tuple[str, list[str]]:
@@ -736,16 +748,20 @@ class Symbol(sp.Symbol):
 
         delimiters = ["", "^", "_", "", "_", "^", ""]
 
+        # the base symbol sits at this index in `parts` and is the only part left unbraced.
+        # identifying it by position rather than by value keeps a decoration whose typeset form
+        # happens to equal the symbol's own name (e.g. Symbol("x").decorate(prefix="x")) braced
+        base_index = 3
+
         decorated_parts = []
 
-        for p, d in zip(parts, delimiters, strict=False):
+        for index, (p, d) in enumerate(zip(parts, delimiters, strict=False)):
             if p is None:
                 continue
 
             p = str(p)
 
-            # don't add extra braces around the base symbol
-            if p != self.name:
+            if index != base_index:
                 p = "{" + p + "}"
 
             decorated_parts.append(d + p)

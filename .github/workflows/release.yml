@@ -4,10 +4,12 @@ name: encomp CI/release
 # + bundled libCoolProp, all in one wheel) for macOS / Linux / Windows, run the full
 # test suite against each wheel on Python 3.13 and 3.14, and publish to PyPI on a tag.
 #
-#   typecheck      -> ruff, pyright (strict) + pyrefly, docs build, plus
+#   typecheck      -> ruff check + format, pyright (strict) + pyrefly, docs build, plus
 #                     source-only doc/static tests (ty is local-only and intentionally not gated)
 #   docs-rtd       -> rebuild the docs in a ReadTheDocs-equivalent environment (no project
 #                     install, no compiled plugin) so an RTD-only break fails the PR
+#   dependency-floors -> install at the LOWEST versions the declared bounds allow and run the
+#                     suite, so a too-low bound fails here rather than on a user's machine
 #   rust           -> cargo fmt, clippy, and in-crate tests
 #   build-wheels   -> one wheel per OS/arch (abi3 cp313 => runs on 3.13+)
 #   test           -> install each prebuilt wheel + run pytest, every OS x py
@@ -45,6 +47,8 @@ jobs:
           python-version: "3.13"
       - run: uv sync --locked --no-install-project
       - run: uv run --no-sync ruff check encomp scripts
+      # formatting is enforced here too, not only by the (opt-in) pre-commit hook
+      - run: uv run --no-sync ruff format --check encomp scripts
       - run: uv run --no-sync pyright
       - run: uv run --no-sync pyrefly check
       - name: Build and install the compiled CoolProp plugin for docs execution
@@ -86,6 +90,76 @@ jobs:
         env:
           READTHEDOCS: "True"
         run: uv run --no-sync python -m sphinx -T -W --keep-going -b html docs docs/_build/html
+
+  dependency-floors:
+    # The `test` job below installs the wheel's dependencies from PyPI at their LATEST
+    # versions, so it can never notice that a declared lower bound is too low. Resolve the
+    # bounds themselves and run the suite against that resolution: an API that only exists
+    # in a newer release than the bound claims fails here instead of on a user's machine.
+    #
+    # --only-binary=:all: keeps the resolution to versions that actually install on this
+    # Python: a bound may legitimately name a release that predates 3.13 and ships no wheel
+    # for it (pydantic 2.4 is the floor for the core-schema API, but its pydantic-core has
+    # no cp313 wheel). Resolving to a version nobody can install would test nothing.
+    name: dependency floors
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          python-version: "3.13"
+      - name: Build the bundled CoolProp library
+        run: |
+          python -m pip install cmake
+          uv sync --locked --no-install-project
+          uv run --no-sync python scripts/build_libcoolprop.py
+      - name: Install encomp into a fresh env pinned to the lowest allowed versions
+        # a fresh env, not the dev one: the dev group's own requirements would otherwise
+        # constrain the resolution back up. --no-deps on the project keeps the pins in place,
+        # and building it through PEP 517 (rather than `maturin build`) is what cibuildwheel
+        # does, so the bundled libCoolProp lands beside the plugin exactly as it does in a
+        # released wheel.
+        #
+        # The env lives OUTSIDE the workspace on purpose. Tests that look for the repo (
+        # test_docs, test_static_typing) walk up from their own __file__ until they find a
+        # pyproject.toml; from a venv nested in the workspace they would find this checkout
+        # and then run doc snippets against the source tree, which has no compiled plugin.
+        # Outside it, they skip -- exactly as they do for someone who pip-installed a wheel.
+        run: |
+          uv pip compile pyproject.toml --python-version 3.13 --resolution lowest-direct --only-binary=:all: -o floors.txt
+          cat floors.txt
+          uv venv "$RUNNER_TEMP/floors-venv" --python 3.13
+          PY=$RUNNER_TEMP/floors-venv/bin/python
+          uv pip install --python "$PY" -r floors.txt
+          uv pip install --python "$PY" --no-deps .
+          uv pip install --python "$PY" pytest hypothesis
+      - name: Report the resolved versions and run the suite against them
+        # NOT from the workspace: `encomp/` sits in it and would shadow the installed package
+        # on sys.path, resolving the import to a source tree with no compiled plugin.
+        working-directory: ${{ runner.temp }}
+        run: |
+          PY=$RUNNER_TEMP/floors-venv/bin/python
+          "$PY" - <<'PY'
+          import importlib.metadata as metadata
+          from pathlib import Path
+
+          names = ("encomp", "pint", "pydantic", "typeguard", "typing_extensions", "numpy", "polars", "sympy", "uncertainties", "coolprop")
+          for name in names:
+              print(f"{name:20s} {metadata.version(name)}")
+
+          import encomp.coolprop as cp
+
+          package = Path(cp.__file__).parent
+          print(f"\nencomp.coolprop imported from {package}")
+          for path in sorted(package.iterdir()):
+              print(f"  {path.name}")
+
+          print("\nlib_path:", cp.lib_path())
+          print("lib_version:", cp.lib_version())
+          assert cp.self_check(), "plugin self_check failed"
+          print("self_check OK")
+          PY
+          "$PY" -m pytest --pyargs encomp.tests -q
 
   rust:
     name: rust fmt/clippy/test
@@ -161,7 +235,7 @@ jobs:
 
   publish:
     name: publish to PyPI
-    needs: [typecheck, docs-rtd, rust, build-wheels, test]
+    needs: [typecheck, docs-rtd, dependency-floors, rust, build-wheels, test]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment: pypi               # configure the Trusted Publisher against this env

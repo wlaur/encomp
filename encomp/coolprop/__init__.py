@@ -1,8 +1,10 @@
 """Parallel CoolProp property evaluation as Polars expression plugins.
 
-The ``fluid`` / ``humid_air`` API mirrors :mod:`encomp.fluids`: a fluid is identified
-by its ``name`` (with the backend folded in, e.g. ``"HEOS::CarbonDioxide"``), a mixture
-by a ``composition`` dict, and a fixed phase by ``assume_phase``.
+The ``fluid`` / ``water`` / ``humid_air`` API mirrors :mod:`encomp.fluids`: ``fluid``
+requires the fluid ``name`` (with the backend folded in, e.g. ``"HEOS::CarbonDioxide"``)
+exactly as :class:`encomp.fluids.Fluid` does, ``water`` fixes it to IF97 water/steam like
+:class:`encomp.fluids.Water`, a mixture is given by a ``composition`` dict, and a fixed
+phase by ``assume_phase``.
 
 .. code-block:: python
 
@@ -10,15 +12,15 @@ by a ``composition`` dict, and a fixed phase by ``assume_phase``.
     from encomp import coolprop as cp
 
     df.select(
-        cp.fluid("DMASS", "P", "T").alias("rho"),   # default: IF97 water
-        cp.fluid("HMASS", "P", "T").alias("h"),
+        cp.water("DMASS", "P", "T").alias("rho"),   # IF97 water/steam
+        cp.water("HMASS", "P", "T").alias("h"),
     )                       # independent properties run in PARALLEL (no GIL)
 
     df.select(cp.fluid("DMASS", "P", "H", name="HEOS::Water"))   # any input pair (named by inputs)
     df.select(cp.fluid("DMASS", "P", "T", name="HEOS::CO2&O2",   # mixture, mole fractions
                        composition={"CO2": 0.7, "O2": 0.3}))
     df.select(cp.humid_air("W", "P", "T", "R"))                  # humid air
-    # for differently-named columns, alias them: cp.fluid("DMASS", pl.col("p").alias("P"), "T")
+    # for differently-named columns, alias them: cp.water("DMASS", pl.col("p").alias("P"), "T")
 """
 
 from __future__ import annotations
@@ -52,6 +54,8 @@ __all__ = [
     "HUMID_AIR_INPUTS",
     "HUMID_AIR_PARAMS",
     "PHASES",
+    "PHASE_IGNORING_BACKENDS",
+    "WATER_NAME",
     "AssumedPhase",
     "Backend",
     "CName",
@@ -76,6 +80,7 @@ __all__ = [
     "lib_version",
     "resolve_fluid_spec",
     "self_check",
+    "water",
 ]
 
 # Each name set is defined ONCE as a Literal (static typing) and exposed as a
@@ -139,6 +144,13 @@ AssumedPhase = Literal[
     "twophase",
 ]
 ASSUMED_PHASES: frozenset[AssumedPhase] = frozenset(get_args(AssumedPhase))
+
+# backends that ignore AbstractState.specify_phase because they are region-explicit: assuming a
+# phase has no effect there. Mirrors encomp.fluids._PHASE_IGNORING_BACKENDS.
+PHASE_IGNORING_BACKENDS: frozenset[str] = frozenset({"IF97"})
+
+# the fluid name behind encomp.fluids.Water, and the one `water()` evaluates
+WATER_NAME: CommonFluidName = "IF97::Water"
 
 # CoolProp fluid parameters (outputs / the two state-input names): canonical names
 # plus the common single-letter aliases.
@@ -585,21 +597,26 @@ def fluid(
     input1: FluidInput | pl.Expr,
     input2: FluidInput | pl.Expr,
     *,
-    name: CName = "IF97::Water",
+    name: CName,
     assume_phase: AssumedPhase | None = None,
     composition: Composition | None = None,
 ) -> pl.Expr:
     """A CoolProp fluid property (``output``) as a parallel Polars expression.
 
-    Mirrors :class:`encomp.fluids.Fluid`. The fluid is identified by ``name`` with the
-    backend folded in (``"HEOS::CarbonDioxide"``, ``"IF97::Water"``; a bare ``"Water"``
-    defaults to HEOS/IAPWS-95). A mixture is given either by fractions in the name
+    Mirrors :class:`encomp.fluids.Fluid`, including that ``name`` is required. Use
+    :func:`water` for the IF97 water/steam shorthand, as :class:`encomp.fluids.Water`
+    mirrors :class:`encomp.fluids.Fluid`.
+
+    The fluid is identified by ``name`` with the backend folded in
+    (``"HEOS::CarbonDioxide"``, ``"IF97::Water"``; a bare ``"Water"`` defaults to
+    HEOS/IAPWS-95). A mixture is given either by fractions in the name
     (``"HEOS::CO2[0.5]&O2[0.5]"``) or a ``composition={species: mole fraction}`` dict;
     mole fractions must sum to 1 (an off-by-more-than-rounding sum is an error). An
     incompressible mixture instead carries a single concentration in the name
     (``"INCOMP::MEG[0.5]"``), on the fluid's own basis (see :func:`resolve_fluid_spec`).
     ``assume_phase`` pins the phase, skipping CoolProp's phase-stability search (a speed
-    tool; honoured by HEOS/GERG, ignored by region-explicit backends like IF97).
+    tool; honoured by HEOS/GERG, ignored by region-explicit backends like IF97, which log
+    a warning).
 
     Each input identifies its property by NAME -- a string is the property and the
     column read from it; an expression by its output name (``pl.col("P")`` or
@@ -623,6 +640,18 @@ def fluid(
     a_expr, b_expr = _as_expr(a), _as_expr(b)
     backend, fluids, fractions = resolve_fluid_spec(name, composition)
     phase = _phase_from_assumed(assume_phase) if assume_phase is not None else None
+
+    if phase is not None and backend.upper() in PHASE_IGNORING_BACKENDS:
+        # CoolProp accepts specify_phase for a region-explicit backend and then ignores it, so the
+        # value is correct but assume_phase bought nothing. encomp.fluids.Fluid.assume_phase warns
+        # in the same situation
+        _LOGGER.warning(
+            "the %s backend is region-explicit and ignores an assumed phase; assume_phase=%r is a "
+            "no-op for %r. Use a HEOS-backed fluid (e.g. name='HEOS::Water') to assume a phase.",
+            backend,
+            assume_phase,
+            name,
+        )
     # inputs are passed at their own dtype (the plugin casts to f64 internally); the
     # output dtype preserves the input precision (Float32 in -> Float32 out).
     return register_plugin_function(
@@ -642,6 +671,24 @@ def fluid(
         is_elementwise=True,
         use_abs_path=True,
     ).alias(output)  # name the result after the computed property, not the first input
+
+
+def water(
+    output: FluidParam,
+    input1: FluidInput | pl.Expr,
+    input2: FluidInput | pl.Expr,
+) -> pl.Expr:
+    """A water/steam property as a parallel Polars expression, using IAPWS-IF97.
+
+    Mirrors :class:`encomp.fluids.Water`: the fluid is fixed to ``"IF97::Water"``, so there
+    is no ``name``. Equivalent to ``fluid(output, input1, input2, name="IF97::Water")``.
+
+    ``composition`` and ``assume_phase`` are not accepted: water is a pure fluid, and IF97 is
+    region-explicit so an assumed phase would be ignored. Use
+    ``fluid(..., name="HEOS::Water")`` for the IAPWS-95 reference formulation, which does
+    honour an assumed phase.
+    """
+    return fluid(output, input1, input2, name=WATER_NAME)
 
 
 def humid_air(
@@ -709,7 +756,7 @@ def lib_version() -> str:
 def _self_check_cached() -> bool:
     try:
         df = pl.DataFrame({"P": [50e5], "T": [400.0]})
-        v = df.select(fluid("DMASS", "P", "T", name="IF97::Water"))[0, 0]
+        v = df.select(water("DMASS", "P", "T"))[0, 0]
         return v is not None and abs(v - 939.906) < 1.0
     except Exception:
         return False

@@ -78,8 +78,8 @@ dimensionality subclasses, the custom `[currency]` / `[normal]` dimensions and
 `on_redefinition="raise"` would silently not apply. Another `pint`-based library in the
 same process therefore gets `encomp`'s registry (and its unit definitions) after the
 import. The registry options `force_ndarray`, `force_ndarray_like` and
-`autoconvert_offset_to_baseunit` are pinned: assigning to them is discarded and logs a
-warning.
+`autoconvert_offset_to_baseunit` are pinned: a write that would change one is discarded and
+logs a warning.
 :::
 
 ### Quantity types
@@ -183,11 +183,13 @@ pressure.check("[pressure]")  # True
 Q(1, "degC").check(TemperatureDifference)  # True
 Q(1, "delta_degC").check(Temperature)  # True
 
-# isinstance_types works with simple Quantity types and nested containers
+# isinstance_types works with simple Quantity types and nested containers.
+# every element of a container is checked, not just the first
 
 isinstance_types(pressure, Q[Pressure, Any])  # True
 isinstance_types(pressure, Q[Length, Any])  # False
 isinstance_types([pressure, pressure], list[Q[Pressure, Any]])  # True
+isinstance_types([pressure, Q(1, "m")], list[Q[Pressure, Any]])  # False
 isinstance_types({1: Q(2, "m"), 2: Q(25, "cm")}, dict[int, Q[Length, Any]])  # True
 
 # all Quantity[...] objects are subclasses of Quantity
@@ -224,7 +226,23 @@ def func(_p1: Q[Pressure, float]) -> tuple[Q[Length, float], Q[Power, float]]:
 
 `typeguard.TypeCheckError` is raised if the arguments or the return value have incorrect dimensionalities.
 
-Scalar `Quantity` equality is tolerant (`rtol=1e-9`, `atol=1e-12`) and compares after unit conversion, so values that differ only by tiny floating-point noise may compare equal. The same tolerance folds into the non-strict ordering comparisons, so `Q(1 + 1e-12, "m") <= Q(1, "m")` is `True`; `<` and `>` are strict. Hashing is supported for float magnitudes and uses root units; vector magnitudes are unhashable.
+Scalar `Quantity` equality is tolerant (`rtol=1e-9`, `atol=1e-12`) and compares after unit conversion, so values that differ only by tiny floating-point noise may compare equal. This is not optional: unit conversion is lossy, and `Q(1, "L")` and `Q(1000, "cm³")` differ in the last bit.
+
+The same tolerance folds into *every* ordering comparison, so the five relations stay consistent: for operands that compare equal, `<=` and `>=` are `True` while `<` and `>` are `False`. `Q(1 + 1e-12, "m") <= Q(1, "m")` is `True`, and `Q(1 + 1e-12, "m") > Q(1, "m")` is `False`.
+
+:::{note}
+Quantities within the tolerance are *ties*. Because closeness is not transitive (`a == b` and `b == c` do not imply `a == c`), `<` is a strict *partial* order rather than a strict weak order. `sorted()`, `min()` and `max()` are therefore exact for any input that does not contain a tolerance *chain* — a run of values where each adjacent pair is within tolerance but the endpoints are not. Such a chain spans less than the width at which the library already calls the values equal. When a strict total order is required regardless, sort on the raw magnitudes:
+
+```python
+from encomp.units import Quantity as Q
+
+quantities = [Q(1.0, "m"), Q(50, "cm"), Q(2000, "mm")]
+
+ordered = sorted(quantities, key=lambda q: q.to("m").m)
+```
+:::
+
+Hashing is supported for float magnitudes and uses root units; vector magnitudes are unhashable.
 
 Pickling preserves the dimensionality class for module-global dimensionalities. Dynamically generated dimensionalities round-trip by deriving the dimensionality from the stored unit.
 
@@ -679,13 +697,15 @@ from encomp import coolprop as cp
 df = pl.DataFrame({"P": [1e5, 1e5], "T": [293.15, 313.15], "R": [0.4, 0.6]})  # Pa, K, -
 
 df.select(
-    cp.fluid("DMASS", "P", "T").alias("rho"),  # default: IF97 water
-    cp.fluid("HMASS", "P", "T").alias("h"),
+    cp.water("DMASS", "P", "T").alias("rho"),  # IF97 water/steam
+    cp.water("HMASS", "P", "T").alias("h"),
     cp.humid_air("W", "P", "T", "R").alias("humidity_ratio"),
 )
 ```
 
-The API mirrors {py:class}`encomp.fluids.Fluid`: any CoolProp input pair is supported (in any order), the fluid is given by `name` (with the backend folded in, e.g. `name="HEOS::CarbonDioxide"`), mixtures via a `composition={species: mole fraction}` dict, and a fixed phase via `assume_phase="gas"`. See the `encomp.coolprop` package README in the repository for the full design and thread-safety model.
+The API mirrors {py:class}`encomp.fluids.Fluid`: any CoolProp input pair is supported (in any order), the fluid is given by `name` (with the backend folded in, e.g. `name="HEOS::CarbonDioxide"`), mixtures via a `composition={species: mole fraction}` dict, and a fixed phase via `assume_phase="gas"`.
+
+`name` is required, exactly as it is for {py:class}`encomp.fluids.Fluid`. `cp.water(output, in1, in2)` is the IF97 water/steam shorthand, standing to `cp.fluid` as {py:class}`encomp.fluids.Water` stands to {py:class}`encomp.fluids.Fluid`. See the `encomp.coolprop` package README in the repository for the full design and thread-safety model.
 
 ## SymPy functionality
 

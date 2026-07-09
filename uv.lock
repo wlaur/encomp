@@ -514,7 +514,7 @@ wheels = [
 
 [[package]]
 name = "encomp"
-version = "1.6.4"
+version = "1.7.0"
 source = { editable = "." }
 dependencies = [
     { name = "coolprop" },
@@ -564,12 +564,12 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.1" },
     { name = "pint", specifier = ">=0.25.3" },
     { name = "polars", specifier = ">=1.42" },
-    { name = "pydantic", specifier = ">=2" },
+    { name = "pydantic", specifier = ">=2.4" },
     { name = "pydantic-settings", specifier = ">=2" },
-    { name = "sympy" },
-    { name = "typeguard", specifier = ">=4" },
-    { name = "typing-extensions" },
-    { name = "uncertainties" },
+    { name = "sympy", specifier = ">=1.13" },
+    { name = "typeguard", specifier = ">=4.1" },
+    { name = "typing-extensions", specifier = ">=4.13" },
+    { name = "uncertainties", specifier = ">=3.2" },
 ]
 
 [package.metadata.requires-dev]

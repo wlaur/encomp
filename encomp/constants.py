@@ -1,6 +1,5 @@
 """Physical constants and reference conditions used by encomp helpers."""
 
-from dataclasses import dataclass, field
 from typing import Any
 
 from .units import Quantity
@@ -9,31 +8,50 @@ from .utypes import Pressure, Temperature
 __all__ = ["CONSTANTS", "Constants"]
 
 
-@dataclass(frozen=True, slots=True)
 class Constants:
-    """Namespace of constants exposed through the :data:`CONSTANTS` singleton."""
+    """Namespace of constants exposed through the :data:`CONSTANTS` singleton.
 
-    R: Quantity[Any, float] = field(default_factory=lambda: Quantity(8.31446261815324, "kg*m²/K/mol/s²"))
-    """Molar gas constant, exact by the 2019 SI definition."""
+    Every attribute returns a fresh :class:`~encomp.units.Quantity`. A ``Quantity`` is
+    mutable -- :meth:`~encomp.units.Quantity.ito` converts in place and the ``m`` setter
+    replaces the magnitude -- so handing out one shared instance would let a caller alter
+    the constant for the whole process.
+    """
 
-    SIGMA: Quantity[Any, float] = field(default_factory=lambda: Quantity(5.670374419e-8, "W/m**2/K**4"))
-    """Stefan-Boltzmann constant."""
+    @property
+    def R(self) -> Quantity[Any, float]:
+        """Molar gas constant, exact by the 2019 SI definition."""
 
-    normal_conditions_pressure: Quantity[Pressure, float] = field(default_factory=lambda: Quantity(1, "atm"))
-    """Normal-condition pressure, 1 atm."""
+        return Quantity(8.31446261815324, "kg*m²/K/mol/s²")
 
-    normal_conditions_temperature: Quantity[Temperature, float] = field(
-        default_factory=lambda: Quantity(0, "degC").to("K")
-    )
-    """Normal-condition temperature, 0 degC."""
+    @property
+    def SIGMA(self) -> Quantity[Any, float]:
+        """Stefan-Boltzmann constant."""
 
-    standard_conditions_pressure: Quantity[Pressure, float] = field(default_factory=lambda: Quantity(1, "atm"))
-    """Standard-condition pressure, 1 atm."""
+        return Quantity(5.670374419e-8, "W/m**2/K**4")
 
-    standard_conditions_temperature: Quantity[Temperature, float] = field(
-        default_factory=lambda: Quantity(15, "degC").to("K")
-    )
-    """Standard-condition temperature, 15 degC."""
+    @property
+    def normal_conditions_pressure(self) -> Quantity[Pressure, float]:
+        """Normal-condition pressure, 1 atm."""
+
+        return Quantity(1, "atm")
+
+    @property
+    def normal_conditions_temperature(self) -> Quantity[Temperature, float]:
+        """Normal-condition temperature, 0 degC."""
+
+        return Quantity(0, "degC").to("K")
+
+    @property
+    def standard_conditions_pressure(self) -> Quantity[Pressure, float]:
+        """Standard-condition pressure, 1 atm."""
+
+        return Quantity(1, "atm")
+
+    @property
+    def standard_conditions_temperature(self) -> Quantity[Temperature, float]:
+        """Standard-condition temperature, 15 degC."""
+
+        return Quantity(15, "degC").to("K")
 
 
 CONSTANTS = Constants()

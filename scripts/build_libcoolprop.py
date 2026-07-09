@@ -38,10 +38,43 @@ def _coolprop_version() -> str:
 
 COOLPROP_VERSION = _coolprop_version()  # e.g. "v8.0.0" (the floor of the coolprop requirement)
 
+# A git tag is mutable, and this clone produces the C++ library that ships inside the wheel.
+# Pin the commit each supported tag must resolve to, and verify it after cloning. Submodules
+# are pinned by the superproject commit, so this covers them too.
+COOLPROP_COMMITS = {
+    "v8.0.0": "ae81610e7d23efc57f9d051c8e70a4d66e87537f",
+}
+
 
 def run(*cmd: str, cwd: Path | None = None) -> None:
     print("+", " ".join(cmd), flush=True)
     subprocess.run(cmd, cwd=cwd, check=True)
+
+
+def verify_commit(src: Path) -> None:
+    expected = COOLPROP_COMMITS.get(COOLPROP_VERSION)
+    if expected is None:
+        raise RuntimeError(
+            f"no pinned commit for CoolProp {COOLPROP_VERSION}. Resolve the tag "
+            f"(git ls-remote --tags https://github.com/CoolProp/CoolProp.git {COOLPROP_VERSION}) "
+            "and add the commit it peels to under COOLPROP_COMMITS."
+        )
+
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=src,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+    if head != expected:
+        raise RuntimeError(
+            f"CoolProp {COOLPROP_VERSION} resolved to commit {head}, expected {expected}. "
+            "The upstream tag moved; do not build from it until this is understood."
+        )
+
+    print(f"+ verified CoolProp {COOLPROP_VERSION} at {head}", flush=True)
 
 
 def main() -> None:
@@ -54,6 +87,8 @@ def main() -> None:
             "--recursive", "--shallow-submodules",
             "https://github.com/CoolProp/CoolProp.git", str(src),
         )  # fmt: skip
+
+    verify_commit(src)
 
     # CoolProp hardcodes `-m${BITNESS}` (= -m64), which gcc rejects on aarch64. All
     # our targets are 64-bit (the compiler default), so strip the flag for portability.

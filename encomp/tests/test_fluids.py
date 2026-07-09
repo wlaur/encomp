@@ -363,7 +363,7 @@ def test_Water() -> None:
 
     repr(water_mixed_phase)
 
-    with pytest.raises(Exception):  # noqa: B017
+    with pytest.raises(ValueError, match="All inputs must have the same size"):
         # mismatching sizes
         # must access an attribute before it's actually evaluated
         Water(T=Q(np.linspace(25, 500, 10), "°C"), P=Q(np.linspace(0.5, 10, 50), "bar")).P
@@ -1126,6 +1126,51 @@ def test_dimensional_property_missing_is_nan_never_zero() -> None:
         Fluid[pl.Expr]("Water", P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K")).get("I").m.alias("i")
     )["i"]
     check_polars(st_col, 2)
+
+
+@pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf])
+def test_non_finite_scalar_input_matches_vector_path(bad: float) -> None:
+    # A non-finite input cannot fix a state. Handed one directly, CoolProp answers with
+    # plausible finite values rather than failing: PHASE -> 0.0 ("Liquid"), Q -> the -1.0
+    # single-phase sentinel, TCRIT -> a state-independent constant, and HAPropsSI echoes an
+    # input back. Every property must be NaN, and the scalar answer must equal the 1-element
+    # vector answer for the same state.
+    scalar = Water(T=Q(bad, "degC"), P=Q(1.0, "bar"))
+    vector = Water(T=Q(np.array([bad]), "degC"), P=Q(np.array([1.0]), "bar"))
+
+    for prop in ("D", "Q", "TCRIT", "H", "PHASE"):
+        scalar_value = float(cast(Any, scalar.get(cast(Any, prop))).m)
+        vector_value = float(cast(Any, vector.get(cast(Any, prop))).m[0])
+
+        assert np.isnan(scalar_value), f"scalar {prop} must be NaN for a {bad} input"
+        assert np.isnan(vector_value), f"vector {prop} must be NaN for a {bad} input"
+
+    assert scalar.phase == vector.phase == "N/A"
+
+    # HAPropsSI echoes an input value straight back for some outputs, so mask the scalar path too
+    humid_scalar = HumidAir(T=Q(bad, "degC"), P=Q(1.0, "bar"), R=Q(0.5))
+    humid_vector = HumidAir(T=Q(np.array([bad]), "degC"), P=Q(np.array([1.0]), "bar"), R=Q(np.array([0.5])))
+
+    assert np.isnan(float(humid_scalar.get("R").m))
+    assert np.isnan(float(humid_vector.get("R").m[0]))
+
+
+def test_phase_ignores_invalid_rows_and_is_length_independent() -> None:
+    # an invalid row has no phase, and the answer must not depend on how many of them there are
+    for n in (1, 2, 3):
+        fluid = Water(T=Q(np.full(n, np.nan), "degC"), P=Q(np.full(n, 1.0), "bar"))
+        assert fluid.phase == "N/A", f"all-invalid array of length {n}"
+
+    # an empty array has no phase either
+    assert Water(P=Q(np.array([]), "Pa"), T=Q(np.array([]), "K")).phase == "N/A"
+
+    # invalid rows are not a phase: the determinate rows decide
+    superheated = Water(T=Q(np.array([200.0, 250.0, np.nan]), "degC"), P=Q(np.array([1.0, 1.0, 1.0]), "bar"))
+    assert np.isnan(float(cast(Any, superheated.PHASE.m)[2]))
+    assert superheated.phase == "Gas"
+
+    # genuine variation is still reported
+    assert Water(T=Q(np.array([20.0, 250.0]), "degC"), P=Q(np.array([1.0, 1.0]), "bar")).phase == "Variable"
 
 
 def test_new_typed_fluid_properties() -> None:

@@ -6,7 +6,7 @@
 [![Documentation](https://readthedocs.org/projects/encomp/badge/?version=latest)](https://encomp.readthedocs.io)
 [![License](https://img.shields.io/pypi/l/encomp.svg)](https://github.com/wlaur/encomp/blob/main/LICENSE)
 
-<img src="https://raw.githubusercontent.com/wlaur/encomp/v1.6.4/docs/img/logo.png" alt="encomp logo" width="150">
+<img src="https://raw.githubusercontent.com/wlaur/encomp/v1.7.0/docs/img/logo.png" alt="encomp logo" width="150">
 
 > General-purpose library for *en*gineering *comp*utations.
 
@@ -57,7 +57,7 @@ from encomp.units import Quantity as Q
 Q(1, "bar").to("kPa")
 
 # list inputs are converted to np.ndarray
-Q([1, 2, 3], "bar") * 2  # [2, 4, 6] bar
+Q([1, 2, 3], "bar") * 2  # [2.0 4.0 6.0] bar
 
 # without a unit, the quantity is dimensionless
 assert Q(0.1) == Q(10, "%")
@@ -309,13 +309,14 @@ from encomp import coolprop as cp
 df = pl.DataFrame({"P": [1e5, 1e5], "T": [293.15, 313.15], "R": [0.4, 0.6]})  # Pa, K, -
 
 df.select(
-    cp.fluid("DMASS", "P", "T").alias("rho"),  # default: IF97 water
-    cp.fluid("HMASS", "P", "T").alias("h"),
+    cp.water("DMASS", "P", "T").alias("rho"),  # IF97 water/steam
+    cp.water("HMASS", "P", "T").alias("h"),
     cp.humid_air("W", "P", "T", "R").alias("humidity_ratio"),
 )
 # mirrors encomp.fluids: any CoolProp input pair (in any order), the fluid via
-# name='HEOS::CarbonDioxide', mixtures via a composition={species: mole fraction}
-# dict, and a fixed phase via assume_phase='gas'
+# the required name='HEOS::CarbonDioxide' (cp.water is the IF97 water shorthand,
+# as encomp.fluids.Water is for Fluid), mixtures via a
+# composition={species: mole fraction} dict, and a fixed phase via assume_phase='gas'
 ```
 
 ### Implementation
@@ -382,7 +383,9 @@ Settings are loaded when `encomp.settings` is imported; for runtime changes to q
 
 Because the `.env` file is resolved relative to the current working directory, a stray `.env` that sets an invalid `ENCOMP_*` value (for example `ENCOMP_UNITS` pointing at a missing file) makes `import encomp` fail with a `pydantic.ValidationError`, even in an unrelated project. Remove or correct the offending value; unrelated keys in the `.env` are ignored.
 
-`import encomp` also installs `encomp.units.UNIT_REGISTRY` as pint's process-wide *application registry*. This is deliberate: every quantity in the process must come from that registry, or the dimensionality subclasses, the custom `[currency]` / `[normal]` dimensions and `on_redefinition="raise"` would silently not apply. The consequence is that another pint-based library in the same process gets encomp's registry (and its unit definitions, including the `Nm³` reinterpretation) after `import encomp`. Registry options that encomp pins — `force_ndarray`, `force_ndarray_like`, `autoconvert_offset_to_baseunit` — cannot be reassigned; a write to one is discarded and logs a warning.
+Importing `encomp.units` also registers a `typeguard` checker for `Quantity`, so `@typeguard.typechecked` and `encomp.misc.isinstance_types` compare dimensionality and magnitude type rather than falling back to a plain `isinstance`.
+
+`import encomp` also installs `encomp.units.UNIT_REGISTRY` as pint's process-wide *application registry*. This is deliberate: every quantity in the process must come from that registry, or the dimensionality subclasses, the custom `[currency]` / `[normal]` dimensions and `on_redefinition="raise"` would silently not apply. The consequence is that another pint-based library in the same process gets encomp's registry (and its unit definitions, including the `Nm³` reinterpretation) after `import encomp`. Registry options that encomp pins — `force_ndarray`, `force_ndarray_like`, `autoconvert_offset_to_baseunit` — cannot be reassigned; a write that would change one is discarded and logs a warning.
 
 ## Documentation
 

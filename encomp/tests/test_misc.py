@@ -7,6 +7,7 @@ from ..utypes import (
     Dimensionless,
     Mass,
     Power,
+    Pressure,
     Temperature,
     UnknownDimensionality,
 )
@@ -44,7 +45,7 @@ def test_isinstance_types() -> None:
     assert not isinstance_types((1, 4), tuple[str, int])
     assert not isinstance_types((1, 4), tuple[int])
 
-    # NOTE: only the first element in each collection is type checked at runtime
+    # every element of a collection is checked, not only the first
     d = {"dsa": [None, 1, 3.2, 4, 22], "asd": [1, 3, 4]}
 
     assert isinstance_types(d, dict[str, list[float | None]])
@@ -56,6 +57,26 @@ def test_isinstance_types() -> None:
 
     y = (2, 2, "3")
     assert isinstance_types(y, tuple[int, int, str]) or isinstance_types(y, str)
+
+
+def test_isinstance_types_checks_every_collection_element() -> None:
+    # typeguard's default CollectionCheckStrategy is FIRST_ITEM, which accepts a list whose only
+    # bad element sits past index 0. isinstance_types inspects every element instead.
+    pressure = Q(1, "bar")
+    length = Q(1, "m")
+
+    assert isinstance_types([pressure, pressure], list[Q[Pressure, Any]])
+    assert not isinstance_types([length, pressure], list[Q[Pressure, Any]])
+    assert not isinstance_types([pressure, length], list[Q[Pressure, Any]])
+    assert not isinstance_types([pressure, pressure, pressure, length], list[Q[Pressure, Any]])
+
+    assert not isinstance_types({"a": pressure, "b": length}, dict[str, Q[Pressure, Any]])
+    assert not isinstance_types((pressure, length), tuple[Q[Pressure, Any], ...])
+
+    # the same holds for plain types
+    assert not isinstance_types([1, "x"], list[int])
+    assert not isinstance_types((1, "x"), tuple[int, ...])
+    assert not isinstance_types({1, "x"}, set[int])
 
 
 def test_isinstance_types_invalid_expected() -> None:

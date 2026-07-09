@@ -1,5 +1,6 @@
 from typing import Any, assert_type, cast
 
+import numpy as np
 import polars as pl
 import pytest
 
@@ -19,17 +20,24 @@ def _assert_type(val: object, typ: type) -> None:
 assert_type.__code__ = _assert_type.__code__
 
 
+WATER = Q(997.0, "kg/m³")
+
+
 def test_convert_volume_mass() -> None:
     mf = Q(25, "kg/s")
 
-    assert_type(convert_volume_mass(mf), Q[VolumeFlow, float])
+    assert_type(convert_volume_mass(mf, WATER), Q[VolumeFlow, float])
 
     mf_list = Q([25.5, 25.34], "kg/s")
-    assert_type(convert_volume_mass(mf_list), Q[VolumeFlow, Numpy1DArray])
+    assert_type(convert_volume_mass(mf_list, WATER), Q[VolumeFlow, Numpy1DArray])
 
     m = Q(25, "ton")
 
-    assert_type(convert_volume_mass(m), Q[Volume, float])
+    assert_type(convert_volume_mass(m, WATER), Q[Volume, float])
+
+    # the density is required: there is no substance to assume
+    with pytest.raises(TypeError, match="rho"):
+        cast(Any, convert_volume_mass)(mf)
 
     # wrong dimensionality raises a proper unit error naming the argument,
     # not an internal AssertionError
@@ -45,8 +53,32 @@ def test_convert_volume_mass() -> None:
     with pytest.raises(ValueError, match="positive"):
         convert_volume_mass(mf_list, rho=Q([997.0, 0.0], "kg/m³"))
 
+    with pytest.raises(ValueError, match="positive"):
+        convert_volume_mass(mf, rho=Q(float("inf"), "kg/m³"))
+
     with pytest.raises(ExpectedDimensionalityError, match="inp"):
-        convert_volume_mass(cast(Any, Q(25, "m/s")))
+        convert_volume_mass(cast(Any, Q(25, "m/s")), WATER)
+
+
+def test_missing_density_propagates_like_a_missing_input() -> None:
+    # a missing density yields a missing result at that position, exactly as a missing `inp`
+    # does -- NaN for float/numpy magnitudes, null for a Polars Series
+    assert np.isnan(convert_volume_mass(Q(2.0, "kg"), Q(float("nan"), "kg/m³")).to("m³").m)
+
+    volume = convert_volume_mass(Q(np.array([2.0, 2.0]), "kg"), Q(np.array([1000.0, np.nan]), "kg/m³"))
+    magnitude = volume.to("m³").m
+    assert magnitude[0] == pytest.approx(0.002)
+    assert np.isnan(magnitude[1])
+
+    series = convert_volume_mass(Q(pl.Series([2.0, 2.0]), "kg"), Q(pl.Series([1000.0, None]), "kg/m³"))
+    assert series.to("m³").m.to_list() == [0.002, None]
+
+    # a present value is still validated
+    with pytest.raises(ValueError, match="positive"):
+        convert_volume_mass(Q(np.array([2.0, 2.0]), "kg"), Q(np.array([1000.0, np.inf]), "kg/m³"))
+
+    with pytest.raises(ValueError, match="positive"):
+        convert_volume_mass(Q(np.array([2.0, 2.0]), "kg"), Q(np.array([np.nan, 0.0]), "kg/m³"))
 
 
 def test_convert_volume_mass_polars_series_density() -> None:
@@ -61,5 +93,11 @@ def test_convert_volume_mass_polars_series_density() -> None:
     with pytest.raises(ValueError, match="positive"):
         convert_volume_mass(mass, rho=Q(pl.Series([1000.0, -1.0]), "kg/m³"))
 
-    with pytest.raises(ValueError, match="positive"):
+    # null is the polars missing sentinel, so a NaN would leak into a result that never
+    # carries one
+    with pytest.raises(ValueError, match="must not contain NaN"):
         convert_volume_mass(mass, rho=Q(pl.Series([1000.0, float("nan")]), "kg/m³"))
+
+    # a null density is missing, not invalid: it propagates
+    nulled = convert_volume_mass(mass, rho=Q(pl.Series([1000.0, None]), "kg/m³"))
+    assert nulled.to("m³").m.to_list() == [0.002, None]

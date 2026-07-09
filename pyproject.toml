@@ -1,6 +1,6 @@
 [project]
 name = "encomp"
-version = "1.6.4"
+version = "1.7.0"
 description = "General-purpose library for engineering computations"
 authors = [{ name = "William Laurén", email = "lauren.william.a@gmail.com" }]
 requires-python = ">=3.13"
@@ -20,7 +20,6 @@ classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
@@ -35,10 +34,10 @@ classifiers = [
 ]
 dependencies = [
     "pint>=0.25.3",
-    "pydantic>=2",
+    "pydantic>=2.4",
     "pydantic-settings>=2",
-    "typeguard>=4",
-    "typing-extensions",
+    "typeguard>=4.1",
+    "typing-extensions>=4.13",
     "numpy>=2.1",
     # The bundled Rust plugin is loaded over polars' plugin ABI (polars-ffi, major 0),
     # which the host dispatches on by *major* version -- stable across py-polars minors,
@@ -47,8 +46,8 @@ dependencies = [
     # and encomp.coolprop.self_check() makes any incompatibility a clear runtime error.
     # See encomp/coolprop/README.md.
     "polars>=1.42",
-    "sympy",
-    "uncertainties",
+    "sympy>=1.13",
+    "uncertainties>=3.2",
     # encomp uses TWO copies of CoolProp: the Python `coolprop` package (scalar /
     # small-eager PropsSI path) and the bundled libCoolProp the Rust plugin dlopens
     # (lazy / large-eager path). The only integer crossing from Python into the bundled
@@ -170,9 +169,6 @@ lint.ignore = [
 
 lint.dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
-# the Sphinx config isn't library code: its API-override callbacks (resolve_xref, setup)
-# don't warrant full type annotations
-lint.per-file-ignores = { "docs/conf.py" = ["ANN"] }
 exclude = [
     ".bzr",
     ".direnv",

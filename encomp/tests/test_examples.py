@@ -216,9 +216,10 @@ class TestUsageExamples:
 
     def test_custom_base_dimensionality(self) -> None:
         """Test defining custom base dimensionalities"""
-        # Use unique names to avoid conflicts with other tests
-        define_dimensionality("dry_air_ex")
-        define_dimensionality("oxygen_ex")
+        # unique names avoid conflicts with other tests; if_exists="warn" keeps this
+        # idempotent, since the dimensionality registry is process-wide
+        define_dimensionality("dry_air_ex", if_exists="warn")
+        define_dimensionality("oxygen_ex", if_exists="warn")
 
         m_air = Q(5, "kg * dry_air_ex")
         n_O2 = Q(2.4, "mol * oxygen_ex")
