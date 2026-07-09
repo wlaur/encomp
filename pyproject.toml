@@ -37,7 +37,7 @@ dependencies = [
     "pint>=0.25.3",
     "pydantic>=2.4",
     "pydantic-settings>=2",
-    "typeguard>=4",
+    "typeguard>=4.1",
     "typing-extensions>=4.13",
     "numpy>=2.1",
     # The bundled Rust plugin is loaded over polars' plugin ABI (polars-ffi, major 0),
