@@ -2416,11 +2416,18 @@ class Quantity(
         except (ValueError, DimensionalityError) as e:
             raise DimensionalityComparisonError(str(e)) from e
 
-        if op in ("__ge__", "__le__"):
-            equal = cast(Any, self).__eq__(other)
-            ret = ret | equal
-            if isinstance(ret, np.bool):
-                return bool(cast(Any, ret))
+        # __eq__ is tolerant (rtol, atol), so every ordering operator must agree with it or the
+        # five relations do not form an ordering. pint compares exactly, so fold the tolerance in
+        # here: the non-strict operators absorb equality, the strict ones exclude it. Without the
+        # strict side, `a > b` and `a <= b` were both True for operands equal within tolerance,
+        # which breaks sorted()/bisect and any code assuming `a > b` implies `not (a <= b)`.
+        equal = cast(Any, self).__eq__(other)
+        not_equal = (not equal) if isinstance(equal, bool) else ~equal
+
+        ret = (ret | equal) if op in ("__ge__", "__le__") else (ret & not_equal)
+
+        if isinstance(ret, np.bool):
+            return bool(cast(Any, ret))
 
         return cast("bool | Numpy1DBoolArray | pl.Series | pl.Expr", ret)
 

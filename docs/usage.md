@@ -224,7 +224,7 @@ def func(_p1: Q[Pressure, float]) -> tuple[Q[Length, float], Q[Power, float]]:
 
 `typeguard.TypeCheckError` is raised if the arguments or the return value have incorrect dimensionalities.
 
-Scalar `Quantity` equality is tolerant (`rtol=1e-9`, `atol=1e-12`) and compares after unit conversion, so values that differ only by tiny floating-point noise may compare equal. The same tolerance folds into the non-strict ordering comparisons, so `Q(1 + 1e-12, "m") <= Q(1, "m")` is `True`; `<` and `>` are strict. Hashing is supported for float magnitudes and uses root units; vector magnitudes are unhashable.
+Scalar `Quantity` equality is tolerant (`rtol=1e-9`, `atol=1e-12`) and compares after unit conversion, so values that differ only by tiny floating-point noise may compare equal. The same tolerance folds into *every* ordering comparison, so the five relations stay consistent: for operands that compare equal, `<=` and `>=` are `True` while `<` and `>` are `False`. `Q(1 + 1e-12, "m") <= Q(1, "m")` is `True`, and `Q(1 + 1e-12, "m") > Q(1, "m")` is `False`. Hashing is supported for float magnitudes and uses root units; vector magnitudes are unhashable.
 
 Pickling preserves the dimensionality class for module-global dimensionalities. Dynamically generated dimensionalities round-trip by deriving the dimensionality from the stored unit.
 
