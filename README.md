@@ -6,7 +6,7 @@
 [![Documentation](https://readthedocs.org/projects/encomp/badge/?version=latest)](https://encomp.readthedocs.io)
 [![License](https://img.shields.io/pypi/l/encomp.svg)](https://github.com/wlaur/encomp/blob/main/LICENSE)
 
-<img src="https://raw.githubusercontent.com/wlaur/encomp/v1.6.4/docs/img/logo.png" alt="encomp logo" width="150">
+<img src="https://raw.githubusercontent.com/wlaur/encomp/v1.7.0/docs/img/logo.png" alt="encomp logo" width="150">
 
 > General-purpose library for *en*gineering *comp*utations.
 

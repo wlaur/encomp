@@ -225,7 +225,14 @@ _EXPR_EVALUATION_CACHE_LOCK = Lock()
 
 
 def clear_expr_evaluation_cache() -> None:
-    """Drop the cache of constructed CoolProp ``pl.Expr`` nodes."""
+    """Drop the cache of constructed CoolProp ``pl.Expr`` nodes.
+
+    Repeated evaluations of the same property, on the same fluid and inputs, return the
+    *identical* expression object, so callers that deduplicate expressions by ``id()``
+    see one node instead of many. Clearing the cache never changes a result; it only
+    releases the cached nodes. Useful when benchmarking expression construction, or to
+    free the (bounded) cache in a long-lived process that builds many distinct fluids.
+    """
 
     with _EXPR_EVALUATION_CACHE_LOCK:
         _EXPR_EVALUATION_CACHE.clear()
