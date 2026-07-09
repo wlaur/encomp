@@ -1128,6 +1128,33 @@ def test_dimensional_property_missing_is_nan_never_zero() -> None:
     check_polars(st_col, 2)
 
 
+@pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf])
+def test_non_finite_scalar_input_matches_vector_path(bad: float) -> None:
+    # A non-finite input cannot fix a state. The scalar path used to hand it straight to
+    # CoolProp, which answers with plausible finite values rather than failing: PHASE -> 0.0
+    # ("Liquid"), Q -> the -1.0 single-phase sentinel, TCRIT -> a state-independent constant,
+    # and HAPropsSI echoes an input back. Every property must be NaN, and the scalar answer
+    # must equal the 1-element vector answer for the same state.
+    scalar = Water(T=Q(bad, "degC"), P=Q(1.0, "bar"))
+    vector = Water(T=Q(np.array([bad]), "degC"), P=Q(np.array([1.0]), "bar"))
+
+    for prop in ("D", "Q", "TCRIT", "H", "PHASE"):
+        scalar_value = float(cast(Any, scalar.get(cast(Any, prop))).m)
+        vector_value = float(cast(Any, vector.get(cast(Any, prop))).m[0])
+
+        assert np.isnan(scalar_value), f"scalar {prop} must be NaN for a {bad} input"
+        assert np.isnan(vector_value), f"vector {prop} must be NaN for a {bad} input"
+
+    assert scalar.phase == vector.phase == "N/A"
+
+    # HumidAir echoed the offending input straight back through the scalar path
+    humid_scalar = HumidAir(T=Q(bad, "degC"), P=Q(1.0, "bar"), R=Q(0.5))
+    humid_vector = HumidAir(T=Q(np.array([bad]), "degC"), P=Q(np.array([1.0]), "bar"), R=Q(np.array([0.5])))
+
+    assert np.isnan(float(humid_scalar.get("R").m))
+    assert np.isnan(float(humid_vector.get("R").m[0]))
+
+
 def test_new_typed_fluid_properties() -> None:
     water = Fluid("HEOS::Water", P=Q(1.0, "bar"), T=Q(25.0, "degC"))
 

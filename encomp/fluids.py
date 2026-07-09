@@ -996,6 +996,15 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     def evaluate_single(self, output: CProperty, *points: tuple[CProperty, float]) -> float:
         """Evaluate ``output`` for scalar inputs through the CoolProp backend, returning ``NaN`` on an invalid state."""
 
+        # A non-finite input cannot fix a state, and CoolProp does not reliably say so: it
+        # returns 0.0 ("Liquid") for PropsSI("PHASE", "T", nan, ...), the -1 single-phase
+        # sentinel for "Q", a finite constant for state-independent outputs like TCRIT, and
+        # HAPropsSI echoes an input straight back. Mask the input here, exactly as
+        # evaluate_multiple, _lowlevel_loop_constant and _rust_eager already do, so the
+        # scalar path cannot disagree with the vector/plugin paths.
+        if not all(np.isfinite(value) for _, value in points):
+            return np.nan
+
         inputs = list(flatten(points))
 
         if self._append_name_to_cp_inputs:
