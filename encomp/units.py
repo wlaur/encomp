@@ -97,9 +97,15 @@ from .utypes import (
     Mass,
     MassFlow,
     MassFlowUnits,
+    MassPerNormalVolume,
+    MassPerNormalVolumeUnits,
     MassUnits,
+    MolarDensity,
+    MolarDensityUnits,
     MolarMass,
     MolarMassUnits,
+    MolarSpecificEnthalpy,
+    MolarSpecificEnthalpyUnits,
     NormalVolume,
     NormalVolumeFlow,
     NormalVolumeFlowUnits,
@@ -108,7 +114,10 @@ from .utypes import (
     NormalVolumeUnits,
     Numpy1DArray,
     Numpy1DBoolArray,
+    Numpy1DIntArray,
     Power,
+    PowerPerArea,
+    PowerPerAreaUnits,
     PowerUnits,
     Pressure,
     PressureUnits,
@@ -232,9 +241,22 @@ _REGISTRY_STATIC_OPTIONS = {
 
 
 class _UnitRegistry(UnitRegistry[Any]):
+    # flipped once the pinned values in _REGISTRY_STATIC_OPTIONS have been applied;
+    # writes before that are pint's own initialization, not user overrides
+    _static_options_pinned: bool = False
+
     def __setattr__(self, key: str, value: Any) -> None:  # noqa: ANN401
         # ensure that static options cannot be overridden
         if key in _REGISTRY_STATIC_OPTIONS and value != _REGISTRY_STATIC_OPTIONS[key]:
+            if self._static_options_pinned:
+                # pint documents these as ordinary mutable options; encomp pins them,
+                # so tell the caller instead of discarding the write in silence
+                _LOGGER.warning(
+                    "Ignoring assignment UNIT_REGISTRY.%s = %r: encomp pins this registry option to %r",
+                    key,
+                    value,
+                    _REGISTRY_STATIC_OPTIONS[key],
+                )
             return
 
         return super().__setattr__(key, value)
@@ -259,7 +281,15 @@ UNIT_REGISTRY = cast(UnitRegistry[Any], _LazyRegistry())
 for _option_name, _option_value in _REGISTRY_STATIC_OPTIONS.items():
     setattr(UNIT_REGISTRY, _option_name, _option_value)
 
-# make sure that UNIT_REGISTRY is the only registry that can be used
+setattr(UNIT_REGISTRY, "_static_options_pinned", True)  # noqa: B010
+
+# Make sure that UNIT_REGISTRY is the only registry that can be used. This DELIBERATELY
+# reaches into pint internals and takes over its process-wide application registry: every
+# Quantity in the process must come from encomp's registry, or the dimensionality
+# subclasses, the custom dimensions (currency, normal) and on_redefinition="raise" would
+# silently not apply. The trade-off is documented (README "Settings"): another pint-based
+# library in the same process sees encomp's registry after `import encomp`. This is an
+# intentional, settled design decision -- not an oversight to be re-flagged.
 setattr(pint, "_DEFAULT_REGISTRY", UNIT_REGISTRY)  # noqa: B010
 cast(Any, pint.application_registry).set(UNIT_REGISTRY)
 
@@ -283,7 +313,7 @@ def set_quantity_format(fmt: str = "compact") -> None:
         raise ValueError(
             f'Cannot set default format to "{fmt}", '
             f"fmt must be one of {Quantity.FORMATTING_SPECS} "
-            "or alias compact: ~P, siunitx: ~Lx"
+            f"or an alias: {', '.join(f'{k}: {v}' for k, v in fmt_aliases.items())}"
         )
 
     UNIT_REGISTRY.formatter.default_format = fmt
@@ -428,6 +458,10 @@ class Quantity(
 
     _max_recursion_depth: int = 10
 
+    # NOTE: __repr__ is inherited from pint and shows its generic class name
+    # (<Quantity(5.0, 'delta_degree_Celsius')>), while type() and __str__ show the
+    # dimensionality subclass. Overriding __repr__ would ripple through doctests,
+    # notebook outputs and user logs for no functional gain -- settled, not an oversight.
     def __str__(self) -> str:
         return self.__format__(self._REGISTRY.formatter.default_format)
 
@@ -512,6 +546,8 @@ class Quantity(
 
     @staticmethod
     def validate_magnitude_type(mt: type) -> None:
+        """Raise ``TypeError`` unless ``mt`` is a supported magnitude container type."""
+
         if mt == np.float64:
             raise TypeError(f"Invalid magnitude type: {mt}, expected one of float, np.ndarray, pl.Series, pl.Expr")
 
@@ -560,6 +596,8 @@ class Quantity(
 
     @staticmethod
     def get_unknown_dimensionality_subclass() -> type[Quantity[UnknownDimensionality, Any]]:
+        """Return the magnitude-agnostic quantity subclass with unknown dimensionality."""
+
         return Quantity[UnknownDimensionality, Any]
 
     @classmethod
@@ -703,6 +741,8 @@ class Quantity(
         elif isinstance(unit, Unit):
             return Unit(unit)
         elif isinstance(unit, Quantity):
+            # only reachable through to()/ito(), where "convert to another quantity's
+            # unit" is intended -- the constructor rejects a Quantity unit outright
             qty = cast("Quantity[DT, Any]", unit)
             return qty.u
         elif isinstance(unit, dict):
@@ -718,7 +758,8 @@ class Quantity(
             # pint registry -- fail with the accepted types instead of a bare
             # AttributeError from str-only parsing
             raise TypeError(
-                f"unit must be a str, Unit, UnitsContainer, dict, Quantity or None, got {type(unit).__name__}: {unit!r}"
+                f"unit must be a str, Unit, UnitsContainer, dict or None, got {type(unit).__name__}: {unit!r} "
+                "(a Quantity is accepted by .to()/.ito(), not by the Quantity constructor)"
             )
 
     @staticmethod
@@ -728,6 +769,12 @@ class Quantity(
                 "magnitude must be a numeric scalar, sympy atom, Polars object, "
                 "or 1-dimensional sequence of real numbers; strings and None are not supported"
             )
+
+        # bool is an int subclass, so Q(True) would otherwise become 1.0 dimensionless.
+        # A bool magnitude is always a mistake (e.g. a swapped argument or a comparison
+        # result); the coolprop composition path rejects it for the same reason
+        if isinstance(val, bool):
+            raise TypeError("magnitude must be a real number, not a bool")
 
         if isinstance(val, int):
             return cast("MT", float(val))
@@ -771,6 +818,8 @@ class Quantity(
         return Unit(cast(Any, cls._REGISTRY.parse_units(unit_name)))
 
     def get_subclass(self, dt: type[DT_], mt: type[MT_]) -> type[Quantity[DT_, MT_]]:
+        """Return the ``Quantity`` subclass for dimensionality ``dt`` and magnitude type ``mt``."""
+
         subcls = self._get_dimensional_subclass(dt, mt)
         return cast("type[Quantity[DT_, MT_]]", subcls)
 
@@ -899,13 +948,21 @@ class Quantity(
         cls, val: Sequence[float], unit: NormalVolumePerMassUnits
     ) -> Quantity[NormalVolumePerMass, Numpy1DArray]: ...
     @overload
+    def __new__(
+        cls, val: Sequence[float], unit: MassPerNormalVolumeUnits
+    ) -> Quantity[MassPerNormalVolume, Numpy1DArray]: ...
+    @overload
     def __new__(cls, val: Sequence[float], unit: DensityUnits) -> Quantity[Density, Numpy1DArray]: ...
+    @overload
+    def __new__(cls, val: Sequence[float], unit: MolarDensityUnits) -> Quantity[MolarDensity, Numpy1DArray]: ...
     @overload
     def __new__(cls, val: Sequence[float], unit: SpecificVolumeUnits) -> Quantity[SpecificVolume, Numpy1DArray]: ...
     @overload
     def __new__(cls, val: Sequence[float], unit: EnergyUnits) -> Quantity[Energy, Numpy1DArray]: ...
     @overload
     def __new__(cls, val: Sequence[float], unit: PowerUnits) -> Quantity[Power, Numpy1DArray]: ...
+    @overload
+    def __new__(cls, val: Sequence[float], unit: PowerPerAreaUnits) -> Quantity[PowerPerArea, Numpy1DArray]: ...
     @overload
     def __new__(cls, val: Sequence[float], unit: VelocityUnits) -> Quantity[Velocity, Numpy1DArray]: ...
     @overload
@@ -918,6 +975,10 @@ class Quantity(
     ) -> Quantity[KinematicViscosity, Numpy1DArray]: ...
     @overload
     def __new__(cls, val: Sequence[float], unit: EnergyPerMassUnits) -> Quantity[EnergyPerMass, Numpy1DArray]: ...
+    @overload
+    def __new__(
+        cls, val: Sequence[float], unit: MolarSpecificEnthalpyUnits
+    ) -> Quantity[MolarSpecificEnthalpy, Numpy1DArray]: ...
     @overload
     def __new__(
         cls, val: Sequence[float], unit: SpecificHeatCapacityUnits
@@ -995,13 +1056,19 @@ class Quantity(
     @overload
     def __new__(cls, val: MT, unit: NormalVolumePerMassUnits) -> Quantity[NormalVolumePerMass, MT]: ...
     @overload
+    def __new__(cls, val: MT, unit: MassPerNormalVolumeUnits) -> Quantity[MassPerNormalVolume, MT]: ...
+    @overload
     def __new__(cls, val: MT, unit: DensityUnits) -> Quantity[Density, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: MolarDensityUnits) -> Quantity[MolarDensity, MT]: ...
     @overload
     def __new__(cls, val: MT, unit: SpecificVolumeUnits) -> Quantity[SpecificVolume, MT]: ...
     @overload
     def __new__(cls, val: MT, unit: EnergyUnits) -> Quantity[Energy, MT]: ...
     @overload
     def __new__(cls, val: MT, unit: PowerUnits) -> Quantity[Power, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: PowerPerAreaUnits) -> Quantity[PowerPerArea, MT]: ...
     @overload
     def __new__(cls, val: MT, unit: VelocityUnits) -> Quantity[Velocity, MT]: ...
     @overload
@@ -1012,6 +1079,8 @@ class Quantity(
     def __new__(cls, val: MT, unit: KinematicViscosityUnits) -> Quantity[KinematicViscosity, MT]: ...
     @overload
     def __new__(cls, val: MT, unit: EnergyPerMassUnits) -> Quantity[EnergyPerMass, MT]: ...
+    @overload
+    def __new__(cls, val: MT, unit: MolarSpecificEnthalpyUnits) -> Quantity[MolarSpecificEnthalpy, MT]: ...
     @overload
     def __new__(cls, val: MT, unit: SpecificHeatCapacityUnits) -> Quantity[SpecificHeatCapacity, MT]: ...
     @overload
@@ -1039,7 +1108,10 @@ class Quantity(
         # statically (it also raises ValueError at runtime) -- Quantity magnitudes and
         # units are always passed separately
         val: float | np.ndarray[Any, Any] | pl.Series | pl.Expr | Sequence[float] | Quantity[Any, Any] | sp.Basic,
-        unit: Any = None,  # noqa: ANN401
+        # Quantity is deliberately absent: passing one as the unit drops its magnitude,
+        # which is a bug rather than a shorthand. It is rejected here and at runtime;
+        # .to() does accept a Quantity, where reusing another quantity's unit is the point
+        unit: Unit[Any] | UnitsContainer | dict[str, Any] | str | None = None,
         _depth: int = 0,
     ) -> Quantity[Any, Any]: ...
     def __new__(
@@ -1048,6 +1120,13 @@ class Quantity(
         unit: Any = None,
         _depth: int = 0,
     ) -> Quantity[Any, Any]:
+        if isinstance(unit, Quantity):
+            raise TypeError(
+                f"unit must be a str, Unit, UnitsContainer, dict or None, got Quantity: {unit!r}. "
+                'Pass the unit itself ("qty.u"), or use "value.to(qty)" to convert to another '
+                "quantity's unit"
+            )
+
         unit = cast("Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | None", unit)
 
         if isinstance(val, Quantity):
@@ -1755,6 +1834,12 @@ class Quantity(
         qty: Any,  # noqa: ANN401
         info: Any,  # noqa: ANN401, ARG003
     ) -> Quantity[DT, MT]:
+        """Pydantic validator: coerce ``qty`` to this subclass, checking dimensionality and magnitude type.
+
+        Every failure is re-raised as a ``pydantic_core.PydanticCustomError`` with type
+        ``quantity_dimensionality``, ``quantity_magnitude_type`` or ``quantity_validation``.
+        """
+
         try:
             ret = cls._pydantic_build_quantity(qty)
             cls._pydantic_enforce_dimensionality(ret)
@@ -1771,6 +1856,13 @@ class Quantity(
         return cast("Quantity[DT, MT]", ret)
 
     def check_compatibility(self, other: Quantity[Any, Any] | float) -> None:
+        """Raise ``DimensionalityTypeError`` unless ``other`` can be combined with this quantity.
+
+        Compatibility is semantic, not just dimensional: ``Temperature`` and
+        ``TemperatureDifference`` share ``[temperature]`` but are not compatible. A plain
+        number is compatible only with a dimensionless quantity.
+        """
+
         if not isinstance(other, Quantity):
             if not self.dimensionless:
                 raise DimensionalityTypeError(
@@ -1816,6 +1908,8 @@ class Quantity(
         *contexts: Any,  # noqa: ANN401
         **ctx_kwargs: Any,  # noqa: ANN401
     ) -> bool:
+        """Whether ``other`` is convertible to this quantity's unit *and* :meth:`check_compatibility` passes."""
+
         # add an additional check of the dimensionality types
         is_compatible = super().is_compatible_with(other, *contexts, **ctx_kwargs)
 
@@ -1868,10 +1962,14 @@ class Quantity(
 
     @property
     def is_scalar(self) -> bool:
+        """Whether the magnitude is a scalar (``float``) rather than a container."""
+
         return isinstance(self.m, float)
 
     @property
     def ndim(self) -> int:
+        """Number of magnitude dimensions: 0 for a scalar, 1 for a vector magnitude."""
+
         if isinstance(self.m, (float, int)):
             return 0
 
@@ -1918,6 +2016,8 @@ class Quantity(
         return cast("Quantity[DT_, MT]", subcls(self.m, unit))
 
     def unknown(self) -> Quantity[UnknownDimensionality, MT]:
+        """Return this quantity with its dimensionality erased, i.e. ``asdim(UnknownDimensionality)``."""
+
         return self.asdim(UnknownDimensionality)
 
     @overload
@@ -2183,7 +2283,8 @@ class Quantity(
             return False
 
         if isinstance(other, (float, int)):
-            other = Quantity(other, "dimensionless")
+            # float() so a bool operand still compares (Quantity rejects bool magnitudes)
+            other = Quantity(float(other), "dimensionless")
 
         m = self.m
         other_m = cast(float | Numpy1DArray | pl.Series | pl.Expr, cast(Any, other).to(self.u).m)
@@ -2267,7 +2368,8 @@ class Quantity(
             return True
 
         if isinstance(other, (float, int)):
-            other = Quantity(other, "dimensionless")
+            # float() so a bool operand still compares (Quantity rejects bool magnitudes)
+            other = Quantity(float(other), "dimensionless")
 
         m = self.m
         other_m = cast(float | Numpy1DArray | pl.Series | pl.Expr, cast(Any, other).to(self.u).m)
@@ -2707,6 +2809,142 @@ class Quantity(
         self: Quantity[TemperatureDifference, float], other: Quantity[SpecificHeatCapacity, MT_]
     ) -> Quantity[EnergyPerMass, MT_]: ...
 
+    # Pressure * Area = Force
+    @overload
+    def __mul__(self: Quantity[Pressure, MT], other: Quantity[Area, MT]) -> Quantity[Force, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Pressure, MT], other: Quantity[Area, float]) -> Quantity[Force, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Pressure, float], other: Quantity[Area, MT_]) -> Quantity[Force, MT_]: ...
+
+    # Area * Pressure = Force
+    @overload
+    def __mul__(self: Quantity[Area, MT], other: Quantity[Pressure, MT]) -> Quantity[Force, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Area, MT], other: Quantity[Pressure, float]) -> Quantity[Force, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Area, float], other: Quantity[Pressure, MT_]) -> Quantity[Force, MT_]: ...
+
+    # Force * Length = Energy
+    @overload
+    def __mul__(self: Quantity[Force, MT], other: Quantity[Length, MT]) -> Quantity[Energy, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Force, MT], other: Quantity[Length, float]) -> Quantity[Energy, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Force, float], other: Quantity[Length, MT_]) -> Quantity[Energy, MT_]: ...
+
+    # Length * Force = Energy
+    @overload
+    def __mul__(self: Quantity[Length, MT], other: Quantity[Force, MT]) -> Quantity[Energy, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Length, MT], other: Quantity[Force, float]) -> Quantity[Energy, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Length, float], other: Quantity[Force, MT_]) -> Quantity[Energy, MT_]: ...
+
+    # Force * Velocity = Power
+    @overload
+    def __mul__(self: Quantity[Force, MT], other: Quantity[Velocity, MT]) -> Quantity[Power, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Force, MT], other: Quantity[Velocity, float]) -> Quantity[Power, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Force, float], other: Quantity[Velocity, MT_]) -> Quantity[Power, MT_]: ...
+
+    # Velocity * Force = Power
+    @overload
+    def __mul__(self: Quantity[Velocity, MT], other: Quantity[Force, MT]) -> Quantity[Power, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Velocity, MT], other: Quantity[Force, float]) -> Quantity[Power, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Velocity, float], other: Quantity[Force, MT_]) -> Quantity[Power, MT_]: ...
+
+    # Substance * MolarMass = Mass
+    @overload
+    def __mul__(self: Quantity[Substance, MT], other: Quantity[MolarMass, MT]) -> Quantity[Mass, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Substance, MT], other: Quantity[MolarMass, float]) -> Quantity[Mass, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Substance, float], other: Quantity[MolarMass, MT_]) -> Quantity[Mass, MT_]: ...
+
+    # MolarMass * Substance = Mass
+    @overload
+    def __mul__(self: Quantity[MolarMass, MT], other: Quantity[Substance, MT]) -> Quantity[Mass, MT]: ...
+    @overload
+    def __mul__(self: Quantity[MolarMass, MT], other: Quantity[Substance, float]) -> Quantity[Mass, MT]: ...
+    @overload
+    def __mul__(self: Quantity[MolarMass, float], other: Quantity[Substance, MT_]) -> Quantity[Mass, MT_]: ...
+
+    # MolarDensity * Volume = Substance
+    @overload
+    def __mul__(self: Quantity[MolarDensity, MT], other: Quantity[Volume, MT]) -> Quantity[Substance, MT]: ...
+    @overload
+    def __mul__(self: Quantity[MolarDensity, MT], other: Quantity[Volume, float]) -> Quantity[Substance, MT]: ...
+    @overload
+    def __mul__(self: Quantity[MolarDensity, float], other: Quantity[Volume, MT_]) -> Quantity[Substance, MT_]: ...
+
+    # Volume * MolarDensity = Substance
+    @overload
+    def __mul__(self: Quantity[Volume, MT], other: Quantity[MolarDensity, MT]) -> Quantity[Substance, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Volume, MT], other: Quantity[MolarDensity, float]) -> Quantity[Substance, MT]: ...
+    @overload
+    def __mul__(self: Quantity[Volume, float], other: Quantity[MolarDensity, MT_]) -> Quantity[Substance, MT_]: ...
+
+    # HeatTransferCoefficient * TemperatureDifference = PowerPerArea
+    @overload
+    def __mul__(
+        self: Quantity[HeatTransferCoefficient, MT], other: Quantity[TemperatureDifference, MT]
+    ) -> Quantity[PowerPerArea, MT]: ...
+    @overload
+    def __mul__(
+        self: Quantity[HeatTransferCoefficient, MT], other: Quantity[TemperatureDifference, float]
+    ) -> Quantity[PowerPerArea, MT]: ...
+    @overload
+    def __mul__(
+        self: Quantity[HeatTransferCoefficient, float], other: Quantity[TemperatureDifference, MT_]
+    ) -> Quantity[PowerPerArea, MT_]: ...
+
+    # TemperatureDifference * HeatTransferCoefficient = PowerPerArea
+    @overload
+    def __mul__(
+        self: Quantity[TemperatureDifference, MT], other: Quantity[HeatTransferCoefficient, MT]
+    ) -> Quantity[PowerPerArea, MT]: ...
+    @overload
+    def __mul__(
+        self: Quantity[TemperatureDifference, MT], other: Quantity[HeatTransferCoefficient, float]
+    ) -> Quantity[PowerPerArea, MT]: ...
+    @overload
+    def __mul__(
+        self: Quantity[TemperatureDifference, float], other: Quantity[HeatTransferCoefficient, MT_]
+    ) -> Quantity[PowerPerArea, MT_]: ...
+
+    # HeatTransferCoefficient * Length = ThermalConductivity
+    @overload
+    def __mul__(
+        self: Quantity[HeatTransferCoefficient, MT], other: Quantity[Length, MT]
+    ) -> Quantity[ThermalConductivity, MT]: ...
+    @overload
+    def __mul__(
+        self: Quantity[HeatTransferCoefficient, MT], other: Quantity[Length, float]
+    ) -> Quantity[ThermalConductivity, MT]: ...
+    @overload
+    def __mul__(
+        self: Quantity[HeatTransferCoefficient, float], other: Quantity[Length, MT_]
+    ) -> Quantity[ThermalConductivity, MT_]: ...
+
+    # Length * HeatTransferCoefficient = ThermalConductivity
+    @overload
+    def __mul__(
+        self: Quantity[Length, MT], other: Quantity[HeatTransferCoefficient, MT]
+    ) -> Quantity[ThermalConductivity, MT]: ...
+    @overload
+    def __mul__(
+        self: Quantity[Length, MT], other: Quantity[HeatTransferCoefficient, float]
+    ) -> Quantity[ThermalConductivity, MT]: ...
+    @overload
+    def __mul__(
+        self: Quantity[Length, float], other: Quantity[HeatTransferCoefficient, MT_]
+    ) -> Quantity[ThermalConductivity, MT_]: ...
+
     # Unknown * Unknown = Unknown
     @overload
     def __mul__(
@@ -3054,6 +3292,131 @@ class Quantity(
         self: Quantity[EnergyPerMass, float], other: Quantity[TemperatureDifference, MT_]
     ) -> Quantity[SpecificHeatCapacity, MT_]: ...
 
+    # Force / Area = Pressure
+    @overload
+    def __truediv__(self: Quantity[Force, MT], other: Quantity[Area, MT]) -> Quantity[Pressure, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Force, MT], other: Quantity[Area, float]) -> Quantity[Pressure, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Force, float], other: Quantity[Area, MT_]) -> Quantity[Pressure, MT_]: ...
+
+    # Force / Pressure = Area
+    @overload
+    def __truediv__(self: Quantity[Force, MT], other: Quantity[Pressure, MT]) -> Quantity[Area, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Force, MT], other: Quantity[Pressure, float]) -> Quantity[Area, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Force, float], other: Quantity[Pressure, MT_]) -> Quantity[Area, MT_]: ...
+
+    # Energy / Length = Force
+    @overload
+    def __truediv__(self: Quantity[Energy, MT], other: Quantity[Length, MT]) -> Quantity[Force, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Energy, MT], other: Quantity[Length, float]) -> Quantity[Force, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Energy, float], other: Quantity[Length, MT_]) -> Quantity[Force, MT_]: ...
+
+    # Energy / Force = Length
+    @overload
+    def __truediv__(self: Quantity[Energy, MT], other: Quantity[Force, MT]) -> Quantity[Length, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Energy, MT], other: Quantity[Force, float]) -> Quantity[Length, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Energy, float], other: Quantity[Force, MT_]) -> Quantity[Length, MT_]: ...
+
+    # Power / Force = Velocity
+    @overload
+    def __truediv__(self: Quantity[Power, MT], other: Quantity[Force, MT]) -> Quantity[Velocity, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Power, MT], other: Quantity[Force, float]) -> Quantity[Velocity, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Power, float], other: Quantity[Force, MT_]) -> Quantity[Velocity, MT_]: ...
+
+    # Power / Velocity = Force
+    @overload
+    def __truediv__(self: Quantity[Power, MT], other: Quantity[Velocity, MT]) -> Quantity[Force, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Power, MT], other: Quantity[Velocity, float]) -> Quantity[Force, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Power, float], other: Quantity[Velocity, MT_]) -> Quantity[Force, MT_]: ...
+
+    # Mass / MolarMass = Substance
+    @overload
+    def __truediv__(self: Quantity[Mass, MT], other: Quantity[MolarMass, MT]) -> Quantity[Substance, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Mass, MT], other: Quantity[MolarMass, float]) -> Quantity[Substance, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Mass, float], other: Quantity[MolarMass, MT_]) -> Quantity[Substance, MT_]: ...
+
+    # Mass / Substance = MolarMass
+    @overload
+    def __truediv__(self: Quantity[Mass, MT], other: Quantity[Substance, MT]) -> Quantity[MolarMass, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Mass, MT], other: Quantity[Substance, float]) -> Quantity[MolarMass, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Mass, float], other: Quantity[Substance, MT_]) -> Quantity[MolarMass, MT_]: ...
+
+    # Substance / Volume = MolarDensity
+    @overload
+    def __truediv__(self: Quantity[Substance, MT], other: Quantity[Volume, MT]) -> Quantity[MolarDensity, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Substance, MT], other: Quantity[Volume, float]) -> Quantity[MolarDensity, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Substance, float], other: Quantity[Volume, MT_]) -> Quantity[MolarDensity, MT_]: ...
+
+    # Substance / MolarDensity = Volume
+    @overload
+    def __truediv__(self: Quantity[Substance, MT], other: Quantity[MolarDensity, MT]) -> Quantity[Volume, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Substance, MT], other: Quantity[MolarDensity, float]) -> Quantity[Volume, MT]: ...
+    @overload
+    def __truediv__(self: Quantity[Substance, float], other: Quantity[MolarDensity, MT_]) -> Quantity[Volume, MT_]: ...
+
+    # PowerPerArea / TemperatureDifference = HeatTransferCoefficient
+    # (the reverse, PowerPerArea / HeatTransferCoefficient, is intentionally omitted for
+    # the same reason as EnergyPerMass / SpecificHeatCapacity above: it resolves to
+    # Temperature rather than TemperatureDifference)
+    @overload
+    def __truediv__(
+        self: Quantity[PowerPerArea, MT], other: Quantity[TemperatureDifference, MT]
+    ) -> Quantity[HeatTransferCoefficient, MT]: ...
+    @overload
+    def __truediv__(
+        self: Quantity[PowerPerArea, MT], other: Quantity[TemperatureDifference, float]
+    ) -> Quantity[HeatTransferCoefficient, MT]: ...
+    @overload
+    def __truediv__(
+        self: Quantity[PowerPerArea, float], other: Quantity[TemperatureDifference, MT_]
+    ) -> Quantity[HeatTransferCoefficient, MT_]: ...
+
+    # ThermalConductivity / Length = HeatTransferCoefficient
+    @overload
+    def __truediv__(
+        self: Quantity[ThermalConductivity, MT], other: Quantity[Length, MT]
+    ) -> Quantity[HeatTransferCoefficient, MT]: ...
+    @overload
+    def __truediv__(
+        self: Quantity[ThermalConductivity, MT], other: Quantity[Length, float]
+    ) -> Quantity[HeatTransferCoefficient, MT]: ...
+    @overload
+    def __truediv__(
+        self: Quantity[ThermalConductivity, float], other: Quantity[Length, MT_]
+    ) -> Quantity[HeatTransferCoefficient, MT_]: ...
+
+    # ThermalConductivity / HeatTransferCoefficient = Length
+    @overload
+    def __truediv__(
+        self: Quantity[ThermalConductivity, MT], other: Quantity[HeatTransferCoefficient, MT]
+    ) -> Quantity[Length, MT]: ...
+    @overload
+    def __truediv__(
+        self: Quantity[ThermalConductivity, MT], other: Quantity[HeatTransferCoefficient, float]
+    ) -> Quantity[Length, MT]: ...
+    @overload
+    def __truediv__(
+        self: Quantity[ThermalConductivity, float], other: Quantity[HeatTransferCoefficient, MT_]
+    ) -> Quantity[Length, MT_]: ...
+
     @overload
     def __truediv__(
         self: Quantity[Dimensionless, MT], other: Quantity[DT_, float]
@@ -3193,7 +3556,16 @@ class Quantity(
     def __getitem__(self: Quantity[DT, Numpy1DArray], index: int) -> Quantity[DT, float]: ...
     @overload
     def __getitem__(self: Quantity[DT, Numpy1DArray], index: slice) -> Quantity[DT, Numpy1DArray]: ...
-    def __getitem__(self, index: int | slice) -> Quantity[Any, Any]:
+    # numpy fancy indexing: a boolean mask (the type the comparison operators return, so
+    # q[q > threshold] type-checks) or an integer index array/sequence. Not offered for a
+    # pl.Series magnitude: polars refuses a boolean-mask __getitem__ (use .m.filter(...))
+    @overload
+    def __getitem__(
+        self: Quantity[DT, Numpy1DArray], index: Numpy1DBoolArray | Numpy1DIntArray | Sequence[int]
+    ) -> Quantity[DT, Numpy1DArray]: ...
+    def __getitem__(
+        self, index: int | slice | Numpy1DBoolArray | Numpy1DIntArray | Sequence[int]
+    ) -> Quantity[Any, Any]:
         ret = cast("Quantity[DT, Any]", self._pint_super.__getitem__(index))
 
         magnitude_type = cast("type[Any]", type(ret.m))

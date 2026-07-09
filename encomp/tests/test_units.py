@@ -2,6 +2,7 @@
 
 import copy
 import inspect
+import logging
 import pickle
 import subprocess
 import sys
@@ -49,6 +50,7 @@ from ..utypes import (
     NormalVolume,
     NormalVolumeFlow,
     Numpy1DArray,
+    Numpy1DBoolArray,
     Power,
     Pressure,
     SpecificEnthalpy,
@@ -2130,3 +2132,93 @@ def test_power_div_massflow_energypermass() -> None:
     p_expr = Q(pl.col.test, "kW")
     assert_type(p_expr / mf, Q[EnergyPerMass, pl.Expr])
     assert_type(p_expr / epm, Q[MassFlow, pl.Expr])
+
+
+def test_bool_magnitude_is_rejected() -> None:
+    # bool is an int subclass, so Q(True) would silently become 1.0 dimensionless
+    with pytest.raises(TypeError, match="not a bool"):
+        Q(cast(Any, True))
+
+    with pytest.raises(TypeError, match="not a bool"):
+        Q(cast(Any, False), "kg")
+
+    # comparing against a bool still works (the bool never becomes a magnitude)
+    assert Q(1.0) == True  # noqa: E712
+    assert Q(0.5) != True  # noqa: E712
+
+
+def test_quantity_as_unit_is_rejected() -> None:
+    # Q(1, Q(2, "m")) silently dropped the 2; it is an error now
+    with pytest.raises(TypeError, match="got Quantity"):
+        Q(1, cast(Any, Q(2, "m")))
+
+    with pytest.raises(TypeError, match="got Quantity"):
+        Q(Q(1, "m"), cast(Any, Q(2, "cm")))
+
+    # the unit of another quantity is still reachable, explicitly
+    assert Q(1, Q(2, "m").u) == Q(1, "m")
+
+    # ... and .to() keeps accepting a quantity, where the intent is unambiguous
+    assert Q(100, "cm").to(Q(2, "m")) == Q(1, "m")
+
+
+def test_boolean_mask_and_fancy_indexing() -> None:
+    q = Q([1.0, 2.0, 3.0], "m")
+
+    # the comparison operators produce exactly the mask type __getitem__ accepts
+    mask = q > Q(1.5, "m")
+    assert_type(mask, Numpy1DBoolArray)
+
+    masked = q[mask]
+    assert_type(masked, Q[Length, Numpy1DArray])
+    assert (masked == Q([2.0, 3.0], "m")).all()
+
+    from_list = q[[0, 2]]
+    assert_type(from_list, Q[Length, Numpy1DArray])
+    assert (from_list == Q([1.0, 3.0], "m")).all()
+
+    from_index_array = q[np.array([0, 2])]
+    assert_type(from_index_array, Q[Length, Numpy1DArray])
+    assert (from_index_array == Q([1.0, 3.0], "m")).all()
+
+
+def test_static_registry_option_write_warns(caplog: pytest.LogCaptureFixture) -> None:
+    registry = cast(Any, UNIT_REGISTRY)
+
+    with caplog.at_level(logging.WARNING, logger="encomp.units"):
+        registry.force_ndarray = True
+
+    assert "encomp pins this registry option" in caplog.text
+
+    # the write is still discarded
+    assert registry.force_ndarray is False
+
+    caplog.clear()
+
+    # writing the pinned value is not a warning
+    with caplog.at_level(logging.WARNING, logger="encomp.units"):
+        registry.force_ndarray = False
+
+    assert not caplog.text
+
+
+def test_set_quantity_format_error_lists_every_alias() -> None:
+    # the alias is rejected before the default format is touched, so this test has no
+    # process-wide side effect
+    with pytest.raises(ValueError, match="normal") as excinfo:
+        set_quantity_format("not-a-format")
+
+    message = str(excinfo.value)
+
+    for alias in ("compact", "normal", "siunitx"):
+        assert alias in message
+
+
+def test_no_q_alias_is_exported() -> None:
+    # the docs create the alias with `from encomp.units import Quantity as Q`; the
+    # library itself never exports the name (it used to leak from encomp.constants)
+    import encomp.constants
+    import encomp.units
+
+    assert not hasattr(encomp.units, "Q")
+    assert not hasattr(encomp.constants, "Q")

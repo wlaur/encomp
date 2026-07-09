@@ -8,6 +8,7 @@ import logging
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable, Mapping
+from functools import cache
 from threading import Lock
 from typing import Annotated, Any, ClassVar, Generic, Literal, Self, TypedDict, Unpack, cast
 
@@ -53,6 +54,7 @@ from .utypes import (
     MolarMass,
     MolarSpecificEnthalpy,
     MolarSpecificEntropy,
+    MolarSpecificHeatCapacity,
     MolarSpecificInternalEnergy,
     Numpy1DArray,
     Pressure,
@@ -62,6 +64,7 @@ from .utypes import (
     SpecificHeatPerDryAir,
     SpecificHeatPerHumidAir,
     SpecificInternalEnergy,
+    SurfaceTension,
     Temperature,
     ThermalConductivity,
     Velocity,
@@ -222,8 +225,36 @@ _EXPR_EVALUATION_CACHE_LOCK = Lock()
 
 
 def clear_expr_evaluation_cache() -> None:
+    """Drop the cache of constructed CoolProp ``pl.Expr`` nodes."""
+
     with _EXPR_EVALUATION_CACHE_LOCK:
         _EXPR_EVALUATION_CACHE.clear()
+
+
+@cache
+def _resolve_fluid_name(backend: str, fluids: str) -> None:
+    # Constructing the AbstractState is the only reliable way to ask CoolProp whether a
+    # name resolves (it covers pure fluids, INCOMP, and mixtures alike). It costs tens of
+    # microseconds for the usual backends -- and seconds the very first time a tabular
+    # backend builds its tables, a cost that would otherwise be paid at the first property
+    # access anyway. Cached per (backend, fluids), so the 1000th Fluid("Water", ...) pays
+    # a dict lookup rather than another CoolProp initialization.
+    #
+    # functools.cache stores return values, never exceptions, so only a resolved name is
+    # remembered: a failure (an invalid name, or a transient CoolProp error) is re-checked
+    # on the next call instead of being cached as "this fluid does not exist".
+    _cp.AbstractState(backend, fluids)
+
+
+def _validate_fluid_name(name: CName, composition: Composition | None = None) -> None:
+    backend, fluids, _ = resolve_fluid_spec(name, composition)
+
+    try:
+        _resolve_fluid_name(backend, fluids)
+    except Exception as e:
+        raise ValueError(
+            f"Fluid '{name}' could not be initialized, ensure that the name is a valid CoolProp fluid name"
+        ) from e
 
 
 def _expr_cache_digest(expr: pl.Expr) -> str:
@@ -528,89 +559,24 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         (this method must set instance attributes ``name`` and ``points``).
 
         Fluid names for pure fluids are not case-sensitive, but the mixture names are.
-        The following fluid names are recognized by CoolProp:
+        A name may fold in the backend (``"IF97::Water"``, ``"HEOS::CO2&O2"``); a bare
+        name defaults to the HEOS backend. Incompressible fluids and their mixtures use
+        the ``INCOMP::`` prefix, optionally with a concentration
+        (``"INCOMP::MEG[0.5]"``). An unknown name raises ``ValueError`` at construction.
 
-        **Pure**
+        The names recognized by the installed CoolProp build are listed by
 
-        .. code:: none
+        .. code:: python
 
-            1-Butene,Acetone,Air,Ammonia,Argon,Benzene,CarbonDioxide,CarbonMonoxide,
-            CarbonylSulfide,CycloHexane,CycloPropane,Cyclopentane,D4,D5,D6,Deuterium,
-            Dichloroethane,DiethylEther,DimethylCarbonate,DimethylEther,Ethane,
-            Ethanol,EthylBenzene,Ethylene,EthyleneOxide,Fluorine,HFE143m,HeavyWater,
-            Helium,Hydrogen,HydrogenChloride,HydrogenSulfide,IsoButane,IsoButene,
-            Isohexane,Isopentane,Krypton,MD2M,MD3M,MD4M,MDM,MM,Methane,Methanol,
-            MethylLinoleate,MethylLinolenate,MethylOleate,MethylPalmitate,MethylStearate,
-            Neon,Neopentane,Nitrogen,NitrousOxide,Novec649,OrthoDeuterium,OrthoHydrogen,
-            Oxygen,ParaDeuterium,ParaHydrogen,Propylene,Propyne,R11,R113,R114,R115,
-            R116,R12,R123,R1233zd(E),R1234yf,R1234ze(E),R1234ze(Z),R124,R1243zf,
-            R125,R13,R134a,R13I1,R14,R141b,R142b,R143a,R152A,R161,R21,R218,R22,R227EA,
-            R23,R236EA,R236FA,R245ca,R245fa,R32,R365MFC,R40,R404A,R407C,R41,R410A,
-            R507A,RC318,SES36,SulfurDioxide,SulfurHexafluoride,Toluene,Water,Xenon,
-            cis-2-Butene,m-Xylene,n-Butane,n-Decane,n-Dodecane,n-Heptane,n-Hexane,
-            n-Nonane,n-Octane,n-Pentane,n-Propane,n-Undecane,o-Xylene,p-Xylene,trans-2-Butene
+            import CoolProp.CoolProp as CP
 
-        **Incompressible pure**
+            CP.get_global_param_string("FluidsList")            # pure and pseudo-pure
+            CP.get_global_param_string("incompressible_list_pure")
+            CP.get_global_param_string("incompressible_list_solution")
+            CP.get_global_param_string("predefined_mixtures")
 
-        .. code:: none
-
-            INCOMP::AS10,INCOMP::AS20,INCOMP::AS30,INCOMP::AS40,INCOMP::AS55,INCOMP::DEB,
-            INCOMP::DSF,INCOMP::DowJ,INCOMP::DowJ2,INCOMP::DowQ,INCOMP::DowQ2,INCOMP::HC10,
-            INCOMP::HC20,INCOMP::HC30,INCOMP::HC40,INCOMP::HC50,INCOMP::HCB,INCOMP::HCM,
-            INCOMP::HFE,INCOMP::HFE2,INCOMP::HY20,INCOMP::HY30,INCOMP::HY40,INCOMP::HY45,
-            INCOMP::HY50,INCOMP::NBS,INCOMP::NaK,INCOMP::PBB,INCOMP::PCL,INCOMP::PCR,
-            INCOMP::PGLT,INCOMP::PHE,INCOMP::PHR,INCOMP::PLR,INCOMP::PMR,INCOMP::PMS1,
-            INCOMP::PMS2,INCOMP::PNF,INCOMP::PNF2,INCOMP::S800,INCOMP::SAB,INCOMP::T66,
-            INCOMP::T72,INCOMP::TCO,INCOMP::TD12,INCOMP::TVP1,INCOMP::TVP1869,INCOMP::TX22,
-            INCOMP::TY10,INCOMP::TY15,INCOMP::TY20,INCOMP::TY24,INCOMP::Water,INCOMP::XLT,
-            INCOMP::XLT2,INCOMP::ZS10,INCOMP::ZS25,INCOMP::ZS40,INCOMP::ZS45,INCOMP::ZS55
-
-        **Incompressible mixtures**
-
-        .. code:: none
-
-            INCOMP::FRE,INCOMP::IceEA,INCOMP::IceNA,INCOMP::IcePG,INCOMP::LiBr,INCOMP::MAM,
-            INCOMP::MAM2,INCOMP::MCA,INCOMP::MCA2,INCOMP::MEA,INCOMP::MEA2,INCOMP::MEG,
-            INCOMP::MEG2,INCOMP::MGL,INCOMP::MGL2,INCOMP::MITSW,INCOMP::MKA,INCOMP::MKA2,
-            INCOMP::MKC,INCOMP::MKC2,INCOMP::MKF,INCOMP::MLI,INCOMP::MMA,INCOMP::MMA2,
-            INCOMP::MMG,INCOMP::MMG2,INCOMP::MNA,INCOMP::MNA2,INCOMP::MPG,INCOMP::MPG2,
-            INCOMP::VCA,INCOMP::VKC,INCOMP::VMA,INCOMP::VMG,INCOMP::VNA,INCOMP::AEG,
-            INCOMP::AKF,INCOMP::AL,INCOMP::AN,INCOMP::APG,INCOMP::GKN,INCOMP::PK2,
-            INCOMP::PKL,INCOMP::ZAC,INCOMP::ZFC,INCOMP::ZLC,INCOMP::ZM,INCOMP::ZMC
-
-        **Mixtures**
-
-        .. code:: none
-
-            AIR.MIX,AMARILLO.MIX,Air.mix,Amarillo.mix,EKOFISK.MIX,Ekofisk.mix,GULFCOAST.MIX,
-            GULFCOASTGAS(NIST1).MIX,GulfCoast.mix,GulfCoastGas(NIST1).mix,HIGHCO2.MIX,
-            HIGHN2.MIX,HighCO2.mix,HighN2.mix,NATURALGASSAMPLE.MIX,NaturalGasSample.mix,
-            R401A.MIX,R401A.mix,R401B.MIX,R401B.mix,R401C.MIX,R401C.mix,R402A.MIX,R402A.mix,
-            R402B.MIX,R402B.mix,R403A.MIX,R403A.mix,R403B.MIX,R403B.mix,R404A.MIX,R404A.mix,
-            R405A.MIX,R405A.mix,R406A.MIX,R406A.mix,R407A.MIX,R407A.mix,R407B.MIX,R407B.mix,
-            R407C.MIX,R407C.mix,R407D.MIX,R407D.mix,R407E.MIX,R407E.mix,R407F.MIX,R407F.mix,
-            R408A.MIX,R408A.mix,R409A.MIX,R409A.mix,R409B.MIX,R409B.mix,R410A.MIX,R410A.mix,
-            R410B.MIX,R410B.mix,R411A.MIX,R411A.mix,R411B.MIX,R411B.mix,R412A.MIX,R412A.mix,
-            R413A.MIX,R413A.mix,R414A.MIX,R414A.mix,R414B.MIX,R414B.mix,R415A.MIX,R415A.mix,
-            R415B.MIX,R415B.mix,R416A.MIX,R416A.mix,R417A.MIX,R417A.mix,R417B.MIX,R417B.mix,
-            R417C.MIX,R417C.mix,R418A.MIX,R418A.mix,R419A.MIX,R419A.mix,R419B.MIX,R419B.mix,
-            R420A.MIX,R420A.mix,R421A.MIX,R421A.mix,R421B.MIX,R421B.mix,R422A.MIX,R422A.mix,
-            R422B.MIX,R422B.mix,R422C.MIX,R422C.mix,R422D.MIX,R422D.mix,R422E.MIX,R422E.mix,
-            R423A.MIX,R423A.mix,R424A.MIX,R424A.mix,R425A.MIX,R425A.mix,R426A.MIX,R426A.mix,
-            R427A.MIX,R427A.mix,R428A.MIX,R428A.mix,R429A.MIX,R429A.mix,R430A.MIX,R430A.mix,
-            R431A.MIX,R431A.mix,R432A.MIX,R432A.mix,R433A.MIX,R433A.mix,R433B.MIX,R433B.mix,
-            R433C.MIX,R433C.mix,R434A.MIX,R434A.mix,R435A.MIX,R435A.mix,R436A.MIX,R436A.mix,
-            R436B.MIX,R436B.mix,R437A.MIX,R437A.mix,R438A.MIX,R438A.mix,R439A.MIX,R439A.mix,
-            R440A.MIX,R440A.mix,R441A.MIX,R441A.mix,R442A.MIX,R442A.mix,R443A.MIX,R443A.mix,
-            R444A.MIX,R444A.mix,R444B.MIX,R444B.mix,R445A.MIX,R445A.mix,R446A.MIX,R446A.mix,
-            R447A.MIX,R447A.mix,R448A.MIX,R448A.mix,R449A.MIX,R449A.mix,R449B.MIX,R449B.mix,
-            R450A.MIX,R450A.mix,R451A.MIX,R451A.mix,R451B.MIX,R451B.mix,R452A.MIX,R452A.mix,
-            R453A.MIX,R453A.mix,R454A.MIX,R454A.mix,R454B.MIX,R454B.mix,R500.MIX,R500.mix,
-            R501.MIX,R501.mix,R502.MIX,R502.mix,R503.MIX,R503.mix,R504.MIX,R504.mix,R507A.MIX,
-            R507A.mix,R508A.MIX,R508A.mix,R508B.MIX,R508B.mix,R509A.MIX,R509A.mix,R510A.MIX,
-            R510A.mix,R511A.MIX,R511A.mix,R512A.MIX,R512A.mix,R513A.MIX,R513A.mix,
-            TYPICALNATURALGAS.MIX,TypicalNaturalGas.mix
-
+        Examples: ``Water``, ``Air``, ``Nitrogen``, ``CarbonDioxide``, ``Ammonia``,
+        ``R134a``, ``Toluene``, ``INCOMP::T66``, ``INCOMP::MPG[0.5]``, ``R410A.mix``.
 
         Refer to the CoolProp documentation for more information:
 
@@ -649,6 +615,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
     @classmethod
     def get_prop_key(cls, prop: str) -> tuple[CProperty, ...]:
+        """Return the tuple of synonyms in :attr:`PROPERTY_MAP` that ``prop`` belongs to."""
+
         if prop not in cls.ALL_PROPERTIES:
             raise ValueError(f'Property "{prop}" is not a valid CoolProp property name')
 
@@ -660,6 +628,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
     @classmethod
     def get_coolprop_unit(cls, prop: CProperty) -> Unit:
+        """Return the unit CoolProp reports ``prop`` in, before conversion to :attr:`RETURN_UNITS`."""
+
         key = cls.get_prop_key(prop)
 
         if key in cls.PROPERTY_MAP:
@@ -670,6 +640,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
     @classmethod
     def is_valid_prop(cls, prop: str) -> bool:
+        """Whether ``prop`` is a CoolProp property name known to this class."""
+
         try:
             cls.get_prop_key(prop)
             return True
@@ -679,6 +651,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
     @classmethod
     def check_inputs(cls, kwargs: Mapping[str, object]) -> None:
+        """Raise ``ValueError`` unless every key names a distinct CoolProp state input."""
+
         invalid = [key for key in kwargs if not cls.is_valid_prop(key)]
 
         if len(invalid):
@@ -726,6 +700,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
     @classmethod
     def describe(cls, prop: CProperty) -> str:
+        """Return a one-line description of ``prop``: its synonyms, meaning, and unit."""
+
         key = cls.get_prop_key(prop)
 
         if key in cls.PROPERTY_MAP:
@@ -742,6 +718,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
     @classmethod
     def search(cls, inp: str) -> list[str]:
+        """Return the :meth:`describe` lines of every property whose description contains ``inp``."""
+
         matches: list[str] = []
 
         for key in cls.PROPERTY_MAP:
@@ -756,6 +734,12 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             _LOGGER.warning(f'CoolProp could not calculate "{prop}" for fluid "{self.name}", output is NaN: {msg}')
 
     def check_exception(self, prop: CProperty, e: ValueError) -> None:
+        """Re-raise ``e``, or return so the caller can yield ``NaN`` for ``prop``.
+
+        CoolProp signals both "out of range" and "not implemented" with ``ValueError``;
+        those cases warn (or stay silent) and produce ``NaN``. Anything else re-raises.
+        """
+
         msg = str(e)
 
         # this error occurs in case the input values are outside
@@ -1010,6 +994,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         return x
 
     def evaluate_single(self, output: CProperty, *points: tuple[CProperty, float]) -> float:
+        """Evaluate ``output`` for scalar inputs through the CoolProp backend, returning ``NaN`` on an invalid state."""
+
         inputs = list(flatten(points))
 
         if self._append_name_to_cp_inputs:
@@ -1031,6 +1017,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             return np.nan
 
     def evaluate_expression(self, output: CProperty, *points: tuple[CProperty, pl.Expr]) -> pl.Expr:
+        """Build (or reuse) the cached ``pl.Expr`` plugin node that evaluates ``output``."""
+
         # pl.Expr (lazy) inputs are evaluated only through the GIL-free rust plugin;
         # _rust_expr raises if it is unavailable (no map_batches fallback).
         key = _get_expr_evaluation_cache_key(self, output, points)
@@ -1050,6 +1038,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         arrs_flat_masked: list[Numpy1DArray],
         N: int,
     ) -> Numpy1DArray:
+        """Evaluate ``output`` row by row, so a single invalid row yields ``NaN`` rather than failing the batch."""
+
         vals: list[float] = []
 
         for i in range(N):
@@ -1075,6 +1065,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         return np.array(vals)
 
     def evaluate_multiple(self, output: CProperty, *points: tuple[CProperty, Numpy1DArray]) -> Numpy1DArray:
+        """Evaluate ``output`` for array inputs in one vectorized backend call; non-finite rows are ``NaN``."""
+
         props: list[CProperty] = [pt[0] for pt in points]
         arrs = [pt[1] for pt in points]
         shape = arrs[0].shape
@@ -1129,6 +1121,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     def evaluate(
         self, output: CProperty, *points: tuple[CProperty, float | Numpy1DArray | pl.Expr]
     ) -> float | Numpy1DArray | pl.Expr:
+        """Evaluate ``output`` in CoolProp's own unit, dispatching on the magnitude type of ``points``."""
+
         if self._lowlevel:
             return self._evaluate_lowlevel(output, points)
 
@@ -1199,6 +1193,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     def construct_quantity(
         self, val: float | Numpy1DArray | pl.Expr, output: CProperty, convert_magnitude: bool = True
     ) -> Quantity[Any, MT]:
+        """Wrap a raw CoolProp result as a ``Quantity``, converted to the preferred :attr:`RETURN_UNITS`."""
+
         unit_output = self.get_coolprop_unit(output)
 
         # the dimensionality is not known until runtime
@@ -1223,6 +1219,12 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     def to_numeric_correct_unit(
         self, prop: CProperty, qty: Quantity[Any, MT] | Quantity[Any, float]
     ) -> float | Numpy1DArray | pl.Expr:
+        """Convert a state-input quantity to CoolProp's unit for ``prop`` and return its bare magnitude.
+
+        This is where the dimensionality of a state input is validated: a mismatch raises
+        :class:`encomp.units.ExpectedDimensionalityError`.
+        """
+
         unit = self.get_coolprop_unit(prop)
 
         try:
@@ -1288,7 +1290,16 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         # narrow to a known property before delegating to the strictly-typed get().
         if (is_fluid_param(attr) or is_humid_air_param(attr)) and attr in self.ALL_PROPERTIES:
             return self.get(attr)
-        raise AttributeError(attr)
+
+        # dunder lookups reach here during copy/pickle/inspect protocol probing; those
+        # must fail plainly, without suggesting a property lookup
+        if attr.startswith("__") and attr.endswith("__"):
+            raise AttributeError(attr)
+
+        raise AttributeError(
+            f'"{attr}" is not a CoolProp property name for {type(self).__name__} '
+            f'(property names are case-sensitive); use {type(self).__name__}.search("...") to look one up'
+        )
 
     def _get_repr(self, prop: CProperty, fmt: str) -> str:
         if all(isinstance(n[1].m, (float, int)) for n in self.points):
@@ -1345,6 +1356,10 @@ class Fluid(CoolPropFluid[MT]):
         Represents a fluid at a fixed state, for example at a
         specific temperature and pressure.
 
+        The fluid name is resolved eagerly: an unknown name raises ``ValueError`` here,
+        not at the first property access. The dimensionality of each state input is still
+        validated lazily, when a property is evaluated.
+
         Parameters
         ----------
         name : CName
@@ -1373,6 +1388,8 @@ class Fluid(CoolPropFluid[MT]):
             self._init_composition(name, composition)
         else:
             self.name = name
+
+        _validate_fluid_name(self.name)
 
         points = self._build_points(kwargs)
 
@@ -1564,8 +1581,16 @@ class Fluid(CoolPropFluid[MT]):
         return self.get("DELTA").asdim(Dimensionless)
 
     @property
+    def TAU(self) -> Quantity[Dimensionless, MT]:
+        return self.get("TAU").asdim(Dimensionless)
+
+    @property
     def D(self) -> Quantity[Density, MT]:
         return self.get("D").asdim(Density)
+
+    @property
+    def RHOCRIT(self) -> Quantity[Density, MT]:
+        return self.get("RHOCRIT").asdim(Density)
 
     @property
     def RHOMASS_REDUCING(self) -> Quantity[Density, MT]:
@@ -1594,6 +1619,28 @@ class Fluid(CoolPropFluid[MT]):
     @property
     def C(self) -> Quantity[SpecificHeatCapacity, MT]:
         return self.get("C").asdim(SpecificHeatCapacity)
+
+    @property
+    def CVMASS(self) -> Quantity[SpecificHeatCapacity, MT]:
+        return self.get("CVMASS").asdim(SpecificHeatCapacity)
+
+    @property
+    def CPMOLAR(self) -> Quantity[MolarSpecificHeatCapacity, MT]:
+        return self.get("CPMOLAR").asdim(MolarSpecificHeatCapacity)
+
+    @property
+    def CVMOLAR(self) -> Quantity[MolarSpecificHeatCapacity, MT]:
+        return self.get("CVMOLAR").asdim(MolarSpecificHeatCapacity)
+
+    @property
+    def GAS_CONSTANT(self) -> Quantity[MolarSpecificHeatCapacity, MT]:
+        """Molar gas constant, which shares its dimensions with a molar heat capacity."""
+
+        return self.get("GAS_CONSTANT").asdim(MolarSpecificHeatCapacity)
+
+    @property
+    def I(self) -> Quantity[SurfaceTension, MT]:  # noqa: E743  # CoolProp's name for surface tension
+        return self.get("I").asdim(SurfaceTension)
 
     @property
     def M(self) -> Quantity[MolarMass, MT]:
@@ -1803,6 +1850,14 @@ class HumidAir(CoolPropFluid[MT]):
     @property
     def Cha(self) -> Quantity[SpecificHeatPerHumidAir, MT]:
         return self.get("Cha").asdim(SpecificHeatPerHumidAir)
+
+    @property
+    def CV(self) -> Quantity[SpecificHeatPerDryAir, MT]:
+        return self.get("CV").asdim(SpecificHeatPerDryAir)
+
+    @property
+    def CVha(self) -> Quantity[SpecificHeatPerHumidAir, MT]:
+        return self.get("CVha").asdim(SpecificHeatPerHumidAir)
 
     @property
     def H(self) -> Quantity[MixtureEnthalpyPerDryAir, MT]:

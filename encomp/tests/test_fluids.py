@@ -20,6 +20,7 @@ from ..fluids import (
     HumidAir,
     HumidAirState,
     Water,
+    _resolve_fluid_name,
     clear_expr_evaluation_cache,
 )
 from ..settings import SETTINGS
@@ -250,12 +251,9 @@ def test_humid_air_out_of_range_logs_warning(caplog: pytest.LogCaptureFixture, m
 
 
 def test_incorrect_inputs() -> None:
-    # NOTE: the name cannot be checked until CoolProp is actually
-    # called, so the name is not validated in __init__
-    invalid = Fluid("this fluid name does not exist", P=Q(2, "bar"), T=Q(25, "°C"))
-
-    with pytest.raises(ValueError):
-        invalid.P
+    # the name is resolved eagerly (cached per name), so construction is where it fails
+    with pytest.raises(ValueError, match="could not be initialized"):
+        Fluid("this fluid name does not exist", P=Q(2, "bar"), T=Q(25, "°C"))
 
     p = np.zeros((5, 5))
     t = np.zeros(5)
@@ -310,13 +308,43 @@ def test_describe_rejects_unknown_property() -> None:
         Fluid.describe(cast(Any, "not_a_real_property"))
 
 
-def test_invalid_fluid_repr_does_not_raise() -> None:
-    invalid = Fluid(cast(Any, "Watr"), P=Q(2, "bar"), T=Q(25, "degC"))
+def test_invalid_fluid_name_rejected_at_construction() -> None:
+    with pytest.raises(ValueError, match="could not be initialized"):
+        Fluid(cast(Any, "Watr"), P=Q(2, "bar"), T=Q(25, "degC"))
+
+
+def test_fluid_name_validation_is_cached() -> None:
+    # a valid name is resolved by CoolProp once; every later construction is a cache hit
+    _resolve_fluid_name.cache_clear()
+
+    for _ in range(50):
+        Fluid("Water", P=Q(2, "bar"), T=Q(25, "degC"))
+
+    info = _resolve_fluid_name.cache_info()
+
+    assert info.misses == 1
+    assert info.hits == 49
+
+    # an invalid name is NOT cached: functools.cache stores return values, not exceptions,
+    # so a transient CoolProp failure can never be remembered as "this fluid is invalid"
+    _resolve_fluid_name.cache_clear()
+
+    for _ in range(3):
+        with pytest.raises(ValueError, match="could not be initialized"):
+            Fluid("Watr", P=Q(2, "bar"), T=Q(25, "degC"))
+
+    assert _resolve_fluid_name.cache_info().currsize == 0
+
+
+def test_invalid_fluid_state_repr_does_not_raise() -> None:
+    # a valid name whose state cannot be fixed still reprs: the name resolved, only the
+    # property evaluation fails, so the derived properties come back as NaN
+    invalid = Fluid("water", P=Q(-2.0, "bar"), T=Q(25.0, "degC"))
 
     text = repr(invalid)
 
-    assert text.startswith('<Fluid "Watr", invalid:')
-    assert "could not be initialized" in text
+    assert text.startswith('<Fluid "water",')
+    assert "D=nan" in text
 
 
 def test_Water() -> None:
@@ -1098,3 +1126,52 @@ def test_dimensional_property_missing_is_nan_never_zero() -> None:
         Fluid[pl.Expr]("Water", P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K")).get("I").m.alias("i")
     )["i"]
     check_polars(st_col, 2)
+
+
+def test_new_typed_fluid_properties() -> None:
+    water = Fluid("HEOS::Water", P=Q(1.0, "bar"), T=Q(25.0, "degC"))
+
+    assert_type(water.RHOCRIT, Q[ut.Density, float])  # pyrefly: ignore[assert-type]
+    assert_type(water.CVMASS, Q[ut.SpecificHeatCapacity, float])  # pyrefly: ignore[assert-type]
+    assert_type(water.CPMOLAR, Q[ut.MolarSpecificHeatCapacity, float])  # pyrefly: ignore[assert-type]
+    assert_type(water.CVMOLAR, Q[ut.MolarSpecificHeatCapacity, float])  # pyrefly: ignore[assert-type]
+    assert_type(water.GAS_CONSTANT, Q[ut.MolarSpecificHeatCapacity, float])  # pyrefly: ignore[assert-type]
+    assert_type(water.TAU, Q[ut.Dimensionless, float])  # pyrefly: ignore[assert-type]
+
+    assert water.RHOCRIT.to("kg/m³").m == approx(322.0, rel=1e-3)
+    # CoolProp carries its own value of R per equation of state, so compare loosely
+    assert water.GAS_CONSTANT.to("J/mol/K").m == approx(8.3144598, rel=1e-4)
+
+    # the typed accessors agree with the untyped __getattr__ path
+    assert water.CVMASS.m == approx(water.__getattr__("Cvmass").m)
+    assert water.CPMOLAR.m == approx(water.__getattr__("Cpmolar").m)
+
+    # surface tension needs a new dimensionality, [force] / [length]
+    saturated = Fluid("HEOS::Water", T=Q(25.0, "degC"), Q=Q(0.0))
+
+    assert_type(saturated.I, Q[ut.SurfaceTension, float])  # pyrefly: ignore[assert-type]
+    assert saturated.I.to("mN/m").m == approx(72.0, rel=1e-2)
+
+
+def test_humid_air_constant_volume_heat_capacity_is_typed() -> None:
+    humid_air = HumidAir(T=Q(25.0, "degC"), P=Q(1.0, "bar"), R=Q(0.5))
+
+    # CV / CVha now match C / Cha instead of falling back to SpecificHeatCapacity
+    assert_type(humid_air.CV, Q[ut.SpecificHeatPerDryAir, float])  # pyrefly: ignore[assert-type]
+    assert_type(humid_air.CVha, Q[ut.SpecificHeatPerHumidAir, float])  # pyrefly: ignore[assert-type]
+
+    assert type(humid_air.CV).__name__ == type(humid_air.C).__name__
+    assert type(humid_air.CVha).__name__ == type(humid_air.Cha).__name__
+
+    assert humid_air.CV.m < humid_air.C.m
+
+
+def test_unknown_property_error_message_points_at_search() -> None:
+    fluid = Fluid("water", P=Q(2.0, "bar"), T=Q(25.0, "degC"))
+
+    with pytest.raises(AttributeError, match=r'use Fluid\.search\("\.\.\."\) to look one up'):
+        fluid.NOT_A_PROPERTY
+
+    # dunder probing (copy, pickle, inspect) still fails plainly
+    with pytest.raises(AttributeError):
+        fluid.__deepcopy__

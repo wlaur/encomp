@@ -67,17 +67,25 @@ def test_convert_gas_volume() -> None:
 
 
 def test_ideal_gas_density() -> None:
-    # ideal_gas_density ties P/T/M to one magnitude TypeVar (its body does arithmetic
-    # across all three), so a mixed array/scalar call cannot be typed: the scalar P/M
-    # args are cast (needed for both checkers), and pyrefly additionally cannot solve
-    # the shared constrained TypeVar across multiple arguments at all
+    # P drives the magnitude type of the result; T and M widen to accept a scalar
+    # alongside a vector P (a scalar molar mass is the usual case). pyrefly cannot
+    # solve the constrained magnitude TypeVar across several arguments at all
     assert_type(  # pyrefly: ignore[assert-type]
         ideal_gas_density(Q(12, "bar"), Q(25, "degC"), Q(12, "g/mol")),  # pyrefly: ignore[bad-specialization]
         Q[Density, float],
     )
 
-    ret = ideal_gas_density(cast(Any, Q(12, "bar")), Q([25, 26], "degC"), cast(Any, Q(12, "g/mol")))  # pyrefly: ignore[bad-argument-type, bad-specialization]
-    assert_type(ret, Q[Density, Numpy1DArray])  # pyrefly: ignore[assert-type]
+    P = Q([12, 13], "bar")
+    T = Q([25, 26], "degC")
+
+    # mixed vector P with scalar T and M: a static error before the parameters widened
+    mixed = ideal_gas_density(P, Q(25, "degC"), Q(12, "g/mol"))
+    assert_type(mixed, Q[Density, Numpy1DArray])
+
+    vector = ideal_gas_density(P, T, Q(12, "g/mol"))
+    assert_type(vector, Q[Density, Numpy1DArray])
+
+    assert mixed.m[0] == approx(vector.m[0])
 
 
 def test_gas_conversion() -> None:

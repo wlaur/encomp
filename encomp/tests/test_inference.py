@@ -157,7 +157,7 @@ def test_inference_complex_units() -> None:
     assert_type(Q(1000, "kg") / Q(1, "m^3"), Q[ut.Density, float])
 
     # pressure = force / area
-    assert_type(Q(100, "N") / Q(2, "m^2"), Q[ut.UnknownDimensionality, float])
+    assert_type(Q(100, "N") / Q(2, "m^2"), Q[ut.Pressure, float])
 
 
 def test_inference_dimensional_multiplication() -> None:
@@ -365,9 +365,9 @@ def test_inference_dimensional_derived_units() -> None:
 
     # MolarMass = Mass / Substance
     assert_type(Q(0.018, "kg/mol"), Q[ut.MolarMass, float])
-    assert_type(Q(18.0, "g") / Q(1.0, "mol"), Q[ut.UnknownDimensionality, float])
-    assert_type(Q([18.0, 44.0], "g") / Q(1.0, "mol"), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
-    assert_type(Q(pl.lit(18.0), "g") / Q(1.0, "mol"), Q[ut.UnknownDimensionality, pl.Expr])
+    assert_type(Q(18.0, "g") / Q(1.0, "mol"), Q[ut.MolarMass, float])
+    assert_type(Q([18.0, 44.0], "g") / Q(1.0, "mol"), Q[ut.MolarMass, ut.Numpy1DArray])
+    assert_type(Q(pl.lit(18.0), "g") / Q(1.0, "mol"), Q[ut.MolarMass, pl.Expr])
 
     # SubstancePerMass = Substance / Mass (reciprocal of MolarMass)
     assert_type(Q(1.0, "mol") / Q(18.0, "g"), Q[ut.UnknownDimensionality, float])
@@ -1137,3 +1137,76 @@ def test_unknown() -> None:
     assert_type(Q(25, "kg").unknown(), Q[ut.UnknownDimensionality, float])
     assert_type(Q([1, 23], "kg").unknown(), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
     assert_type(Q([1, 23], "kg").unknown(), Q[ut.UnknownDimensionality, ut.Numpy1DArray])
+
+
+def test_inference_new_unit_literals() -> None:
+    # spellings that used to fall back to UnknownDimensionality
+    assert_type(Q(250.0, "ppm"), Q[ut.Dimensionless, float])
+    assert_type(Q(760.0, "torr"), Q[ut.Pressure, float])
+    assert_type(Q(2.5e6, "J/kg"), Q[ut.EnergyPerMass, float])
+    assert_type(Q(0.998, "g/cm3"), Q[ut.Density, float])
+
+    # dimensionalities that had no unit literal at all
+    assert_type(Q(1.2, "kg/Nm3"), Q[ut.MassPerNormalVolume, float])
+    assert_type(Q(40.9, "mol/m3"), Q[ut.MolarDensity, float])
+    assert_type(Q(-285.8, "kJ/mol"), Q[ut.MolarSpecificEnthalpy, float])
+    assert_type(Q(1000.0, "W/m2"), Q[ut.PowerPerArea, float])
+
+    # ... in every magnitude container
+    assert_type(Q([40.9, 41.0], "mol/m3"), Q[ut.MolarDensity, ut.Numpy1DArray])
+    assert_type(Q(pl.Series([1000.0]), "W/m²"), Q[ut.PowerPerArea, pl.Series])
+    assert_type(Q(pl.lit(1.2), "kg/Nm³"), Q[ut.MassPerNormalVolume, pl.Expr])
+
+
+def test_inference_mechanical_overloads() -> None:
+    # Pressure * Area = Force, and its inverses
+    assert_type(Q(2.0, "bar") * Q(0.5, "m^2"), Q[ut.Force, float])
+    assert_type(Q(0.5, "m^2") * Q(2.0, "bar"), Q[ut.Force, float])
+    assert_type(Q(100.0, "N") / Q(0.5, "m^2"), Q[ut.Pressure, float])
+    assert_type(Q(100.0, "N") / Q(2.0, "bar"), Q[ut.Area, float])
+
+    # Force * Length = Energy, and its inverses
+    assert_type(Q(100.0, "N") * Q(2.0, "m"), Q[ut.Energy, float])
+    assert_type(Q(2.0, "m") * Q(100.0, "N"), Q[ut.Energy, float])
+    assert_type(Q(200.0, "J") / Q(2.0, "m"), Q[ut.Force, float])
+    assert_type(Q(200.0, "J") / Q(100.0, "N"), Q[ut.Length, float])
+
+    # Force * Velocity = Power, and its inverses
+    assert_type(Q(100.0, "N") * Q(3.0, "m/s"), Q[ut.Power, float])
+    assert_type(Q(3.0, "m/s") * Q(100.0, "N"), Q[ut.Power, float])
+    assert_type(Q(300.0, "W") / Q(100.0, "N"), Q[ut.Velocity, float])
+    assert_type(Q(300.0, "W") / Q(3.0, "m/s"), Q[ut.Force, float])
+
+    # every pair carries the three magnitude variants
+    assert_type(Q([2.0, 3.0], "bar") * Q(0.5, "m^2"), Q[ut.Force, ut.Numpy1DArray])
+    assert_type(Q(2.0, "bar") * Q(pl.Series([0.5]), "m^2"), Q[ut.Force, pl.Series])
+    assert_type(Q(pl.lit(100.0), "N") / Q(0.5, "m^2"), Q[ut.Pressure, pl.Expr])
+
+
+def test_inference_molar_overloads() -> None:
+    # Substance * MolarMass = Mass, and its inverses
+    assert_type(Q(2.0, "mol") * Q(18.0, "g/mol"), Q[ut.Mass, float])
+    assert_type(Q(18.0, "g/mol") * Q(2.0, "mol"), Q[ut.Mass, float])
+    assert_type(Q(36.0, "g") / Q(18.0, "g/mol"), Q[ut.Substance, float])
+    assert_type(Q(36.0, "g") / Q(2.0, "mol"), Q[ut.MolarMass, float])
+
+    # Substance / Volume = MolarDensity, and its inverses
+    assert_type(Q(2.0, "mol") / Q(0.5, "m^3"), Q[ut.MolarDensity, float])
+    assert_type(Q(4.0, "mol/m3") * Q(0.5, "m^3"), Q[ut.Substance, float])
+    assert_type(Q(0.5, "m^3") * Q(4.0, "mol/m3"), Q[ut.Substance, float])
+    assert_type(Q(2.0, "mol") / Q(4.0, "mol/m3"), Q[ut.Volume, float])
+
+
+def test_inference_heat_transfer_overloads() -> None:
+    htc = Q(10.0, "W/m^2/K")
+
+    # HeatTransferCoefficient * TemperatureDifference = PowerPerArea
+    assert_type(htc * Q(5.0, "delta_degC"), Q[ut.PowerPerArea, float])
+    assert_type(Q(5.0, "delta_degC") * htc, Q[ut.PowerPerArea, float])
+    assert_type(Q(50.0, "W/m2") / Q(5.0, "delta_degC"), Q[ut.HeatTransferCoefficient, float])
+
+    # ThermalConductivity / Length = HeatTransferCoefficient
+    assert_type(Q(0.6, "W/m/K") / Q(0.06, "m"), Q[ut.HeatTransferCoefficient, float])
+    assert_type(Q(0.6, "W/m/K") / htc, Q[ut.Length, float])
+    assert_type(htc * Q(0.06, "m"), Q[ut.ThermalConductivity, float])
+    assert_type(Q(0.06, "m") * htc, Q[ut.ThermalConductivity, float])

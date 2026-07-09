@@ -12,6 +12,11 @@ Gas-condition literals use the values in :data:`encomp.constants.CONSTANTS`:
 ``"N"`` means normal conditions (0 °C, 1 atm) and ``"S"`` means standard
 conditions (15 °C, 1 atm).
 
+The functions here name their fluid parameter ``fluid_name``, whereas
+:class:`encomp.fluids.Fluid` names it ``name``. That is intentional, not an
+inconsistency: ``name`` is unambiguous on a fluid object, while a free function that
+also takes volumes, masses and conditions has to say *whose* name it is.
+
 .. note::
     Humid-air-specific conversions are not implemented here; use
     :class:`encomp.fluids.HumidAir` for humid-air properties.
@@ -98,8 +103,8 @@ def _resolve_gas_condition(condition: object, name: str) -> GasCondition:
 
 def ideal_gas_density(
     P: Quantity[Pressure, MT],
-    T: Quantity[Temperature, MT],
-    M: Quantity[MolarMass, MT],
+    T: Quantity[Temperature, MT] | Quantity[Temperature, float],
+    M: Quantity[MolarMass, MT] | Quantity[MolarMass, float],
 ) -> Quantity[Density, MT]:
     """
     Returns the density :math:`\\rho` of an ideal gas.
@@ -114,13 +119,16 @@ def ideal_gas_density(
     \\text{m}^2}{\\text{s}^2 \\, \\text{K} \\, \\text{mol}}`
     (exact by the 2019 SI definition).
 
+    The magnitude type of the result follows ``P``; ``T`` and ``M`` may be scalars
+    alongside a vector ``P`` (a scalar molar mass is the common case).
+
     Parameters
     ----------
     P : Quantity[Pressure, MT]
         Absolute pressure of the gas
-    T : Quantity[Temperature, MT]
+    T : Quantity[Temperature, MT] | Quantity[Temperature, float]
         Temperature of the gas
-    M : Quantity[MolarMass, MT]
+    M : Quantity[MolarMass, MT] | Quantity[MolarMass, float]
         Molar mass of the gas
 
     Returns
@@ -172,6 +180,10 @@ def convert_gas_volume(
     normal and standard conditions. ``"N"`` is 0 °C and 1 atm
     (``CONSTANTS.normal_conditions_*``); ``"S"`` is 15 °C and 1 atm
     (``CONSTANTS.standard_conditions_*``).
+
+    Both conditions default to ``"N"``, so calling this with only ``V1`` converts
+    nothing (it still evaluates :math:`Z` twice, at the same state). Pass at least one
+    of ``condition_1`` / ``condition_2`` for a conversion to take place.
 
     Parameters
     ----------

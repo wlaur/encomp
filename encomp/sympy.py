@@ -827,6 +827,11 @@ def _patch_symbol_class(dest: type[sp.Symbol] | sp.Symbol) -> None:
 
 
 def symbols(inp: str, **kwargs: Any) -> list[Symbol]:  # noqa: ANN401
+    """Like ``sympy.symbols``, but typed as a list and always returning more than one symbol.
+
+    ``kwargs`` are SymPy assumptions (``positive=True``, ``integer=True``, ...).
+    """
+
     ret = sp.symbols(inp, **kwargs)
 
     if not isinstance(ret, Iterable):

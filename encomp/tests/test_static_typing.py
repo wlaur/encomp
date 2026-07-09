@@ -1,11 +1,15 @@
-"""String inputs to ``Quantity`` are deliberately unsupported: the magnitude and unit
-are always passed separately (``Q(24, "kg")``, never ``Q("24 kg")``).
+"""Some ``Quantity`` constructor inputs are deliberately unsupported and must fail the
+type checkers, not just the runtime.
 
-The runtime already rejects strings (``_validate_magnitude``); these tests additionally
-pin the *static* rejection: the fallback ``Quantity.__new__`` overload enumerates the
-supported magnitude types and excludes ``str``, so ``Q("24 kg")`` must fail both pyright
-and pyrefly. A valid twin snippet is checked as a control, so a failure of the invalid
-snippet cannot be explained away by import-resolution problems.
+* the magnitude and unit are always passed separately (``Q(24, "kg")``, never
+  ``Q("24 kg")``), so ``str`` is excluded from the magnitude types;
+* a ``Quantity`` is not a unit: ``Q(1, Q(2, "m"))`` silently dropped the ``2``, so the
+  fallback overload excludes it from the unit types.
+
+The runtime rejects both (``_validate_magnitude`` / ``__new__``); these tests additionally
+pin the *static* rejection through the fallback ``Quantity.__new__`` overload, under both
+pyright and pyrefly. A valid twin snippet is checked as a control, so a failure of the
+invalid snippet cannot be explained away by import-resolution problems.
 """
 
 from __future__ import annotations
@@ -42,6 +46,18 @@ from encomp.units import Quantity as Q
 
 q1 = Q("24 kg")
 q2 = Q("24", "kg")
+"""
+
+_VALID_UNIT = """
+from encomp.units import Quantity as Q
+
+q = Q(1, Q(2, "m").u)
+"""
+
+_INVALID_UNIT = """
+from encomp.units import Quantity as Q
+
+q = Q(1, Q(2, "m"))
 """
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -82,3 +98,23 @@ def test_string_input_rejected_at_runtime() -> None:
 
     with pytest.raises(ValueError):
         Q(cast(Any, "24"), "kg")
+
+
+@pytest.mark.skipif(_PYREFLY is None, reason="pyrefly not installed")
+def test_quantity_unit_rejected_by_pyrefly(tmp_path: Path) -> None:
+    assert _PYREFLY is not None  # narrowed by the skipif above
+    cmd = [_PYREFLY, "check", "--config", str(_ROOT / "pyproject.toml")]
+    assert _check(cmd, _VALID_UNIT, tmp_path) == 0, "control snippet must type-check"
+    assert _check(cmd, _INVALID_UNIT, tmp_path) != 0, "a Quantity unit must not type-check"
+
+
+@pytest.mark.skipif(_PYRIGHT is None, reason="pyright not installed")
+def test_quantity_unit_rejected_by_pyright(tmp_path: Path) -> None:
+    assert _PYRIGHT is not None  # narrowed by the skipif above
+    assert _check([_PYRIGHT], _VALID_UNIT, tmp_path) == 0, "control snippet must type-check"
+    assert _check([_PYRIGHT], _INVALID_UNIT, tmp_path) != 0, "a Quantity unit must not type-check"
+
+
+def test_quantity_unit_rejected_at_runtime() -> None:
+    with pytest.raises(TypeError, match="got Quantity"):
+        Q(1, cast(Any, Q(2, "m")))
