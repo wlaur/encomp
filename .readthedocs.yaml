@@ -27,7 +27,7 @@ build:
          # they are NOT executed on RTD (conf.py sets nbsphinx_execute="never" when
          # READTHEDOCS is set) -- their committed outputs are rendered instead. CI executes
          # the notebooks against the real plugin, which is the notebook-correctness gate.
-         - UV_PROJECT_ENVIRONMENT=$READTHEDOCS_VIRTUALENV_PATH uv sync --all-extras --all-groups --no-install-project --link-mode=copy
+         - UV_PROJECT_ENVIRONMENT=$READTHEDOCS_VIRTUALENV_PATH uv sync --locked --all-extras --all-groups --no-install-project --link-mode=copy
 
 python:
    install: []
