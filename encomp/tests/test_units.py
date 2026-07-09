@@ -800,7 +800,9 @@ def test_custom_units() -> None:
     # floating point accuracy
     assert round(v1, 10) == round(v2, 10) == round(v3, 10) == round(v4, 10)
 
-    define_dimensionality("air")
+    # if_exists="warn" keeps this idempotent: the dimensionality registry is process-wide,
+    # so a second in-process run of the suite would otherwise raise
+    define_dimensionality("air", if_exists="warn")
 
     factor = Q(12, "Nm3 water/ (normal liter air)")
     (Q(1, "kg water") / factor).to("pound air")
