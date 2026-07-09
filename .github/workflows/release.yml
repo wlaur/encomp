@@ -96,6 +96,11 @@ jobs:
     # versions, so it can never notice that a declared lower bound is too low. Resolve the
     # bounds themselves and run the suite against that resolution: an API that only exists
     # in a newer release than the bound claims fails here instead of on a user's machine.
+    #
+    # --only-binary=:all: keeps the resolution to versions that actually install on this
+    # Python: a bound may legitimately name a release that predates 3.13 and ships no wheel
+    # for it (pydantic 2.4 is the floor for the core-schema API, but its pydantic-core has
+    # no cp313 wheel). Resolving to a version nobody can install would test nothing.
     name: dependency floors
     runs-on: ubuntu-latest
     steps:
@@ -103,21 +108,33 @@ jobs:
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
         with:
           python-version: "3.13"
-      - name: Build the bundled CoolProp library and the plugin
+      - name: Build the bundled CoolProp library and an encomp wheel
         run: |
           python -m pip install cmake
           uv sync --locked --no-install-project
           uv run --no-sync python scripts/build_libcoolprop.py
-      - name: Install encomp with the LOWEST versions its bounds allow, then test
+          uv run --no-sync maturin build --release --out dist
+      - name: Install the wheel into a fresh env pinned to the lowest allowed versions
+        # a fresh env, not the dev one: the dev group's own requirements would otherwise
+        # constrain the resolution back up. --no-deps on the wheel keeps the pins in place.
         run: |
-          uv pip install --resolution lowest-direct .
-          uv pip install pytest hypothesis
-          uv run --no-sync python -c "
-          import importlib.metadata as m
-          for p in ('pint', 'pydantic', 'typeguard', 'typing_extensions', 'numpy', 'polars', 'sympy', 'uncertainties', 'coolprop'):
-              print(f'{p:20s} {m.version(p)}')
-          "
-          uv run --no-sync pytest --pyargs encomp.tests -q
+          uv pip compile pyproject.toml --python-version 3.13 --resolution lowest-direct --only-binary=:all: -o floors.txt
+          cat floors.txt
+          uv venv .floors --python 3.13
+          uv pip install --python .floors/bin/python -r floors.txt
+          uv pip install --python .floors/bin/python --no-deps dist/*.whl
+          uv pip install --python .floors/bin/python pytest hypothesis
+      - name: Report the resolved versions and run the suite against them
+        run: |
+          .floors/bin/python - <<'PY'
+          import importlib.metadata as metadata
+
+          names = ("encomp", "pint", "pydantic", "typeguard", "typing_extensions", "numpy", "polars", "sympy", "uncertainties", "coolprop")
+          for name in names:
+              print(f"{name:20s} {metadata.version(name)}")
+          PY
+          .floors/bin/python -c "from encomp import coolprop as cp; assert cp.self_check(), 'plugin self_check failed'"
+          .floors/bin/python -m pytest --pyargs encomp.tests -q
 
   rust:
     name: rust fmt/clippy/test
