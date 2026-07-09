@@ -119,21 +119,26 @@ jobs:
         # and building it through PEP 517 (rather than `maturin build`) is what cibuildwheel
         # does, so the bundled libCoolProp lands beside the plugin exactly as it does in a
         # released wheel.
+        #
+        # The env lives OUTSIDE the workspace on purpose. Tests that look for the repo (
+        # test_docs, test_static_typing) walk up from their own __file__ until they find a
+        # pyproject.toml; from a venv nested in the workspace they would find this checkout
+        # and then run doc snippets against the source tree, which has no compiled plugin.
+        # Outside it, they skip -- exactly as they do for someone who pip-installed a wheel.
         run: |
           uv pip compile pyproject.toml --python-version 3.13 --resolution lowest-direct --only-binary=:all: -o floors.txt
           cat floors.txt
-          uv venv .floors --python 3.13
-          uv pip install --python .floors/bin/python -r floors.txt
-          uv pip install --python .floors/bin/python --no-deps .
-          uv pip install --python .floors/bin/python pytest hypothesis
+          uv venv "$RUNNER_TEMP/floors-venv" --python 3.13
+          PY=$RUNNER_TEMP/floors-venv/bin/python
+          uv pip install --python "$PY" -r floors.txt
+          uv pip install --python "$PY" --no-deps .
+          uv pip install --python "$PY" pytest hypothesis
       - name: Report the resolved versions and run the suite against them
-        # NOT from the workspace: this job checks the repo out, so `encomp/` sits in the
-        # working directory and would shadow the installed package on sys.path. The source
-        # tree has libCoolProp but no compiled plugin, so the import would silently resolve
-        # to a broken half-package. Run from a directory that has no `encomp/` in it.
+        # NOT from the workspace: `encomp/` sits in it and would shadow the installed package
+        # on sys.path, resolving the import to a source tree with no compiled plugin.
         working-directory: ${{ runner.temp }}
         run: |
-          PY=$GITHUB_WORKSPACE/.floors/bin/python
+          PY=$RUNNER_TEMP/floors-venv/bin/python
           "$PY" - <<'PY'
           import importlib.metadata as metadata
           from pathlib import Path
