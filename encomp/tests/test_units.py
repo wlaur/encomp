@@ -1176,7 +1176,7 @@ def test_convert_volume_mass() -> None:
 
     assert V.check(VolumeFlow)
 
-    m = convert_volume_mass(Q(125, "liter/day").asdim(VolumeFlow))
+    m = convert_volume_mass(Q(125, "liter/day").asdim(VolumeFlow), Q(997, "kg/m**3"))
 
     assert m.check(MassFlow)
 
