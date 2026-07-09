@@ -35,10 +35,10 @@ classifiers = [
 ]
 dependencies = [
     "pint>=0.25.3",
-    "pydantic>=2",
+    "pydantic>=2.4",
     "pydantic-settings>=2",
     "typeguard>=4",
-    "typing-extensions",
+    "typing-extensions>=4.13",
     "numpy>=2.1",
     # The bundled Rust plugin is loaded over polars' plugin ABI (polars-ffi, major 0),
     # which the host dispatches on by *major* version -- stable across py-polars minors,
@@ -47,8 +47,8 @@ dependencies = [
     # and encomp.coolprop.self_check() makes any incompatibility a clear runtime error.
     # See encomp/coolprop/README.md.
     "polars>=1.42",
-    "sympy",
-    "uncertainties",
+    "sympy>=1.13",
+    "uncertainties>=3.2",
     # encomp uses TWO copies of CoolProp: the Python `coolprop` package (scalar /
     # small-eager PropsSI path) and the bundled libCoolProp the Rust plugin dlopens
     # (lazy / large-eager path). The only integer crossing from Python into the bundled
