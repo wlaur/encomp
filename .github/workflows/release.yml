@@ -108,33 +108,53 @@ jobs:
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
         with:
           python-version: "3.13"
-      - name: Build the bundled CoolProp library and an encomp wheel
+      - name: Build the bundled CoolProp library
         run: |
           python -m pip install cmake
           uv sync --locked --no-install-project
           uv run --no-sync python scripts/build_libcoolprop.py
-          uv run --no-sync maturin build --release --out dist
-      - name: Install the wheel into a fresh env pinned to the lowest allowed versions
+      - name: Install encomp into a fresh env pinned to the lowest allowed versions
         # a fresh env, not the dev one: the dev group's own requirements would otherwise
-        # constrain the resolution back up. --no-deps on the wheel keeps the pins in place.
+        # constrain the resolution back up. --no-deps on the project keeps the pins in place,
+        # and building it through PEP 517 (rather than `maturin build`) is what cibuildwheel
+        # does, so the bundled libCoolProp lands beside the plugin exactly as it does in a
+        # released wheel.
         run: |
           uv pip compile pyproject.toml --python-version 3.13 --resolution lowest-direct --only-binary=:all: -o floors.txt
           cat floors.txt
           uv venv .floors --python 3.13
           uv pip install --python .floors/bin/python -r floors.txt
-          uv pip install --python .floors/bin/python --no-deps dist/*.whl
+          uv pip install --python .floors/bin/python --no-deps .
           uv pip install --python .floors/bin/python pytest hypothesis
       - name: Report the resolved versions and run the suite against them
+        # NOT from the workspace: this job checks the repo out, so `encomp/` sits in the
+        # working directory and would shadow the installed package on sys.path. The source
+        # tree has libCoolProp but no compiled plugin, so the import would silently resolve
+        # to a broken half-package. Run from a directory that has no `encomp/` in it.
+        working-directory: ${{ runner.temp }}
         run: |
-          .floors/bin/python - <<'PY'
+          PY=$GITHUB_WORKSPACE/.floors/bin/python
+          "$PY" - <<'PY'
           import importlib.metadata as metadata
+          from pathlib import Path
 
           names = ("encomp", "pint", "pydantic", "typeguard", "typing_extensions", "numpy", "polars", "sympy", "uncertainties", "coolprop")
           for name in names:
               print(f"{name:20s} {metadata.version(name)}")
+
+          import encomp.coolprop as cp
+
+          package = Path(cp.__file__).parent
+          print(f"\nencomp.coolprop imported from {package}")
+          for path in sorted(package.iterdir()):
+              print(f"  {path.name}")
+
+          print("\nlib_path:", cp.lib_path())
+          print("lib_version:", cp.lib_version())
+          assert cp.self_check(), "plugin self_check failed"
+          print("self_check OK")
           PY
-          .floors/bin/python -c "from encomp import coolprop as cp; assert cp.self_check(), 'plugin self_check failed'"
-          .floors/bin/python -m pytest --pyargs encomp.tests -q
+          "$PY" -m pytest --pyargs encomp.tests -q
 
   rust:
     name: rust fmt/clippy/test
