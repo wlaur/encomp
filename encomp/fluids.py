@@ -1245,14 +1245,12 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 f"{qty.u} ({qty.dimensionality})"
             ) from e
 
-        if isinstance(m, (float, int, pl.Expr)):
-            return m
-        elif isinstance(m, pl.Series):
+        # a Quantity magnitude is float / ndarray / pl.Series / pl.Expr (a list input is
+        # converted to an ndarray at construction, and .to() preserves the container)
+        if isinstance(m, pl.Series):
             return m.to_numpy()
-        elif isinstance(m, list):
-            return np.array(m)
-        else:
-            return m
+
+        return m
 
     def get(
         self,
