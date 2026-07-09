@@ -56,21 +56,18 @@ __all__ = [
     "normal_volume_to_actual_volume",
 ]
 
-_R = CONSTANTS.R
-
 type GasCondition = tuple[Quantity[Pressure, Any], Quantity[Temperature, Any]]
 type GasConditionInput = GasCondition | Literal["N", "S"]
 
-_N_S_CONDITIONS: dict[Literal["N", "S"], GasCondition] = {
-    "N": (
-        CONSTANTS.normal_conditions_pressure,
-        CONSTANTS.normal_conditions_temperature,
-    ),
-    "S": (
-        CONSTANTS.standard_conditions_pressure,
-        CONSTANTS.standard_conditions_temperature,
-    ),
-}
+
+def _n_s_condition(condition: Literal["N", "S"]) -> GasCondition:
+    # read CONSTANTS on every call: each access returns a fresh Quantity, so a caller that
+    # converts the returned condition in place cannot alter the constant
+    if condition == "N":
+        return CONSTANTS.normal_conditions_pressure, CONSTANTS.normal_conditions_temperature
+
+    return CONSTANTS.standard_conditions_pressure, CONSTANTS.standard_conditions_temperature
+
 
 # multiplying/dividing by this converts between the actual-volume and normal-volume
 # dimensionalities without changing the magnitude (Nm³ = normal * m³)
@@ -79,8 +76,8 @@ _NORMAL = Quantity(1.0, "normal")
 
 def _resolve_gas_condition(condition: object, name: str) -> GasCondition:
     if isinstance(condition, str):
-        if condition in _N_S_CONDITIONS:
-            return _N_S_CONDITIONS[condition]
+        if condition in ("N", "S"):
+            return _n_s_condition(condition)
 
         raise ValueError(f"{name} must be 'N', 'S', or a (pressure, temperature) tuple, got {condition!r}")
 
@@ -139,7 +136,7 @@ def ideal_gas_density(
 
     # directly from ideal gas law
     # override the inferred type here since it's sure to be Density
-    rho = (P * M) / (_R * T.to("K").unknown())
+    rho = (P * M) / (CONSTANTS.R * T.to("K").unknown())
 
     return rho.to("kg/m³").asdim(Density)
 
