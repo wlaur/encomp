@@ -1155,6 +1155,25 @@ def test_non_finite_scalar_input_matches_vector_path(bad: float) -> None:
     assert np.isnan(float(humid_vector.get("R").m[0]))
 
 
+def test_phase_ignores_invalid_rows_and_is_length_independent() -> None:
+    # `nan != nan`, so testing uniqueness over the raw PHASE array made every invalid row a
+    # distinct member: an all-NaN array answered "N/A" at length 1 but "Variable" at length 2+.
+    for n in (1, 2, 3):
+        fluid = Water(T=Q(np.full(n, np.nan), "degC"), P=Q(np.full(n, 1.0), "bar"))
+        assert fluid.phase == "N/A", f"all-invalid array of length {n}"
+
+    # an empty array has no phase either
+    assert Water(P=Q(np.array([]), "Pa"), T=Q(np.array([]), "K")).phase == "N/A"
+
+    # invalid rows are not a phase: the determinate rows decide
+    superheated = Water(T=Q(np.array([200.0, 250.0, np.nan]), "degC"), P=Q(np.array([1.0, 1.0, 1.0]), "bar"))
+    assert np.isnan(float(cast(Any, superheated.PHASE.m)[2]))
+    assert superheated.phase == "Gas"
+
+    # genuine variation is still reported
+    assert Water(T=Q(np.array([20.0, 250.0]), "degC"), P=Q(np.array([1.0, 1.0]), "bar")).phase == "Variable"
+
+
 def test_new_typed_fluid_properties() -> None:
     water = Fluid("HEOS::Water", P=Q(1.0, "bar"), T=Q(25.0, "degC"))
 

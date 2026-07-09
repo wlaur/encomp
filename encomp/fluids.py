@@ -1477,12 +1477,21 @@ class Fluid(CoolPropFluid[MT]):
         phase_idx_val = phase_idx.m
 
         if isinstance(phase_idx_val, np.ndarray):
-            if len(set(phase_idx_val)) == 1:
-                phase_idx_val_element = float(phase_idx_val[0])
-                return self.PHASES.get(phase_idx_val_element, "N/A")
+            # A NaN row is an invalid state, not a phase. Testing uniqueness over the raw array
+            # counted each NaN as a distinct member (nan != nan), so any array with two or more
+            # invalid rows reported "Variable" -- while exactly one reported "N/A", making the
+            # answer depend on the array length. Judge the phase on the rows that have one.
+            finite = cast("Numpy1DArray", phase_idx_val[np.isfinite(phase_idx_val)])
 
-            else:
-                return "Variable"
+            if finite.size == 0:
+                return "N/A"
+
+            unique = np.unique(finite)
+
+            if unique.size == 1:
+                return self.PHASES.get(float(unique[0]), "N/A")
+
+            return "Variable"
 
         elif isinstance(phase_idx_val, float | int):
             return self.PHASES.get(float(phase_idx_val), "N/A")
