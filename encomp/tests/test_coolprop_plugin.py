@@ -1,12 +1,14 @@
 """Tests for the encomp.coolprop Polars plugin API.
 
-These exercise ``cp.fluid`` / ``cp.humid_air`` directly on Polars expressions,
+These exercise ``cp.fluid`` / ``cp.water`` / ``cp.humid_air`` directly on Polars expressions,
 WITHOUT going through encomp's ``Fluid`` class. Reference values come from
 CoolProp's PropsSI / HAPropsSI / AbstractState.
 """
 
 from __future__ import annotations
 
+import inspect
+import logging
 from typing import Any, cast
 
 import CoolProp.CoolProp as _CP
@@ -61,9 +63,9 @@ def test_self_check_version_and_lib_path() -> None:
     assert cp.lib_path().endswith((".dylib", ".so", ".dll"))
 
 
-def test_fluid_defaults_if97_water() -> None:
+def test_water_uses_if97() -> None:
     df = pl.DataFrame({"P": [50e5, 101325.0], "T": [400.0, 300.0]})
-    out = df.select(rho=cp.fluid("DMASS", "P", "T"))  # defaults: IF97, Water
+    out = df.select(rho=cp.water("DMASS", "P", "T"))
     ref = CP.PropsSI("DMASS", "P", df["P"].to_numpy(), "T", df["T"].to_numpy(), "IF97::Water")
     assert np.allclose(out["rho"].to_numpy(), ref, rtol=RTOL)
 
@@ -278,7 +280,7 @@ def test_invalid_inputs_become_null() -> None:
     # the plugin emits null (encomp's single missing-value sentinel, never NaN) for
     # invalid inputs, so the Fluid wrapper needs no fill_nan(None); T = -5 K is invalid
     df = pl.DataFrame({"P": [50e5, 50e5], "T": [400.0, -5.0]})
-    rho = df.select(rho=cp.fluid("DMASS", "P", "T"))["rho"]
+    rho = df.select(rho=cp.water("DMASS", "P", "T"))["rho"]
     assert rho[0] is not None and np.isfinite(rho[0])
     assert rho[1] is None  # null, not NaN
     assert rho.null_count() == 1
@@ -289,7 +291,7 @@ def test_null_inputs_become_null() -> None:
     # eager numpy/NaN path -- the lazy plugin must not hard-error on the first null
     # (nulls are ubiquitous in real frames: joins, sensor dropouts)
     df = pl.DataFrame({"P": [50e5, None, 60e5], "T": [400.0, 450.0, None]})
-    rho = df.select(rho=cp.fluid("DMASS", "P", "T"))["rho"]
+    rho = df.select(rho=cp.water("DMASS", "P", "T"))["rho"]
     assert rho[0] is not None and np.isfinite(rho[0])
     assert rho[1] is None and rho[2] is None  # null P, then null T -> null
     # humid air path handles nulls the same way
@@ -310,7 +312,7 @@ def test_humid_air() -> None:
 
 def test_eager_and_lazy_agree() -> None:
     df = pl.DataFrame({"P": np.full(100, 50e5), "T": np.linspace(300.0, 500.0, 100)})
-    expr = {"d": cp.fluid("DMASS", "P", "T"), "h": cp.fluid("HMASS", "P", "T")}
+    expr = {"d": cp.water("DMASS", "P", "T"), "h": cp.water("HMASS", "P", "T")}
     eager = df.select(**expr)
     lazy = df.lazy().select(**expr).collect()
     assert eager.equals(lazy)
@@ -320,7 +322,7 @@ def test_inputs_named_by_property() -> None:
     # the property of each input is its name: a string, or an expression's output
     # name. Differently-named columns must be aliased to the CoolProp input name.
     df = pl.DataFrame({"pressure": [50e5], "temp": [400.0]})
-    out = df.select(rho=cp.fluid("DMASS", pl.col("pressure").alias("P"), pl.col("temp").alias("T")))
+    out = df.select(rho=cp.water("DMASS", pl.col("pressure").alias("P"), pl.col("temp").alias("T")))
     ref = CP.PropsSI("DMASS", "P", 50e5, "T", 400.0, "IF97::Water")
     assert np.isclose(out["rho"][0], ref, rtol=RTOL)
 
@@ -328,21 +330,21 @@ def test_inputs_named_by_property() -> None:
 def test_input_not_named_after_state_input_raises() -> None:
     # an input whose name is not a CoolProp state input is rejected at build time
     with pytest.raises(ValueError, match="state input"):
-        cp.fluid("DMASS", pl.col("pressure"), "T")
+        cp.water("DMASS", pl.col("pressure"), "T")
     with pytest.raises(ValueError, match="state input"):
         cp.humid_air("W", pl.col("rel_hum"), "T", "P")
 
 
 def test_invalid_input_pair_raises_before_plugin_execution() -> None:
     with pytest.raises(ValueError, match="unsupported CoolProp input pair"):
-        cp.fluid("DMASS", "H", "U")
+        cp.water("DMASS", "H", "U")
 
 
 def test_invalid_runtime_names_raise_python_exceptions() -> None:
     df = pl.DataFrame({"P": [101325.0], "T": [300.0]})
 
     with pytest.raises(Exception, match="unknown parameter"):
-        df.select(cp.fluid(cast(Any, "NOT_A_PROPERTY"), "P", "T"))
+        df.select(cp.water(cast(Any, "NOT_A_PROPERTY"), "P", "T"))
 
     with pytest.raises(Exception, match="interior NUL"):
         df.select(cp.fluid("DMASS", "P", "T", name=cast(Any, "Water\0bad")))
@@ -350,10 +352,10 @@ def test_invalid_runtime_names_raise_python_exceptions() -> None:
 
 def test_duplicate_state_inputs_raise() -> None:
     with pytest.raises(ValueError, match="distinct"):
-        cp.fluid("DMASS", "P", "P")
+        cp.water("DMASS", "P", "P")
 
     with pytest.raises(ValueError, match="same state input"):
-        cp.fluid("DMASS", "D", "DMASS")
+        cp.water("DMASS", "D", "DMASS")
 
     with pytest.raises(ValueError, match="distinct"):
         cp.humid_air("W", "P", "P", "T")
@@ -423,7 +425,7 @@ def test_plugin_output_dtype_preserves_input_precision() -> None:
 
     def fluid_dtype(p_dt: pl.DataType, t_dt: pl.DataType) -> pl.DataType:
         df = pl.DataFrame({"P": pl.Series([50e5], dtype=p_dt), "T": pl.Series([400.0], dtype=t_dt)})
-        return df.select(cp.fluid("DMASS", "P", "T").alias("d"))["d"].dtype
+        return df.select(cp.water("DMASS", "P", "T").alias("d"))["d"].dtype
 
     assert fluid_dtype(f32, f32) == f32
     assert fluid_dtype(f64, f64) == f64
@@ -432,7 +434,7 @@ def test_plugin_output_dtype_preserves_input_precision() -> None:
 
     # a length-1 literal is neutral: a Float64 scalar alongside a Float32 column -> Float32
     df = pl.DataFrame({"T": pl.Series([400.0], dtype=pl.Float32)})
-    out = df.select(cp.fluid("DMASS", pl.lit(50e5).alias("P"), "T").alias("d"))["d"]
+    out = df.select(cp.water("DMASS", pl.lit(50e5).alias("P"), "T").alias("d"))["d"]
     assert out.dtype == pl.Float32
     assert out[0] == pytest.approx(939.90625, rel=RTOL)  # value still correct
 
@@ -506,8 +508,56 @@ def test_fluid_rejects_unknown_assume_phase() -> None:
     # assume_phase is a Literal statically, but an out-of-range value passed dynamically
     # is rejected up front (while building the expression), before any evaluation
     with pytest.raises(ValueError, match="unknown assumed phase"):
-        cp.fluid("DMASS", "P", "T", assume_phase=cast(Any, "bogus"))
+        cp.fluid("DMASS", "P", "T", name="HEOS::Water", assume_phase=cast(Any, "bogus"))
 
     # a valid assumed phase builds an expression as usual
     expr = cp.fluid("DMASS", "P", "T", name="HEOS::Water", assume_phase="gas")
     assert isinstance(expr, pl.Expr)
+
+
+def test_fluid_requires_an_explicit_name() -> None:
+    # the fluid is always named, exactly as for encomp.fluids.Fluid
+    with pytest.raises(TypeError, match="name"):
+        cast(Any, cp.fluid)("DMASS", "P", "T")
+
+
+def test_water_matches_fluid_with_the_if97_name() -> None:
+    df = pl.DataFrame({"P": [50e5, 101325.0], "T": [400.0, 300.0]})
+
+    by_water = df.select(d=cp.water("DMASS", "P", "T"))["d"].to_numpy()
+    by_name = df.select(d=cp.fluid("DMASS", "P", "T", name=cp.WATER_NAME))["d"].to_numpy()
+
+    assert cp.WATER_NAME == "IF97::Water"
+    assert np.array_equal(by_water, by_name)
+
+    # the bare name "Water" is the HEOS/IAPWS-95 fluid, NOT what water() evaluates
+    heos = df.select(d=cp.fluid("DMASS", "P", "T", name="Water"))["d"].to_numpy()
+    assert not np.array_equal(by_water, heos)
+
+
+def test_water_does_not_accept_composition_or_assume_phase() -> None:
+    signature = inspect.signature(cp.water)
+    assert set(signature.parameters) == {"output", "input1", "input2"}
+
+
+def test_assume_phase_warns_for_a_region_explicit_backend(caplog: pytest.LogCaptureFixture) -> None:
+    # CoolProp silently ignores specify_phase for IF97; encomp.fluids.Fluid.assume_phase warns,
+    # so the plugin must too rather than quietly discarding the request
+    with caplog.at_level(logging.WARNING, logger="encomp.coolprop"):
+        cp.fluid("DMASS", "P", "T", name="IF97::Water", assume_phase="liquid")
+
+    assert "region-explicit" in caplog.text
+    assert "IF97" in caplog.text
+
+    caplog.clear()
+
+    with caplog.at_level(logging.WARNING, logger="encomp.coolprop"):
+        cp.fluid("DMASS", "P", "T", name="HEOS::Water", assume_phase="liquid")
+
+    assert not caplog.text
+
+    # the value itself is unaffected either way
+    df = pl.DataFrame({"P": [1e5], "T": [323.15]})
+    with_phase = df.select(d=cp.fluid("DMASS", "P", "T", name="IF97::Water", assume_phase="liquid"))["d"][0]
+    without = df.select(d=cp.water("DMASS", "P", "T"))["d"][0]
+    assert with_phase == without

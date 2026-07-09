@@ -1130,11 +1130,11 @@ def test_dimensional_property_missing_is_nan_never_zero() -> None:
 
 @pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf])
 def test_non_finite_scalar_input_matches_vector_path(bad: float) -> None:
-    # A non-finite input cannot fix a state. The scalar path used to hand it straight to
-    # CoolProp, which answers with plausible finite values rather than failing: PHASE -> 0.0
-    # ("Liquid"), Q -> the -1.0 single-phase sentinel, TCRIT -> a state-independent constant,
-    # and HAPropsSI echoes an input back. Every property must be NaN, and the scalar answer
-    # must equal the 1-element vector answer for the same state.
+    # A non-finite input cannot fix a state. Handed one directly, CoolProp answers with
+    # plausible finite values rather than failing: PHASE -> 0.0 ("Liquid"), Q -> the -1.0
+    # single-phase sentinel, TCRIT -> a state-independent constant, and HAPropsSI echoes an
+    # input back. Every property must be NaN, and the scalar answer must equal the 1-element
+    # vector answer for the same state.
     scalar = Water(T=Q(bad, "degC"), P=Q(1.0, "bar"))
     vector = Water(T=Q(np.array([bad]), "degC"), P=Q(np.array([1.0]), "bar"))
 
@@ -1147,7 +1147,7 @@ def test_non_finite_scalar_input_matches_vector_path(bad: float) -> None:
 
     assert scalar.phase == vector.phase == "N/A"
 
-    # HumidAir echoed the offending input straight back through the scalar path
+    # HAPropsSI echoes an input value straight back for some outputs, so mask the scalar path too
     humid_scalar = HumidAir(T=Q(bad, "degC"), P=Q(1.0, "bar"), R=Q(0.5))
     humid_vector = HumidAir(T=Q(np.array([bad]), "degC"), P=Q(np.array([1.0]), "bar"), R=Q(np.array([0.5])))
 
@@ -1156,8 +1156,7 @@ def test_non_finite_scalar_input_matches_vector_path(bad: float) -> None:
 
 
 def test_phase_ignores_invalid_rows_and_is_length_independent() -> None:
-    # `nan != nan`, so testing uniqueness over the raw PHASE array made every invalid row a
-    # distinct member: an all-NaN array answered "N/A" at length 1 but "Variable" at length 2+.
+    # an invalid row has no phase, and the answer must not depend on how many of them there are
     for n in (1, 2, 3):
         fluid = Water(T=Q(np.full(n, np.nan), "degC"), P=Q(np.full(n, 1.0), "bar"))
         assert fluid.phase == "N/A", f"all-invalid array of length {n}"

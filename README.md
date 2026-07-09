@@ -309,13 +309,14 @@ from encomp import coolprop as cp
 df = pl.DataFrame({"P": [1e5, 1e5], "T": [293.15, 313.15], "R": [0.4, 0.6]})  # Pa, K, -
 
 df.select(
-    cp.fluid("DMASS", "P", "T").alias("rho"),  # default: IF97 water
-    cp.fluid("HMASS", "P", "T").alias("h"),
+    cp.water("DMASS", "P", "T").alias("rho"),  # IF97 water/steam
+    cp.water("HMASS", "P", "T").alias("h"),
     cp.humid_air("W", "P", "T", "R").alias("humidity_ratio"),
 )
 # mirrors encomp.fluids: any CoolProp input pair (in any order), the fluid via
-# name='HEOS::CarbonDioxide', mixtures via a composition={species: mole fraction}
-# dict, and a fixed phase via assume_phase='gas'
+# the required name='HEOS::CarbonDioxide' (cp.water is the IF97 water shorthand,
+# as encomp.fluids.Water is for Fluid), mixtures via a
+# composition={species: mole fraction} dict, and a fixed phase via assume_phase='gas'
 ```
 
 ### Implementation

@@ -190,10 +190,10 @@ def _is_close(
 
         |a - b| <= max(rtol * max(|a|, |b|), atol)
 
-    ``np.isclose`` instead evaluates the asymmetric ``atol + rtol * |b|``, which makes the
-    float/ndarray tolerance band wider than the pl.Series/pl.Expr one by ``atol`` and lets the
-    answer depend on operand order. The exact-equality term keeps ``+-inf`` close to itself,
-    matching both the stdlib and polars.
+    so that every magnitude type answers identically. ``np.isclose`` is deliberately not used:
+    it evaluates the asymmetric ``atol + rtol * |b|``, treating ``b`` as a reference value, and
+    an equality operator must be symmetric. The exact-equality term keeps ``+-inf`` close to
+    itself, matching both the stdlib and polars.
     """
 
     a_arr = np.asarray(a, dtype=np.float64)
@@ -2480,8 +2480,8 @@ class Quantity(
     ) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:
         # Tolerant __eq__ is not optional: unit conversion is lossy, so Q(1, "L") and
         # Q(1000, "cm³") differ in the last bit and an exact __eq__ would call them unequal.
-        # Given that, np.isclose's non-transitivity forces a choice -- a == b and b == c does
-        # not imply a == c -- and only two of these three can hold at once:
+        # Given that, closeness is not transitive -- a == b and b == c does not imply a == c --
+        # and only two of these three can hold at once:
         #
         #   (1) __eq__ is tolerant
         #   (2) the operators agree pairwise: a == b implies not (a > b), and a > b implies

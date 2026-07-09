@@ -220,9 +220,8 @@ def _compare(magnitude_type: str, a: float, b: float, op: str) -> bool:
 @pytest.mark.parametrize(("a", "b"), _COMPARISON_PAIRS)
 @pytest.mark.parametrize("op", ["==", "!=", "<", "<=", ">", ">="])
 def test_every_magnitude_type_compares_identically(a: float, b: float, op: str) -> None:
-    # np.isclose evaluates the ASYMMETRIC `atol + rtol*|b|` while polars is_close evaluates
-    # `max(rtol*max(|a|,|b|), atol)`, so a float/ndarray magnitude used to answer True where the
-    # identical pl.Series/pl.Expr magnitude answered False (e.g. 1.0 vs 1.000000001001)
+    # the same physical comparison must not depend on the magnitude container, so every
+    # magnitude type evaluates the same tolerance predicate
     results = {mt: _compare(mt, a, b, op) for mt in ("float", "ndarray", "pl.Series", "pl.Expr")}
 
     assert len(set(results.values())) == 1, f"{a} {op} {b} disagrees across magnitude types: {results}"

@@ -60,9 +60,8 @@ def test_isinstance_types() -> None:
 
 
 def test_isinstance_types_checks_every_collection_element() -> None:
-    # typeguard's default CollectionCheckStrategy is FIRST_ITEM, which answered True for a
-    # list whose only bad element sits past index 0 -- silently accepting a Length inside a
-    # list[Quantity[Pressure]]. isinstance_types must inspect every element.
+    # typeguard's default CollectionCheckStrategy is FIRST_ITEM, which accepts a list whose only
+    # bad element sits past index 0. isinstance_types inspects every element instead.
     pressure = Q(1, "bar")
     length = Q(1, "m")
 

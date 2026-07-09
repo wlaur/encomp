@@ -697,13 +697,15 @@ from encomp import coolprop as cp
 df = pl.DataFrame({"P": [1e5, 1e5], "T": [293.15, 313.15], "R": [0.4, 0.6]})  # Pa, K, -
 
 df.select(
-    cp.fluid("DMASS", "P", "T").alias("rho"),  # default: IF97 water
-    cp.fluid("HMASS", "P", "T").alias("h"),
+    cp.water("DMASS", "P", "T").alias("rho"),  # IF97 water/steam
+    cp.water("HMASS", "P", "T").alias("h"),
     cp.humid_air("W", "P", "T", "R").alias("humidity_ratio"),
 )
 ```
 
-The API mirrors {py:class}`encomp.fluids.Fluid`: any CoolProp input pair is supported (in any order), the fluid is given by `name` (with the backend folded in, e.g. `name="HEOS::CarbonDioxide"`), mixtures via a `composition={species: mole fraction}` dict, and a fixed phase via `assume_phase="gas"`. See the `encomp.coolprop` package README in the repository for the full design and thread-safety model.
+The API mirrors {py:class}`encomp.fluids.Fluid`: any CoolProp input pair is supported (in any order), the fluid is given by `name` (with the backend folded in, e.g. `name="HEOS::CarbonDioxide"`), mixtures via a `composition={species: mole fraction}` dict, and a fixed phase via `assume_phase="gas"`.
+
+`name` is required, exactly as it is for {py:class}`encomp.fluids.Fluid`. `cp.water(output, in1, in2)` is the IF97 water/steam shorthand, standing to `cp.fluid` as {py:class}`encomp.fluids.Water` stands to {py:class}`encomp.fluids.Fluid`. See the `encomp.coolprop` package README in the repository for the full design and thread-safety model.
 
 ## SymPy functionality
 

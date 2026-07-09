@@ -17,23 +17,28 @@ from encomp import coolprop as cp
 df = pl.DataFrame({"P": [50e5, 60e5], "T": [400.0, 450.0], "R": [0.4, 0.6]})  # Pa, K, -
 
 df.select(
-    cp.fluid("DMASS", "P", "T").alias("rho"),   # default: IF97 water
-    cp.fluid("HMASS", "P", "T").alias("h"),     # runs in parallel
+    cp.water("DMASS", "P", "T").alias("rho"),   # IF97 water/steam
+    cp.water("HMASS", "P", "T").alias("h"),     # runs in parallel
     cp.humid_air("W", "P", "T", "R").alias("humidity_ratio"),
 )
 ```
 
 The API mirrors `encomp.fluids.Fluid`:
 
-- `fluid(output, in1, in2, *, name="IF97::Water", assume_phase=None,
+- `fluid(output, in1, in2, *, name, assume_phase=None,
   composition=None)` — each input names its property (a string, or an expression's
   output name, e.g. `pl.col("p").alias("P")`); both must be CoolProp state inputs (any
-  pair: PT, PH, PQ, ...). `output` may be any property. The fluid is `name` with the
+  pair: PT, PH, PQ, ...). `output` may be any property. `name` is required, as it is for
+  `encomp.fluids.Fluid`. The fluid is `name` with the
   backend folded in (`name="HEOS::CarbonDioxide"`); a mixture is given by fractions in the
   name (`"HEOS::CO2[0.5]&O2[0.5]"`) or a `composition={species: mole fraction}` dict (mole
   fractions must sum to 1); an incompressible mixture instead carries a single concentration
   in the name (`"INCOMP::MEG[0.5]"`, on the fluid's own mass/volume basis). An assumed phase
-  is `assume_phase="gas"` (skips the phase flash, HEOS/GERG only).
+  is `assume_phase="gas"` (skips the phase flash, HEOS/GERG only; a region-explicit backend
+  such as IF97 ignores it and a warning is logged).
+- `water(output, in1, in2)` — the IF97 water/steam shorthand, mirroring
+  `encomp.fluids.Water`. Equivalent to `fluid(..., name="IF97::Water")`. It takes no
+  `composition` (water is pure) and no `assume_phase` (IF97 would ignore it).
 - `humid_air(output, in1, in2, in3)` — same naming rule for the three HAPropsSI inputs.
 - `FluidInput` / `HumidAirInput` (state inputs), `FluidParam` / `HumidAirParam` /
   `Backend` / `Phase` / `AssumedPhase` are `Literal`s; `CName` / `Composition` mirror
