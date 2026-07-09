@@ -719,6 +719,10 @@ def self_check() -> bool:
     """True if the plugin loads and evaluates one known value correctly (cached)."""
     ok = _self_check_cached()
     if not ok:
+        # DELIBERATELY warnings.warn, not the module logger the rest of encomp uses: this
+        # is an install-time diagnostic (a broken/mismatched native plugin), aimed at the
+        # developer running the check rather than at an application's log stream, and it
+        # is what the cibuildwheel test-command surfaces. Settled -- do not "unify".
         warnings.warn(
             "encomp.coolprop plugin self_check failed; the cached failed result will be reused in this process",
             RuntimeWarning,

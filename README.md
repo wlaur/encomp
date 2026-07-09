@@ -6,7 +6,7 @@
 [![Documentation](https://readthedocs.org/projects/encomp/badge/?version=latest)](https://encomp.readthedocs.io)
 [![License](https://img.shields.io/pypi/l/encomp.svg)](https://github.com/wlaur/encomp/blob/main/LICENSE)
 
-<img src="https://raw.githubusercontent.com/wlaur/encomp/v1.6.3/docs/img/logo.png" alt="encomp logo" width="150">
+<img src="https://raw.githubusercontent.com/wlaur/encomp/v1.6.4/docs/img/logo.png" alt="encomp logo" width="150">
 
 > General-purpose library for *en*gineering *comp*utations.
 
@@ -46,8 +46,9 @@ pip install encomp
 
 ## The `Quantity` class
 
-`encomp.units.Quantity` (alias `Q`) extends `pint.Quantity`.
+`encomp.units.Quantity` extends `pint.Quantity`.
 A quantity has a *magnitude* and a *unit*; each unit has a *dimensionality* (a combination of the base dimensions), and each dimensionality has multiple associated units.
+The examples below abbreviate it as `Q` via `from encomp.units import Quantity as Q`; the library does not export a name `Q`.
 
 ```python
 from encomp.units import Quantity as Q
@@ -78,6 +79,8 @@ A newly created dimensionality gets a class name of the form `Dimensionality[...
 The second type parameter is the magnitude container. It defaults to `Numpy1DArray`, so annotate scalar quantities explicitly as `Quantity[Pressure, float]` (or `Q[Pressure, float]`).
 
 ```python
+from typing import Any
+
 from encomp.misc import isinstance_types
 from encomp.units import ExpectedDimensionalityError
 from encomp.units import Quantity as Q
@@ -99,8 +102,10 @@ rho = m / V  # Quantity[Density, float]
 m_ = Q(25, "kg/week")  # Quantity[UnknownDimensionality, float]
 
 # at runtime, the dimensionality of m_ is evaluated to MassFlow;
-# use isinstance_types for parameterized Quantity checks in type-checked code
-assert isinstance_types(m_, Q[MassFlow])
+# use isinstance_types for parameterized Quantity checks in type-checked code.
+# always spell the magnitude parameter here: a bare Q[MassFlow] means
+# Quantity[MassFlow, Numpy1DArray] to a type checker, which narrows m_ to Never
+assert isinstance_types(m_, Q[MassFlow, Any])
 
 # these operations (Mass**2 divided by Volume) are not explicitly defined as overloads
 # at runtime, the type will be evaluated to
@@ -376,6 +381,8 @@ Attribute names are prefixed with `ENCOMP_`.
 Settings are loaded when `encomp.settings` is imported; for runtime changes to quantity and unit rendering, use `encomp.units.set_quantity_format()`.
 
 Because the `.env` file is resolved relative to the current working directory, a stray `.env` that sets an invalid `ENCOMP_*` value (for example `ENCOMP_UNITS` pointing at a missing file) makes `import encomp` fail with a `pydantic.ValidationError`, even in an unrelated project. Remove or correct the offending value; unrelated keys in the `.env` are ignored.
+
+`import encomp` also installs `encomp.units.UNIT_REGISTRY` as pint's process-wide *application registry*. This is deliberate: every quantity in the process must come from that registry, or the dimensionality subclasses, the custom `[currency]` / `[normal]` dimensions and `on_redefinition="raise"` would silently not apply. The consequence is that another pint-based library in the same process gets encomp's registry (and its unit definitions, including the `Nm³` reinterpretation) after `import encomp`. Registry options that encomp pins — `force_ndarray`, `force_ndarray_like`, `autoconvert_offset_to_baseunit` — cannot be reassigned; a write to one is discarded and logs a warning.
 
 ## Documentation
 

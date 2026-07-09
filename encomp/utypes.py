@@ -3,6 +3,14 @@ Contains type definitions for :py:class:`encomp.units.Quantity` objects.
 
 The dimensionalities defined in this module can be combined with ``*`` and ``/``.
 Some commonly used derived dimensionalities (like density) are defined for convenience.
+
+Most dimensionalities are backed by unit literals (see :py:func:`get_registered_units`)
+and by ``*`` / ``/`` overloads on :py:class:`encomp.units.Quantity`, so they are inferred
+statically. A few -- ``NormalTemperature``, ``MassPerEnergy``, ``PowerPerLength``,
+``PowerPerVolume``, ``PowerPerTemperature`` and the ``HeatingValue`` family -- are
+deliberately *vocabulary only*: they have no unit literals and no overloads, and exist so
+user code can annotate quantities with them and reinterpret via
+:py:meth:`encomp.units.Quantity.asdim`.
 """
 
 from __future__ import annotations
@@ -51,6 +59,7 @@ DimensionlessUnits = Literal[
     "wt-%",
     "weight%",
     "weight-%",
+    "ppm",
     "-",
     "dimensionless",
 ]
@@ -279,6 +288,7 @@ PressureUnits = Literal[
     "MPa",
     "mbar",
     "mmHg",
+    "torr",
     "psi",
     "atm",
     "N/m2",
@@ -367,6 +377,23 @@ DensityUnits = Literal[
     "g/l",
     "g/L",
     "gram/liter",
+    "g/cm3",
+    "g/cm**3",
+    "g/cm^3",
+    "g/cm³",
+]
+
+MolarDensityUnits = Literal[
+    "mol/m3",
+    "mol/m**3",
+    "mol/m^3",
+    "mol/m³",
+    "kmol/m3",
+    "kmol/m**3",
+    "kmol/m^3",
+    "kmol/m³",
+    "mol/l",
+    "mol/L",
 ]
 
 SpecificVolumeUnits = Literal[
@@ -384,6 +411,18 @@ NormalVolumePerMassUnits = Literal[
     "nm3/kg",
     "nm^3/kg",
     "nm³/kg",
+]
+
+MassPerNormalVolumeUnits = Literal[
+    "kg/Nm3",
+    "kg/Nm^3",
+    "kg/Nm³",
+    "kg/nm3",
+    "kg/nm^3",
+    "kg/nm³",
+    "g/Nm3",
+    "g/Nm^3",
+    "g/Nm³",
 ]
 
 EnergyUnits = Literal[
@@ -461,6 +500,8 @@ EnergyPerMassUnits = Literal[
     "MWh/kg",
     "kJ/kg",
     "kWh/kg",
+    "J/kg",
+    "J/g",
     "MJ/t",
     "MWh/t",
     "kJ/t",
@@ -469,6 +510,15 @@ EnergyPerMassUnits = Literal[
     "MWh/ton",
     "kJ/ton",
     "kWh/ton",
+]
+
+# CoolProp reports molar enthalpy/internal energy in J/mol
+MolarSpecificEnthalpyUnits = Literal[
+    "J/mol",
+    "kJ/mol",
+    "J/kmol",
+    "kJ/kmol",
+    "MJ/kmol",
 ]
 
 SpecificHeatCapacityUnits = Literal[
@@ -502,6 +552,17 @@ ThermalConductivityUnits = Literal[
     "W/m/Δ℃",
     "kW/m/K",
     "mW/m/K",
+]
+
+PowerPerAreaUnits = Literal[
+    "W/m2",
+    "W/m^2",
+    "W/m**2",
+    "W/m²",
+    "kW/m2",
+    "kW/m^2",
+    "kW/m**2",
+    "kW/m²",
 ]
 
 HeatTransferCoefficientUnits = Literal[
@@ -549,15 +610,19 @@ AllUnits = (
     | VolumeFlowUnits
     | NormalVolumeFlowUnits
     | DensityUnits
+    | MolarDensityUnits
     | SpecificVolumeUnits
     | NormalVolumePerMassUnits
+    | MassPerNormalVolumeUnits
     | EnergyUnits
     | PowerUnits
+    | PowerPerAreaUnits
     | VelocityUnits
     | ForceUnits
     | DynamicViscosityUnits
     | KinematicViscosityUnits
     | EnergyPerMassUnits
+    | MolarSpecificEnthalpyUnits
     | SpecificHeatCapacityUnits
     | ThermalConductivityUnits
     | HeatTransferCoefficientUnits
@@ -706,6 +771,12 @@ class Dimensionality(metaclass=_DimensionalityMeta):
 
     @classmethod
     def get_dimensionality(cls, dimensions: UnitsContainer) -> type[Dimensionality]:
+        """Return the registered dimensionality for ``dimensions``.
+
+        Unregistered dimensions get a new subclass named after them, for example
+        ``Dimensionality[[mass] ** 2 / [length] ** 3]``.
+        """
+
         if dimensions in cls._registry_reversed:
             return cls._registry_reversed[dimensions]
 
@@ -726,6 +797,13 @@ class Dimensionality(metaclass=_DimensionalityMeta):
 
     @classmethod
     def is_distinct(cls) -> bool:
+        """Whether this class is the one :meth:`get_dimensionality` returns for its dimensions.
+
+        Unless ``_distinct`` is set explicitly, only the first registered subclass with a
+        given ``dimensions`` is distinct. The answer is registry-relative and can change
+        when a later subclass registers the same dimensions.
+        """
+
         if cls._distinct is None:
             # special case if dimensions was overridden to None
             if getattr(cls, "dimensions", None) is None:
@@ -754,6 +832,9 @@ _LuminosityUC = UnitsContainer({"[luminosity]": 1})
 
 Numpy1DArray = np.ndarray[tuple[int], np.dtype[np.float64]]
 Numpy1DBoolArray = np.ndarray[tuple[int], np.dtype[np.bool]]
+
+# integer index array, as accepted by numpy "fancy" indexing
+Numpy1DIntArray = np.ndarray[tuple[int], np.dtype[np.intp]]
 
 
 MT = TypeVar(
@@ -858,6 +939,7 @@ _HeatTransferCoefficientUC = _PowerUC / _AreaUC / _TemperatureUC
 _MassPerNormalVolumeUC = _MassUC / _NormalVolumeUC
 _MassPerEnergyUC = _MassUC / _EnergyUC
 _MolarSpecificEntropyUC = _EnergyUC / _TemperatureUC / _SubstanceUC
+_SurfaceTensionUC = _ForceUC / _LengthUC
 
 
 class Area(Dimensionality):
@@ -1000,6 +1082,10 @@ class MassPerEnergy(Dimensionality):
     dimensions = _MassPerEnergyUC
 
 
+class SurfaceTension(Dimensionality):
+    dimensions = _SurfaceTensionUC
+
+
 class MolarSpecificEntropy(Dimensionality):
     dimensions = _MolarSpecificEntropyUC
 
@@ -1051,6 +1137,12 @@ class MolarSpecificEnthalpy(Dimensionality):
 
 class MolarSpecificInternalEnergy(Dimensionality):
     dimensions = _EnergyUC / _SubstanceUC
+
+
+# shares its dimensions with the (earlier, and therefore distinct) MolarSpecificEntropy,
+# so a unit like J/mol/K still resolves to MolarSpecificEntropy at runtime
+class MolarSpecificHeatCapacity(Dimensionality):
+    dimensions = _MolarSpecificEntropyUC
 
 
 class SpecificHeatCapacity(Dimensionality):
@@ -1157,6 +1249,7 @@ __all__ = [
     "MassFlowUnits",
     "MassPerEnergy",
     "MassPerNormalVolume",
+    "MassPerNormalVolumeUnits",
     "MassUnits",
     "MixtureEnthalpyPerDryAir",
     "MixtureEnthalpyPerHumidAir",
@@ -1165,10 +1258,13 @@ __all__ = [
     "MixtureVolumePerDryAir",
     "MixtureVolumePerHumidAir",
     "MolarDensity",
+    "MolarDensityUnits",
     "MolarMass",
     "MolarMassUnits",
     "MolarSpecificEnthalpy",
+    "MolarSpecificEnthalpyUnits",
     "MolarSpecificEntropy",
+    "MolarSpecificHeatCapacity",
     "MolarSpecificInternalEnergy",
     "Normal",
     "NormalTemperature",
@@ -1180,8 +1276,10 @@ __all__ = [
     "NormalVolumeUnits",
     "Numpy1DArray",
     "Numpy1DBoolArray",
+    "Numpy1DIntArray",
     "Power",
     "PowerPerArea",
+    "PowerPerAreaUnits",
     "PowerPerLength",
     "PowerPerTemperature",
     "PowerPerVolume",
@@ -1201,6 +1299,7 @@ __all__ = [
     "SubstancePerMass",
     "SubstancePerMassUnits",
     "SubstanceUnits",
+    "SurfaceTension",
     "Temperature",
     "TemperatureDifference",
     "TemperatureDifferenceUnits",

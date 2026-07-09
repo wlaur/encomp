@@ -14,7 +14,8 @@ A {py:class}`encomp.units.Quantity` stores the *magnitude*, *unit* and *dimensio
 Each dimensionality is a separate subclass, so static type checkers catch dimensionality errors before the code runs.
 
 :::{note}
-`Q` is an alias for `Quantity`: `from encomp.units import Quantity as Q`
+Throughout this guide, `Q` is the alias created by `from encomp.units import Quantity as Q`.
+The library does not export a name `Q` -- create the alias yourself in each module that wants it.
 :::
 
 Import the class, then create an instance representing an absolute pressure of 1 bar:
@@ -41,10 +42,16 @@ pressure_kpa = pressure.to("kPa")
 ```
 
 For measured values with uncertainty, `Quantity.plus_minus()` keeps the unit and stores an `uncertainties` magnitude.
+Uncertainty propagation is delegated to `pint` and `uncertainties`: the result is a `pint.Measurement`, not an `encomp` dimensionality subclass, so it carries no `Quantity[DT, MT]` typing and leaves the dimensionality-typed system.
 
 The unit definition file (`encomp/defs/units.txt`) lists the accepted unit names.
 It is based on the `default_en.txt` file from `pint`, with minor modifications.
 The `Nm3`/`Nm³`/`nm3` spellings mean *normal cubic meter*, not nanometer cubed; use `nanometer**3` for nanoscale volumes.
+
+The magnitude and the unit are always separate arguments, and each has a closed set of accepted types.
+A magnitude is a real scalar, a 1-dimensional sequence, a NumPy array, a Polars `Series`/`Expr`, or a SymPy atom -- a string (`Q("24 kg")`) and a `bool` (`Q(True)`) are rejected, statically where possible and at runtime always.
+A unit is a string, a `Unit`, a `pint.UnitsContainer`, or `None`; passing a `Quantity` as the unit is an error, because its magnitude would be silently dropped.
+Use `qty.u` to reuse another quantity's unit, or {py:meth}`encomp.units.Quantity.to`, which does accept a `Quantity` and converts to its unit.
 
 Quantities can also be constructed from unit registry attributes:
 
@@ -63,6 +70,17 @@ v = d / ureg.s
 
 mf = Q(25, ureg.kg / ureg.h)
 ```
+
+:::{warning}
+`import encomp` installs {py:data}`encomp.units.UNIT_REGISTRY` as `pint`'s process-wide
+*application registry*. Every quantity in the process must come from it, or the
+dimensionality subclasses, the custom `[currency]` / `[normal]` dimensions and
+`on_redefinition="raise"` would silently not apply. Another `pint`-based library in the
+same process therefore gets `encomp`'s registry (and its unit definitions) after the
+import. The registry options `force_ndarray`, `force_ndarray_like` and
+`autoconvert_offset_to_baseunit` are pinned: assigning to them is discarded and logs a
+warning.
+:::
 
 ### Quantity types
 
@@ -146,6 +164,8 @@ Check the physical dimensionality of a quantity with {py:meth}`encomp.units.Quan
 For semantic dimensionality checks and parameterized types like `list[Quantity[Pressure]]`, use {py:func}`encomp.misc.isinstance_types`.
 
 ```python
+from typing import Any
+
 from encomp.misc import isinstance_types
 from encomp.units import Quantity as Q
 from encomp.utypes import Length, Pressure, Temperature, TemperatureDifference
@@ -165,14 +185,28 @@ Q(1, "delta_degC").check(Temperature)  # True
 
 # isinstance_types works with simple Quantity types and nested containers
 
-isinstance_types(pressure, Q[Pressure])  # True
-isinstance_types(pressure, Q[Length])  # False
-isinstance_types([pressure, pressure], list[Q[Pressure]])  # True
-isinstance_types({1: Q(2, "m"), 2: Q(25, "cm")}, dict[int, Q[Length]])  # True
+isinstance_types(pressure, Q[Pressure, Any])  # True
+isinstance_types(pressure, Q[Length, Any])  # False
+isinstance_types([pressure, pressure], list[Q[Pressure, Any]])  # True
+isinstance_types({1: Q(2, "m"), 2: Q(25, "cm")}, dict[int, Q[Length, Any]])  # True
 
 # all Quantity[...] objects are subclasses of Quantity
 isinstance_types(pressure, Q)  # True
 ```
+
+:::{warning}
+Spell the magnitude parameter when `isinstance_types` narrows a variable you go on to use:
+write `Q[Pressure, Any]` (or the exact magnitude type, `Q[Pressure, float]`), not a bare
+`Q[Pressure]`.
+
+At *runtime* `Q[Dim]` is magnitude-agnostic, so a bare `Q[Pressure]` matches a scalar
+quantity. *Statically*, `Q[Dim]` means `Quantity[Dim, Numpy1DArray]` (the magnitude
+parameter defaults to `Numpy1DArray`), and `isinstance_types` is a
+{py:obj}`typing.TypeIs` predicate: a type checker intersects the declared type with the
+narrowed one, so `Quantity[Pressure, float]` narrows to `Never` and every later use of
+the variable is an error. `Q[Pressure, Any]` behaves identically at runtime and narrows
+correctly.
+:::
 
 For functions and methods, use the `typeguard.typechecked` decorator instead of explicit checks in the function body:
 
@@ -190,7 +224,7 @@ def func(_p1: Q[Pressure, float]) -> tuple[Q[Length, float], Q[Power, float]]:
 
 `typeguard.TypeCheckError` is raised if the arguments or the return value have incorrect dimensionalities.
 
-Scalar `Quantity` equality is tolerant (`rtol=1e-9`, `atol=1e-12`) and compares after unit conversion, so values that differ only by tiny floating-point noise may compare equal. Hashing is supported for float magnitudes and uses root units; vector magnitudes are unhashable.
+Scalar `Quantity` equality is tolerant (`rtol=1e-9`, `atol=1e-12`) and compares after unit conversion, so values that differ only by tiny floating-point noise may compare equal. The same tolerance folds into the non-strict ordering comparisons, so `Q(1 + 1e-12, "m") <= Q(1, "m")` is `True`; `<` and `>` are strict. Hashing is supported for float magnitudes and uses root units; vector magnitudes are unhashable.
 
 Pickling preserves the dimensionality class for module-global dimensionalities. Dynamically generated dimensionalities round-trip by deriving the dimensionality from the stored unit.
 
@@ -443,6 +477,8 @@ Pass the CoolProp fluid name and the fixed points (for example *P, T*) to the co
 Not every combination of input values can fix the state: with an invalid state, derived properties evaluate to `nan` and `encomp.fluids` logs a warning, but no exception is raised.
 Set `ENCOMP_IGNORE_COOLPROP_WARNINGS=true` (the default) to suppress these calculation warnings, or `false` to emit them through Python logging.
 An invalid property *name* or output-only state input, on the other hand, raises `ValueError`.
+So does an unknown *fluid* name: it is resolved against CoolProp in the constructor (and the answer is cached per name, so repeated construction of the same fluid costs nothing).
+The *dimensionality* of each state-input quantity is still validated lazily, at the first property evaluation.
 
 ```python
 from typing import Any

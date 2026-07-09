@@ -1,4 +1,13 @@
-"""Context managers for process-local filesystem and formatting changes."""
+"""Context managers for process-local filesystem and formatting changes.
+
+Two unrelated groups share this module:
+
+* *process utilities* -- :func:`working_dir`, :func:`temp_dir` and :func:`silence_stdout`
+  temporarily change the working directory or redirect ``stdout``; they have nothing to do
+  with units.
+* *quantity formatting* -- :func:`quantity_format` scopes the process-wide default format
+  used when rendering quantities and units.
+"""
 
 import os
 import sys
@@ -84,7 +93,8 @@ def quantity_format(fmt: str = "compact") -> Generator[None]:
     ----------
     fmt : str
         Unit format string: one of ``'~P', '~L', '~H', '~Lx'``.
-        Also accepts aliases: ``'compact': '~P'`` and ``'siunitx': '~Lx'``.
+        Also accepts the aliases ``'compact': '~P'``, ``'normal': '~P'``
+        and ``'siunitx': '~Lx'``.
     """
 
     default = UNIT_REGISTRY.formatter.default_format or "~P"

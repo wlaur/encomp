@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Any
 
-from .units import Quantity as Q
+from .units import Quantity
 from .utypes import Pressure, Temperature
 
 __all__ = ["CONSTANTS", "Constants"]
@@ -13,22 +13,26 @@ __all__ = ["CONSTANTS", "Constants"]
 class Constants:
     """Namespace of constants exposed through the :data:`CONSTANTS` singleton."""
 
-    R: Q[Any, float] = field(default_factory=lambda: Q(8.31446261815324, "kg*m²/K/mol/s²"))
+    R: Quantity[Any, float] = field(default_factory=lambda: Quantity(8.31446261815324, "kg*m²/K/mol/s²"))
     """Molar gas constant, exact by the 2019 SI definition."""
 
-    SIGMA: Q[Any, float] = field(default_factory=lambda: Q(5.670374419e-8, "W/m**2/K**4"))
+    SIGMA: Quantity[Any, float] = field(default_factory=lambda: Quantity(5.670374419e-8, "W/m**2/K**4"))
     """Stefan-Boltzmann constant."""
 
-    normal_conditions_pressure: Q[Pressure, float] = field(default_factory=lambda: Q(1, "atm"))
+    normal_conditions_pressure: Quantity[Pressure, float] = field(default_factory=lambda: Quantity(1, "atm"))
     """Normal-condition pressure, 1 atm."""
 
-    normal_conditions_temperature: Q[Temperature, float] = field(default_factory=lambda: Q(0, "degC").to("K"))
+    normal_conditions_temperature: Quantity[Temperature, float] = field(
+        default_factory=lambda: Quantity(0, "degC").to("K")
+    )
     """Normal-condition temperature, 0 degC."""
 
-    standard_conditions_pressure: Q[Pressure, float] = field(default_factory=lambda: Q(1, "atm"))
+    standard_conditions_pressure: Quantity[Pressure, float] = field(default_factory=lambda: Quantity(1, "atm"))
     """Standard-condition pressure, 1 atm."""
 
-    standard_conditions_temperature: Q[Temperature, float] = field(default_factory=lambda: Q(15, "degC").to("K"))
+    standard_conditions_temperature: Quantity[Temperature, float] = field(
+        default_factory=lambda: Quantity(15, "degC").to("K")
+    )
     """Standard-condition temperature, 15 degC."""
 
 

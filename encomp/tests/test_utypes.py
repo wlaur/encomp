@@ -13,6 +13,7 @@ _EXPLICIT_UTYPES_EXPORTS = {
     "MT_",
     "Numpy1DArray",
     "Numpy1DBoolArray",
+    "Numpy1DIntArray",
     "UnitsContainer",
     "get_registered_units",
 }
