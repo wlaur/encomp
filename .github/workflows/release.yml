@@ -4,10 +4,12 @@ name: encomp CI/release
 # + bundled libCoolProp, all in one wheel) for macOS / Linux / Windows, run the full
 # test suite against each wheel on Python 3.13 and 3.14, and publish to PyPI on a tag.
 #
-#   typecheck      -> ruff, pyright (strict) + pyrefly, docs build, plus
+#   typecheck      -> ruff check + format, pyright (strict) + pyrefly, docs build, plus
 #                     source-only doc/static tests (ty is local-only and intentionally not gated)
 #   docs-rtd       -> rebuild the docs in a ReadTheDocs-equivalent environment (no project
 #                     install, no compiled plugin) so an RTD-only break fails the PR
+#   dependency-floors -> install at the LOWEST versions the declared bounds allow and run the
+#                     suite, so a too-low bound fails here rather than on a user's machine
 #   rust           -> cargo fmt, clippy, and in-crate tests
 #   build-wheels   -> one wheel per OS/arch (abi3 cp313 => runs on 3.13+)
 #   test           -> install each prebuilt wheel + run pytest, every OS x py
@@ -45,6 +47,8 @@ jobs:
           python-version: "3.13"
       - run: uv sync --locked --no-install-project
       - run: uv run --no-sync ruff check encomp scripts
+      # formatting is enforced here too, not only by the (opt-in) pre-commit hook
+      - run: uv run --no-sync ruff format --check encomp scripts
       - run: uv run --no-sync pyright
       - run: uv run --no-sync pyrefly check
       - name: Build and install the compiled CoolProp plugin for docs execution
@@ -86,6 +90,34 @@ jobs:
         env:
           READTHEDOCS: "True"
         run: uv run --no-sync python -m sphinx -T -W --keep-going -b html docs docs/_build/html
+
+  dependency-floors:
+    # The `test` job below installs the wheel's dependencies from PyPI at their LATEST
+    # versions, so it can never notice that a declared lower bound is too low. Resolve the
+    # bounds themselves and run the suite against that resolution: an API that only exists
+    # in a newer release than the bound claims fails here instead of on a user's machine.
+    name: dependency floors
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          python-version: "3.13"
+      - name: Build the bundled CoolProp library and the plugin
+        run: |
+          python -m pip install cmake
+          uv sync --locked --no-install-project
+          uv run --no-sync python scripts/build_libcoolprop.py
+      - name: Install encomp with the LOWEST versions its bounds allow, then test
+        run: |
+          uv pip install --resolution lowest-direct .
+          uv pip install pytest hypothesis
+          uv run --no-sync python -c "
+          import importlib.metadata as m
+          for p in ('pint', 'pydantic', 'typeguard', 'typing_extensions', 'numpy', 'polars', 'sympy', 'uncertainties', 'coolprop'):
+              print(f'{p:20s} {m.version(p)}')
+          "
+          uv run --no-sync pytest --pyargs encomp.tests -q
 
   rust:
     name: rust fmt/clippy/test
@@ -161,7 +193,7 @@ jobs:
 
   publish:
     name: publish to PyPI
-    needs: [typecheck, docs-rtd, rust, build-wheels, test]
+    needs: [typecheck, docs-rtd, dependency-floors, rust, build-wheels, test]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment: pypi               # configure the Trusted Publisher against this env
