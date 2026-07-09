@@ -75,7 +75,7 @@ a per-handle `AbstractState` mutates no global state — safe to run concurrentl
 flash), (b) handle create/destroy is synchronized (the global handle table is the
 one shared structure — `coolprop.rs` guards `factory`/`free` with a narrow mutex,
 never the hot path), and (c) global config isn't mutated during evaluation. Results
-are bit-identical across 1/2/4/8 threads.
+are bit-identical across thread-pool sizes (1/4/8 are covered by `test_thread_count_parity`).
 
 All `unsafe` is confined to `rust/src/coolprop.rs` (the FFI boundary); `lib.rs` has none.
 Every `unsafe` block carries a `// SAFETY:` comment (rationale + error modes),
@@ -102,7 +102,10 @@ much slower per call (iterative solver). Still better than the Python path.
   so a genuinely incompatible polars surfaces as a clear error, never a silent wrong result.
 - **Version match**: CoolProp enum integers can differ across major versions. `encomp`
   requires Python `coolprop>=8.0.0,<9`, while the bundled Rust lib is built at 8.0.0.
-  The plugin resolves parameter indices via CoolProp at runtime, never hardcoded.
+  The Rust side resolves the *output* parameter index via CoolProp at runtime, never
+  hardcoded. The one integer that crosses from Python into the bundled lib is the
+  `input_pairs` enum index, computed by the Python `coolprop` (`generate_update_pair`);
+  that enum is stable within a CoolProp major, which is why the requirement caps it.
 - **One property per node (no output batching).** Each `fluid(...)` / `humid_air(...)` is an
   independent plugin node, so selecting K properties of one state runs K flashes of it —
   Polars cannot reuse (CSE) the shared flash across opaque plugin nodes. Independent

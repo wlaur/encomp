@@ -299,17 +299,14 @@ impl State<'_> {
     pub fn set_fractions(&mut self, fracs: &[f64]) -> Result<(), CpError> {
         let mut err: c_long = 0;
         let mut msg = [0 as c_char; BUFLEN as usize];
+        // c_long is i32 on Windows (LLP64); a mixture never has that many species, but the
+        // cast is checked rather than truncating
+        let n = c_long::try_from(fracs.len())
+            .map_err(|_| CpError("set_fractions: too many species for the C API".to_string()))?;
         // SAFETY: `fracs` ptr + len describe the same slice; `self.handle` is a
         // live handle we own; `err`/`msg` are valid stack buffers.
         unsafe {
-            (self.cp.set_fractions)(
-                self.handle,
-                fracs.as_ptr(),
-                fracs.len() as c_long,
-                &mut err,
-                msg.as_mut_ptr(),
-                BUFLEN,
-            );
+            (self.cp.set_fractions)(self.handle, fracs.as_ptr(), n, &mut err, msg.as_mut_ptr(), BUFLEN);
         }
         if err != 0 {
             return Err(CpError(format!("set_fractions: {}", read_msg(&msg))));
@@ -349,6 +346,13 @@ impl State<'_> {
         if v1.len() != n || v2.len() != n {
             return Err(CpError("update_and_1_out: length mismatch".into()));
         }
+        // c_long is i32 on Windows (LLP64), so a chunk longer than i32::MAX would be passed
+        // to C truncated (and possibly negative). Refuse rather than read out of bounds.
+        let n_c = c_long::try_from(n).map_err(|_| {
+            CpError(format!(
+                "update_and_1_out: chunk of {n} rows exceeds the C API length limit"
+            ))
+        })?;
         out.fill(f64::NAN);
         let mut err: c_long = 0;
         let mut msg = [0 as c_char; BUFLEN as usize];
@@ -361,7 +365,7 @@ impl State<'_> {
                 input_pair as c_long,
                 v1.as_ptr(),
                 v2.as_ptr(),
-                n as c_long,
+                n_c,
                 out_key,
                 out.as_mut_ptr(),
                 &mut err,
