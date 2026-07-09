@@ -183,11 +183,13 @@ pressure.check("[pressure]")  # True
 Q(1, "degC").check(TemperatureDifference)  # True
 Q(1, "delta_degC").check(Temperature)  # True
 
-# isinstance_types works with simple Quantity types and nested containers
+# isinstance_types works with simple Quantity types and nested containers.
+# every element of a container is checked, not just the first
 
 isinstance_types(pressure, Q[Pressure, Any])  # True
 isinstance_types(pressure, Q[Length, Any])  # False
 isinstance_types([pressure, pressure], list[Q[Pressure, Any]])  # True
+isinstance_types([pressure, Q(1, "m")], list[Q[Pressure, Any]])  # False
 isinstance_types({1: Q(2, "m"), 2: Q(25, "cm")}, dict[int, Q[Length, Any]])  # True
 
 # all Quantity[...] objects are subclasses of Quantity

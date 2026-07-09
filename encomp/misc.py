@@ -4,7 +4,7 @@ import ast
 from types import UnionType
 from typing import Any, TypeIs, Union, cast, get_args, get_origin
 
-from typeguard import TypeCheckError, check_type
+from typeguard import CollectionCheckStrategy, TypeCheckError, check_type
 from typing_extensions import TypeForm
 
 __all__ = ["isinstance_types", "name_assignments"]
@@ -24,6 +24,11 @@ def isinstance_types[T](obj: Any, expected: TypeForm[T]) -> TypeIs[T]:  # noqa: 
     ``Quantity[Mass, float]``. It delegates general type forms to
     :func:`typeguard.check_type` and handles ``Quantity`` subclasses directly
     so dimensionality and magnitude parameters are both respected.
+
+    Every element of a collection is checked, not just the first: a
+    ``list[Quantity[Pressure]]`` holding a ``Quantity[Length]`` at any position
+    is rejected. (``typeguard.typechecked`` keeps typeguard's own default of
+    checking only the first element.)
     """
 
     from .units import Quantity
@@ -80,7 +85,12 @@ def isinstance_types[T](obj: Any, expected: TypeForm[T]) -> TypeIs[T]:  # noqa: 
         return False
 
     try:
-        check_type(cast(Any, obj), expected)
+        # ALL_ITEMS, not typeguard's FIRST_ITEM default: a dimensionality check that only
+        # inspects element 0 answers True for list[Quantity[Pressure]] holding a Length at
+        # index 1, which is exactly the error this library exists to catch. The linear cost
+        # is irrelevant here -- encomp's own hot-path calls pass scalar quantities, never
+        # collections
+        check_type(cast(Any, obj), expected, collection_check_strategy=CollectionCheckStrategy.ALL_ITEMS)
         return True
     except TypeCheckError:
         # only a genuine type mismatch answers False -- an invalid ``expected``
