@@ -748,16 +748,20 @@ class Symbol(sp.Symbol):
 
         delimiters = ["", "^", "_", "", "_", "^", ""]
 
+        # the base symbol sits at this index in `parts` and is the only part left unbraced.
+        # identifying it by position rather than by value keeps a decoration whose typeset form
+        # happens to equal the symbol's own name (e.g. Symbol("x").decorate(prefix="x")) braced
+        base_index = 3
+
         decorated_parts = []
 
-        for p, d in zip(parts, delimiters, strict=False):
+        for index, (p, d) in enumerate(zip(parts, delimiters, strict=False)):
             if p is None:
                 continue
 
             p = str(p)
 
-            # don't add extra braces around the base symbol
-            if p != self.name:
+            if index != base_index:
                 p = "{" + p + "}"
 
             decorated_parts.append(d + p)

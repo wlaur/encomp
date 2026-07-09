@@ -179,3 +179,20 @@ def test_cached_helpers_return_a_fresh_list() -> None:
 
     # the expensive part is still cached
     assert get_lambda(expr)[0] is get_lambda(expr)[0]
+
+
+def test_decorate_braces_a_decoration_equal_to_the_symbol_name() -> None:
+    # the base symbol is the only unbraced part, identified by position: a decoration whose
+    # typeset form happens to equal the symbol's own name must still be braced
+    x = cast(Any, sp.Symbol("x"))
+
+    assert str(x.decorate(prefix="x")) == "{x}x"
+    assert str(x.decorate(suffix_sub="x")) == "x_{x}"
+    assert str(x.decorate(suffix="x")) == "x{x}"
+
+    # the ordinary case is unchanged, and assumptions survive
+    n = cast(Any, sp.Symbol("n", integer=True))
+    assert (
+        str(n.decorate(prefix=r"\sum", prefix_sub="2", suffix_sup="i", suffix=r"\ldots")) == r"{\sum}_{2}n^{i}{\ldots}"
+    )
+    assert n.decorate(prefix="a").assumptions0["integer"]
