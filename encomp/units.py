@@ -18,6 +18,7 @@ import re
 import sys
 import warnings
 from collections.abc import Iterable, Iterator, Sequence, Sized
+from inspect import isclass
 from types import UnionType
 from typing import (
     TYPE_CHECKING,
@@ -48,6 +49,7 @@ from pint.util import UnitsContainer
 from pydantic import GetCoreSchemaHandler, GetJsonSchemaHandler
 from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import PydanticCustomError, core_schema
+from typeguard import TypeCheckError, TypeCheckMemo, checker_lookup_functions
 
 from .settings import PINT_FORMATTING_SPECIFIERS, SETTINGS
 from .utypes import (
@@ -3593,6 +3595,40 @@ def _reconstruct_quantity(magnitude: object, unit: str, dim: type[Dimensionality
         return qty
     return qty.asdim(dim)
 
+
+def _quantity_typeguard_checker(
+    value: Any,  # noqa: ANN401
+    origin_type: Any,  # noqa: ANN401
+    args: tuple[Any, ...],
+    memo: TypeCheckMemo,  # noqa: ARG001
+) -> None:
+    # imported here rather than at module scope: encomp.misc resolves encomp.units lazily,
+    # and this keeps the dependency one-directional
+    from .misc import isinstance_types
+
+    annotation = origin_type[args] if args else origin_type
+
+    if not isinstance_types(value, annotation):
+        raise TypeCheckError(f"is not an instance of {annotation.__module__}.{annotation.__qualname__}")
+
+
+def _quantity_typeguard_lookup(
+    origin_type: Any,  # noqa: ANN401
+    args: tuple[Any, ...],  # noqa: ARG001
+    extras: tuple[Any, ...],  # noqa: ARG001
+) -> Any:  # noqa: ANN401
+    if isclass(origin_type) and issubclass(origin_type, Quantity):
+        return _quantity_typeguard_checker
+
+    return None
+
+
+# Teach typeguard how to check a Quantity, so `@typechecked` and the nested type forms that
+# isinstance_types hands to check_type both compare dimensionality AND magnitude type instead of
+# falling back to a plain isinstance. isinstance is not enough: Quantity[UnknownDimensionality] --
+# the runtime class behind Q[Any, Any] -- is a *sibling* of every concrete dimensionality rather
+# than a base, so `isinstance(Q(1, "bar"), Q[Any, Any])` is False.
+checker_lookup_functions.insert(0, _quantity_typeguard_lookup)
 
 # register the Quantity and Unit implementations on the registry, so every object
 # created through it (results of pint-internal operations, parse_units output) is

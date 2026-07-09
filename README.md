@@ -382,6 +382,8 @@ Settings are loaded when `encomp.settings` is imported; for runtime changes to q
 
 Because the `.env` file is resolved relative to the current working directory, a stray `.env` that sets an invalid `ENCOMP_*` value (for example `ENCOMP_UNITS` pointing at a missing file) makes `import encomp` fail with a `pydantic.ValidationError`, even in an unrelated project. Remove or correct the offending value; unrelated keys in the `.env` are ignored.
 
+Importing `encomp.units` also registers a `typeguard` checker for `Quantity`, so `@typeguard.typechecked` and `encomp.misc.isinstance_types` compare dimensionality and magnitude type rather than falling back to a plain `isinstance`.
+
 `import encomp` also installs `encomp.units.UNIT_REGISTRY` as pint's process-wide *application registry*. This is deliberate: every quantity in the process must come from that registry, or the dimensionality subclasses, the custom `[currency]` / `[normal]` dimensions and `on_redefinition="raise"` would silently not apply. The consequence is that another pint-based library in the same process gets encomp's registry (and its unit definitions, including the `Nm³` reinterpretation) after `import encomp`. Registry options that encomp pins — `force_ndarray`, `force_ndarray_like`, `autoconvert_offset_to_baseunit` — cannot be reassigned; a write to one is discarded and logs a warning.
 
 ## Documentation
