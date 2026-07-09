@@ -2191,7 +2191,7 @@ def test_static_registry_option_write_warns(caplog: pytest.LogCaptureFixture) ->
     assert "encomp pins this registry option" in caplog.text
 
     # the write is still discarded
-    assert registry.force_ndarray is False
+    assert not registry.force_ndarray
 
     caplog.clear()
 

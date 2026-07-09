@@ -70,7 +70,7 @@ def temp_dir() -> Generator[Path]:
 def silence_stdout() -> Generator[None]:
     """
     Context manager that redirects ``stdout`` to ``os.devnull``.
-    This is used suppress functions that print to ``stdout``.
+    This is used to suppress functions that print to ``stdout``.
     """
 
     old_target = sys.stdout

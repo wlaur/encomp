@@ -57,7 +57,7 @@ from encomp.units import Quantity as Q
 Q(1, "bar").to("kPa")
 
 # list inputs are converted to np.ndarray
-Q([1, 2, 3], "bar") * 2  # [2, 4, 6] bar
+Q([1, 2, 3], "bar") * 2  # [2.0 4.0 6.0] bar
 
 # without a unit, the quantity is dimensionless
 assert Q(0.1) == Q(10, "%")
@@ -385,7 +385,7 @@ Because the `.env` file is resolved relative to the current working directory, a
 
 Importing `encomp.units` also registers a `typeguard` checker for `Quantity`, so `@typeguard.typechecked` and `encomp.misc.isinstance_types` compare dimensionality and magnitude type rather than falling back to a plain `isinstance`.
 
-`import encomp` also installs `encomp.units.UNIT_REGISTRY` as pint's process-wide *application registry*. This is deliberate: every quantity in the process must come from that registry, or the dimensionality subclasses, the custom `[currency]` / `[normal]` dimensions and `on_redefinition="raise"` would silently not apply. The consequence is that another pint-based library in the same process gets encomp's registry (and its unit definitions, including the `Nm³` reinterpretation) after `import encomp`. Registry options that encomp pins — `force_ndarray`, `force_ndarray_like`, `autoconvert_offset_to_baseunit` — cannot be reassigned; a write to one is discarded and logs a warning.
+`import encomp` also installs `encomp.units.UNIT_REGISTRY` as pint's process-wide *application registry*. This is deliberate: every quantity in the process must come from that registry, or the dimensionality subclasses, the custom `[currency]` / `[normal]` dimensions and `on_redefinition="raise"` would silently not apply. The consequence is that another pint-based library in the same process gets encomp's registry (and its unit definitions, including the `Nm³` reinterpretation) after `import encomp`. Registry options that encomp pins — `force_ndarray`, `force_ndarray_like`, `autoconvert_offset_to_baseunit` — cannot be reassigned; a write that would change one is discarded and logs a warning.
 
 ## Documentation
 

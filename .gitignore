@@ -138,7 +138,7 @@ dmypy.json
 generated
 
 .python-version
-.ruff-cache/
+.ruff_cache/
 .claude
 
 **/temp

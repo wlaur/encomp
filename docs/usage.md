@@ -78,8 +78,8 @@ dimensionality subclasses, the custom `[currency]` / `[normal]` dimensions and
 `on_redefinition="raise"` would silently not apply. Another `pint`-based library in the
 same process therefore gets `encomp`'s registry (and its unit definitions) after the
 import. The registry options `force_ndarray`, `force_ndarray_like` and
-`autoconvert_offset_to_baseunit` are pinned: assigning to them is discarded and logs a
-warning.
+`autoconvert_offset_to_baseunit` are pinned: a write that would change one is discarded and
+logs a warning.
 :::
 
 ### Quantity types
