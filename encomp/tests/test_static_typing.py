@@ -60,10 +60,24 @@ from encomp.units import Quantity as Q
 q = Q(1, Q(2, "m"))
 """
 
-_ROOT = Path(__file__).resolve().parents[2]
+
+def _repo_root() -> Path | None:
+    # the checkers need the project's pyproject.toml for their configuration; an installed
+    # wheel does not ship it, so the checker tests below skip rather than fail there
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "pyproject.toml").is_file():
+            return parent
+
+    return None
+
+
+_ROOT = _repo_root()
+
+_NO_CONFIG = "encomp pyproject.toml not on disk (installed wheel) -- source-tree check only"
 
 
 def _check(cmd: list[str], code: str, tmp_path: Path) -> int:
+    assert _ROOT is not None  # narrowed by the skipif on every caller
     snippet = tmp_path / "snippet.py"
     snippet.write_text(code)
     proc = subprocess.run(
@@ -76,8 +90,9 @@ def _check(cmd: list[str], code: str, tmp_path: Path) -> int:
 
 
 @pytest.mark.skipif(_PYREFLY is None, reason="pyrefly not installed")
+@pytest.mark.skipif(_ROOT is None, reason=_NO_CONFIG)
 def test_string_input_rejected_by_pyrefly(tmp_path: Path) -> None:
-    assert _PYREFLY is not None  # narrowed by the skipif above
+    assert _PYREFLY is not None and _ROOT is not None  # narrowed by the skipifs above
     # --config is required: without it, pyrefly silently skips files outside any
     # configured project (reporting "0 errors" without analyzing)
     cmd = [_PYREFLY, "check", "--config", str(_ROOT / "pyproject.toml")]
@@ -86,6 +101,7 @@ def test_string_input_rejected_by_pyrefly(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(_PYRIGHT is None, reason="pyright not installed")
+@pytest.mark.skipif(_ROOT is None, reason=_NO_CONFIG)
 def test_string_input_rejected_by_pyright(tmp_path: Path) -> None:
     assert _PYRIGHT is not None  # narrowed by the skipif above
     assert _check([_PYRIGHT], _VALID, tmp_path) == 0, "control snippet must type-check"
@@ -101,14 +117,16 @@ def test_string_input_rejected_at_runtime() -> None:
 
 
 @pytest.mark.skipif(_PYREFLY is None, reason="pyrefly not installed")
+@pytest.mark.skipif(_ROOT is None, reason=_NO_CONFIG)
 def test_quantity_unit_rejected_by_pyrefly(tmp_path: Path) -> None:
-    assert _PYREFLY is not None  # narrowed by the skipif above
+    assert _PYREFLY is not None and _ROOT is not None  # narrowed by the skipifs above
     cmd = [_PYREFLY, "check", "--config", str(_ROOT / "pyproject.toml")]
     assert _check(cmd, _VALID_UNIT, tmp_path) == 0, "control snippet must type-check"
     assert _check(cmd, _INVALID_UNIT, tmp_path) != 0, "a Quantity unit must not type-check"
 
 
 @pytest.mark.skipif(_PYRIGHT is None, reason="pyright not installed")
+@pytest.mark.skipif(_ROOT is None, reason=_NO_CONFIG)
 def test_quantity_unit_rejected_by_pyright(tmp_path: Path) -> None:
     assert _PYRIGHT is not None  # narrowed by the skipif above
     assert _check([_PYRIGHT], _VALID_UNIT, tmp_path) == 0, "control snippet must type-check"
