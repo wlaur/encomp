@@ -4,7 +4,7 @@ from typing import Any, cast
 import numpy as np
 import pytest
 
-from ..sympy import Symbol, get_args, get_function, get_lambda_matrix, sp, symbols, to_identifier
+from ..sympy import Symbol, get_args, get_function, get_lambda, get_lambda_matrix, sp, symbols, to_identifier
 from ..units import Quantity as Q
 
 
@@ -158,3 +158,24 @@ def test_get_function() -> None:
             z: Q(0.4, "m³/kg"),
         }
     )
+
+
+def test_cached_helpers_return_a_fresh_list() -> None:
+    # get_args and get_lambda are cached; the cached value is a tuple, so a caller that mutates
+    # the returned list cannot poison the cache for every later call
+    x, y, z = sp.symbols("x, y, z")  # pyright: ignore[reportUnknownMemberType]
+    expr = 25 * x * y / z
+
+    args = get_args(expr)
+    assert args == ["x", "y", "z"]
+
+    args.append("INJECTED")
+    assert get_args(expr) == ["x", "y", "z"]
+    assert get_args(expr) is not get_args(expr)
+
+    lambda_args = get_lambda(expr)[1]
+    lambda_args.append("INJECTED")
+    assert get_lambda(expr)[1] == ["x", "y", "z"]
+
+    # the expensive part is still cached
+    assert get_lambda(expr)[0] is get_lambda(expr)[0]
