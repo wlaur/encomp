@@ -510,9 +510,9 @@ class Quantity(
         # hash on the canonical root-unit representation so the eq/hash contract holds:
         # __eq__ compares across units (Q(1, "m") == Q(100, "cm")), so two quantities that
         # are equal must hash equal -- hashing the raw (m, u) would break that.
-        # NOTE: __eq__ is tolerant (np.isclose), so quantities that are only *approximately*
+        # NOTE: __eq__ is tolerant (rtol, atol), so quantities that are only *approximately*
         # equal may still hash differently -- an inherent limit of tolerant equality, the same
-        # way hash(0.1 + 0.2) != hash(0.3); exact equality (the common case) is now consistent.
+        # way hash(0.1 + 0.2) != hash(0.3); exact equality (the common case) is consistent.
         root = self.to_root_units()
 
         # __eq__ also answers True against plain numbers (Q(0.5, "") == 0.5), so a
