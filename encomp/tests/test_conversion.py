@@ -101,3 +101,22 @@ def test_convert_volume_mass_polars_series_density() -> None:
     # a null density is missing, not invalid: it propagates
     nulled = convert_volume_mass(mass, rho=Q(pl.Series([1000.0, None]), "kg/m³"))
     assert nulled.to("m³").m.to_list() == [0.002, None]
+
+
+def test_nan_density_is_rejected_for_polars_inputs() -> None:
+    # a polars result carries null, never NaN, and a float/ndarray density has no null
+    # spelling -- so a NaN density cannot express "missing" when the input is polars
+    mass_series = Q(pl.Series([2.0, 4.0]), "kg")
+    mass_expr = Q(pl.col("m"), "kg")
+
+    with pytest.raises(ValueError, match="null for a missing density"):
+        convert_volume_mass(mass_series, rho=Q(float("nan"), "kg/m³"))
+
+    with pytest.raises(ValueError, match="null for a missing density"):
+        convert_volume_mass(mass_expr, rho=Q(float("nan"), "kg/m³"))
+
+    with pytest.raises(ValueError, match="null for a missing density"):
+        convert_volume_mass(mass_series, rho=Q(np.array([1000.0, np.nan]), "kg/m³"))
+
+    # the same missing density is fine for float/numpy inputs, where NaN IS the sentinel
+    assert np.isnan(convert_volume_mass(Q(2.0, "kg"), rho=Q(float("nan"), "kg/m³")).m)
