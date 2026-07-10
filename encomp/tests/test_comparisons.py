@@ -263,13 +263,40 @@ def test_comparing_numpy_and_polars_magnitudes_raises() -> None:
     series = Q(pl.Series([1.0]), "m")
     expr = Q(pl.col("x"), "m")
 
-    for lhs, rhs in ((array, series), (series, array), (array, expr), (expr, array)):
+    for lhs, rhs in ((array, series), (series, array)):
         for op in _OPERATORS.values():
             with pytest.raises(TypeError, match="convert one side first"):
                 op(lhs, rhs)
 
+    # when a pl.Expr is involved there is no data to convert on that side, so the
+    # message points at evaluating the expression or lifting the other operand instead
+    for lhs, rhs in ((array, expr), (expr, array)):
+        for op in _OPERATORS.values():
+            with pytest.raises(TypeError, match="lift the other side"):
+                op(lhs, rhs)
+
     # the escape hatch is explicit conversion
     assert (array.astype("pl.Series") == series).to_list() == [True]
+
+
+def test_comparing_series_and_expr_magnitudes_raises() -> None:
+    # Series-vs-Expr is equally outside the typed API: polars' raw operator would lift the
+    # Series into an Expr literal and compare EXACTLY, skipping the (rtol, atol) tolerance
+    # every sanctioned path applies, with a length mismatch surfacing only at collect()
+    # time as a ShapeError pointing into the plan -- so the runtime refuses this pair too
+    series = Q(pl.Series([1.0]), "m")
+    expr = Q(pl.col("x"), "m")
+
+    for lhs, rhs in ((series, expr), (expr, series)):
+        for op in _OPERATORS.values():
+            with pytest.raises(TypeError, match="lift the other side"):
+                op(lhs, rhs)
+
+    # the escape hatch is an explicit literal lift, which states the intent and lands on
+    # the sanctioned (tolerant) Expr-vs-Expr path
+    df = pl.DataFrame({"x": [1.0 + 5e-10, 2.0]})
+    lifted = Q(pl.lit(pl.Series([1.0, 2.0])), "m")
+    assert df.select((expr == lifted).alias("r"))["r"].to_list() == [True, True]
 
 
 def test_numpy_and_polars_disagree_on_nan_ordering() -> None:

@@ -620,25 +620,34 @@ class Quantity(
 
     @classmethod
     def _check_comparable_magnitudes(cls, m: object, other_m: object) -> None:
-        # The numpy world and the polars world do not compare elementwise against each other:
-        # numpy raises an opaque ufunc-loop TypeError, polars an equally opaque dtype error, and
-        # pl.Expr silently lifts an ndarray into a literal. None of these combinations is in the
-        # typed API (the __eq__/__gt__/... overloads pair a magnitude type with itself or with a
-        # scalar), so reject them here with an actionable message instead
+        # Mixed containers do not compare elementwise: numpy-vs-polars raises an opaque
+        # ufunc-loop TypeError or dtype error, and pl.Expr silently lifts an ndarray OR a
+        # pl.Series into a literal and compares EXACTLY, skipping the (rtol, atol) tolerance
+        # every sanctioned path applies -- with a length mismatch surfacing only at collect()
+        # time as a ShapeError pointing into the plan. None of these combinations is in the
+        # typed API (the __eq__/__gt__/... overloads pair a magnitude type with itself or with
+        # a scalar), so reject them here with an actionable message instead
         if cls._is_mixed_container(m, other_m):
+            if isinstance(m, pl.Expr) or isinstance(other_m, pl.Expr):
+                hint = (
+                    "evaluate the pl.Expr side first, or lift the other side into the "
+                    "expression explicitly (e.g. with pl.lit(...)) if literal semantics are intended"
+                )
+            else:
+                hint = 'convert one side first, e.g. with .astype("pl.Series") or .astype("ndarray")'
+
             raise TypeError(
                 f"Cannot compare a Quantity with {cls._describe_magnitude(m)} magnitude to one with "
-                f"{cls._describe_magnitude(other_m)} magnitude; convert one side first, "
-                'e.g. with .astype("pl.Series") or .astype("ndarray")'
+                f"{cls._describe_magnitude(other_m)} magnitude; {hint}"
             )
 
-    @staticmethod
-    def _is_mixed_container(m: object, other_m: object) -> bool:
-        polars_types = (pl.Series, pl.Expr)
+    @classmethod
+    def _is_mixed_container(cls, m: object, other_m: object) -> bool:
+        container_kinds = ("ndarray", "pl.Series", "pl.Expr")
+        m_kind = cls._describe_magnitude(m)
+        other_kind = cls._describe_magnitude(other_m)
 
-        return (isinstance(m, np.ndarray) and isinstance(other_m, polars_types)) or (
-            isinstance(m, polars_types) and isinstance(other_m, np.ndarray)
-        )
+        return m_kind in container_kinds and other_kind in container_kinds and m_kind != other_kind
 
     @staticmethod
     def _describe_magnitude(value: object) -> str:
