@@ -55,3 +55,5 @@ class Constants:
 
 
 CONSTANTS = Constants()
+"""Singleton :class:`Constants` instance; every attribute access returns a fresh
+:class:`~encomp.units.Quantity`."""

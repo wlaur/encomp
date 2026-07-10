@@ -84,7 +84,7 @@ class Settings(BaseSettings):
     )
 
 
-# The settings object is initialized the first time the library loads. Some
-# consumers read values during their own import/initialization, so do not treat
-# attribute assignment on this instance as a general runtime configuration API.
 SETTINGS = Settings()
+"""Singleton :class:`Settings` instance, initialized the first time the library loads.
+Some consumers read values during their own import/initialization, so attribute
+assignment on this instance is not a general runtime-configuration API."""

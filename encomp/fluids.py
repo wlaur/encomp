@@ -203,13 +203,13 @@ _ASSUMED_PHASE_MAP: dict[str, Any] = {
 # phase has no effect and should not switch evaluation to the slower low-level loop
 _PHASE_IGNORING_BACKENDS = frozenset({"IF97"})
 
-# Eager numpy / pl.Series inputs with at least this many elements are evaluated
-# through the GIL-free rust plugin (faster and lower peak memory than CoolProp's
-# vectorized PropsSI, and much faster than the low-level per-row Python loop for an
-# assumed phase / composition). Scalars and smaller arrays stay on the Python
-# CoolProp path, where the plugin's fixed dispatch overhead would dominate. The two
-# paths are verified to agree on dtype, value, and NaN/inf handling (test_fluids).
 EAGER_PLUGIN_MIN_SIZE = 1000
+"""Eager numpy / ``pl.Series`` inputs with at least this many elements are evaluated
+through the GIL-free rust plugin (faster and lower peak memory than CoolProp's
+vectorized ``PropsSI``, and much faster than the low-level per-row Python loop for an
+assumed phase / composition). Scalars and smaller arrays stay on the Python CoolProp
+path, where the plugin's fixed dispatch overhead would dominate. The two paths are
+verified to agree on dtype, value, and NaN/inf handling (``test_fluids``)."""
 
 # Caches the CONSTRUCTED pl.Expr per (fluid config, output, input-expr digests), so
 # repeated evaluations of the same property return the IDENTICAL expression object.

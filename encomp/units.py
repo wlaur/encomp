@@ -256,12 +256,14 @@ class DimensionalityRedefinitionError(ValueError):
     """Raised when defining a dimensionality that already exists."""
 
 
-# keep track of user-created dimensions
 # NOTE: make sure to list all that are defined in defs/units.txt ("# custom dimensions")
 CUSTOM_DIMENSIONS: list[str] = [
     "currency",
     "normal",
 ]
+"""Names of the registered custom base dimensions. The entries defined out of the box
+match the custom-dimension section of ``defs/units.txt``;
+:func:`define_dimensionality` appends every dimensionality it defines."""
 
 
 _REGISTRY_STATIC_OPTIONS = {
@@ -312,6 +314,8 @@ class _LazyRegistry(LazyRegistry[Any, Any]):
         self._after_init()
 
 
+# NOTE: no attribute docstring here: autodoc's signature formatter fails on the
+# UnitRegistry[Any] value annotation, which would break the -W docs build
 UNIT_REGISTRY = cast(UnitRegistry[Any], _LazyRegistry())
 
 for _option_name, _option_value in _REGISTRY_STATIC_OPTIONS.items():
@@ -467,9 +471,12 @@ class Quantity(
         Unit("delta_degRe")._units,
     )
 
-    # Tolerance for == / != and the ordering operators, applied identically to every magnitude
-    # type: two values are equal when |a - b| <= max(rtol * max(|a|, |b|), atol). This is the
-    # math.isclose / polars is_close predicate; see the module-level _is_close.
+    # Tolerance for == / != and the ordering operators, applied identically to every
+    # magnitude type: two values are equal when |a - b| <= max(rtol * max(|a|, |b|), atol).
+    # This is the math.isclose / polars is_close predicate; see the module-level _is_close.
+    # NOTE: no comment line here may begin with "# type:" -- sphinx's source analyzer
+    # parses that as a PEP 484 type comment, and a failure there drops the attribute
+    # docstrings of the WHOLE module from the rendered API reference.
     rtol: float = 1e-9
     atol: float = 1e-12
 
