@@ -18,7 +18,7 @@ Every physical quantity in `encomp` carries a magnitude, a unit, and a dimension
 
 - **`Quantity`** (`encomp.units`, `encomp.utypes`) extends [pint](https://pypi.org/project/Pint): each dimensionality (pressure, mass flow, density, ...) is a distinct subclass of `Quantity`. Dividing a `Mass` by a `Volume` gives a `Density`, inferred by static type checkers and verified at runtime. Magnitudes can be scalars, NumPy arrays, Polars `Series`, or Polars `Expr`.
 
-- **Static unit checking.** Common dimensionalities and their `*` / `/` / `**` combinations are encoded as `__new__` overloads, so a type checker flags a `Temperature` passed where a `Power` is expected. `@typeguard.typechecked` extends the same checks to runtime.
+- **Static unit checking.** Common dimensionalities are encoded as `Quantity.__new__` overloads, and their `*` / `/` / `**` combinations as arithmetic-operator overloads, so a type checker flags a `Temperature` passed where a `Power` is expected. `@typeguard.typechecked` extends the same checks to runtime.
 
 - **`Fluid` / `Water` / `HumidAir`** (`encomp.fluids`) wrap [CoolProp](http://www.coolprop.org): fix a state with two points (three for humid air) and read any property as an attribute. Inputs and outputs are `Quantity` objects, so units are converted and validated automatically.
 
