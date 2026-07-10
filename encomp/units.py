@@ -2507,20 +2507,30 @@ class Quantity(
         if isinstance(other, Quantity):
             self._check_comparable_magnitudes(self.m, other.m)
 
+        # only the STRICT pint operator is ever evaluated; a non-strict result is derived
+        # from it below. Using pint's raw >= / <= would poison the derivation for NaN:
+        # polars' total order calls NaN equal to NaN, so its raw `nan >= nan` is True while
+        # encomp's tolerant __eq__ says False -- and `ge == (gt or eq)` would not hold.
+        strict_op: str = {"__ge__": "__gt__", "__le__": "__lt__"}.get(op, op)
+
         try:
-            ret = getattr(self._pint_super, op)(other)
+            ret = getattr(self._pint_super, strict_op)(other)
         except (ValueError, DimensionalityError) as e:
             raise DimensionalityComparisonError(str(e)) from e
 
         # __eq__ is tolerant (rtol, atol), so every ordering operator must agree with it or the
-        # five relations do not form an ordering. pint compares exactly, so fold the tolerance in
-        # here: the non-strict operators absorb equality, the strict ones exclude it. Without the
-        # strict side, `a > b` and `a <= b` were both True for operands equal within tolerance,
-        # which breaks sorted()/bisect and any code assuming `a > b` implies `not (a <= b)`.
+        # five relations do not form an ordering. pint compares exactly, so fold the tolerance
+        # in here: the strict operators exclude equality, and the non-strict ones are exactly
+        # `strict or equal`. This keeps `a > b` implies `not (a <= b)` (which sorted()/bisect
+        # assume), and makes `ge == (gt or eq)` / `le == (lt or eq)` hold for EVERY input --
+        # including NaN operands on polars magnitudes -- in all four magnitude containers.
         equal = cast(Any, self).__eq__(other)
         not_equal = (not equal) if isinstance(equal, bool) else ~equal
 
-        ret = (ret | equal) if op in ("__ge__", "__le__") else (ret & not_equal)
+        ret = ret & not_equal
+
+        if op in ("__ge__", "__le__"):
+            ret = ret | equal
 
         if isinstance(ret, np.bool):
             return bool(cast(Any, ret))

@@ -161,8 +161,12 @@ def test_values_within_tolerance_are_ties_and_sort_stably() -> None:
 
 
 _INF = float("inf")
+_NAN = float("nan")
 
-# pairs that straddle the tolerance band, plus the non-finite corners
+# pairs that straddle the tolerance band, plus the non-finite corners. NaN appears only
+# paired with itself: numpy and polars deliberately disagree on ordering NaN against a
+# NUMBER (see test_numpy_and_polars_disagree_on_nan_ordering), but nan-vs-nan answers
+# identically everywhere (never equal, never ordered)
 _COMPARISON_PAIRS = [
     (1.0, 1.0),
     (0.0, 0.0),
@@ -178,6 +182,7 @@ _COMPARISON_PAIRS = [
     (-_INF, -_INF),
     (1.0, _INF),
     (-_INF, _INF),
+    (_NAN, _NAN),
 ]
 
 
@@ -283,6 +288,16 @@ def test_numpy_and_polars_disagree_on_nan_ordering() -> None:
     assert_type(series > one, pl.Series)
     assert (series > one).to_list() == [True]
     assert (series <= one).to_list() == [False]
+
+    # nan-vs-nan is the one NaN case the worlds AGREE on: polars' raw >= calls NaN equal
+    # to NaN (total order), but the non-strict operators are derived as `strict or equal`
+    # with encomp's tolerant __eq__ (NaN is never equal), so every container answers
+    # False for all four orderings -- `ge == (gt or eq)` holds even here
+    other_nan = Q(pl.Series([nan]), "m")
+    assert (series >= other_nan).to_list() == [False]
+    assert (series <= other_nan).to_list() == [False]
+    assert (series > other_nan).to_list() == [False]
+    assert (series == other_nan).to_list() == [False]
 
     # a null magnitude propagates as null in both directions
     with_null = Q(pl.Series([1.0, None]), "m")
