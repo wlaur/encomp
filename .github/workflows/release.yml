@@ -101,13 +101,22 @@ jobs:
     # Python: a bound may legitimately name a release that predates 3.13 and ships no wheel
     # for it (pydantic 2.4 is the floor for the core-schema API, but its pydantic-core has
     # no cp313 wheel). Resolving to a version nobody can install would test nothing.
-    name: dependency floors
+    #
+    # The matrix covers the OLDEST and NEWEST supported Python: a pure-Python wheel
+    # installs on any Python, so --only-binary cannot stop a floor that resolves on
+    # every supported Python but only works on some of them (e.g. one that uses a
+    # stdlib API the newest Python removed).
+    name: dependency floors (${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.13", "3.14"]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
         with:
-          python-version: "3.13"
+          python-version: ${{ matrix.python-version }}
       - name: Build the bundled CoolProp library
         run: |
           python -m pip install cmake
@@ -126,9 +135,9 @@ jobs:
         # and then run doc snippets against the source tree, which has no compiled plugin.
         # Outside it, they skip -- exactly as they do for someone who pip-installed a wheel.
         run: |
-          uv pip compile pyproject.toml --python-version 3.13 --resolution lowest-direct --only-binary=:all: -o floors.txt
+          uv pip compile pyproject.toml --python-version ${{ matrix.python-version }} --resolution lowest-direct --only-binary=:all: -o floors.txt
           cat floors.txt
-          uv venv "$RUNNER_TEMP/floors-venv" --python 3.13
+          uv venv "$RUNNER_TEMP/floors-venv" --python ${{ matrix.python-version }}
           PY=$RUNNER_TEMP/floors-venv/bin/python
           uv pip install --python "$PY" -r floors.txt
           uv pip install --python "$PY" --no-deps .

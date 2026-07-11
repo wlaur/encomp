@@ -161,8 +161,12 @@ def test_values_within_tolerance_are_ties_and_sort_stably() -> None:
 
 
 _INF = float("inf")
+_NAN = float("nan")
 
-# pairs that straddle the tolerance band, plus the non-finite corners
+# pairs that straddle the tolerance band, plus the non-finite corners. NaN appears only
+# paired with itself: numpy and polars deliberately disagree on ordering NaN against a
+# NUMBER (see test_numpy_and_polars_disagree_on_nan_ordering), but nan-vs-nan answers
+# identically everywhere (never equal, never ordered)
 _COMPARISON_PAIRS = [
     (1.0, 1.0),
     (0.0, 0.0),
@@ -178,6 +182,7 @@ _COMPARISON_PAIRS = [
     (-_INF, -_INF),
     (1.0, _INF),
     (-_INF, _INF),
+    (_NAN, _NAN),
 ]
 
 
@@ -258,13 +263,40 @@ def test_comparing_numpy_and_polars_magnitudes_raises() -> None:
     series = Q(pl.Series([1.0]), "m")
     expr = Q(pl.col("x"), "m")
 
-    for lhs, rhs in ((array, series), (series, array), (array, expr), (expr, array)):
+    for lhs, rhs in ((array, series), (series, array)):
         for op in _OPERATORS.values():
             with pytest.raises(TypeError, match="convert one side first"):
                 op(lhs, rhs)
 
+    # when a pl.Expr is involved there is no data to convert on that side, so the
+    # message points at evaluating the expression or lifting the other operand instead
+    for lhs, rhs in ((array, expr), (expr, array)):
+        for op in _OPERATORS.values():
+            with pytest.raises(TypeError, match="lift the other side"):
+                op(lhs, rhs)
+
     # the escape hatch is explicit conversion
     assert (array.astype("pl.Series") == series).to_list() == [True]
+
+
+def test_comparing_series_and_expr_magnitudes_raises() -> None:
+    # Series-vs-Expr is equally outside the typed API: polars' raw operator would lift the
+    # Series into an Expr literal and compare EXACTLY, skipping the (rtol, atol) tolerance
+    # every sanctioned path applies, with a length mismatch surfacing only at collect()
+    # time as a ShapeError pointing into the plan -- so the runtime refuses this pair too
+    series = Q(pl.Series([1.0]), "m")
+    expr = Q(pl.col("x"), "m")
+
+    for lhs, rhs in ((series, expr), (expr, series)):
+        for op in _OPERATORS.values():
+            with pytest.raises(TypeError, match="lift the other side"):
+                op(lhs, rhs)
+
+    # the escape hatch is an explicit literal lift, which states the intent and lands on
+    # the sanctioned (tolerant) Expr-vs-Expr path
+    df = pl.DataFrame({"x": [1.0 + 5e-10, 2.0]})
+    lifted = Q(pl.lit(pl.Series([1.0, 2.0])), "m")
+    assert df.select((expr == lifted).alias("r"))["r"].to_list() == [True, True]
 
 
 def test_numpy_and_polars_disagree_on_nan_ordering() -> None:
@@ -283,6 +315,16 @@ def test_numpy_and_polars_disagree_on_nan_ordering() -> None:
     assert_type(series > one, pl.Series)
     assert (series > one).to_list() == [True]
     assert (series <= one).to_list() == [False]
+
+    # nan-vs-nan is the one NaN case the worlds AGREE on: polars' raw >= calls NaN equal
+    # to NaN (total order), but the non-strict operators are derived as `strict or equal`
+    # with encomp's tolerant __eq__ (NaN is never equal), so every container answers
+    # False for all four orderings -- `ge == (gt or eq)` holds even here
+    other_nan = Q(pl.Series([nan]), "m")
+    assert (series >= other_nan).to_list() == [False]
+    assert (series <= other_nan).to_list() == [False]
+    assert (series > other_nan).to_list() == [False]
+    assert (series == other_nan).to_list() == [False]
 
     # a null magnitude propagates as null in both directions
     with_null = Q(pl.Series([1.0, None]), "m")

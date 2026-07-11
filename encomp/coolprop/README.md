@@ -147,7 +147,7 @@ PYO3_PYTHON=$(pwd)/.venv/bin/python cargo test --manifest-path rust/Cargo.toml -
 
 ## Files
 
-- `encomp/coolprop/__init__.py` — public Python API (`fluid`, `humid_air`).
+- `encomp/coolprop/__init__.py` — public Python API (`fluid`, `water`, `humid_air`).
 - `rust/src/lib.rs` — the `cp_evaluate` / `ha_evaluate` plugin expressions (crate at repo root).
 - `rust/src/coolprop.rs` — the CoolProp C-API bindings + thread-safety model (all `unsafe`).
 - `scripts/build_libcoolprop.py` — builds + bundles CoolProp's shared library.

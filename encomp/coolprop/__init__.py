@@ -92,6 +92,7 @@ __all__ = [
 # CoolProp AbstractState backends (HEOS is the general-purpose mixture EOS; IF97 is water/steam).
 Backend = Literal["HEOS", "IF97", "REFPROP", "SRK", "PR", "PCSAFT", "VTPR", "INCOMP", "BICUBIC&HEOS", "TTSE&HEOS"]
 BACKENDS: frozenset[Backend] = frozenset(get_args(Backend))
+"""Runtime set of the CoolProp ``AbstractState`` backend names in :data:`Backend`."""
 
 # A few common CoolProp fluid names surfaced as Literals so editors can suggest them;
 # ANY CoolProp name string is still accepted (the union widens to ``str``). The name may
@@ -131,6 +132,7 @@ Phase = Literal[
     "phase_critical_point",
 ]
 PHASES: frozenset[Phase] = frozenset(get_args(Phase))
+"""Runtime set of the low-level CoolProp ``phase_*`` strings in :data:`Phase`."""
 
 # User-facing assumed-phase names (matches encomp.fluids.Fluid.assume_phase). Each maps
 # to the CoolProp ``phase_*`` string (the ``Phase`` literal) via ``_phase_from_assumed``;
@@ -144,13 +146,15 @@ AssumedPhase = Literal[
     "twophase",
 ]
 ASSUMED_PHASES: frozenset[AssumedPhase] = frozenset(get_args(AssumedPhase))
+"""Runtime set of the user-facing assumed-phase names in :data:`AssumedPhase`."""
 
-# backends that ignore AbstractState.specify_phase because they are region-explicit: assuming a
-# phase has no effect there. Mirrors encomp.fluids._PHASE_IGNORING_BACKENDS.
 PHASE_IGNORING_BACKENDS: frozenset[str] = frozenset({"IF97"})
+"""Region-explicit backends that ignore ``AbstractState.specify_phase``: assuming a phase has
+no effect there, so :func:`fluid` logs a warning when ``assume_phase`` names one of these.
+Mirrors the set :class:`encomp.fluids.Fluid` uses."""
 
-# the fluid name behind encomp.fluids.Water, and the one `water()` evaluates
 WATER_NAME: CommonFluidName = "IF97::Water"
+"""The fluid name behind :class:`encomp.fluids.Water`, and the one :func:`water` evaluates."""
 
 # CoolProp fluid parameters (outputs / the two state-input names): canonical names
 # plus the common single-letter aliases.
@@ -296,6 +300,7 @@ FluidParam = Literal[
     "viscosity",
 ]
 FLUID_PARAMS: frozenset[FluidParam] = frozenset(get_args(FluidParam))
+"""Runtime set of the CoolProp fluid parameter names in :data:`FluidParam`."""
 
 # CoolProp fluid STATE-INPUT properties: the subset of FluidParam valid as the two
 # inputs that fix a state -- pressure/temperature/quality + density/enthalpy/entropy/
@@ -309,6 +314,8 @@ FluidInput = Literal[
     "U", "UMASS", "UMOLAR", "Umass", "Umolar",
 ]  # fmt: skip
 FLUID_INPUTS: frozenset[FluidInput] = frozenset(get_args(FluidInput))
+"""Runtime set of the fluid state-input names in :data:`FluidInput` -- the subset of
+:data:`FluidParam` that can fix a state."""
 
 # Common HumidAir (HAPropsSI) parameters.
 HumidAirParam = Literal[
@@ -360,6 +367,7 @@ HumidAirParam = Literal[
     "psi_w",
 ]
 HUMID_AIR_PARAMS: frozenset[HumidAirParam] = frozenset(get_args(HumidAirParam))
+"""Runtime set of the ``HAPropsSI`` parameter names in :data:`HumidAirParam`."""
 
 # HumidAir (HAPropsSI) STATE-INPUT properties: the subset valid as the three inputs.
 HumidAirInput = Literal[
@@ -369,6 +377,8 @@ HumidAirInput = Literal[
     "S", "Sda", "Sha", "Entropy", "V", "Vda", "Vha", "P", "P_w", "Y",
 ]  # fmt: skip
 HUMID_AIR_INPUTS: frozenset[HumidAirInput] = frozenset(get_args(HumidAirInput))
+"""Runtime set of the ``HAPropsSI`` state-input names in :data:`HumidAirInput` -- the subset
+of :data:`HumidAirParam` that can fix a state."""
 
 _HUMID_AIR_INPUT_ALIASES: tuple[tuple[HumidAirInput, ...], ...] = (
     ("T", "Tdb", "T_db"),

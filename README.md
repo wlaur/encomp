@@ -6,7 +6,7 @@
 [![Documentation](https://readthedocs.org/projects/encomp/badge/?version=latest)](https://encomp.readthedocs.io)
 [![License](https://img.shields.io/pypi/l/encomp.svg)](https://github.com/wlaur/encomp/blob/main/LICENSE)
 
-<img src="https://raw.githubusercontent.com/wlaur/encomp/v1.7.0/docs/img/logo.png" alt="encomp logo" width="150">
+<img src="https://raw.githubusercontent.com/wlaur/encomp/main/docs/img/logo.png" alt="encomp logo" width="150">
 
 > General-purpose library for *en*gineering *comp*utations.
 
@@ -18,7 +18,7 @@ Every physical quantity in `encomp` carries a magnitude, a unit, and a dimension
 
 - **`Quantity`** (`encomp.units`, `encomp.utypes`) extends [pint](https://pypi.org/project/Pint): each dimensionality (pressure, mass flow, density, ...) is a distinct subclass of `Quantity`. Dividing a `Mass` by a `Volume` gives a `Density`, inferred by static type checkers and verified at runtime. Magnitudes can be scalars, NumPy arrays, Polars `Series`, or Polars `Expr`.
 
-- **Static unit checking.** Common dimensionalities and their `*` / `/` / `**` combinations are encoded as `__new__` overloads, so a type checker flags a `Temperature` passed where a `Power` is expected. `@typeguard.typechecked` extends the same checks to runtime.
+- **Static unit checking.** Common dimensionalities are encoded as `Quantity.__new__` overloads, and their `*` / `/` / `**` combinations as arithmetic-operator overloads, so a type checker flags a `Temperature` passed where a `Power` is expected. `@typeguard.typechecked` extends the same checks to runtime.
 
 - **`Fluid` / `Water` / `HumidAir`** (`encomp.fluids`) wrap [CoolProp](http://www.coolprop.org): fix a state with two points (three for humid air) and read any property as an attribute. Inputs and outputs are `Quantity` objects, so units are converted and validated automatically.
 
@@ -32,7 +32,7 @@ The remaining modules (`encomp.gases`, `encomp.conversion`, `encomp.constants`, 
 
 ## Versioning and stability
 
-`encomp` uses semantic versioning for documented public APIs. Public APIs are the documented modules and objects in the API reference; private helpers, tests, notebooks, generated docs, and Rust internals may change in any release. The top-level `encomp` package intentionally exposes only `__version__`; import library APIs from their submodules.
+`encomp` does not follow strict semantic versioning: releases keep the documented public APIs stable where possible, and any breaking change to them is called out in the [GitHub release notes](https://github.com/wlaur/encomp/releases). Public APIs are the documented modules and objects in the API reference; private helpers, tests, notebooks, generated docs, and Rust internals may change in any release. The top-level `encomp` package intentionally exposes only `__version__`; import library APIs from their submodules.
 
 `encomp.sympy` is legacy and soft-deprecated. It remains available for existing users, but new code should avoid depending on its `sympy.Symbol` monkey-patching and helper wrappers because the module is planned for removal in a future major release.
 

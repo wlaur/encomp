@@ -256,12 +256,14 @@ class DimensionalityRedefinitionError(ValueError):
     """Raised when defining a dimensionality that already exists."""
 
 
-# keep track of user-created dimensions
 # NOTE: make sure to list all that are defined in defs/units.txt ("# custom dimensions")
 CUSTOM_DIMENSIONS: list[str] = [
     "currency",
     "normal",
 ]
+"""Names of the registered custom base dimensions. The entries defined out of the box
+match the custom-dimension section of ``defs/units.txt``;
+:func:`define_dimensionality` appends every dimensionality it defines."""
 
 
 _REGISTRY_STATIC_OPTIONS = {
@@ -312,6 +314,8 @@ class _LazyRegistry(LazyRegistry[Any, Any]):
         self._after_init()
 
 
+# NOTE: no attribute docstring here: autodoc's signature formatter fails on the
+# UnitRegistry[Any] value annotation, which would break the -W docs build
 UNIT_REGISTRY = cast(UnitRegistry[Any], _LazyRegistry())
 
 for _option_name, _option_value in _REGISTRY_STATIC_OPTIONS.items():
@@ -467,9 +471,12 @@ class Quantity(
         Unit("delta_degRe")._units,
     )
 
-    # Tolerance for == / != and the ordering operators, applied identically to every magnitude
-    # type: two values are equal when |a - b| <= max(rtol * max(|a|, |b|), atol). This is the
-    # math.isclose / polars is_close predicate; see the module-level _is_close.
+    # Tolerance for == / != and the ordering operators, applied identically to every
+    # magnitude type: two values are equal when |a - b| <= max(rtol * max(|a|, |b|), atol).
+    # This is the math.isclose / polars is_close predicate; see the module-level _is_close.
+    # NOTE: no comment line here may begin with "# type:" -- sphinx's source analyzer
+    # parses that as a PEP 484 type comment, and a failure there drops the attribute
+    # docstrings of the WHOLE module from the rendered API reference.
     rtol: float = 1e-9
     atol: float = 1e-12
 
@@ -510,9 +517,9 @@ class Quantity(
         # hash on the canonical root-unit representation so the eq/hash contract holds:
         # __eq__ compares across units (Q(1, "m") == Q(100, "cm")), so two quantities that
         # are equal must hash equal -- hashing the raw (m, u) would break that.
-        # NOTE: __eq__ is tolerant (np.isclose), so quantities that are only *approximately*
+        # NOTE: __eq__ is tolerant (rtol, atol), so quantities that are only *approximately*
         # equal may still hash differently -- an inherent limit of tolerant equality, the same
-        # way hash(0.1 + 0.2) != hash(0.3); exact equality (the common case) is now consistent.
+        # way hash(0.1 + 0.2) != hash(0.3); exact equality (the common case) is consistent.
         root = self.to_root_units()
 
         # __eq__ also answers True against plain numbers (Q(0.5, "") == 0.5), so a
@@ -620,25 +627,34 @@ class Quantity(
 
     @classmethod
     def _check_comparable_magnitudes(cls, m: object, other_m: object) -> None:
-        # The numpy world and the polars world do not compare elementwise against each other:
-        # numpy raises an opaque ufunc-loop TypeError, polars an equally opaque dtype error, and
-        # pl.Expr silently lifts an ndarray into a literal. None of these combinations is in the
-        # typed API (the __eq__/__gt__/... overloads pair a magnitude type with itself or with a
-        # scalar), so reject them here with an actionable message instead
+        # Mixed containers do not compare elementwise: numpy-vs-polars raises an opaque
+        # ufunc-loop TypeError or dtype error, and pl.Expr silently lifts an ndarray OR a
+        # pl.Series into a literal and compares EXACTLY, skipping the (rtol, atol) tolerance
+        # every sanctioned path applies -- with a length mismatch surfacing only at collect()
+        # time as a ShapeError pointing into the plan. None of these combinations is in the
+        # typed API (the __eq__/__gt__/... overloads pair a magnitude type with itself or with
+        # a scalar), so reject them here with an actionable message instead
         if cls._is_mixed_container(m, other_m):
+            if isinstance(m, pl.Expr) or isinstance(other_m, pl.Expr):
+                hint = (
+                    "evaluate the pl.Expr side first, or lift the other side into the "
+                    "expression explicitly (e.g. with pl.lit(...)) if literal semantics are intended"
+                )
+            else:
+                hint = 'convert one side first, e.g. with .astype("pl.Series") or .astype("ndarray")'
+
             raise TypeError(
                 f"Cannot compare a Quantity with {cls._describe_magnitude(m)} magnitude to one with "
-                f"{cls._describe_magnitude(other_m)} magnitude; convert one side first, "
-                'e.g. with .astype("pl.Series") or .astype("ndarray")'
+                f"{cls._describe_magnitude(other_m)} magnitude; {hint}"
             )
 
-    @staticmethod
-    def _is_mixed_container(m: object, other_m: object) -> bool:
-        polars_types = (pl.Series, pl.Expr)
+    @classmethod
+    def _is_mixed_container(cls, m: object, other_m: object) -> bool:
+        container_kinds = ("ndarray", "pl.Series", "pl.Expr")
+        m_kind = cls._describe_magnitude(m)
+        other_kind = cls._describe_magnitude(other_m)
 
-        return (isinstance(m, np.ndarray) and isinstance(other_m, polars_types)) or (
-            isinstance(m, polars_types) and isinstance(other_m, np.ndarray)
-        )
+        return m_kind in container_kinds and other_kind in container_kinds and m_kind != other_kind
 
     @staticmethod
     def _describe_magnitude(value: object) -> str:
@@ -2507,20 +2523,30 @@ class Quantity(
         if isinstance(other, Quantity):
             self._check_comparable_magnitudes(self.m, other.m)
 
+        # only the STRICT pint operator is ever evaluated; a non-strict result is derived
+        # from it below. Using pint's raw >= / <= would poison the derivation for NaN:
+        # polars' total order calls NaN equal to NaN, so its raw `nan >= nan` is True while
+        # encomp's tolerant __eq__ says False -- and `ge == (gt or eq)` would not hold.
+        strict_op: str = {"__ge__": "__gt__", "__le__": "__lt__"}.get(op, op)
+
         try:
-            ret = getattr(self._pint_super, op)(other)
+            ret = getattr(self._pint_super, strict_op)(other)
         except (ValueError, DimensionalityError) as e:
             raise DimensionalityComparisonError(str(e)) from e
 
         # __eq__ is tolerant (rtol, atol), so every ordering operator must agree with it or the
-        # five relations do not form an ordering. pint compares exactly, so fold the tolerance in
-        # here: the non-strict operators absorb equality, the strict ones exclude it. Without the
-        # strict side, `a > b` and `a <= b` were both True for operands equal within tolerance,
-        # which breaks sorted()/bisect and any code assuming `a > b` implies `not (a <= b)`.
+        # five relations do not form an ordering. pint compares exactly, so fold the tolerance
+        # in here: the strict operators exclude equality, and the non-strict ones are exactly
+        # `strict or equal`. This keeps `a > b` implies `not (a <= b)` (which sorted()/bisect
+        # assume), and makes `ge == (gt or eq)` / `le == (lt or eq)` hold for EVERY input --
+        # including NaN operands on polars magnitudes -- in all four magnitude containers.
         equal = cast(Any, self).__eq__(other)
         not_equal = (not equal) if isinstance(equal, bool) else ~equal
 
-        ret = (ret | equal) if op in ("__ge__", "__le__") else (ret & not_equal)
+        ret = ret & not_equal
+
+        if op in ("__ge__", "__le__"):
+            ret = ret | equal
 
         if isinstance(ret, np.bool):
             return bool(cast(Any, ret))
