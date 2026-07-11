@@ -632,6 +632,10 @@ def fluid(
     column read from it; an expression by its output name (``pl.col("P")`` or
     ``pl.col("p").alias("P")``). Both must be CoolProp state inputs (P/T/Q/D/H/S/U,
     any pair: PT, PH, PQ, ...).
+
+    Inputs must be plain numeric columns holding SI magnitudes. A unit-carrying
+    extension dtype (:mod:`encomp.polars`) is refused at schema-resolution time --
+    convert to the SI unit CoolProp expects, then unwrap with ``.ext.storage()``.
     """
     name1, name2 = _input_name(input1), _input_name(input2)
     for nm in (name1, name2):
@@ -711,6 +715,8 @@ def humid_air(
 
     Each input identifies its property by name (the string, or the expression's
     output name); all three must be HAPropsSI state inputs (T, P, R, W, B, ...).
+    Like :func:`fluid`, inputs must be plain numeric columns holding SI magnitudes;
+    a unit-carrying extension dtype is refused (unwrap with ``.ext.storage()``).
     """
     # Unlike the fluid path (validated by CoolProp's param_index in the plugin), HAPropsSI
     # returns _HUGE -> null for an unknown output, so a typo'd output would silently yield

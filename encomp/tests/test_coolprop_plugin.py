@@ -364,6 +364,33 @@ def test_duplicate_state_inputs_raise() -> None:
         cp.humid_air("W", "P", "R", "RH")
 
 
+def test_extension_typed_inputs_refused_cleanly() -> None:
+    # a unit-typed column (encomp.polars extension dtype) must not be interpreted as raw
+    # SI magnitudes -- the storage values could be in any unit. Without the plugin's
+    # dtype-extension feature + validation this was a PANIC inside the FFI field import;
+    # now it is an actionable error at schema-resolution time, before any flash runs.
+    from encomp.polars import with_units
+
+    df = with_units(pl.DataFrame({"P": [50e5], "T": [400.0]}), {"P": "Pa", "T": "K"})
+
+    with pytest.raises(Exception, match=r"ext\.storage"):
+        df.lazy().select(cp.water("D", "P", "T")).collect_schema()
+    with pytest.raises(Exception, match=r"ext\.storage"):
+        df.select(cp.water("D", "P", "T"))
+
+    # the documented escape hatch: unwrap to storage (these values are already SI)
+    out = df.select(cp.water("D", pl.col("P").ext.storage(), pl.col("T").ext.storage()))
+    ref = CP.PropsSI("D", "P", 50e5, "T", 400.0, "IF97::Water")
+    assert out["D"][0] == pytest.approx(ref, rel=RTOL)
+
+    # one extension-typed input among plain ones is refused too, and so is humid air
+    with pytest.raises(Exception, match=r"ext\.storage"):
+        df.select(cp.water("D", pl.col("P").ext.storage(), "T"))
+    dfh = with_units(pl.DataFrame({"T": [300.0], "P": [101325.0], "R": [0.5]}), {"T": "K"})
+    with pytest.raises(Exception, match=r"ext\.storage"):
+        dfh.select(cp.humid_air("W", "T", "P", "R"))
+
+
 def test_scalar_literal_inputs_on_empty_frames_return_empty() -> None:
     df = pl.DataFrame({"T": pl.Series([], dtype=pl.Float64)})
     out = df.select(cp.fluid("DMASS", pl.lit(5e5).alias("P"), "T", name="HEOS::Water").alias("d"))

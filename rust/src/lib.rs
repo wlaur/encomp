@@ -34,6 +34,27 @@ fn validate_input_count(kind: &str, got: usize, expected: usize) -> PolarsResult
     Ok(())
 }
 
+/// Refuse extension-typed inputs (e.g. encomp's "encomp.unit" columns, whose unit rides
+/// in the dtype metadata) up front: the plugin computes on raw SI magnitudes and cannot
+/// know what an extension type's values mean, so silently using the storage values could
+/// treat e.g. bar as Pa. The plugin's own polars registry loads unknown extension types
+/// as generic (never as bare storage), so the dtype always arrives intact here. Runs at
+/// schema-resolution time via the output-dtype callbacks, so a bad plan fails before any
+/// flash is computed; the compute entrypoints repeat it defensively.
+fn validate_no_extension_input(kind: &str, name: &str, dtype: &DataType) -> PolarsResult<()> {
+    if let DataType::Extension(typ, storage) = dtype {
+        return Err(PolarsError::InvalidOperation(
+            format!(
+                "{kind}: input '{name}' has extension dtype '{typ}' (storage {storage}); the plugin \
+                 computes on raw SI magnitudes and does not interpret extension types. Convert the \
+                 column to the SI unit CoolProp expects, then unwrap it with `.ext.storage()`."
+            )
+            .into(),
+        ));
+    }
+    Ok(())
+}
+
 /// Broadcast a length-1 input to `n` (Polars passes a scalar `pl.lit` input as
 /// length 1 alongside full columns; map_batches broadcasts via its struct, we
 /// must do it here). No copy when the length already matches.
@@ -119,6 +140,9 @@ fn output_dtype(dtypes: &[&DataType], scalar_mask: &[bool]) -> DataType {
 
 fn cp_output(input_fields: &[Field], kwargs: EvalKwargs) -> PolarsResult<Field> {
     validate_input_count("cp_evaluate", input_fields.len(), 2)?;
+    for f in input_fields {
+        validate_no_extension_input("cp_evaluate", f.name(), f.dtype())?;
+    }
     let dtypes: Vec<&DataType> = input_fields.iter().map(|f| f.dtype()).collect();
     Ok(Field::new(
         input_fields[0].name().clone(),
@@ -128,6 +152,9 @@ fn cp_output(input_fields: &[Field], kwargs: EvalKwargs) -> PolarsResult<Field> 
 
 fn ha_output(input_fields: &[Field], kwargs: HaKwargs) -> PolarsResult<Field> {
     validate_input_count("ha_evaluate", input_fields.len(), 3)?;
+    for f in input_fields {
+        validate_no_extension_input("ha_evaluate", f.name(), f.dtype())?;
+    }
     let dtypes: Vec<&DataType> = input_fields.iter().map(|f| f.dtype()).collect();
     Ok(Field::new(
         input_fields[0].name().clone(),
@@ -155,6 +182,9 @@ struct EvalKwargs {
 fn cp_evaluate(inputs: &[Series], kwargs: EvalKwargs) -> PolarsResult<Series> {
     validate_input_count("cp_evaluate", inputs.len(), 2)?;
     validate_input_count("cp_evaluate scalar_mask", kwargs.scalar_mask.len(), 2)?;
+    for s in inputs {
+        validate_no_extension_input("cp_evaluate", s.name(), s.dtype())?;
+    }
     let cp = coolprop(&kwargs.lib_path)?;
     // warm THIS (backend, fluid) once, single-threaded, before the parallel flash below
     cp.ensure_warmed_fluid(&kwargs.backend, &kwargs.fluid).map_err(perr)?;
@@ -271,6 +301,9 @@ struct HaKwargs {
 fn ha_evaluate(inputs: &[Series], kwargs: HaKwargs) -> PolarsResult<Series> {
     validate_input_count("ha_evaluate", inputs.len(), 3)?;
     validate_input_count("ha_evaluate scalar_mask", kwargs.scalar_mask.len(), 3)?;
+    for s in inputs {
+        validate_no_extension_input("ha_evaluate", s.name(), s.dtype())?;
+    }
     let cp = coolprop(&kwargs.lib_path)?;
     cp.ensure_warmed_humid_air().map_err(perr)?; // one-time HAPropsSI global init, single-threaded
     let out_dtype = output_dtype(
