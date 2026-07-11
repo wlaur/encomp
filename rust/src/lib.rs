@@ -34,25 +34,58 @@ fn validate_input_count(kind: &str, got: usize, expected: usize) -> PolarsResult
     Ok(())
 }
 
-/// Refuse extension-typed inputs (e.g. encomp's "encomp.unit" columns, whose unit rides
-/// in the dtype metadata) up front: the plugin computes on raw SI magnitudes and cannot
-/// know what an extension type's values mean, so silently using the storage values could
-/// treat e.g. bar as Pa. The plugin's own polars registry loads unknown extension types
-/// as generic (never as bare storage), so the dtype always arrives intact here. Runs at
-/// schema-resolution time via the output-dtype callbacks, so a bad plan fails before any
-/// flash is computed; the compute entrypoints repeat it defensively.
-fn validate_no_extension_input(kind: &str, name: &str, dtype: &DataType) -> PolarsResult<()> {
-    if let DataType::Extension(typ, storage) = dtype {
+/// The extension-type name of encomp's unit-carrying dtype (encomp/polars.py
+/// EXTENSION_NAME -- the two must stay in sync). Its metadata is the unit string in
+/// encomp's canonical registry rendering.
+const ENCOMP_UNIT_EXTENSION_NAME: &str = "encomp.unit";
+
+/// Validate an extension-typed input (e.g. encomp's "encomp.unit" columns, whose unit
+/// rides in the dtype metadata). The plugin computes on raw SI magnitudes and has no
+/// units engine, so the most it can honestly do is string equality: an "encomp.unit"
+/// input whose canonical unit string equals `expected_unit` (the canonical rendering of
+/// the SI unit CoolProp expects, supplied by the Python wrapper) is accepted and its
+/// storage values are used as-is. Anything else is refused -- silently using the
+/// storage values could treat e.g. bar as Pa. The plugin's own polars registry loads
+/// unknown extension types as generic (never as bare storage), so the dtype always
+/// arrives intact here. Runs at schema-resolution time via the output-dtype callbacks,
+/// so a bad plan fails before any flash is computed; the compute entrypoints repeat it
+/// defensively.
+fn validate_extension_input(kind: &str, name: &str, dtype: &DataType, expected_unit: Option<&str>) -> PolarsResult<()> {
+    let DataType::Extension(typ, storage) = dtype else {
+        return Ok(());
+    };
+    if typ.name() == ENCOMP_UNIT_EXTENSION_NAME
+        && let (Some(expected), Some(carried)) = (expected_unit, typ.serialize_metadata())
+    {
+        if carried == expected {
+            return Ok(()); // already the SI unit this input expects: storage used as-is
+        }
+        let display = |u: &str| {
+            if u.is_empty() {
+                "dimensionless".to_string()
+            } else {
+                format!("'{u}'")
+            }
+        };
         return Err(PolarsError::InvalidOperation(
             format!(
-                "{kind}: input '{name}' has extension dtype '{typ}' (storage {storage}); the plugin \
-                 computes on raw SI magnitudes and does not interpret extension types. Convert the \
-                 column to the SI unit CoolProp expects, then unwrap it with `.ext.storage()`."
+                "{kind}: input '{name}' carries unit {} but this input expects {}. Convert the \
+                 column first, e.g. with encomp.polars.quantities and `.to(...)`, or pass raw \
+                 SI values via `.ext.storage()`.",
+                display(&carried),
+                display(expected),
             )
             .into(),
         ));
     }
-    Ok(())
+    Err(PolarsError::InvalidOperation(
+        format!(
+            "{kind}: input '{name}' has extension dtype '{typ}' (storage {storage}); the plugin \
+             computes on raw SI magnitudes and does not interpret this extension type. Unwrap it \
+             with `.ext.storage()` first."
+        )
+        .into(),
+    ))
 }
 
 /// Broadcast a length-1 input to `n` (Polars passes a scalar `pl.lit` input as
@@ -90,7 +123,9 @@ fn broadcast_len(values: &[Vec<f64>], scalar_mask: &[bool]) -> usize {
 /// row becomes a null output row -- matching the eager numpy path, rather than the old
 /// `cont_slice()` hard error on the first null (nulls are ubiquitous in real frames).
 fn to_f64(s: &Series) -> PolarsResult<Vec<f64>> {
-    let s = s.cast(&DataType::Float64)?;
+    // to_storage: an accepted extension-typed input (validate_extension_input) computes
+    // on its storage values; the identity for plain columns
+    let s = s.to_storage().cast(&DataType::Float64)?;
     Ok(s.f64()?.iter().map(|o| o.unwrap_or(f64::NAN)).collect())
 }
 
@@ -119,8 +154,10 @@ fn coolprop(lib_path: &str) -> PolarsResult<&'static CoolProp> {
 /// i as a length-1 literal (the Python wrapper detects these via empty root names),
 /// so a Float64 scalar does not force the whole result up to Float64. If every input
 /// is a scalar, promote over all of them. CoolProp always computes in f64; this only
-/// sizes the result so a Float32 pipeline keeps Float32.
-fn output_dtype(dtypes: &[&DataType], scalar_mask: &[bool]) -> DataType {
+/// sizes the result so a Float32 pipeline keeps Float32. An accepted extension-typed
+/// input counts as its storage dtype (Float32 storage keeps a Float32 pipeline).
+fn output_dtype(dtypes: &[DataType], scalar_mask: &[bool]) -> DataType {
+    let is_f32 = |dt: &DataType| matches!(dt.to_storage(), DataType::Float32);
     let mut saw_column = false;
     let mut all_f32 = true;
     for (i, dt) in dtypes.iter().enumerate() {
@@ -128,22 +165,31 @@ fn output_dtype(dtypes: &[&DataType], scalar_mask: &[bool]) -> DataType {
             continue;
         }
         saw_column = true;
-        if !matches!(dt, DataType::Float32) {
+        if !is_f32(dt) {
             all_f32 = false;
         }
     }
     if !saw_column {
-        all_f32 = dtypes.iter().all(|dt| matches!(dt, DataType::Float32));
+        all_f32 = dtypes.iter().all(is_f32);
     }
     if all_f32 { DataType::Float32 } else { DataType::Float64 }
 }
 
+fn expected_unit(expected_units: &[String], i: usize) -> Option<&str> {
+    expected_units.get(i).map(String::as_str)
+}
+
 fn cp_output(input_fields: &[Field], kwargs: EvalKwargs) -> PolarsResult<Field> {
     validate_input_count("cp_evaluate", input_fields.len(), 2)?;
-    for f in input_fields {
-        validate_no_extension_input("cp_evaluate", f.name(), f.dtype())?;
+    for (i, f) in input_fields.iter().enumerate() {
+        validate_extension_input(
+            "cp_evaluate",
+            f.name(),
+            f.dtype(),
+            expected_unit(&kwargs.expected_units, i),
+        )?;
     }
-    let dtypes: Vec<&DataType> = input_fields.iter().map(|f| f.dtype()).collect();
+    let dtypes: Vec<DataType> = input_fields.iter().map(|f| f.dtype().clone()).collect();
     Ok(Field::new(
         input_fields[0].name().clone(),
         output_dtype(&dtypes, &kwargs.scalar_mask),
@@ -152,10 +198,15 @@ fn cp_output(input_fields: &[Field], kwargs: EvalKwargs) -> PolarsResult<Field> 
 
 fn ha_output(input_fields: &[Field], kwargs: HaKwargs) -> PolarsResult<Field> {
     validate_input_count("ha_evaluate", input_fields.len(), 3)?;
-    for f in input_fields {
-        validate_no_extension_input("ha_evaluate", f.name(), f.dtype())?;
+    for (i, f) in input_fields.iter().enumerate() {
+        validate_extension_input(
+            "ha_evaluate",
+            f.name(),
+            f.dtype(),
+            expected_unit(&kwargs.expected_units, i),
+        )?;
     }
-    let dtypes: Vec<&DataType> = input_fields.iter().map(|f| f.dtype()).collect();
+    let dtypes: Vec<DataType> = input_fields.iter().map(|f| f.dtype().clone()).collect();
     Ok(Field::new(
         input_fields[0].name().clone(),
         output_dtype(&dtypes, &kwargs.scalar_mask),
@@ -172,6 +223,11 @@ struct EvalKwargs {
     phase: Option<String>,       // CoolProp phase string (assume_phase)
     fractions: Option<Vec<f64>>, // composition/concentration; set_fractions picks the basis per fluid
     scalar_mask: Vec<bool>,      // per-input: true = length-1 literal (neutral for output dtype)
+    // per-input canonical SI unit strings (encomp registry rendering), for accepting
+    // "encomp.unit" extension-typed inputs already in the expected unit; empty (the
+    // serde default) refuses every extension-typed input
+    #[serde(default)]
+    expected_units: Vec<String>,
 }
 
 /// inputs[0], inputs[1] are the two state values already in the canonical order
@@ -182,8 +238,13 @@ struct EvalKwargs {
 fn cp_evaluate(inputs: &[Series], kwargs: EvalKwargs) -> PolarsResult<Series> {
     validate_input_count("cp_evaluate", inputs.len(), 2)?;
     validate_input_count("cp_evaluate scalar_mask", kwargs.scalar_mask.len(), 2)?;
-    for s in inputs {
-        validate_no_extension_input("cp_evaluate", s.name(), s.dtype())?;
+    for (i, s) in inputs.iter().enumerate() {
+        validate_extension_input(
+            "cp_evaluate",
+            s.name(),
+            s.dtype(),
+            expected_unit(&kwargs.expected_units, i),
+        )?;
     }
     let cp = coolprop(&kwargs.lib_path)?;
     // warm THIS (backend, fluid) once, single-threaded, before the parallel flash below
@@ -192,7 +253,7 @@ fn cp_evaluate(inputs: &[Series], kwargs: EvalKwargs) -> PolarsResult<Series> {
     let okey = cp.param_index(&kwargs.output).map_err(perr)?;
     // decide the output precision from the original input dtypes (before the f64 cast)
     let out_dtype = output_dtype(
-        &inputs.iter().map(|s| s.dtype()).collect::<Vec<_>>(),
+        &inputs.iter().map(|s| s.dtype().clone()).collect::<Vec<_>>(),
         &kwargs.scalar_mask,
     );
 
@@ -254,19 +315,19 @@ mod tests {
 
     #[test]
     fn output_dtype_column_precision_wins() {
-        let f32d = DataType::Float32;
-        let f64d = DataType::Float64;
+        let f32d = || DataType::Float32;
+        let f64d = || DataType::Float64;
         // all-Float32 columns stay Float32; any Float64 column promotes
-        assert_eq!(output_dtype(&[&f32d, &f32d], &[false, false]), DataType::Float32);
-        assert_eq!(output_dtype(&[&f32d, &f64d], &[false, false]), DataType::Float64);
+        assert_eq!(output_dtype(&[f32d(), f32d()], &[false, false]), DataType::Float32);
+        assert_eq!(output_dtype(&[f32d(), f64d()], &[false, false]), DataType::Float64);
         // a Float64 scalar literal is neutral next to a Float32 column
-        assert_eq!(output_dtype(&[&f32d, &f64d], &[false, true]), DataType::Float32);
+        assert_eq!(output_dtype(&[f32d(), f64d()], &[false, true]), DataType::Float32);
         // all-scalar inputs promote over the scalars themselves
-        assert_eq!(output_dtype(&[&f32d, &f32d], &[true, true]), DataType::Float32);
-        assert_eq!(output_dtype(&[&f32d, &f64d], &[true, true]), DataType::Float64);
+        assert_eq!(output_dtype(&[f32d(), f32d()], &[true, true]), DataType::Float32);
+        assert_eq!(output_dtype(&[f32d(), f64d()], &[true, true]), DataType::Float64);
         // integer columns promote to Float64
         assert_eq!(
-            output_dtype(&[&DataType::Int64, &f32d], &[false, false]),
+            output_dtype(&[DataType::Int64, f32d()], &[false, false]),
             DataType::Float64
         );
     }
@@ -292,6 +353,9 @@ struct HaKwargs {
     name2: String,          // e.g. "T"
     name3: String,          // e.g. "R"
     scalar_mask: Vec<bool>, // per-input: true = length-1 literal (neutral for output dtype)
+    // see EvalKwargs.expected_units
+    #[serde(default)]
+    expected_units: Vec<String>,
 }
 
 /// Humid air: inputs[0..3] are the three HAPropsSI values for name1/name2/name3.
@@ -301,13 +365,18 @@ struct HaKwargs {
 fn ha_evaluate(inputs: &[Series], kwargs: HaKwargs) -> PolarsResult<Series> {
     validate_input_count("ha_evaluate", inputs.len(), 3)?;
     validate_input_count("ha_evaluate scalar_mask", kwargs.scalar_mask.len(), 3)?;
-    for s in inputs {
-        validate_no_extension_input("ha_evaluate", s.name(), s.dtype())?;
+    for (i, s) in inputs.iter().enumerate() {
+        validate_extension_input(
+            "ha_evaluate",
+            s.name(),
+            s.dtype(),
+            expected_unit(&kwargs.expected_units, i),
+        )?;
     }
     let cp = coolprop(&kwargs.lib_path)?;
     cp.ensure_warmed_humid_air().map_err(perr)?; // one-time HAPropsSI global init, single-threaded
     let out_dtype = output_dtype(
-        &inputs.iter().map(|s| s.dtype()).collect::<Vec<_>>(),
+        &inputs.iter().map(|s| s.dtype().clone()).collect::<Vec<_>>(),
         &kwargs.scalar_mask,
     );
     let v: Vec<Vec<f64>> = inputs.iter().take(3).map(to_f64).collect::<PolarsResult<_>>()?;
