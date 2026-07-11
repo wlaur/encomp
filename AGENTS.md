@@ -14,7 +14,7 @@ CI gates on **pyright (strict), pyrefly and ty** — all three must pass with ze
 ```bash
 uv run pyright
 uv run pyrefly check
-uv run ty check --error-on-warning
+uv run ty check
 ```
 
 Rules of engagement:

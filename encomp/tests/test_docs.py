@@ -193,9 +193,9 @@ def test_doc_block_typechecks_ty(code: str, tmp_path: Path) -> None:
     block = tmp_path / "block.py"
     block.write_text(code)
     proc = subprocess.run(
-        # --project resolves the repo's [tool.ty] config and venv even though the
-        # block itself lives in tmp_path; --error-on-warning matches the CI gate
-        [_TY, "check", "--project", str(ROOT), "--error-on-warning", str(block)],
+        # --project resolves the repo's [tool.ty] config (including its
+        # error-on-warning gate) and venv even though the block lives in tmp_path
+        [_TY, "check", "--project", str(ROOT), str(block)],
         capture_output=True,
         text=True,
         cwd=ROOT,

@@ -241,6 +241,11 @@ include = ["encomp"]
 [tool.ty.environment]
 python-version = "3.13"
 
+[tool.ty.terminal]
+# any ty warning (e.g. a typo'd rule name in an ignore comment) fails `ty check`,
+# matching how the other two checkers are gated; no CLI flag needed in CI
+error-on-warning = true
+
 [tool.ty.rules]
 # ty's default rule set is already effectively strict; these are the rules that are
 # not error-by-default, elevated here. ty runs as the third checker in CI alongside
