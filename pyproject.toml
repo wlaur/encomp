@@ -242,9 +242,13 @@ include = ["encomp"]
 python-version = "3.13"
 
 [tool.ty.rules]
-# ty's default rule set is already effectively strict; these are the rules
-# that are not error-by-default, elevated here so manual `ty check` runs use
-# the intended strictness. ty is intentionally local-only for now.
+# ty's default rule set is already effectively strict; these are the rules that are
+# not error-by-default, elevated here. ty runs as the third checker in CI alongside
+# pyright and pyrefly; where it disagrees with pyright (the primary checker), the
+# code carries a rule-specific `# ty: ignore[...]` comment instead of being changed.
 redundant-cast = "error"
 possibly-missing-attribute = "error"
 unsupported-dynamic-base = "error"
+# match pyright's reportUnnecessaryTypeIgnoreComment and pyrefly's unused-ignore:
+# a `ty: ignore` that no longer suppresses anything must fail, not linger
+unused-ignore-comment = "error"

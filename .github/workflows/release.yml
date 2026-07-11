@@ -4,8 +4,8 @@ name: encomp CI/release
 # + bundled libCoolProp, all in one wheel) for macOS / Linux / Windows, run the full
 # test suite against each wheel on Python 3.13 and 3.14, and publish to PyPI on a tag.
 #
-#   typecheck      -> ruff check + format, pyright (strict) + pyrefly, docs build, plus
-#                     source-only doc/static tests (ty is local-only and intentionally not gated)
+#   typecheck      -> ruff check + format, pyright (strict) + pyrefly + ty, docs build,
+#                     plus source-only doc/static tests
 #   docs-rtd       -> rebuild the docs in a ReadTheDocs-equivalent environment (no project
 #                     install, no compiled plugin) so an RTD-only break fails the PR
 #   dependency-floors -> install at the LOWEST versions the declared bounds allow and run the
@@ -38,7 +38,7 @@ jobs:
     # Static source checks run before building the project. The executable docs
     # checks then install the compiled plugin too, so README/usage snippets and
     # notebooks exercise the same public API users get from wheels.
-    name: typecheck (pyright + pyrefly)
+    name: typecheck (pyright + pyrefly + ty)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -51,6 +51,9 @@ jobs:
       - run: uv run --no-sync ruff format --check encomp scripts
       - run: uv run --no-sync pyright
       - run: uv run --no-sync pyrefly check
+      # --error-on-warning: ty's own warnings (e.g. a typo'd rule name in an ignore
+      # comment) must fail the gate, matching how the other two checkers are run
+      - run: uv run --no-sync ty check --error-on-warning
       - name: Build and install the compiled CoolProp plugin for docs execution
         run: |
           python -m pip install cmake

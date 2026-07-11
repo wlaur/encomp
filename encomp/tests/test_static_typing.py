@@ -7,8 +7,8 @@ type checkers, not just the runtime.
   fallback overload excludes it from the unit types.
 
 The runtime rejects both (``_validate_magnitude`` / ``__new__``); these tests additionally
-pin the *static* rejection through the fallback ``Quantity.__new__`` overload, under both
-pyright and pyrefly. A valid twin snippet is checked as a control, so a failure of the
+pin the *static* rejection through the fallback ``Quantity.__new__`` overload, under
+pyright, pyrefly and ty. A valid twin snippet is checked as a control, so a failure of the
 invalid snippet cannot be explained away by import-resolution problems.
 """
 
@@ -34,6 +34,7 @@ def _tool(name: str) -> str | None:
 
 _PYREFLY = _tool("pyrefly")
 _PYRIGHT = _tool("pyright")
+_TY = _tool("ty")
 
 _VALID = """
 from encomp.units import Quantity as Q
@@ -108,6 +109,15 @@ def test_string_input_rejected_by_pyright(tmp_path: Path) -> None:
     assert _check([_PYRIGHT], _INVALID, tmp_path) != 0, "string inputs must not type-check"
 
 
+@pytest.mark.skipif(_TY is None, reason="ty not installed")
+@pytest.mark.skipif(_ROOT is None, reason=_NO_CONFIG)
+def test_string_input_rejected_by_ty(tmp_path: Path) -> None:
+    assert _TY is not None  # narrowed by the skipif above
+    cmd = [_TY, "check"]
+    assert _check(cmd, _VALID, tmp_path) == 0, "control snippet must type-check"
+    assert _check(cmd, _INVALID, tmp_path) != 0, "string inputs must not type-check"
+
+
 def test_string_input_rejected_at_runtime() -> None:
     with pytest.raises(ValueError):
         Q(cast(Any, "24 kg"))
@@ -131,6 +141,15 @@ def test_quantity_unit_rejected_by_pyright(tmp_path: Path) -> None:
     assert _PYRIGHT is not None  # narrowed by the skipif above
     assert _check([_PYRIGHT], _VALID_UNIT, tmp_path) == 0, "control snippet must type-check"
     assert _check([_PYRIGHT], _INVALID_UNIT, tmp_path) != 0, "a Quantity unit must not type-check"
+
+
+@pytest.mark.skipif(_TY is None, reason="ty not installed")
+@pytest.mark.skipif(_ROOT is None, reason=_NO_CONFIG)
+def test_quantity_unit_rejected_by_ty(tmp_path: Path) -> None:
+    assert _TY is not None  # narrowed by the skipif above
+    cmd = [_TY, "check"]
+    assert _check(cmd, _VALID_UNIT, tmp_path) == 0, "control snippet must type-check"
+    assert _check(cmd, _INVALID_UNIT, tmp_path) != 0, "a Quantity unit must not type-check"
 
 
 def test_quantity_unit_rejected_at_runtime() -> None:
