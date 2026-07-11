@@ -321,7 +321,7 @@ def get_lambda_kwargs(
 
     def _get_val(
         x: Quantity[Any, Numpy1DArray] | Numpy1DArray,
-    ) -> Quantity | Numpy1DArray | float:
+    ) -> Quantity[Any, Numpy1DArray] | Numpy1DArray | float:
         if not isinstance(x, Quantity):
             return x
 
@@ -537,6 +537,8 @@ def substitute_unknowns(
     if avoid is None:
         avoid = set()
 
+    excluded = knowns | avoid
+
     replacements: list[tuple[sp.Symbol, sp.Basic]] = []
 
     def _get_unknowns(expr: sp.Basic) -> list[sp.Symbol]:
@@ -544,7 +546,7 @@ def substitute_unknowns(
 
         already_replaced = [m[0] for m in replacements]
 
-        return [n for n in all_symbols if n not in (knowns | avoid) and n not in already_replaced]
+        return [n for n in all_symbols if n not in excluded and n not in already_replaced]
 
     unknowns_list = _get_unknowns(e)
 

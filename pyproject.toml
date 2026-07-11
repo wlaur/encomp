@@ -1,6 +1,6 @@
 [project]
 name = "encomp"
-version = "1.7.1"
+version = "1.7.2"
 description = "General-purpose library for engineering computations"
 authors = [{ name = "William Laurén", email = "lauren.william.a@gmail.com" }]
 requires-python = ">=3.13"
@@ -241,10 +241,19 @@ include = ["encomp"]
 [tool.ty.environment]
 python-version = "3.13"
 
+[tool.ty.terminal]
+# any ty warning (e.g. a typo'd rule name in an ignore comment) fails `ty check`,
+# matching how the other two checkers are gated; no CLI flag needed in CI
+error-on-warning = true
+
 [tool.ty.rules]
-# ty's default rule set is already effectively strict; these are the rules
-# that are not error-by-default, elevated here so manual `ty check` runs use
-# the intended strictness. ty is intentionally local-only for now.
+# ty's default rule set is already effectively strict; these are the rules that are
+# not error-by-default, elevated here. ty runs as the third checker in CI alongside
+# pyright and pyrefly; where it disagrees with pyright (the primary checker), the
+# code carries a rule-specific `# ty: ignore[...]` comment instead of being changed.
 redundant-cast = "error"
 possibly-missing-attribute = "error"
 unsupported-dynamic-base = "error"
+# match pyright's reportUnnecessaryTypeIgnoreComment and pyrefly's unused-ignore:
+# a `ty: ignore` that no longer suppresses anything must fail, not linger
+unused-ignore-comment = "error"

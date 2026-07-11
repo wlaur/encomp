@@ -660,7 +660,7 @@ phase_names = Water.PHASES
 
 # when one input is constant (float, int, single element array),
 # it's repeated as an array
-Water(T=Q(np.linspace(25, 500, 10), "°C"), P=Q(5, "bar"))
+Water(T=Q(np.linspace(25, 500, 10), "°C"), P=Q(5, "bar"))  # ty: ignore[invalid-argument-type]
 # <Water (Variable), P=[500 500 500 ...] kPa, T=[25.0 77.8 130.6 ...] °C,
 # D=[997.2 973.4 934.5 ...] kg/m³, V=[0.89 0.36 0.21 ...] cP>
 ```

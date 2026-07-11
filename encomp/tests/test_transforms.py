@@ -632,7 +632,7 @@ def _dynamic(*q: Q[DT]) -> Q[DT]:
 
 def test_dynamic() -> None:
     v = _dynamic(Q([25], "kg"), Q([25], "kg"))  # pyrefly: ignore[bad-argument-type]
-    assert_type(v, Q[Mass, np.ndarray])  # pyrefly: ignore[assert-type]
+    assert_type(v, Q[Mass, np.ndarray])  # pyrefly: ignore[assert-type]  # ty: ignore[type-assertion-failure]
 
 
 @typechecked

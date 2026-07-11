@@ -334,7 +334,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     # fractions, one float per species. When not None, evaluation uses the
     # low-level AbstractState API (PropsSI cannot take an explicit composition).
     # None means the composition is fixed in the fluid name, or the fluid is pure.
-    _composition: dict[str, float] | None = None
+    _composition: Composition | None = None
 
     # True when an assumed phase or a composition is configured, i.e. evaluation
     # must use the low-level AbstractState path. A single flag so the normal
@@ -854,7 +854,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         def to_arr(m: float | Numpy1DArray | pl.Expr) -> Numpy1DArray:
             if isinstance(m, np.ndarray):
-                return m.flatten().astype(float)
+                return m.flatten().astype(float)  # ty: ignore[invalid-argument-type, unresolved-attribute]
             return np.full(n, cast("float", m))
 
         p1_arr, p2_arr = to_arr(p1), to_arr(p2)
@@ -943,7 +943,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 exprs[1].alias(n2),
                 name=self.name,
                 assume_phase=cast("AssumedPhase | None", self._assumed_phase),
-                composition=cast("Composition | None", self._composition),
+                composition=self._composition,
             )
         return expr.alias(output)
 
@@ -997,7 +997,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     @staticmethod
     def _reduce_single_element(x: float | Numpy1DArray | pl.Expr) -> float | Numpy1DArray | pl.Expr:
         if isinstance(x, np.ndarray) and x.size == 1:
-            return float(x[0])
+            return float(x[0])  # ty: ignore[invalid-argument-type]
         return x
 
     def evaluate_single(self, output: CProperty, *points: tuple[CProperty, float]) -> float:
@@ -1183,7 +1183,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         def expand_scalars(x: float | np.ndarray) -> Numpy1DArray:
             if isinstance(x, np.ndarray):
-                return x
+                return x  # ty: ignore[invalid-return-type]
 
             return np.repeat(x, n).astype(float).reshape(shape)
 
@@ -1223,12 +1223,11 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             qty.ito(ret_unit)
 
         if convert_magnitude:
-            qty = qty.astype(self._mt)
+            qty = qty.astype(self._mt)  # ty: ignore[no-matching-overload]
 
         if isinstance(qty.m, pl.Series):
             # missing values surface as null, never NaN (the library's single sentinel)
-            qty.m = qty.m.fill_nan(None)
-            qty.m = cast(Any, qty.m).cast(self._eager_series_output_dtype())
+            qty.m = qty.m.fill_nan(None).cast(self._eager_series_output_dtype())
 
         return cast("Quantity[Any, MT]", qty)
 
@@ -1485,7 +1484,7 @@ class Fluid(CoolPropFluid[MT]):
             # a NaN row is an invalid state, not a phase, so the phase is judged on the rows that
             # have one. Reducing over the raw array would instead count each NaN as its own
             # distinct phase, since nan != nan
-            finite = cast("Numpy1DArray", phase_idx_val[np.isfinite(phase_idx_val)])
+            finite = cast("Numpy1DArray", phase_idx_val[np.isfinite(phase_idx_val)])  # ty: ignore[invalid-argument-type]
 
             if finite.size == 0:
                 return "N/A"

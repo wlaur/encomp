@@ -81,10 +81,10 @@ def test_Fluid() -> None:
     repr(Water(T=Q(np.inf, "degC"), Q=Q(0.9)))
     repr(Water(T=Q(-np.inf, "degC"), Q=Q(0.9)))
 
-    repr(Water(T=Q([np.nan, np.nan], "degC"), Q=Q(0.9)))
-    repr(Water(T=Q([np.inf, np.inf], "degC"), Q=Q(0.9)))
-    repr(Water(T=Q([-np.inf, -np.inf], "degC"), Q=Q(0.9)))
-    repr(Water(T=Q([-np.inf, np.inf], "degC"), Q=Q(0.9)))
+    repr(Water(T=Q([np.nan, np.nan], "degC"), Q=Q(0.9)))  # ty: ignore[invalid-argument-type]
+    repr(Water(T=Q([np.inf, np.inf], "degC"), Q=Q(0.9)))  # ty: ignore[invalid-argument-type]
+    repr(Water(T=Q([-np.inf, -np.inf], "degC"), Q=Q(0.9)))  # ty: ignore[invalid-argument-type]
+    repr(Water(T=Q([-np.inf, np.inf], "degC"), Q=Q(0.9)))  # ty: ignore[invalid-argument-type]
 
     with pytest.raises(ValueError):
         # cannot fix all of P, T, Q
@@ -108,10 +108,10 @@ def test_Fluid() -> None:
     Fluid("water", T=Q([25, np.nan], "°C"), P=Q([1, 2], "bar")).H
     Fluid("water", T=Q([np.nan, np.nan], "°C"), P=Q([1, 2], "bar")).H
     Fluid("water", T=Q([np.nan, np.nan], "°C"), P=Q([np.nan, np.nan], "bar")).H
-    Fluid("water", P=Q([1, 2], "bar"), T=Q(23, "°C")).H
-    Fluid("water", P=Q([1], "bar"), T=Q(23, "°C")).H
+    Fluid("water", P=Q([1, 2], "bar"), T=Q(23, "°C")).H  # ty: ignore[invalid-argument-type]
+    Fluid("water", P=Q([1], "bar"), T=Q(23, "°C")).H  # ty: ignore[invalid-argument-type]
     Fluid("water", T=Q([23, 25], "°C"), P=Q([1], "bar")).H
-    Fluid("water", T=Q([23, 25], "°C"), P=Q(np.nan, "bar")).H
+    Fluid("water", T=Q([23, 25], "°C"), P=Q(np.nan, "bar")).H  # ty: ignore[invalid-argument-type]
     Fluid("water", T=Q([23, 25], "°C"), P=Q([1, np.nan], "bar")).H
 
     Water(T=Q([25, 25, 63], "°C"), Q=Q([np.nan, np.nan, 0.4], "")).H
@@ -132,7 +132,7 @@ def test_Fluid() -> None:
 
     assert isinstance(ret, np.ndarray) and ret.size == 2
 
-    ret = Water(P=Q([2, 3], "bar"), Q=Q(0.5)).D.m
+    ret = Water(P=Q([2, 3], "bar"), Q=Q(0.5)).D.m  # ty: ignore[invalid-argument-type]
 
     assert isinstance(ret, np.ndarray) and ret.size == 2
 
@@ -140,11 +140,11 @@ def test_Fluid() -> None:
 
     assert isinstance(ret, np.ndarray) and ret.size == 1
 
-    ret = Water(P=Q([2], "bar"), Q=Q(0.5)).D.m
+    ret = Water(P=Q([2], "bar"), Q=Q(0.5)).D.m  # ty: ignore[invalid-argument-type]
 
     assert isinstance(ret, np.ndarray) and ret.size == 1
 
-    ret = Water(Q=Q([0.5]), P=Q(2, "bar")).D.m
+    ret = Water(Q=Q([0.5]), P=Q(2, "bar")).D.m  # ty: ignore[invalid-argument-type]
 
     assert isinstance(ret, np.ndarray) and ret.size == 1
 
@@ -167,9 +167,9 @@ def test_Fluid() -> None:
     # returns 1-element list
     assert isinstance(Fluid("water", T=Q([23], "°C"), P=Q([1], "bar")).H.m, np.ndarray)
 
-    assert isinstance(Fluid("water", P=Q([1], "bar"), T=Q(23, "°C")).H.m, np.ndarray)
+    assert isinstance(Fluid("water", P=Q([1], "bar"), T=Q(23, "°C")).H.m, np.ndarray)  # ty: ignore[invalid-argument-type]
 
-    assert isinstance(Fluid("water", T=Q([23], "°C"), P=Q(1, "bar")).H.m, np.ndarray)
+    assert isinstance(Fluid("water", T=Q([23], "°C"), P=Q(1, "bar")).H.m, np.ndarray)  # ty: ignore[invalid-argument-type]
 
     # returns float
     assert isinstance(Fluid("water", T=Q(23, "°C"), P=Q(1, "bar")).H.m, float)
@@ -268,10 +268,10 @@ def test_incorrect_inputs() -> None:
         Fluid("water", P=Q(cast(Any, p), "bar"), T=Q(t, "degC")).D
 
     with pytest.raises(ValueError):
-        Fluid("water", P=Q(cast(Any, p), "bar"), T=Q(t, "degC"), H=Q(25, "kJ/kg"))
+        Fluid("water", P=Q(cast(Any, p), "bar"), T=Q(t, "degC"), H=Q(25, "kJ/kg"))  # ty: ignore[invalid-argument-type]
 
     with pytest.raises(ValueError):
-        Water(P=Q(cast(Any, p), "bar"), T=Q(t, "degC"), H=Q(25, "kJ/kg"))
+        Water(P=Q(cast(Any, p), "bar"), T=Q(t, "degC"), H=Q(25, "kJ/kg"))  # ty: ignore[invalid-argument-type]
 
     with pytest.raises(ValueError):
         Water(P=Q(cast(Any, p), "bar"))
@@ -355,7 +355,7 @@ def test_Water() -> None:
     assert "V=0.0 cP" not in steam_repr
     assert "V=0.013 cP" in steam_repr
 
-    water_multi = Water(T=Q(np.linspace(25, 50), "°C"), P=Q(5, "bar"))
+    water_multi = Water(T=Q(np.linspace(25, 50), "°C"), P=Q(5, "bar"))  # ty: ignore[invalid-argument-type]
 
     repr(water_multi)
 
@@ -381,7 +381,7 @@ def test_HumidAir() -> None:
     P = Q(20, "bar")
     R = Q(20, "%")
 
-    ha = HumidAir(T=T, P=P, R=R)
+    ha = HumidAir(T=T, P=P, R=R)  # ty: ignore[invalid-argument-type]
     ha.V
 
     T = Q([25, 34], "°C")
@@ -582,8 +582,8 @@ def test_polars_fluids() -> None:
     w_series = Water(P=Q(pl.Series([1, 2, 3]), "bar"), T=Q(pl.Series([150, 250, 350]), "degC"))
     assert_type(w_series.D, Q[ut.Density, pl.Series])  # pyrefly: ignore[assert-type]
 
-    w_series_const_T = Water(P=Q(pl.Series([1, 2, 3]), "bar"), T=Q(150, "degC"))
-    assert_type(w_series_const_T.D, Q[ut.Density, pl.Series])  # pyrefly: ignore[assert-type]
+    w_series_const_T = Water(P=Q(pl.Series([1, 2, 3]), "bar"), T=Q(150, "degC"))  # ty: ignore[invalid-argument-type]
+    assert_type(w_series_const_T.D, Q[ut.Density, pl.Series])  # pyrefly: ignore[assert-type]  # ty: ignore[type-assertion-failure]
 
     mixed_container = Water(
         P=Q(np.array([1.0, 2.0, 3.0]), "bar"),
@@ -607,7 +607,7 @@ def test_polars_fluids() -> None:
 
     assert D.is_null().all()
 
-    repr(Water(P=Q(pl.lit(5), "bar"), T=Q(50, "degC")))
+    repr(Water(P=Q(pl.lit(5), "bar"), T=Q(50, "degC")))  # ty: ignore[invalid-argument-type]
 
     with pytest.raises(TypeError):
         Water(P=Q(pl.lit(5), "bar"), T=cast(Any, Q([1, 2, 3], "degC"))).D
