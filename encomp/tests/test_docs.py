@@ -1,6 +1,6 @@
 """Every ``python`` code block in the docs must be self-contained: it carries its own
-imports, is clean under ``ruff check``, type-checks under ``pyright`` and ``pyrefly``,
-and runs without error in isolation.
+imports, is clean under ``ruff check``, type-checks under ``pyright``, ``pyrefly`` and
+``ty``, and runs without error in isolation.
 
 This guards the documentation against drift -- a renamed API, a missing import, or a
 snippet that only worked as a continuation of an earlier block all fail here. The block
@@ -73,6 +73,7 @@ ROOT = _repo_root()
 _RUFF = _tool("ruff")
 _PYRIGHT = _tool("pyright")
 _PYREFLY = _tool("pyrefly")
+_TY = _tool("ty")
 
 pytestmark = pytest.mark.skipif(
     ROOT is None, reason="docs sources not on disk (installed wheel) -- source-tree check only"
@@ -182,6 +183,24 @@ def test_doc_block_typechecks_pyrefly(code: str, tmp_path: Path) -> None:
         cwd=ROOT,
     )
     assert proc.returncode == 0, f"pyrefly failed:\n{proc.stdout}{proc.stderr}"
+
+
+@pytest.mark.skipif(_TY is None, reason="ty not installed")
+@pytest.mark.parametrize("code", _CODES, ids=_IDS)
+def test_doc_block_typechecks_ty(code: str, tmp_path: Path) -> None:
+    assert _TY is not None  # narrowed by the skipif above
+    assert ROOT is not None  # narrowed by the module-level skipif
+    block = tmp_path / "block.py"
+    block.write_text(code)
+    proc = subprocess.run(
+        # --project resolves the repo's [tool.ty] config and venv even though the
+        # block itself lives in tmp_path; --error-on-warning matches the CI gate
+        [_TY, "check", "--project", str(ROOT), "--error-on-warning", str(block)],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+    assert proc.returncode == 0, f"ty failed:\n{proc.stdout}{proc.stderr}"
 
 
 @pytest.mark.parametrize("code", _CODES, ids=_IDS)
