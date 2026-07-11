@@ -126,8 +126,9 @@ def test_rust_python_parity_input_pairs() -> None:
 
         def density(mode: str, second: str = second, unit: str = unit, df: pl.DataFrame = df) -> np.ndarray:
             clear_expr_evaluation_cache()
+            second_point: dict[str, Any]
             if mode == "rust":
-                second_point: dict[str, Any] = {second: Q(pl.col(second), unit)}
+                second_point = {second: Q(pl.col(second), unit)}
                 fluid = Fluid("HEOS::Water", P=Q(pl.col("P"), "Pa"), **second_point)
                 return df.select(fluid.D.m.alias("d"))["d"].to_numpy().astype(float)
             second_point = {second: Q(df[second].to_numpy(), unit)}

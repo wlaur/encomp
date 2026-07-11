@@ -877,7 +877,7 @@ class Quantity(
                 raise ValueError(f"Only 1-dimensional NumPy arrays can be used as magnitude, got shape {val.shape}")
             return cast("MT", Quantity._cast_array_float(val))
         elif isinstance(val, (pl.Series, pl.Expr)):
-            return val
+            return cast("MT", val)
         elif hasattr(val, "is_Atom"):
             # implicit way of checking if the value is a sympy symbol without having to import SymPy
             # (must come before the numbers.Real check: sympy Float/Integer register as Real,
@@ -944,7 +944,7 @@ class Quantity(
 
         return self._call_subclass(copy.deepcopy(self._magnitude, memo), copy.deepcopy(self._units, memo))
 
-    def __reduce__(  # pyright: ignore[reportIncompatibleMethodOverride]  # pyrefly: ignore[bad-override]
+    def __reduce__(  # pyright: ignore[reportIncompatibleMethodOverride]  # pyrefly: ignore[bad-override]  # ty: ignore[invalid-method-override]
         self,
     ) -> tuple[object, tuple[object, str, type[Dimensionality] | None]]:
         dim = self.dt if _is_pickle_global(self.dt) else None
@@ -1867,10 +1867,11 @@ class Quantity(
     @classmethod
     def _pydantic_build_quantity(cls, qty: Any) -> Quantity[Any, Any]:  # noqa: ANN401
         if isinstance(qty, dict) and "value" in qty and "magnitude_type" in qty:
-            val = cast(Any, qty["value"])
-            magnitude_type = cast(str, qty["magnitude_type"])
+            qty_dict = cast("dict[str, Any]", qty)
+            val = qty_dict["value"]
+            magnitude_type = cast(str, qty_dict["magnitude_type"])
             magnitude = cls._pydantic_magnitude_from_payload(val, magnitude_type)
-            unit = cast(str | None, cast("dict[str, Any]", qty).get("unit"))
+            unit = cast(str | None, qty_dict.get("unit"))
             return cast("Quantity[Any, Any]", cls(cast(MT, magnitude), unit=unit))
 
         return cast("Quantity[Any, Any]", qty if isinstance(qty, Quantity) else cls(cast(Any, qty)))
@@ -3697,7 +3698,7 @@ class Quantity(
     ) -> Quantity[Any, Any]:
         ret = cast("Quantity[DT, Any]", self._pint_super.__getitem__(index))
 
-        magnitude_type = cast("type[Any]", type(ret.m))
+        magnitude_type = cast("type[Any]", type(ret.m))  # ty: ignore[redundant-cast]
         subcls = self._get_dimensional_subclass(self.dt, self._get_magnitude_type_safe(magnitude_type))
         instance = cast(Any, subcls)(ret.m, ret.u)
 

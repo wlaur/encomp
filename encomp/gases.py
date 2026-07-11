@@ -84,7 +84,9 @@ def _resolve_gas_condition(condition: object, name: str) -> GasCondition:
     if not isinstance(condition, tuple):
         raise TypeError(f"{name} must be 'N', 'S', or a (pressure, temperature) tuple, got {condition!r}")
 
-    condition_tuple = cast("tuple[object, ...]", condition)
+    # cast, not an annotation: pyright strict needs the Unknown tuple elements laundered,
+    # which only cast() does; ty resolves the same type on its own and calls this redundant
+    condition_tuple = cast("tuple[object, ...]", condition)  # ty: ignore[redundant-cast]
     if len(condition_tuple) != 2:
         raise TypeError(f"{name} must be 'N', 'S', or a (pressure, temperature) tuple, got {condition!r}")
 

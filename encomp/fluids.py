@@ -334,7 +334,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     # fractions, one float per species. When not None, evaluation uses the
     # low-level AbstractState API (PropsSI cannot take an explicit composition).
     # None means the composition is fixed in the fluid name, or the fluid is pure.
-    _composition: dict[str, float] | None = None
+    _composition: Composition | None = None
 
     # True when an assumed phase or a composition is configured, i.e. evaluation
     # must use the low-level AbstractState path. A single flag so the normal
@@ -943,7 +943,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
                 exprs[1].alias(n2),
                 name=self.name,
                 assume_phase=cast("AssumedPhase | None", self._assumed_phase),
-                composition=cast("Composition | None", self._composition),
+                composition=self._composition,
             )
         return expr.alias(output)
 
@@ -1227,8 +1227,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         if isinstance(qty.m, pl.Series):
             # missing values surface as null, never NaN (the library's single sentinel)
-            qty.m = qty.m.fill_nan(None)
-            qty.m = cast(Any, qty.m).cast(self._eager_series_output_dtype())
+            qty.m = qty.m.fill_nan(None).cast(self._eager_series_output_dtype())
 
         return cast("Quantity[Any, MT]", qty)
 

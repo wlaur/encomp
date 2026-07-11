@@ -90,7 +90,9 @@ def isinstance_types[T](obj: Any, expected: TypeForm[T]) -> TypeIs[T]:  # noqa: 
         # index 1, which is exactly the error this library exists to catch. The linear cost
         # is irrelevant here -- encomp's own hot-path calls pass scalar quantities, never
         # collections
-        check_type(cast(Any, obj), expected, collection_check_strategy=CollectionCheckStrategy.ALL_ITEMS)
+        # cast(Any) launders the partially-unknown narrowed type for pyright strict;
+        # ty already sees plain Any here and calls the cast redundant
+        check_type(cast(Any, obj), expected, collection_check_strategy=CollectionCheckStrategy.ALL_ITEMS)  # ty: ignore[redundant-cast]
         return True
     except TypeCheckError:
         # only a genuine type mismatch answers False -- an invalid ``expected``
