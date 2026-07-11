@@ -77,7 +77,7 @@ _NORMAL = Quantity(1.0, "normal")
 def _resolve_gas_condition(condition: object, name: str) -> GasCondition:
     if isinstance(condition, str):
         if condition in ("N", "S"):
-            return _n_s_condition(condition)
+            return _n_s_condition(condition)  # ty: ignore[invalid-argument-type]
 
         raise ValueError(f"{name} must be 'N', 'S', or a (pressure, temperature) tuple, got {condition!r}")
 
@@ -138,7 +138,7 @@ def ideal_gas_density(
 
     # directly from ideal gas law
     # override the inferred type here since it's sure to be Density
-    rho = (P * M) / (CONSTANTS.R * T.to("K").unknown())
+    rho = (P * M) / (CONSTANTS.R * T.to("K").unknown())  # ty: ignore[unsupported-operator]
 
     return rho.to("kg/m³").asdim(Density)
 

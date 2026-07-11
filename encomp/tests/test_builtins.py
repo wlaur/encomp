@@ -25,8 +25,8 @@ def test_abs() -> None:
 
 
 def test_min_max() -> None:
-    assert_type(min(Q([25], "kg")), Q[Mass, float])
-    assert_type(max(Q([25], "kg")), Q[Mass, float])
+    assert_type(min(Q([25], "kg")), Q[Mass, float])  # ty: ignore[type-assertion-failure]
+    assert_type(max(Q([25], "kg")), Q[Mass, float])  # ty: ignore[type-assertion-failure]
 
     # min/max iterate, and a pl.Series magnitude (the polars world) is not
     # iterable as a Quantity -- the reduction belongs on the magnitude (.m)

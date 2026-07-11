@@ -736,7 +736,7 @@ class Quantity(
             "type[Quantity[DT, MT]]",
             type(
                 f"Quantity[{dim_name}, {mt_name}]",
-                (DimensionalQuantity,),
+                (DimensionalQuantity,),  # ty: ignore[unsupported-dynamic-base]
                 {
                     "_magnitude_type": mt,
                     "__class__": DimensionalQuantity,
@@ -1257,10 +1257,10 @@ class Quantity(
 
             # special case for temperature difference
             if cls._is_temperature_difference_unit(valid_unit):
-                subcls = cls._get_dimensional_subclass(TemperatureDifference, type(valid_magnitude))
+                subcls = cls._get_dimensional_subclass(TemperatureDifference, type(valid_magnitude))  # ty: ignore[invalid-argument-type]
             else:
                 dim = Dimensionality.get_dimensionality(valid_unit.dimensionality)
-                subcls = cls._get_dimensional_subclass(dim, type(valid_magnitude))
+                subcls = cls._get_dimensional_subclass(dim, type(valid_magnitude))  # ty: ignore[invalid-argument-type]
 
             return subcls(
                 valid_magnitude,
@@ -1523,7 +1523,7 @@ class Quantity(
         # convert integer arrays to float(64) (creating a copy)
         _m = self._magnitude
         if isinstance(_m, np.ndarray) and issubclass(_m.dtype.type, numbers.Integral):
-            self._magnitude = cast("MT", _m.astype(np.float64))
+            self._magnitude = cast("MT", _m.astype(np.float64))  # ty: ignore[no-matching-overload]
 
         try:
             self._pint_super.ito(valid_unit)
@@ -1538,7 +1538,7 @@ class Quantity(
 
     # check() intentionally accepts a wider set of dimension arguments than
     # pint's PlainQuantity.check, so the override signature is incompatible
-    def check(  # pyright: ignore[reportIncompatibleMethodOverride]  # pyrefly: ignore[bad-override]
+    def check(  # pyright: ignore[reportIncompatibleMethodOverride]  # pyrefly: ignore[bad-override]  # ty: ignore[invalid-method-override]
         self,
         dimension: Quantity[Any, Any] | UnitsContainer | Unit[DT_] | Unit | str | Dimensionality | type[Dimensionality],
     ) -> bool:
@@ -2102,7 +2102,7 @@ class Quantity(
         if dim == TemperatureDifference:
             unit = self._as_temperature_difference_unit(unit)
 
-        subcls = self._get_dimensional_subclass(dim, type(self.m))
+        subcls = self._get_dimensional_subclass(dim, type(self.m))  # ty: ignore[invalid-argument-type]
         return cast("Quantity[DT_, MT]", subcls(self.m, unit))
 
     def unknown(self) -> Quantity[UnknownDimensionality, MT]:
@@ -2234,7 +2234,7 @@ class Quantity(
             other_is_temp_or_diff_temp = other._dimensionality_type in (Temperature, TemperatureDifference)
 
             if self_is_temp_or_diff_temp and other_is_temp_or_diff_temp:
-                return self._temperature_difference_add_sub(other, "add")
+                return self._temperature_difference_add_sub(other, "add")  # ty: ignore[invalid-argument-type]
 
             raise e
 
@@ -2291,7 +2291,7 @@ class Quantity(
             # only Temperature - TemperatureDifference is meaningful here; the
             # reverse (ΔT - T) is not a temperature and stays an error
             if self.dt == Temperature and other._dimensionality_type == TemperatureDifference:
-                return self._temperature_difference_add_sub(other, "sub")
+                return self._temperature_difference_add_sub(other, "sub")  # ty: ignore[invalid-argument-type]
 
             raise e
 
@@ -2299,7 +2299,7 @@ class Quantity(
 
         if isinstance(other, Quantity) and self.dt == Temperature and other._dimensionality_type == Temperature:
             _mt = type(ret.m)
-            subcls = self._get_dimensional_subclass(TemperatureDifference, _mt)
+            subcls = self._get_dimensional_subclass(TemperatureDifference, _mt)  # ty: ignore[invalid-argument-type]
             return subcls(ret.m, ret.u)
 
         return self._call_subclass(ret.m, ret.u)
@@ -2360,7 +2360,7 @@ class Quantity(
     def __eq__(self: Quantity[DT, pl.Expr], other: Quantity[DT, float]) -> pl.Expr: ...
     # for vector magnitudes __eq__ returns an array/Series/Expr of element-wise
     # results, intentionally widening object.__eq__'s bool return (as numpy does)
-    def __eq__(self, other: object) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def __eq__(self, other: object) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:  # pyright: ignore[reportIncompatibleMethodOverride]  # ty: ignore[invalid-method-override]
         if not isinstance(other, (Quantity, float, int)):
             return bool(self._pint_super.__eq__(other))
 
@@ -2378,7 +2378,7 @@ class Quantity(
 
         m = self.m
         other_m = cast(float | Numpy1DArray | pl.Series | pl.Expr, cast(Any, other).to(self.u).m)
-        self._check_comparable_magnitudes(m, other_m)
+        self._check_comparable_magnitudes(m, other_m)  # ty: ignore[invalid-argument-type]
 
         if isinstance(m, (float, int, np.ndarray)) and isinstance(other_m, (float, int, np.ndarray)):
             ret = _is_close(cast(Any, m), cast(Any, other_m), self.rtol, self.atol)
@@ -2448,7 +2448,7 @@ class Quantity(
     def __ne__(self: Quantity[DT, pl.Expr], other: Quantity[DT, float]) -> pl.Expr: ...
     # for vector magnitudes __ne__ returns an array/Series/Expr of element-wise
     # results, intentionally widening object.__ne__'s bool return (as numpy does)
-    def __ne__(self, other: object) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def __ne__(self, other: object) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:  # pyright: ignore[reportIncompatibleMethodOverride]  # ty: ignore[invalid-method-override]
         if not isinstance(other, (Quantity, float, int)):
             return bool(self._pint_super.__ne__(other))
 
@@ -2464,7 +2464,7 @@ class Quantity(
 
         m = self.m
         other_m = cast(float | Numpy1DArray | pl.Series | pl.Expr, cast(Any, other).to(self.u).m)
-        self._check_comparable_magnitudes(m, other_m)
+        self._check_comparable_magnitudes(m, other_m)  # ty: ignore[invalid-argument-type]
 
         if isinstance(m, (float, int, np.ndarray)) and isinstance(other_m, (float, int, np.ndarray)):
             ret = ~_is_close(cast(Any, m), cast(Any, other_m), self.rtol, self.atol)
@@ -2522,7 +2522,7 @@ class Quantity(
             raise DimensionalityComparisonError(f"Cannot compare {self} with {other}") from e
 
         if isinstance(other, Quantity):
-            self._check_comparable_magnitudes(self.m, other.m)
+            self._check_comparable_magnitudes(self.m, other.m)  # ty: ignore[invalid-argument-type]
 
         # only the STRICT pint operator is ever evaluated; a non-strict result is derived
         # from it below. Using pint's raw >= / <= would poison the derivation for NaN:
@@ -2578,7 +2578,7 @@ class Quantity(
     def __gt__(self: Quantity[DT, pl.Expr], other: Quantity[DT, float]) -> pl.Expr: ...
     @overload
     def __gt__(self: Quantity[DT, float], other: Quantity[DT, pl.Expr]) -> pl.Expr: ...
-    def __gt__(self, other: Quantity[DT, Any] | float) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:
+    def __gt__(self, other: Quantity[DT, Any] | float) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:  # ty: ignore[invalid-method-override]
         return self._ordering_comparison(other, "__gt__")
 
     @overload
@@ -2605,7 +2605,7 @@ class Quantity(
     def __ge__(self: Quantity[DT, pl.Expr], other: Quantity[DT, float]) -> pl.Expr: ...
     @overload
     def __ge__(self: Quantity[DT, float], other: Quantity[DT, pl.Expr]) -> pl.Expr: ...
-    def __ge__(self, other: Quantity[DT, Any] | float) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:
+    def __ge__(self, other: Quantity[DT, Any] | float) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:  # ty: ignore[invalid-method-override]
         return self._ordering_comparison(other, "__ge__")
 
     @overload
@@ -2632,7 +2632,7 @@ class Quantity(
     def __lt__(self: Quantity[DT, pl.Expr], other: Quantity[DT, float]) -> pl.Expr: ...
     @overload
     def __lt__(self: Quantity[DT, float], other: Quantity[DT, pl.Expr]) -> pl.Expr: ...
-    def __lt__(self, other: Quantity[DT, Any] | float) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:
+    def __lt__(self, other: Quantity[DT, Any] | float) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:  # ty: ignore[invalid-method-override]
         return self._ordering_comparison(other, "__lt__")
 
     @overload
@@ -2659,7 +2659,7 @@ class Quantity(
     def __le__(self: Quantity[DT, pl.Expr], other: Quantity[DT, float]) -> pl.Expr: ...
     @overload
     def __le__(self: Quantity[DT, float], other: Quantity[DT, pl.Expr]) -> pl.Expr: ...
-    def __le__(self, other: Quantity[DT, Any] | float) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:
+    def __le__(self, other: Quantity[DT, Any] | float) -> bool | Numpy1DBoolArray | pl.Series | pl.Expr:  # ty: ignore[invalid-method-override]
         return self._ordering_comparison(other, "__le__")
 
     @overload
@@ -3693,13 +3693,13 @@ class Quantity(
     def __getitem__(
         self: Quantity[DT, Numpy1DArray], index: Numpy1DBoolArray | Numpy1DIntArray | Sequence[int]
     ) -> Quantity[DT, Numpy1DArray]: ...
-    def __getitem__(
+    def __getitem__(  # ty: ignore[invalid-method-override]
         self, index: int | slice | Numpy1DBoolArray | Numpy1DIntArray | Sequence[int]
     ) -> Quantity[Any, Any]:
         ret = cast("Quantity[DT, Any]", self._pint_super.__getitem__(index))
 
         magnitude_type = cast("type[Any]", type(ret.m))  # ty: ignore[redundant-cast]
-        subcls = self._get_dimensional_subclass(self.dt, self._get_magnitude_type_safe(magnitude_type))
+        subcls = self._get_dimensional_subclass(self.dt, self._get_magnitude_type_safe(magnitude_type))  # ty: ignore[invalid-argument-type]
         instance = cast(Any, subcls)(ret.m, ret.u)
 
         return cast("Quantity[Any, Any]", instance)

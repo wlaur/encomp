@@ -85,7 +85,7 @@ def test_invalid_composition(name: str, composition: dict[str, float], match: st
 def test_composition_rejects_non_float_fractions() -> None:
     # bool is an int subclass, so it would otherwise slip through as 1.0
     with pytest.raises(TypeError, match="must be a float"):
-        cp.resolve_fluid_spec("HEOS", composition=cast("cp.Composition", {"CO2": True, "O2": 0.5}))
+        cp.resolve_fluid_spec("HEOS", composition=cast("cp.Composition", {"CO2": True, "O2": 0.5}))  # ty: ignore[redundant-cast]
 
     with pytest.raises(TypeError, match="must be a float"):
         cp.resolve_fluid_spec("HEOS", composition=cast("cp.Composition", {"CO2": "0.7", "O2": 0.3}))
