@@ -1,6 +1,6 @@
 [project]
 name = "encomp"
-version = "1.7.0"
+version = "1.7.1"
 description = "General-purpose library for engineering computations"
 authors = [{ name = "William Laurén", email = "lauren.william.a@gmail.com" }]
 requires-python = ">=3.13"
