@@ -34,6 +34,7 @@ from .utypes import UnknownDimensionality
 __all__ = [
     "EXTENSION_NAME",
     "UnitDType",
+    "canonical_unit_string",
     "dataframe",
     "quantities",
     "units_of",
@@ -43,6 +44,22 @@ __all__ = [
 EXTENSION_NAME = "encomp.unit"
 """Extension-type name registered with polars, and the public, stable identifier under
 which the unit string is stored as Arrow field metadata in Parquet/IPC files."""
+
+_CANONICAL_UNIT_FORMAT = "~P"
+"""Fixed pint format spec for the unit string stored in dtype metadata."""
+
+
+def canonical_unit_string(unit: str | Unit[Any]) -> str:
+    """The canonical rendering of a unit as stored in :class:`UnitDType` metadata.
+
+    Deliberately a *fixed* format ("m³/h", "°C") rather than the process-wide display
+    format (:func:`encomp.units.set_quantity_format` /
+    ``SETTINGS.default_unit_format``): the metadata is an on-disk, cross-process
+    contract and must not drift with a display setting. The CoolProp plugin compares
+    its expected SI units against exactly this rendering.
+    """
+    parsed = Unit(unit) if isinstance(unit, str) else unit
+    return format(parsed, _CANONICAL_UNIT_FORMAT)
 
 
 def _validate_storage(storage: pl.DataType) -> None:
@@ -75,8 +92,7 @@ class UnitDType(pl.BaseExtension):
         if storage is None:
             storage = pl.Float64()
         _validate_storage(storage)
-        canonical = str(Unit(unit) if isinstance(unit, str) else unit)
-        super().__init__(EXTENSION_NAME, storage, canonical)
+        super().__init__(EXTENSION_NAME, storage, canonical_unit_string(unit))
 
     @property
     def unit(self) -> Unit[Any]:

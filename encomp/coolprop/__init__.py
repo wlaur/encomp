@@ -507,13 +507,13 @@ def _expected_si_unit(name: str) -> str:
     """Canonical rendering of the SI unit CoolProp expects for state input ``name``.
 
     Derived from CoolProp's own parameter metadata (no unit table of our own) and
-    normalized through encomp's registry -- the same canonicalization the
-    ``encomp.polars`` unit dtype applies to its metadata, so the plugin can accept a
-    unit-typed input by comparing the two strings for equality.
+    rendered by ``encomp.polars.canonical_unit_string`` -- the exact canonicalization
+    the unit dtype applies to its metadata, so the plugin can accept a unit-typed
+    input by comparing the two strings for equality.
     """
-    from ..units import Unit  # deferred: keep plugin-only imports light
+    from ..polars import canonical_unit_string  # deferred: keep plugin-only imports light
 
-    return str(Unit(_cp.get_parameter_information(_cp.get_parameter_index(name), "units")))
+    return canonical_unit_string(_cp.get_parameter_information(_cp.get_parameter_index(name), "units"))
 
 
 @cache
@@ -525,9 +525,10 @@ def _expected_ha_si_unit(name: str) -> str:
     humid-air units (a lookup failure means that mapping has a gap and raises here).
     """
     from ..fluids import CProperty, HumidAir  # deferred: encomp.fluids imports this module at top level
+    from ..polars import canonical_unit_string
 
     # runtime-validated dynamic lookup: get_coolprop_unit raises for an unknown name
-    return str(HumidAir.get_coolprop_unit(cast(CProperty, name)))
+    return canonical_unit_string(HumidAir.get_coolprop_unit(cast(CProperty, name)))
 
 
 def _reject_duplicate_input_keys(kind: str, keyed_names: tuple[tuple[str, int | str], ...]) -> None:

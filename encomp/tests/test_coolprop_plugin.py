@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+from pathlib import Path
 from typing import Any, cast
 
 import CoolProp.CoolProp as _CP
@@ -395,6 +396,44 @@ def test_si_unit_typed_inputs_accepted() -> None:
     dfh = with_units(pl.DataFrame({"T": [300.0], "P": [101325.0], "R": [0.5]}), {"T": "K", "P": "Pa", "R": ""})
     ref_w = CP.HAPropsSI("W", "T", 300.0, "P", 101325.0, "R", 0.5)
     assert dfh.select(cp.humid_air("W", "T", "P", "R"))["W"][0] == pytest.approx(ref_w, rel=RTOL)
+
+
+def test_si_unit_typed_inputs_from_parquet(tmp_path: Path) -> None:
+    # the real user story: a unit-typed Parquet file feeds the plugin directly, through
+    # plain polars I/O, on both the in-memory and streaming engines
+    from encomp.polars import units_of, with_units
+
+    path = str(tmp_path / "sensors.parquet")
+    with_units(pl.DataFrame({"P": [50e5, 60e5], "T": [400.0, 420.0]}), {"P": "Pa", "T": "K"}).write_parquet(path)
+
+    lf = pl.scan_parquet(path).select(cp.water("D", "P", "T"))
+    ref = CP.PropsSI("D", "P", np.array([50e5, 60e5]), "T", np.array([400.0, 420.0]), "IF97::Water")
+    assert np.allclose(lf.collect()["D"].to_numpy(), ref, rtol=RTOL)
+    assert np.allclose(lf.collect(engine="streaming")["D"].to_numpy(), ref, rtol=RTOL)
+    assert units_of(pl.scan_parquet(path)) != {}  # the units really came from the file
+
+
+def test_unit_match_independent_of_display_format() -> None:
+    # both sides of the plugin's unit comparison use the FIXED canonical rendering
+    # (encomp.polars.canonical_unit_string), not the process-wide display format --
+    # otherwise set_quantity_format("siunitx") would turn both the dtype metadata and
+    # the expected units into LaTeX and the match would silently depend on a setting
+    from encomp.coolprop import _expected_ha_si_unit, _expected_si_unit  # pyright: ignore[reportPrivateUsage]
+    from encomp.polars import with_units
+    from encomp.units import set_quantity_format
+
+    _expected_si_unit.cache_clear()
+    _expected_ha_si_unit.cache_clear()
+    try:
+        set_quantity_format("siunitx")
+        df = with_units(pl.DataFrame({"P": [50e5], "T": [400.0]}), {"P": "Pa", "T": "K"})
+        out = df.select(cp.water("D", "P", "T"))
+        ref = CP.PropsSI("D", "P", 50e5, "T", 400.0, "IF97::Water")
+        assert out["D"][0] == pytest.approx(ref, rel=RTOL)
+    finally:
+        set_quantity_format("compact")
+        _expected_si_unit.cache_clear()
+        _expected_ha_si_unit.cache_clear()
 
 
 def test_wrong_unit_typed_inputs_refused_cleanly() -> None:

@@ -36,6 +36,19 @@ def test_unit_dtype_normalization() -> None:
         UnitDType("asdfgh")
 
 
+def test_unit_dtype_metadata_ignores_display_format() -> None:
+    # the dtype metadata is an on-disk, cross-process contract: it must not follow the
+    # process-wide display format, which e.g. renders LaTeX under "siunitx"
+    from ..units import set_quantity_format
+
+    try:
+        set_quantity_format("siunitx")
+        assert UnitDType("m^3/h").ext_metadata() == "m³/h"
+        assert UnitDType("degC").ext_metadata() == "°C"
+    finally:
+        set_quantity_format("compact")
+
+
 def test_unit_dtype_storage_validation() -> None:
     with raises(TypeError, match="float or integer"):
         UnitDType("bar", storage=pl.Boolean())
