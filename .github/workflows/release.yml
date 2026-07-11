@@ -38,7 +38,10 @@ jobs:
     # Static source checks run before building the project. The executable docs
     # checks then install the compiled plugin too, so README/usage snippets and
     # notebooks exercise the same public API users get from wheels.
-    name: typecheck (pyright + pyrefly + ty)
+    # the job name is pinned by branch protection (required status checks match on the
+    # exact name), so it stays as-is even though the job now gates on ty as well;
+    # renaming it requires updating the required checks on main in the same change
+    name: typecheck (pyright + pyrefly)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
