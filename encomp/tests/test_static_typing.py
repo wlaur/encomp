@@ -61,6 +61,38 @@ from encomp.units import Quantity as Q
 q = Q(1, Q(2, "m"))
 """
 
+_VALID_QUANTITY_FRAME = """
+import polars as pl
+
+from encomp.polars import QuantityFrame, unit
+
+class Sensors(QuantityFrame):
+    pressure = unit("bar")
+    flow = unit("m³/h")
+
+class Report(QuantityFrame):
+    power = unit("kW")
+
+sensors = Sensors.from_untyped(pl.LazyFrame({"pressure": [1.0], "flow": [10.0]}))
+assignment = Report.power.assign(sensors.pressure * sensors.flow)
+report = Report.derive(sensors, assignment)
+"""
+
+_INVALID_QUANTITY_FRAME = """
+import polars as pl
+
+from encomp.polars import QuantityFrame, unit
+
+class Sensors(QuantityFrame):
+    pressure = unit("bar")
+
+class Report(QuantityFrame):
+    power = unit("kW")
+
+sensors = Sensors.from_untyped(pl.LazyFrame({"pressure": [1.0]}))
+assignment = Report.power.assign(sensors.pressure)
+"""
+
 
 def _repo_root() -> Path | None:
     # the checkers need the project's pyproject.toml for their configuration; an installed
@@ -155,3 +187,28 @@ def test_quantity_unit_rejected_by_ty(tmp_path: Path) -> None:
 def test_quantity_unit_rejected_at_runtime() -> None:
     with pytest.raises(TypeError, match="got Quantity"):
         Q(1, cast(Any, Q(2, "m")))
+
+
+@pytest.mark.skipif(_PYREFLY is None, reason="pyrefly not installed")
+@pytest.mark.skipif(_ROOT is None, reason=_NO_CONFIG)
+def test_quantity_frame_assignment_checked_by_pyrefly(tmp_path: Path) -> None:
+    assert _PYREFLY is not None and _ROOT is not None
+    cmd = [_PYREFLY, "check", "--config", str(_ROOT / "pyproject.toml")]
+    assert _check(cmd, _VALID_QUANTITY_FRAME, tmp_path) == 0, "control snippet must type-check"
+    assert _check(cmd, _INVALID_QUANTITY_FRAME, tmp_path) != 0, "wrong dimensionality must not type-check"
+
+
+@pytest.mark.skipif(_PYRIGHT is None, reason="pyright not installed")
+@pytest.mark.skipif(_ROOT is None, reason=_NO_CONFIG)
+def test_quantity_frame_assignment_checked_by_pyright(tmp_path: Path) -> None:
+    assert _PYRIGHT is not None
+    assert _check([_PYRIGHT], _VALID_QUANTITY_FRAME, tmp_path) == 0, "control snippet must type-check"
+    assert _check([_PYRIGHT], _INVALID_QUANTITY_FRAME, tmp_path) != 0, "wrong dimensionality must not type-check"
+
+
+@pytest.mark.skipif(_TY is None, reason="ty not installed")
+@pytest.mark.skipif(_ROOT is None, reason=_NO_CONFIG)
+def test_quantity_frame_assignment_checked_by_ty(tmp_path: Path) -> None:
+    assert _TY is not None
+    assert _check([_TY, "check"], _VALID_QUANTITY_FRAME, tmp_path) == 0, "control snippet must type-check"
+    assert _check([_TY, "check"], _INVALID_QUANTITY_FRAME, tmp_path) != 0, "wrong dimensionality must not type-check"

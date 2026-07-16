@@ -22,10 +22,8 @@ from ..polars import (
     Column,
     QuantityFrame,
     UnitDType,
-    attach,
     dataframe,
     quantities,
-    quantity,
     unit,
     units_of,
     with_units,
@@ -48,6 +46,14 @@ class Sensors(QuantityFrame):
 class FallbackUnits(QuantityFrame):
     speed = unit("furlong/fortnight")
     pressure = unit("kg/(m*s**2)", asdim=Pressure)
+
+
+class Report(QuantityFrame):
+    power = unit("kW", name="Hydraulic power")
+
+
+class OtherReport(QuantityFrame):
+    power = unit("kW")
 
 
 assert_type(Sensors.pressure, Column[Pressure])
@@ -352,61 +358,41 @@ def test_quantities_lazy_round_trip(tmp_path: Path) -> None:
         _ = qs["P"] + qs["V"]
 
 
-def test_quantity_is_typed_compute_bridge() -> None:
-    df = _sensor_df()
-    pressure = quantity(df, "P", Pressure)
-    assert_type(pressure, Q[Pressure, pl.Series])
-    assert pressure.m.to_list() == [1.0, 2.0, 3.0]
-    assert pressure.u == Unit("bar")
-
-    lf = df.lazy()
-    lazy_pressure = quantity(lf, "P", Pressure)
-    assert_type(lazy_pressure, Q[Pressure, pl.Expr])
-    assert isinstance(lazy_pressure.m, pl.Expr)
-
-    with raises(Exception, match=r"[Dd]imension"):
-        quantity(lf, "P", VolumeFlow)
-    with raises(ValueError, match="not present"):
-        quantity(lf, "missing", Pressure)
-    with raises(TypeError, match="with_units"):
-        quantity(pl.DataFrame({"P": [1.0]}).lazy(), "P", Pressure)
-
-
-def test_attach_is_float32_safe_lazy_write_back() -> None:
+def test_quantity_frame_derive_is_typed_and_float32_safe() -> None:
     df = pl.DataFrame(
         {
-            "P": pl.Series([1.0, 2.0], dtype=pl.Float32),
-            "V": pl.Series([10.0, 20.0], dtype=pl.Float32),
+            "pressure": pl.Series([1.0, 2.0], dtype=pl.Float32),
+            "Volume flow": pl.Series([10.0, 20.0], dtype=pl.Float32),
         }
     )
-    lf = with_units(df.lazy(), {"P": "bar", "V": "m³/h"})
-    power = (quantity(lf, "P", Pressure) * quantity(lf, "V", VolumeFlow)).to("kW")
+    sensors = Sensors.from_untyped(df)
+    power = (sensors.pressure * sensors.flow).to("kW")
+    assert_type(power, Q[Power, pl.Expr])
 
-    out_lf = attach(lf, W=power)
-    assert_type(out_lf, pl.LazyFrame)
-    dtype = out_lf.collect_schema()["W"]
+    target = Report.power
+    assignment = target.assign(power)
+    report = Report.derive(sensors, assignment)
+    assert_type(report, Report)
+    dtype = report.lf.collect_schema()["Hydraulic power"]
     assert isinstance(dtype, UnitDType)
     assert dtype.ext_storage() == pl.Float32()
     assert dtype.unit == Unit("kW")
-    assert out_lf.collect()["W"].ext.storage().to_list() == pytest.approx([0.2778, 1.1111], rel=1e-3)
+    assert report.lf.collect()["Hydraulic power"].ext.storage().to_list() == pytest.approx([0.2778, 1.1111], rel=1e-3)
 
 
-def test_attach_eager_and_validation() -> None:
-    df = _sensor_df()
-    pressure = quantity(df, "P", Pressure).to("kPa")
-    out = attach(df, {"converted pressure": pressure})
-    assert_type(out, pl.DataFrame)
-    assert units_of(out)["converted pressure"] == Unit("kPa")
-    assert out["converted pressure"].ext.storage().to_list() == [100.0, 200.0, 300.0]
+def test_quantity_frame_derive_validates_assignments() -> None:
+    sensors = Sensors.from_untyped(pl.DataFrame({"pressure": [1.0], "Volume flow": [10.0]}))
+    power = (sensors.pressure * sensors.flow).to("kW")
 
-    with raises(ValueError, match="provided twice"):
-        attach(df, {"P2": pressure}, P2=pressure)
-    with raises(TypeError, match=r"pl\.Series is eager"):
-        attach(df.lazy(), P2=pressure)
-    with raises(TypeError, match=r"dataframe\(\.\.\.\)"):
-        attach(df, scalar=Q(1.0, "bar"))
-    with raises(TypeError, match="must be Quantity"):
-        attach(df, {"bad": cast(Any, "bar")})
+    with raises(ValueError, match="not declared"):
+        Report.derive(sensors, OtherReport.power.assign(power))
+    with raises(ValueError, match="more than once"):
+        assignment = Report.power.assign(power)
+        Report.derive(sensors, assignment, assignment)
+    with raises(TypeError, match=r"pl\.Expr"):
+        Report.power.assign(cast(Any, Q(pl.Series([1.0]), "kW")))
+    with raises(Exception, match="Cannot convert"):
+        Report.power.assign(cast(Any, sensors.pressure))
 
 
 def test_dataframe_inverse() -> None:

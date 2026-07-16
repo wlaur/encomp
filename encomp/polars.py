@@ -38,14 +38,13 @@ from .utypes import Dimensionality, UnknownDimensionality
 
 __all__ = [
     "EXTENSION_NAME",
+    "Assignment",
     "Column",
     "QuantityFrame",
     "UnitDType",
-    "attach",
     "canonical_unit_string",
     "dataframe",
     "quantities",
-    "quantity",
     "unit",
     "units_of",
     "with_units",
@@ -60,7 +59,8 @@ class Column[DT: Dimensionality]:
     """
 
     def __init__(self, value: str | Unit[Any], dimensionality: type[DT], *, name: str | None = None) -> None:
-        self.unit = Unit(value)
+        validated = Quantity(1.0, value).asdim(dimensionality)
+        self.unit = validated.u
         self.dimensionality = dimensionality
         self._explicit_name = name
         self._attribute_name: str | None = None
@@ -89,6 +89,28 @@ class Column[DT: Dimensionality]:
         if instance is None:
             return self
         return Quantity(pl.col(self.name).ext.storage(), self.unit).asdim(self.dimensionality)
+
+    def assign(self, value: Quantity[DT, pl.Expr]) -> Assignment[DT]:
+        """Bind a typed expression quantity to this declared output column."""
+        return Assignment(self, value)
+
+
+def _validate_assignment_value(value: object) -> None:
+    if not isinstance(value, Quantity):
+        raise TypeError("quantity-column assignments require a Quantity with a pl.Expr magnitude")
+    typed = cast("Quantity[Any, Any]", value)
+    if not isinstance(typed.m, pl.Expr):
+        raise TypeError("quantity-column assignments require a Quantity with a pl.Expr magnitude")
+
+
+class Assignment[DT: Dimensionality]:
+    """A dimension-checked output binding created by :meth:`Column.assign`."""
+
+    def __init__(self, column: Column[DT], value: Quantity[DT, pl.Expr]) -> None:
+        _validate_assignment_value(value)
+        value.to(column.unit)
+        self.column = column
+        self.value = value
 
 
 @overload
@@ -285,7 +307,7 @@ def unit(
     validated; it never performs an unchecked cast.
     """
     probe = Quantity(1.0, value)
-    dimensionality = probe.dt if asdim is None else probe.asdim(asdim).dt
+    dimensionality = probe.dt if asdim is None else asdim
     return Column(probe.u, dimensionality, name=name)
 
 
@@ -357,6 +379,36 @@ class QuantityFrame:
             declared_units[declaration.name] = declaration.unit
         return cls(with_units(frame, declared_units))
 
+    @classmethod
+    def derive(
+        cls,
+        frame: QuantityFrame | pl.DataFrame | pl.LazyFrame,
+        *assignments: Assignment[Any],
+    ) -> Self:
+        """Derive declared quantity columns from typed expression assignments."""
+        lf = (
+            frame.lf
+            if isinstance(frame, QuantityFrame)
+            else (frame.lazy() if isinstance(frame, pl.DataFrame) else frame)
+        )
+        declared = tuple(cls._unit_columns.values())
+        seen: set[str] = set()
+        expressions: list[pl.Expr] = []
+
+        for assignment in assignments:
+            target = assignment.column
+            if not any(target is candidate for candidate in declared):
+                raise ValueError(f"column {target.name!r} is not declared by {cls.__name__}")
+            if target.name in seen:
+                raise ValueError(f"column {target.name!r} was assigned more than once")
+            seen.add(target.name)
+
+            converted = assignment.value.to(target.unit).m.alias(target.name)
+            storage = lf.select(converted).collect_schema()[target.name]
+            expressions.append(converted.ext.to(UnitDType(target.unit, storage=storage)).alias(target.name))
+
+        return cls(lf.with_columns(expressions))
+
 
 def units_of(frame: pl.DataFrame | pl.LazyFrame) -> dict[str, Unit[Any]]:
     """Units of every unit-typed column in the frame, read from the schema.
@@ -416,113 +468,6 @@ def quantities(
     return {name: Quantity(frame.get_column(name).ext.storage(), unit) for name, unit in units.items()}
 
 
-@overload
-def quantity[DT: Dimensionality](
-    frame: pl.DataFrame,
-    name: str,
-    dimensionality: type[DT],
-) -> Quantity[DT, pl.Series]: ...
-
-
-@overload
-def quantity[DT: Dimensionality](
-    frame: pl.LazyFrame,
-    name: str,
-    dimensionality: type[DT],
-) -> Quantity[DT, pl.Expr]: ...
-
-
-def quantity[DT: Dimensionality](
-    frame: pl.DataFrame | pl.LazyFrame,
-    name: str,
-    dimensionality: type[DT],
-) -> Quantity[DT, Any]:
-    """Read one unit-typed column as a statically dimensional quantity.
-
-    This is the primary compute bridge from a frame into encomp: the unit comes from
-    the column dtype, while ``dimensionality`` validates it at the boundary and gives
-    type checkers the concrete ``DT``. A lazy frame returns a ``pl.Expr`` magnitude
-    without collecting data; an eager frame returns its ``pl.Series`` storage.
-    """
-    schema = frame.collect_schema()
-    if name not in schema:
-        raise ValueError(f"column {name!r} is not present in the frame")
-    dtype = schema[name]
-    if not isinstance(dtype, UnitDType):
-        raise TypeError(
-            f"column {name!r} does not carry an {EXTENSION_NAME!r} unit dtype; "
-            "attach its known unit explicitly with with_units(...) first"
-        )
-    magnitude = pl.col(name).ext.storage() if isinstance(frame, pl.LazyFrame) else frame.get_column(name).ext.storage()
-    return Quantity(magnitude, dtype.unit).asdim(dimensionality)
-
-
-@overload
-def attach(
-    frame: pl.DataFrame,
-    quantities: Mapping[str, Quantity[Any, Any]] | None = None,
-    /,
-    **named_quantities: Quantity[Any, Any],
-) -> pl.DataFrame: ...
-
-
-@overload
-def attach(
-    frame: pl.LazyFrame,
-    quantities: Mapping[str, Quantity[Any, Any]] | None = None,
-    /,
-    **named_quantities: Quantity[Any, Any],
-) -> pl.LazyFrame: ...
-
-
-def attach(
-    frame: pl.DataFrame | pl.LazyFrame,
-    quantities: Mapping[str, Quantity[Any, Any]] | None = None,
-    /,
-    **named_quantities: Quantity[Any, Any],
-) -> pl.DataFrame | pl.LazyFrame:
-    """Attach computed quantities to a frame as unit-typed columns.
-
-    Keyword names become column names; pass a mapping positionally for names that are
-    not valid Python identifiers. Each magnitude must be a Polars expression, or an
-    eager Series when ``frame`` is a DataFrame. The expression storage dtype is
-    resolved from the plan, so Float32 results remain Float32 rather than being forced
-    through :class:`UnitDType`'s Float64 default.
-    """
-    items: dict[str, object] = dict(quantities or {})
-    duplicates = sorted(set(items) & set(named_quantities))
-    if duplicates:
-        raise ValueError(f"quantity columns were provided twice: {duplicates}")
-    items.update(named_quantities)
-
-    tagged: list[pl.Expr | pl.Series] = []
-    for name, qty in items.items():
-        if not isinstance(qty, Quantity):
-            raise TypeError(f"column {name!r}: attach(...) values must be Quantity objects, got {type(qty).__name__}")
-        typed_qty = cast("Quantity[Any, Any]", qty)
-        magnitude = typed_qty.m
-        if isinstance(magnitude, pl.Series):
-            if isinstance(frame, pl.LazyFrame):
-                raise TypeError(
-                    f"column {name!r}: a pl.Series is eager data and cannot be attached to a LazyFrame; "
-                    "use a pl.Expr quantity, or build an eager frame with dataframe(...)"
-                )
-            storage = magnitude.dtype
-            expression: pl.Expr | pl.Series = magnitude.alias(name)
-        elif isinstance(magnitude, pl.Expr):
-            expression = magnitude.alias(name)
-            storage = frame.select(expression).collect_schema()[name]
-        else:
-            raise TypeError(
-                f"column {name!r}: attach(...) requires a pl.Expr magnitude"
-                + (" or pl.Series for a DataFrame" if isinstance(frame, pl.DataFrame) else "")
-                + "; use dataframe(...) to build a frame from arrays or scalars"
-            )
-        tagged.append(expression.ext.to(UnitDType(typed_qty.u, storage=storage)).alias(name))
-
-    return frame.with_columns(tagged)
-
-
 def dataframe(
     quantities: Mapping[str, Quantity[Any, pl.Series] | Quantity[Any, Any]],
     *,
@@ -543,7 +488,7 @@ def dataframe(
         if isinstance(magnitude, pl.Expr):
             raise TypeError(
                 f"column {name!r}: a pl.Expr magnitude is a deferred plan, not data; evaluate it in a "
-                "polars context with attach(frame, name=q) instead"
+                "polars context with QuantityFrame.derive(...) instead"
             )
         if isinstance(magnitude, pl.Series):
             series = magnitude.alias(name)
