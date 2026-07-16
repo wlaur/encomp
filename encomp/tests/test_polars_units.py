@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any, assert_type, cast
 
 import numpy as np
 import polars as pl
@@ -16,7 +17,7 @@ import pytest
 from polars.exceptions import InvalidOperationError, SchemaError
 from pytest import raises
 
-from ..polars import EXTENSION_NAME, UnitDType, dataframe, quantities, units_of, with_units
+from ..polars import EXTENSION_NAME, UnitDType, attach, dataframe, quantities, quantity, units_of, with_units
 from ..units import Quantity as Q
 from ..units import Unit
 from ..utypes import Power, Pressure, VolumeFlow
@@ -237,6 +238,63 @@ def test_quantities_lazy_round_trip(tmp_path: Path) -> None:
     # unit errors surface at plan-BUILD time, before any data is collected
     with raises(Exception, match=r"[Dd]imension"):
         _ = qs["P"] + qs["V"]
+
+
+def test_quantity_is_typed_compute_bridge() -> None:
+    df = _sensor_df()
+    pressure = quantity(df, "P", Pressure)
+    assert_type(pressure, Q[Pressure, pl.Series])
+    assert pressure.m.to_list() == [1.0, 2.0, 3.0]
+    assert pressure.u == Unit("bar")
+
+    lf = df.lazy()
+    lazy_pressure = quantity(lf, "P", Pressure)
+    assert_type(lazy_pressure, Q[Pressure, pl.Expr])
+    assert isinstance(lazy_pressure.m, pl.Expr)
+
+    with raises(Exception, match=r"[Dd]imension"):
+        quantity(lf, "P", VolumeFlow)
+    with raises(ValueError, match="not present"):
+        quantity(lf, "missing", Pressure)
+    with raises(TypeError, match="with_units"):
+        quantity(pl.DataFrame({"P": [1.0]}).lazy(), "P", Pressure)
+
+
+def test_attach_is_float32_safe_lazy_write_back() -> None:
+    df = pl.DataFrame(
+        {
+            "P": pl.Series([1.0, 2.0], dtype=pl.Float32),
+            "V": pl.Series([10.0, 20.0], dtype=pl.Float32),
+        }
+    )
+    lf = with_units(df.lazy(), {"P": "bar", "V": "m³/h"})
+    power = (quantity(lf, "P", Pressure) * quantity(lf, "V", VolumeFlow)).to("kW")
+
+    out_lf = attach(lf, W=power)
+    assert_type(out_lf, pl.LazyFrame)
+    dtype = out_lf.collect_schema()["W"]
+    assert isinstance(dtype, UnitDType)
+    assert dtype.ext_storage() == pl.Float32()
+    assert dtype.unit == Unit("kW")
+    assert out_lf.collect()["W"].ext.storage().to_list() == pytest.approx([0.2778, 1.1111], rel=1e-3)
+
+
+def test_attach_eager_and_validation() -> None:
+    df = _sensor_df()
+    pressure = quantity(df, "P", Pressure).to("kPa")
+    out = attach(df, {"converted pressure": pressure})
+    assert_type(out, pl.DataFrame)
+    assert units_of(out)["converted pressure"] == Unit("kPa")
+    assert out["converted pressure"].ext.storage().to_list() == [100.0, 200.0, 300.0]
+
+    with raises(ValueError, match="provided twice"):
+        attach(df, {"P2": pressure}, P2=pressure)
+    with raises(TypeError, match=r"pl\.Series is eager"):
+        attach(df.lazy(), P2=pressure)
+    with raises(TypeError, match=r"dataframe\(\.\.\.\)"):
+        attach(df, scalar=Q(1.0, "bar"))
+    with raises(TypeError, match="must be Quantity"):
+        attach(df, {"bad": cast(Any, "bar")})
 
 
 def test_dataframe_inverse() -> None:
