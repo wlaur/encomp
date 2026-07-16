@@ -1606,6 +1606,27 @@ def test_to_preserves_temperature_dimensionality() -> None:
         _ = Q(1.0, "m").to("delta_degC")
 
 
+def test_m_as_is_typed_conversion_boundary() -> None:
+    scalar = Q(1.0, "bar").m_as("kPa")
+    array = Q(np.array([1.0, 2.0]), "bar").m_as("kPa")
+    series = Q(pl.Series([1.0, 2.0]), "bar").m_as("kPa")
+    expression = Q(pl.col("P"), "bar").m_as("kPa")
+
+    assert_type(scalar, float)
+    assert_type(array, Numpy1DArray)  # pyrefly: ignore[assert-type]
+    assert_type(series, pl.Series)
+    assert_type(expression, pl.Expr)
+    assert scalar == 100.0
+    assert array.tolist() == [100.0, 200.0]
+    assert series.to_list() == [100.0, 200.0]
+    assert pl.DataFrame({"P": [1.0]}).select(expression).item() == 100.0
+
+    with pytest.raises(DimensionalityError):
+        Q(1.0, "bar").m_as("m")
+    with pytest.raises(DimensionalityTypeError):
+        Q(300.0, "K").m_as("delta_degC")
+
+
 def test_inplace_add_sub_checks_dimensionality() -> None:
     epm = Q(1.0, "kJ/kg").asdim(EnergyPerMass)
     hv = Q(2.0, "kJ/kg").asdim(LowerHeatingValue)
