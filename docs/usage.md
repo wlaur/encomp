@@ -355,6 +355,8 @@ The declaration `pressure = unit("bar", name="P")` contains the physical informa
 
 Unit strings are not restricted to the literal autocomplete list. Pint parses other valid expressions and encomp infers their dimensionality at runtime. Since a static checker cannot execute Pint's registry, an unlisted string produces `Column[UnknownDimensionality]`; supply the exceptional `asdim=Pressure` argument when that column needs precise static typing. Compatibility is checked immediately.
 
+Construction safely converts compatible stored units to the declaration inside the lazy plan; incompatible dimensionalities fail before data is read. Schema classes compose through ordinary inheritance when one validated view needs columns from multiple schemas.
+
 Polars has no extension hook for encomp's multiplication or supertype rules. It therefore refuses value-producing operations directly on unit-typed columns; computation must explicitly cross into `Quantity`. Value-preserving operations such as filtering, sorting, aliases, join keys and group keys keep the dtype, and incompatible unit dtypes cannot be concatenated.
 
 Parquet and IPC store `ARROW:extension:name = "encomp.unit"` and `ARROW:extension:metadata = <canonical unit>` on each field. The canonical rendering normalizes syntax, not dimensional equivalence: `m^3` and `m³` match, but `Pa` and `N/m²` remain distinct dtype identities. The upstream Polars extension API is unstable, so encomp treats this integration as experimental and pins its required I/O and refusal behavior in tests.

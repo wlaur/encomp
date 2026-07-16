@@ -441,7 +441,11 @@ def test_wrong_unit_typed_inputs_refused_cleanly() -> None:
     # magnitudes. Without the plugin's dtype-extension feature + validation this was a
     # PANIC inside the FFI field import; now it is an actionable error at
     # schema-resolution time (before any flash runs) naming both units.
-    from encomp.polars import quantities, with_units
+    from encomp.polars import QuantityFrame, unit, with_units
+
+    class Inputs(QuantityFrame):
+        P = unit("bar")
+        T = unit("K")
 
     df = with_units(pl.DataFrame({"P": [5.0], "T": [400.0]}), {"P": "bar", "T": "K"})
 
@@ -451,8 +455,8 @@ def test_wrong_unit_typed_inputs_refused_cleanly() -> None:
         df.select(cp.water("D", "P", "T"))
 
     # escape hatch 1: convert through Quantity (unit-checked, folds to plain arithmetic)
-    qs = quantities(df.lazy())
-    out = df.lazy().select(cp.water("D", qs["P"].to("Pa").m, qs["T"].to("K").m)).collect()
+    inputs = Inputs(df.lazy())
+    out = inputs.lf.select(cp.water("D", inputs.P.to("Pa").m, inputs.T.to("K").m)).collect()
     ref = CP.PropsSI("D", "P", 5e5, "T", 400.0, "IF97::Water")
     assert out["D"][0] == pytest.approx(ref, rel=RTOL)
 

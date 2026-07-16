@@ -509,8 +509,8 @@ def _expected_si_unit(name: str) -> str:
     """Canonical rendering of the SI unit CoolProp expects for state input ``name``.
 
     Derived from CoolProp's own parameter metadata (no unit table of our own) and
-    rendered by ``encomp.polars.canonical_unit_string`` -- the exact canonicalization
-    the unit dtype applies to its metadata, so the plugin can accept a unit-typed
+    rendered by the same internal canonicalization the unit dtype applies to its
+    metadata, so the plugin can accept a unit-typed
     input by comparing the two strings for equality.
     """
     return _canonical_unit_string(_cp.get_parameter_information(_cp.get_parameter_index(name), "units"))

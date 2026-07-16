@@ -14,8 +14,8 @@ Polars refuses arithmetic on extension-typed columns (there is no third-party ke
 or supertype resolution), so the dtype is deliberately *only* a persistence and
 guardrail layer: unit algebra lives in :class:`encomp.units.Quantity`, which is
 exposed by validated :class:`QuantityFrame` descriptors and written back through
-:meth:`QuantityFrame.derive`. The :func:`with_units` and :func:`quantities` helpers
-remain available for schema-less bulk interop.
+:meth:`QuantityFrame.derive`. The :func:`with_units` and :func:`units_of` helpers
+remain available for explicit low-level ingestion and metadata inspection.
 
 .. warning::
     The underlying polars extension-type API is marked unstable by polars. encomp
@@ -31,7 +31,7 @@ from typing import Any, ClassVar, Self, cast, overload
 import polars as pl
 
 from . import utypes as _ut
-from ._polars_dtype import EXTENSION_NAME, UnitDType, canonical_unit_string
+from ._polars_dtype import EXTENSION_NAME, UnitDType
 from .units import Quantity, Unit
 from .utypes import Dimensionality, UnknownDimensionality
 
@@ -41,8 +41,6 @@ __all__ = [
     "Column",
     "QuantityFrame",
     "UnitDType",
-    "canonical_unit_string",
-    "quantities",
     "unit",
     "units_of",
     "with_units",
@@ -440,27 +438,3 @@ def with_units(frame: pl.DataFrame | pl.LazyFrame, units: Mapping[str, str | Uni
     return frame.with_columns(
         pl.col(name).ext.to(UnitDType(unit, storage=schema[name])) for name, unit in units.items()
     )
-
-
-@overload
-def quantities(frame: pl.DataFrame) -> dict[str, Quantity[UnknownDimensionality, pl.Series]]: ...
-
-
-@overload
-def quantities(frame: pl.LazyFrame) -> dict[str, Quantity[UnknownDimensionality, pl.Expr]]: ...
-
-
-def quantities(
-    frame: pl.DataFrame | pl.LazyFrame,
-) -> dict[str, Quantity[UnknownDimensionality, Any]]:
-    """Quantities for every unit-typed column: unit from the dtype, magnitude unwrapped.
-
-    For a ``DataFrame`` the magnitudes are ``pl.Series``; for a ``LazyFrame`` they are
-    ``pl.col(name)`` expressions, so the result composes into the lazy plan. The
-    dimensionality is unknown statically (the file schema is runtime data) — assert it
-    once at the boundary with ``.asdim(...)``.
-    """
-    units = units_of(frame)
-    if isinstance(frame, pl.LazyFrame):
-        return {name: Quantity(pl.col(name).ext.storage(), unit) for name, unit in units.items()}
-    return {name: Quantity(frame.get_column(name).ext.storage(), unit) for name, unit in units.items()}

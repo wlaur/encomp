@@ -21,7 +21,6 @@ from ..polars import (
     Column,
     QuantityFrame,
     UnitDType,
-    quantities,
     unit,
     units_of,
     with_units,
@@ -52,6 +51,10 @@ class Report(QuantityFrame):
 
 class OtherReport(QuantityFrame):
     power = unit("kW")
+
+
+class SensorsReport(Sensors, Report):
+    pass
 
 
 assert_type(Sensors.pressure, Column[Pressure])
@@ -323,39 +326,6 @@ def test_concat_unit_mismatch_is_refused() -> None:
     assert pl.concat([bar, bar]).height == 2
 
 
-def test_quantities_eager_compute() -> None:
-    qs = quantities(_sensor_df())
-    assert set(qs) == {"P", "V"}
-
-    pressure = qs["P"].asdim(Pressure)
-    flow = qs["V"].asdim(VolumeFlow)
-    power: Q[Power, pl.Series] = (pressure * flow).to("kW")
-    # 1 bar * 10 m³/h = 1e5 Pa * (10/3600) m³/s = 277.78 W
-    assert power.m.to_list() == pytest.approx([0.2778, 1.1111, 2.5], rel=1e-3)
-
-    # wrong dimensionality assertion fails at the boundary
-    with raises(Exception, match=r"[Dd]imension"):
-        qs["P"].asdim(VolumeFlow)
-
-
-def test_quantities_lazy_round_trip(tmp_path: Path) -> None:
-    path = tmp_path / "sensors.parquet"
-    _sensor_df().write_parquet(path)
-
-    lf = pl.scan_parquet(path)
-    qs = quantities(lf)
-    assert isinstance(qs["P"].m, pl.Expr)
-
-    power = (qs["P"].asdim(Pressure) * qs["V"].asdim(VolumeFlow)).to("kW")
-    out = lf.with_columns(power.m.ext.to(UnitDType("kW")).alias("W")).collect()
-    assert units_of(out)["W"] == Unit("kW")
-    assert out["W"].ext.storage().to_list() == pytest.approx([0.2778, 1.1111, 2.5], rel=1e-3)
-
-    # unit errors surface at plan-BUILD time, before any data is collected
-    with raises(Exception, match=r"[Dd]imension"):
-        _ = qs["P"] + qs["V"]
-
-
 def test_quantity_frame_derive_is_typed_and_float32_safe() -> None:
     df = pl.DataFrame(
         {
@@ -376,6 +346,10 @@ def test_quantity_frame_derive_is_typed_and_float32_safe() -> None:
     assert dtype.ext_storage() == pl.Float32()
     assert dtype.unit == Unit("kW")
     assert report.lf.collect()["Hydraulic power"].ext.storage().to_list() == pytest.approx([0.2778, 1.1111], rel=1e-3)
+
+    combined = SensorsReport(report.lf)
+    assert_type(combined, SensorsReport)
+    assert combined.lf.collect_schema()["Hydraulic power"] == UnitDType("kW", storage=pl.Float32())
 
 
 def test_quantity_frame_derive_validates_assignments() -> None:
