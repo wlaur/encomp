@@ -26,6 +26,7 @@ remain available for explicit low-level ingestion and metadata inspection.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any, ClassVar, Self, cast, overload
 
 import polars as pl
@@ -374,6 +375,11 @@ class QuantityFrame:
                 )
             declared_units[declaration.name] = declaration.unit
         return cls(with_units(frame, declared_units))
+
+    @classmethod
+    def scan_parquet(cls, source: str | Path) -> Self:
+        """Lazily scan a Parquet file and validate its persisted unit schema."""
+        return cls(pl.scan_parquet(source))
 
     @classmethod
     def derive(

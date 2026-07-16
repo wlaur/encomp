@@ -16,6 +16,7 @@ import pytest
 from polars.exceptions import InvalidOperationError, SchemaError
 from pytest import raises
 
+from ..fluids import Water
 from ..polars import (
     EXTENSION_NAME,
     Column,
@@ -27,7 +28,7 @@ from ..polars import (
 )
 from ..units import Quantity as Q
 from ..units import Unit
-from ..utypes import Power, Pressure, UnknownDimensionality, Velocity, VolumeFlow
+from ..utypes import Density, Power, Pressure, Temperature, UnknownDimensionality, Velocity, VolumeFlow
 
 
 def _sensor_df() -> pl.DataFrame:
@@ -55,6 +56,15 @@ class OtherReport(QuantityFrame):
 
 class SensorsReport(Sensors, Report):
     pass
+
+
+class FluidInputs(QuantityFrame):
+    pressure = unit("bar", name="P")
+    temperature = unit("degC", name="T")
+
+
+class FluidOutputs(QuantityFrame):
+    density = unit("kg/m³", name="rho")
 
 
 assert_type(Sensors.pressure, Column[Pressure])
@@ -365,3 +375,28 @@ def test_quantity_frame_derive_validates_assignments() -> None:
         Report.power.assign(cast(Any, Q(pl.Series([1.0]), "kW")))
     with raises(Exception, match="Cannot convert"):
         Report.power.assign(cast(Any, sensors.pressure))
+
+
+def test_quantity_frame_round_trips_fluid_expression_output(tmp_path: Path) -> None:
+    source_path = tmp_path / "states.parquet"
+    result_path = tmp_path / "properties.parquet"
+    FluidInputs.from_untyped(pl.DataFrame({"P": [5.0, 5.0], "T": [150.0, 250.0]})).lf.sink_parquet(source_path)
+
+    inputs = FluidInputs.scan_parquet(source_path)
+    assert_type(inputs, FluidInputs)
+    water = Water[pl.Expr](P=inputs.pressure, T=inputs.temperature)
+    density = water.D
+    assert_type(inputs.pressure, Q[Pressure, pl.Expr])
+    assert_type(inputs.temperature, Q[Temperature, pl.Expr])
+    assert_type(density, Q[Density, pl.Expr])
+
+    outputs = FluidOutputs.derive(inputs, FluidOutputs.density.assign(density))
+    outputs.lf.sink_parquet(result_path)
+
+    restored = FluidOutputs.scan_parquet(result_path)
+    assert units_of(restored.lf)["rho"] == Unit("kg/m³")
+    expected = [
+        Water(P=Q(5.0, "bar"), T=Q(150.0, "degC")).D.m,
+        Water(P=Q(5.0, "bar"), T=Q(250.0, "degC")).D.m,
+    ]
+    assert restored.lf.collect()["rho"].ext.storage().to_list() == pytest.approx(expected)

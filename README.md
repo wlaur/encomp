@@ -243,7 +243,7 @@ with TemporaryDirectory() as directory:
     path = Path(directory) / "sensors.parquet"
     stored.lf.sink_parquet(path)
 
-    sensors = Sensors(pl.scan_parquet(path))
+    sensors = Sensors.scan_parquet(path)
     power = (sensors.pressure * sensors.flow).to("kW")
     report = Report.derive(sensors, Report.power.assign(power))
 
@@ -254,10 +254,37 @@ with TemporaryDirectory() as directory:
 The boundary is explicit in both directions:
 
 1. `Sensors.from_untyped(raw)` is the conspicuous assertion that bare input magnitudes have the declared units.
-2. `Sensors(pl.scan_parquet(...))` validates metadata before typed attribute access becomes available. Compatible stored units are converted to the declaration inside the lazy plan.
+2. `Sensors.scan_parquet(...)` validates metadata before typed attribute access becomes available. Compatible stored units are converted to the declaration inside the lazy plan.
 3. `Report.power.assign(power)` checks dimensionality, and `Report.derive(...)` converts to `kW` and restores its metadata without collecting.
 
 Use `unit("bar", name="Suction pressure")` when an external column name cannot be the Python attribute. Registered unit literals infer dimensionality for static checkers. Pint still accepts its open unit grammar: an unlisted spelling such as `unit("kg/(m*s**2)")` is inferred at runtime and typed conservatively as unknown; add `asdim=Pressure` when precise static typing is required. The override is validated rather than cast.
+
+The validated expressions pass directly into the high-level fluid API. Non-SI declarations are converted before the native plugin runs, and the result can be persisted with another declaration:
+
+```python
+import polars as pl
+
+from encomp.fluids import Water
+from encomp.polars import QuantityFrame, unit, units_of
+from encomp.units import Unit
+
+
+class States(QuantityFrame):
+    pressure = unit("bar", name="P")
+    temperature = unit("degC", name="T")
+
+
+class Properties(QuantityFrame):
+    density = unit("kg/m³", name="rho")
+
+
+states = States.from_untyped(pl.LazyFrame({"P": [5.0], "T": [150.0]}))
+water = Water[pl.Expr](P=states.pressure, T=states.temperature)
+properties = Properties.derive(states, Properties.density.assign(water.D))
+
+assert units_of(properties.lf)["rho"] == Unit("kg/m³")
+assert properties.lf.collect()["rho"].ext.storage()[0] > 900.0
+```
 
 Raw arithmetic on a unit-typed column is refused because Polars cannot delegate third-party unit algebra. This prevents accidental operations such as adding pressure to flow; intentional computation goes through `Quantity`. Syntax normalization is conservative: `m^3` and `m³` produce the same dtype, while dimensionally equivalent renderings such as `Pa` and `N/m²` remain different metadata identities.
 

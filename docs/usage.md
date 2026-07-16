@@ -335,7 +335,7 @@ source = Sensors.from_untyped(pl.DataFrame({"P": [1.0, 2.0], "V": [10.0, 20.0]})
 with TemporaryDirectory() as directory:
     path = Path(directory) / "source.parquet"
     source.lf.sink_parquet(path)
-    sensors = Sensors(pl.scan_parquet(path))
+    sensors = Sensors.scan_parquet(path)
 
     power = sensors.pressure * sensors.flow
     result = Report.derive(sensors, Report.power.assign(power))
@@ -357,6 +357,35 @@ Unit strings are not restricted to the literal autocomplete list. Pint parses ot
 
 Construction safely converts compatible stored units to the declaration inside the lazy plan; incompatible dimensionalities fail before data is read. Schema classes compose through ordinary inheritance when one validated view needs columns from multiple schemas.
 
+The same bridge composes with the high-level fluid API without dropping to raw expressions. `Water` accepts the descriptor quantities, performs its required SI conversions, and returns a typed expression quantity that can be assigned straight back to a declared output:
+
+```python
+import polars as pl
+
+from encomp.fluids import Water
+from encomp.polars import QuantityFrame, unit, units_of
+from encomp.units import Unit
+
+
+class States(QuantityFrame):
+    pressure = unit("bar", name="P")
+    temperature = unit("degC", name="T")
+
+
+class Properties(QuantityFrame):
+    density = unit("kg/m³", name="rho")
+
+
+states = States.from_untyped(pl.LazyFrame({"P": [5.0], "T": [150.0]}))
+water = Water[pl.Expr](P=states.pressure, T=states.temperature)
+properties = Properties.derive(states, Properties.density.assign(water.D))
+
+assert units_of(properties.lf)["rho"] == Unit("kg/m³")
+assert properties.lf.collect()["rho"].ext.storage()[0] > 900.0
+```
+
+This convenience belongs to `Water`/`Fluid`, where units are present in the `Quantity` inputs. The lower-level `encomp.coolprop.water()` function accepts bare Polars columns and therefore cannot insert unit conversions: extension-typed inputs must already carry the exact SI unit, or callers must pass an explicitly converted magnitude such as `states.pressure.to("Pa").m`.
+
 Polars has no extension hook for encomp's multiplication or supertype rules. It therefore refuses value-producing operations directly on unit-typed columns; computation must explicitly cross into `Quantity`. Value-preserving operations such as filtering, sorting, aliases, join keys and group keys keep the dtype, and incompatible unit dtypes cannot be concatenated.
 
 Parquet and IPC store `ARROW:extension:name = "encomp.unit"` and `ARROW:extension:metadata = <canonical unit>` on each field. The canonical rendering normalizes syntax, not dimensional equivalence: `m^3` and `m³` match, but `Pa` and `N/m²` remain distinct dtype identities. The upstream Polars extension API is unstable, so encomp treats this integration as experimental and pins its required I/O and refusal behavior in tests.
@@ -368,6 +397,8 @@ Inconsistent or ambiguous operations raise descriptive errors.
 
 Units do not always cancel out automatically.
 Call {py:meth}`encomp.units.Quantity.to_base_units` to simplify to base SI units, {py:meth}`encomp.units.Quantity.to` when the target unit is known, or {py:meth}`encomp.units.Quantity.to_reduced_units` to cancel units without converting to base SI units.
+
+When only the converted magnitude is needed, {py:meth}`encomp.units.Quantity.m_as` is the typed shorthand for `.to(unit).m`; it preserves the magnitude container type and applies the same dimensionality and temperature checks.
 
 ```python
 from encomp.units import Quantity as Q
