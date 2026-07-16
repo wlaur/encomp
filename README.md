@@ -20,6 +20,8 @@ Every physical quantity in `encomp` carries a magnitude, a unit, and a dimension
 
 - **Static unit checking.** Common dimensionalities are encoded as `Quantity.__new__` overloads, and their `*` / `/` / `**` combinations as arithmetic-operator overloads, so a type checker flags a `Temperature` passed where a `Power` is expected. `@typeguard.typechecked` extends the same checks to runtime.
 
+- **Unit-carrying Polars columns** (`encomp.polars`). A physical unit is stored in the column dtype and round-trips through Parquet/IPC as Arrow field metadata. `quantity(...)` moves a column into typed `Quantity[DT, pl.Series | pl.Expr]` computation; `attach(...)` writes the result back with its unit metadata.
+
 - **`Fluid` / `Water` / `HumidAir`** (`encomp.fluids`) wrap [CoolProp](http://www.coolprop.org): fix a state with two points (three for humid air) and read any property as an attribute. Inputs and outputs are `Quantity` objects, so units are converted and validated automatically.
 
 - **CoolProp as Polars expressions** (`encomp.coolprop`). Properties evaluate as native Polars expression plugins written in Rust, so independent properties in one `select` / `with_columns` run in parallel without holding the GIL. See [Parallel CoolProp evaluation with Polars](#parallel-coolprop-evaluation-with-polars).
@@ -210,6 +212,49 @@ q2 = Q(3, "delta_degF per (pound per fortnight)")
 assert q1 == q2
 assert type(q1) is type(q2)
 ```
+
+## Unit-carrying Polars columns
+
+`Quantity` is the computation layer, while `UnitDType` is the DataFrame and storage layer. Units are attached explicitly when raw data enters the pipeline; after a Parquet round-trip, `quantity(...)` recovers the unit from the dtype and validates the requested dimensionality. `attach(...)` stores a computed quantity back into the frame without collecting a lazy plan.
+
+```python
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import polars as pl
+
+from encomp.polars import attach, quantity, units_of, with_units
+from encomp.units import Unit
+from encomp.utypes import Pressure, VolumeFlow
+
+raw = pl.DataFrame({"P": [1.0, 2.0], "V": [10.0, 20.0]})
+stored = with_units(raw, {"P": "bar", "V": "m³/h"})
+
+with TemporaryDirectory() as directory:
+    path = Path(directory) / "sensors.parquet"
+    stored.write_parquet(path)
+
+    lf = pl.scan_parquet(path)
+    pressure = quantity(lf, "P", Pressure)
+    flow = quantity(lf, "V", VolumeFlow)
+    power = (pressure * flow).to("kW")
+
+    result = attach(lf, W=power)
+    assert units_of(result)["W"] == Unit("kW")
+    assert abs(result.collect()["W"].ext.storage()[0] - 0.2778) < 0.0001
+```
+
+The bridge is explicit in both directions:
+
+1. `with_units` turns known raw magnitudes into guarded, persistent columns.
+2. `quantity` unwraps the storage values as a Polars expression while carrying the dtype unit into encomp's runtime and static unit algebra.
+3. `attach` asks Polars for the result expression's storage dtype and restores the computed unit as column metadata.
+
+Raw arithmetic on a unit-typed column is refused because Polars cannot delegate third-party unit algebra. This prevents accidental operations such as adding pressure to flow; intentional computation goes through `Quantity`. Syntax normalization is conservative: `m^3` and `m³` produce the same dtype, while dimensionally equivalent renderings such as `Pa` and `N/m²` remain different metadata identities.
+
+The persisted Arrow field contract is `ARROW:extension:name = "encomp.unit"` and `ARROW:extension:metadata = <canonical unit>`. Import `encomp.polars`—or `encomp.coolprop`, which registers the same dtype—before reading with Polars 1.x. For readers that do not import encomp, `POLARS_UNKNOWN_EXTENSION_TYPE_BEHAVIOR=load_as_extension` preserves generic extension metadata; otherwise current Polars 1.x warns and loads the numeric storage type.
+
+The Polars extension API is marked unstable upstream, so this integration is experimental even though encomp pins its required behavior in tests.
 
 ## The `Fluid` class
 

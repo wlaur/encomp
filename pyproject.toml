@@ -85,6 +85,7 @@ dev = [
     "hvplot>=0.12.2",
     "pyparsing>=3.3.1",
     "altair>=6.0.0",
+    "pyarrow",
     "microsoft-python-type-stubs",
     "numpydoc>=1.10.0",
 ]

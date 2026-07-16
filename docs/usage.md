@@ -305,6 +305,47 @@ type(Q(pl.lit(5), "kg").m)  # pl.Expr
 
 A `Quantity` with a `pl.Expr` magnitude is a deferred plan, not data. Only unit algebra (arithmetic, comparison, `.to`, `abs`) is meaningful on it; reach the underlying Polars object with `.m` to compute inside a `select` / `with_columns`. This is also how the parallel CoolProp evaluation described below is driven.
 
+### Persisting units in Polars schemas
+
+A bare `Quantity(pl.col("P"), "bar")` carries its unit only in the Python wrapper. The association disappears if another service reads the underlying Parquet file. `encomp.polars` supplies the missing frame-level layer: `UnitDType` stores the unit in Arrow field metadata, while the numeric values remain the extension dtype's storage.
+
+Use {py:func}`encomp.polars.with_units` once where the producer's raw unit schema is known. Later readers use {py:func}`encomp.polars.quantity` to enter Quantity computation and {py:func}`encomp.polars.attach` to return a result to the frame:
+
+```python
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import polars as pl
+
+from encomp.polars import attach, quantity, units_of, with_units
+from encomp.units import Unit
+from encomp.utypes import Pressure, VolumeFlow
+
+source = with_units(
+    pl.DataFrame({"P": [1.0, 2.0], "V": [10.0, 20.0]}),
+    {"P": "bar", "V": "m³/h"},
+)
+
+with TemporaryDirectory() as directory:
+    path = Path(directory) / "source.parquet"
+    source.write_parquet(path)
+    lf = pl.scan_parquet(path)
+
+    pressure = quantity(lf, "P", Pressure)
+    flow = quantity(lf, "V", VolumeFlow)
+    power = (pressure * flow).to("kW")
+    result = attach(lf, W=power)
+
+    assert units_of(result) == {"P": Unit("bar"), "V": Unit("m³/h"), "W": Unit("kW")}
+    assert result.collect()["W"].ext.storage().to_list() == [0.2777777777777778, 1.1111111111111112]
+```
+
+`quantity(lf, "P", Pressure)` performs two jobs at the boundary: it reads the unit from the dtype and checks that its runtime dimensions are pressure, while its overload returns `Quantity[Pressure, pl.Expr]` to static type checkers. The magnitude becomes `pl.col("P").ext.storage()`, so the lazy optimizer still sees an ordinary numeric expression. `attach` performs the inverse operation and infers the expression's storage dtype, including `Float32`, before applying the result unit.
+
+Polars has no extension hook for encomp's multiplication or supertype rules. It therefore refuses value-producing operations directly on unit-typed columns; computation must explicitly cross into `Quantity`. Value-preserving operations such as filtering, sorting, aliases, join keys and group keys keep the dtype, and incompatible unit dtypes cannot be concatenated.
+
+Parquet and IPC store `ARROW:extension:name = "encomp.unit"` and `ARROW:extension:metadata = <canonical unit>` on each field. The canonical rendering normalizes syntax, not dimensional equivalence: `m^3` and `m³` match, but `Pa` and `N/m²` remain distinct dtype identities. The upstream Polars extension API is unstable, so encomp treats this integration as experimental and pins its required I/O and refusal behavior in tests.
+
 ### Combining quantities
 
 The output of an operation on quantities is always consistent with the input dimensionalities.

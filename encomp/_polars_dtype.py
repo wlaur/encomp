@@ -22,7 +22,12 @@ _CANONICAL_UNIT_FORMAT = "~P"
 
 
 def canonical_unit_string(unit: str | Unit[Any]) -> str:
-    """Return the fixed canonical rendering stored in extension metadata."""
+    """Return the fixed canonical rendering stored in extension metadata.
+
+    The rendering is independent of encomp's process-wide display format because it
+    is an on-disk, cross-process contract. It normalizes spelling (``"m^3"`` and
+    ``"m³"``), not physical equivalence (``"Pa"`` and ``"N/m²"`` remain distinct).
+    """
     from .units import Unit
 
     parsed = Unit(unit) if isinstance(unit, str) else unit
@@ -39,7 +44,13 @@ def _validate_storage(storage: pl.DataType) -> None:
 
 
 class UnitDType(pl.BaseExtension):
-    """Polars extension dtype carrying a physical unit as column metadata."""
+    """Polars extension dtype carrying a physical unit as column metadata.
+
+    A dtype instance consists of the stable extension name ``"encomp.unit"``, a
+    numeric storage dtype, and a canonical unit string. Polars refuses value-producing
+    arithmetic on extension columns; use :func:`encomp.polars.quantity` to enter
+    Quantity unit algebra and :func:`encomp.polars.attach` to return to a frame.
+    """
 
     def __init__(self, unit: str | Unit[Any], storage: pl.DataType | None = None) -> None:
         if storage is None:

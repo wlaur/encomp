@@ -4,9 +4,11 @@ Importing this module registers the ``"encomp.unit"`` extension type with polars
 After that, plain polars I/O (``pl.read_parquet``, ``pl.scan_parquet``,
 ``pl.sink_parquet``, ...) round-trips unit-typed columns with no encomp-specific
 read/write functions: the unit is column-level Arrow field metadata
-(``ARROW:extension:name`` / ``ARROW:extension:metadata``) in the file, readable from
-pyarrow, DuckDB and Spark with stock APIs. Consumers without encomp installed load the
-plain storage values.
+(``ARROW:extension:name`` / ``ARROW:extension:metadata``) in the file. Metadata-aware
+Arrow consumers can inspect those standard field keys with their ordinary schema APIs.
+Unregistered Polars 1.x readers warn and load storage values by default; readers using
+``POLARS_UNKNOWN_EXTENSION_TYPE_BEHAVIOR=load_as_extension`` preserve a generic
+extension (the planned Polars 2.0 default).
 
 Polars refuses arithmetic on extension-typed columns (there is no third-party kernel
 or supertype resolution), so the dtype is deliberately *only* a persistence and

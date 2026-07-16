@@ -34,6 +34,9 @@ def test_unit_dtype_normalization() -> None:
     assert UnitDType("m^3") == UnitDType("m³")
     assert UnitDType("m**3/hour") == UnitDType("m³/h")
     assert UnitDType("bar").unit == Unit("bar")
+    # Canonicalization normalizes syntax, not physical equivalence. This conservative
+    # identity is what lets the Rust plugin compare metadata without embedding Pint.
+    assert UnitDType("Pa") != UnitDType("N/m²")
 
     # an unknown unit fails at dtype construction, not at attach or write time
     with raises(Exception, match="asdfgh"):
@@ -168,15 +171,34 @@ else:
 
 
 def test_arrow_field_metadata(tmp_path: Path) -> None:
-    # the persisted form is the standard Arrow extension convention, under the
-    # documented EXTENSION_NAME -- this is the cross-tool (pyarrow/DuckDB/Spark)
-    # contract, pinned here via the parquet footer polars itself reads back
+    # Pin the actual cross-tool contract through PyArrow, not merely by asking Polars
+    # to deserialize its own file representation.
+    parquet: Any = pytest.importorskip("pyarrow.parquet")
     path = tmp_path / "meta.parquet"
     _sensor_df().write_parquet(path)
-    dtype = pl.read_parquet(path).schema["P"]
-    assert isinstance(dtype, UnitDType)
-    assert dtype.ext_name() == EXTENSION_NAME
-    assert dtype.ext_metadata() == "bar"
+    field = parquet.read_schema(path).field("P")
+    assert field.metadata == {
+        b"ARROW:extension:metadata": b"bar",
+        b"ARROW:extension:name": EXTENSION_NAME.encode(),
+    }
+
+
+def test_ipc_round_trip(tmp_path: Path) -> None:
+    path = tmp_path / "sensors.arrow"
+    df = _sensor_df()
+    df.write_ipc(path)
+    assert pl.read_ipc(path).schema == df.schema
+    assert units_of(pl.scan_ipc(path)) == {"P": Unit("bar"), "V": Unit("m³/h")}
+
+
+def test_passthrough_operations_preserve_unit_dtype() -> None:
+    df = _sensor_df()
+    grouped = df.group_by("P").agg(pl.len())
+    assert units_of(grouped) == {"P": Unit("bar")}
+
+    lookup = df.select("P", code=pl.int_range(pl.len()))
+    joined = df.join(lookup, on="P")
+    assert units_of(joined) == {"P": Unit("bar"), "V": Unit("m³/h")}
 
 
 def test_arithmetic_is_refused() -> None:
