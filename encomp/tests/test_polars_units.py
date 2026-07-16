@@ -17,15 +17,105 @@ import pytest
 from polars.exceptions import InvalidOperationError, SchemaError
 from pytest import raises
 
-from ..polars import EXTENSION_NAME, UnitDType, attach, dataframe, quantities, quantity, units_of, with_units
+from ..polars import (
+    EXTENSION_NAME,
+    Column,
+    QuantityFrame,
+    UnitDType,
+    attach,
+    dataframe,
+    quantities,
+    quantity,
+    unit,
+    units_of,
+    with_units,
+)
 from ..units import Quantity as Q
 from ..units import Unit
-from ..utypes import Power, Pressure, VolumeFlow
+from ..utypes import Power, Pressure, UnknownDimensionality, Velocity, VolumeFlow
 
 
 def _sensor_df() -> pl.DataFrame:
     df = pl.DataFrame({"P": [1.0, 2.0, 3.0], "V": [10.0, 20.0, 30.0], "tag": ["a", "b", "c"]})
     return with_units(df, {"P": "bar", "V": "m^3/h"})
+
+
+class Sensors(QuantityFrame):
+    pressure = unit("bar")
+    flow = unit("m³/h", name="Volume flow")
+
+
+class FallbackUnits(QuantityFrame):
+    speed = unit("furlong/fortnight")
+    pressure = unit("kg/(m*s**2)", asdim=Pressure)
+
+
+assert_type(Sensors.pressure, Column[Pressure])
+assert_type(Sensors.flow, Column[VolumeFlow])
+assert_type(FallbackUnits.speed, Column[UnknownDimensionality])
+assert_type(FallbackUnits.pressure, Column[Pressure])
+
+
+def test_quantity_frame_assigns_declared_units_to_untyped_input() -> None:
+    sensors = Sensors.from_untyped(
+        pl.DataFrame({"pressure": [1.0, 2.0], "Volume flow": [10.0, 20.0], "tag": ["a", "b"]})
+    )
+
+    assert_type(sensors.pressure, Q[Pressure, pl.Expr])
+    assert_type(sensors.flow, Q[VolumeFlow, pl.Expr])
+    assert units_of(sensors.lf) == {"pressure": Unit("bar"), "Volume flow": Unit("m³/h")}
+    assert sensors.lf.select(sensors.pressure.m).collect().to_series().to_list() == [1.0, 2.0]
+
+
+def test_quantity_frame_validates_and_normalizes_stored_units() -> None:
+    stored = with_units(
+        pl.DataFrame({"pressure": [100.0, 200.0], "Volume flow": [10.0, 20.0]}),
+        {"pressure": "kPa", "Volume flow": "m³/h"},
+    )
+    sensors = Sensors(stored)
+
+    assert units_of(sensors.lf) == {"pressure": Unit("bar"), "Volume flow": Unit("m³/h")}
+    assert sensors.lf.select(sensors.pressure.m).collect().to_series().to_list() == [1.0, 2.0]
+
+    with raises(Exception, match=r"[Dd]imension"):
+        Sensors(
+            with_units(
+                pl.DataFrame({"pressure": [1.0], "Volume flow": [1.0]}),
+                {"pressure": "m", "Volume flow": "m³/h"},
+            )
+        )
+
+
+def test_quantity_frame_boundaries_are_explicit() -> None:
+    with raises(TypeError, match="from_untyped"):
+        Sensors(pl.DataFrame({"pressure": [1.0], "Volume flow": [1.0]}))
+    with raises(TypeError, match="already unit-typed"):
+        Sensors.from_untyped(
+            with_units(
+                pl.DataFrame({"pressure": [1.0], "Volume flow": [1.0]}),
+                {"pressure": "bar", "Volume flow": "m³/h"},
+            )
+        )
+    with raises(ValueError, match="missing declared"):
+        Sensors.from_untyped(pl.DataFrame({"pressure": [1.0]}))
+
+
+def test_unit_runtime_fallback_and_validated_asdim() -> None:
+    assert FallbackUnits.speed.dimensionality is Velocity
+    assert FallbackUnits.pressure.dimensionality is Pressure
+    with raises(Exception, match=r"[Dd]imension"):
+        unit("m³/h", asdim=Pressure)
+    with raises(Exception, match="not defined"):
+        unit("not_a_real_unit")
+
+
+def test_quantity_frame_rejects_duplicate_physical_names() -> None:
+    with raises(TypeError, match=r"declares physical column.*twice"):
+        _ = type(
+            "DuplicateColumns",
+            (QuantityFrame,),
+            {"first": unit("bar", name="P"), "second": unit("kPa", name="P")},
+        )
 
 
 def test_unit_dtype_normalization() -> None:
