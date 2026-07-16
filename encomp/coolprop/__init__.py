@@ -38,6 +38,8 @@ import CoolProp.CoolProp as _CoolProp
 import polars as pl
 from polars.plugins import register_plugin_function
 
+from .._polars_dtype import canonical_unit_string as _canonical_unit_string
+
 # CoolProp ships incomplete type stubs; treat the module as Any (mirrors encomp).
 _cp: Any = _CoolProp
 
@@ -511,9 +513,7 @@ def _expected_si_unit(name: str) -> str:
     the unit dtype applies to its metadata, so the plugin can accept a unit-typed
     input by comparing the two strings for equality.
     """
-    from ..polars import canonical_unit_string  # deferred: keep plugin-only imports light
-
-    return canonical_unit_string(_cp.get_parameter_information(_cp.get_parameter_index(name), "units"))
+    return _canonical_unit_string(_cp.get_parameter_information(_cp.get_parameter_index(name), "units"))
 
 
 @cache
@@ -525,10 +525,9 @@ def _expected_ha_si_unit(name: str) -> str:
     humid-air units (a lookup failure means that mapping has a gap and raises here).
     """
     from ..fluids import CProperty, HumidAir  # deferred: encomp.fluids imports this module at top level
-    from ..polars import canonical_unit_string
 
     # runtime-validated dynamic lookup: get_coolprop_unit raises for an unknown name
-    return canonical_unit_string(HumidAir.get_coolprop_unit(cast(CProperty, name)))
+    return _canonical_unit_string(HumidAir.get_coolprop_unit(cast(CProperty, name)))
 
 
 def _reject_duplicate_input_keys(kind: str, keyed_names: tuple[tuple[str, int | str], ...]) -> None:

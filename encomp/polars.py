@@ -28,6 +28,7 @@ from typing import Any, overload
 import numpy as np
 import polars as pl
 
+from ._polars_dtype import EXTENSION_NAME, UnitDType, canonical_unit_string
 from .units import Quantity, Unit
 from .utypes import UnknownDimensionality
 
@@ -40,75 +41,6 @@ __all__ = [
     "units_of",
     "with_units",
 ]
-
-EXTENSION_NAME = "encomp.unit"
-"""Extension-type name registered with polars, and the public, stable identifier under
-which the unit string is stored as Arrow field metadata in Parquet/IPC files."""
-
-_CANONICAL_UNIT_FORMAT = "~P"
-"""Fixed pint format spec for the unit string stored in dtype metadata."""
-
-
-def canonical_unit_string(unit: str | Unit[Any]) -> str:
-    """The canonical rendering of a unit as stored in :class:`UnitDType` metadata.
-
-    Deliberately a *fixed* format ("m³/h", "°C") rather than the process-wide display
-    format (:func:`encomp.units.set_quantity_format` /
-    ``SETTINGS.default_unit_format``): the metadata is an on-disk, cross-process
-    contract and must not drift with a display setting. The CoolProp plugin compares
-    its expected SI units against exactly this rendering.
-    """
-    parsed = Unit(unit) if isinstance(unit, str) else unit
-    return format(parsed, _CANONICAL_UNIT_FORMAT)
-
-
-def _validate_storage(storage: pl.DataType) -> None:
-    # bool magnitudes are always a mistake (same runtime invariant as Quantity), and
-    # non-numeric dtypes cannot be magnitudes at all. An already unit-typed column is
-    # also rejected here (its dtype is an extension type, not a numeric one).
-    if not (storage.is_float() or storage.is_integer()):
-        raise TypeError(
-            f"unit dtype storage must be a float or integer dtype, got {storage!r}. "
-            "Boolean and non-numeric columns cannot carry a unit, and a column that "
-            "already has a unit dtype cannot be re-wrapped."
-        )
-
-
-class UnitDType(pl.BaseExtension):
-    """Polars extension data type carrying a physical unit as column metadata.
-
-    A dtype instance is (extension name ``"encomp.unit"``, numeric storage dtype, unit
-    string). The unit string is normalized through the unit registry on construction,
-    so different spellings of the same unit (``"m^3"``, ``"m³"``) produce equal
-    dtypes; an unknown unit raises immediately.
-
-    Polars refuses arithmetic on extension-typed columns, so a unit-typed column
-    cannot silently take part in unitless math: the escape hatches are an explicit
-    ``.ext.storage()`` unwrap or a :class:`encomp.units.Quantity` (see
-    :func:`quantities`).
-    """
-
-    def __init__(self, unit: str | Unit[Any], storage: pl.DataType | None = None) -> None:
-        if storage is None:
-            storage = pl.Float64()
-        _validate_storage(storage)
-        super().__init__(EXTENSION_NAME, storage, canonical_unit_string(unit))
-
-    @property
-    def unit(self) -> Unit[Any]:
-        """The column's unit, parsed from the dtype metadata.
-
-        For a dtype loaded from a file this re-validates the stored unit string
-        against the registry; a file carrying an unparseable unit raises here, not at
-        scan time.
-        """
-        metadata = self.ext_metadata()
-        if metadata is None:
-            raise ValueError(f"{EXTENSION_NAME} dtype without a unit string in its metadata: {self!r}")
-        return Unit(metadata)
-
-    def _string_repr(self) -> str:
-        return f"unit[{self.ext_metadata()}]"
 
 
 def units_of(frame: pl.DataFrame | pl.LazyFrame) -> dict[str, Unit[Any]]:
@@ -197,9 +129,3 @@ def dataframe(
             series = pl.Series(name, np.atleast_1d(magnitude))
         columns.append(series.ext.to(UnitDType(quantity.u, storage=series.dtype)))
     return pl.DataFrame(columns)
-
-
-# Registration happens at import so that plain polars I/O reconstructs UnitDType columns
-# in any process that has imported encomp.polars; processes without it load the storage
-# type (with a polars warning that names the extension type).
-pl.register_extension_type(EXTENSION_NAME, UnitDType)

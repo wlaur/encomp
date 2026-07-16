@@ -30,3 +30,18 @@ def test_top_level_shortcuts_are_not_reexported() -> None:
 
     with pytest.raises(ImportError):
         exec("from encomp import Q")
+
+
+def test_coolprop_registers_unit_dtype_without_importing_units() -> None:
+    script = (
+        "import sys\n"
+        "from encomp import coolprop\n"
+        "import polars as pl\n"
+        "print('encomp.units' in sys.modules)\n"
+        "print(type(pl.DataFrame({'x': [1.0]}).schema['x']).__name__)\n"
+        "print('encomp._polars_dtype' in sys.modules)\n"
+    )
+
+    result = subprocess.run([sys.executable, "-c", script], check=True, capture_output=True, text=True)
+
+    assert result.stdout.splitlines() == ["False", "Float64", "True"]

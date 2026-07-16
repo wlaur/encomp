@@ -5,6 +5,9 @@ the behavior encomp relies on (I/O round-trip, arithmetic refusal, concat refusa
 polars bump that changes any of it fails loudly.
 """
 
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -102,6 +105,65 @@ def test_parquet_round_trip(tmp_path: Path) -> None:
     sunk = tmp_path / "sunk.parquet"
     lf.sink_parquet(sunk)
     assert units_of(pl.read_parquet(sunk)) == {"P": Unit("bar"), "V": Unit("m³/h")}
+
+
+def test_coolprop_import_registers_before_parquet_read(tmp_path: Path) -> None:
+    path = tmp_path / "bar.parquet"
+    with_units(pl.DataFrame({"P": [5.0], "T": [400.0]}), {"P": "bar", "T": "K"}).write_parquet(path)
+    script = f"""
+import polars as pl
+from encomp import coolprop as cp
+
+df = pl.read_parquet({str(path)!r})
+dtype = df.schema["P"]
+print(type(dtype).__name__, dtype.ext_metadata())
+try:
+    df.lazy().select(cp.water("D", "P", "T")).collect_schema()
+except Exception as exc:
+    print("carries unit 'bar'" in str(exc))
+else:
+    print(False)
+"""
+
+    result = subprocess.run([sys.executable, "-c", script], check=True, capture_output=True, text=True)
+
+    assert result.stdout.splitlines() == ["UnitDType bar", "True"]
+    assert "not registered" not in result.stderr
+
+
+def test_unregistered_reader_modes_are_explicit(tmp_path: Path) -> None:
+    path = tmp_path / "bar.parquet"
+    with_units(pl.DataFrame({"P": [5.0]}), {"P": "bar"}).write_parquet(path)
+    script = f"""
+import polars as pl
+
+df = pl.read_parquet({str(path)!r})
+print(df.schema["P"])
+"""
+
+    stripped = subprocess.run([sys.executable, "-Wdefault", "-c", script], check=True, capture_output=True, text=True)
+    assert stripped.stdout.strip() == "Float64"
+    assert "not registered" in stripped.stderr
+
+    env = {**os.environ, "POLARS_UNKNOWN_EXTENSION_TYPE_BEHAVIOR": "load_as_extension"}
+    preserved_script = f"""
+import polars as pl
+
+df = pl.read_parquet({str(path)!r})
+print(df.schema["P"])
+from encomp import coolprop as cp
+try:
+    df.lazy().select(cp.water("D", "P", pl.lit(400.0).alias("T"))).collect_schema()
+except Exception as exc:
+    print("carries unit 'bar'" in str(exc))
+else:
+    print(False)
+"""
+    preserved = subprocess.run(
+        [sys.executable, "-Wdefault", "-c", preserved_script], check=True, capture_output=True, text=True, env=env
+    )
+    assert preserved.stdout.splitlines() == ["Extension('encomp.unit', Float64, 'bar')", "True"]
+    assert preserved.stderr == ""
 
 
 def test_arrow_field_metadata(tmp_path: Path) -> None:
