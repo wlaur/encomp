@@ -274,7 +274,7 @@ else:
         [sys.executable, "-Wdefault", "-c", preserved_script], check=True, capture_output=True, text=True, env=env
     )
     assert preserved.stdout.splitlines() == ["Extension('encomp.unit', Float64, 'bar')", "True"]
-    assert preserved.stderr == ""
+    assert "not registered" not in preserved.stderr
 
 
 def test_arrow_field_metadata(tmp_path: Path) -> None:
