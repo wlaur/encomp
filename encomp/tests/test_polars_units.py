@@ -11,7 +11,6 @@ import sys
 from pathlib import Path
 from typing import Any, assert_type, cast
 
-import numpy as np
 import polars as pl
 import pytest
 from polars.exceptions import InvalidOperationError, SchemaError
@@ -22,7 +21,6 @@ from ..polars import (
     Column,
     QuantityFrame,
     UnitDType,
-    dataframe,
     quantities,
     unit,
     units_of,
@@ -393,26 +391,3 @@ def test_quantity_frame_derive_validates_assignments() -> None:
         Report.power.assign(cast(Any, Q(pl.Series([1.0]), "kW")))
     with raises(Exception, match="Cannot convert"):
         Report.power.assign(cast(Any, sensors.pressure))
-
-
-def test_dataframe_inverse() -> None:
-    df = dataframe(
-        {
-            "P": Q(pl.Series([1.0, 2.0]), "bar"),
-            "rho": Q(np.array([997.0, 998.0]), "kg/m^3"),
-        },
-        to={"P": "kPa"},
-    )
-    assert units_of(df) == {"P": Unit("kPa"), "rho": Unit("kg/m³")}
-    assert df["P"].ext.storage().to_list() == [100.0, 200.0]
-
-    with raises(TypeError, match="deferred plan"):
-        dataframe({"P": Q(pl.col("P"), "bar")})
-
-
-def test_quantity_round_trip_preserves_values() -> None:
-    # with_units -> quantities -> dataframe is lossless for the magnitudes
-    df = _sensor_df()
-    back = dataframe(quantities(df))
-    assert back["P"].ext.storage().to_list() == df["P"].ext.storage().to_list()
-    assert units_of(back) == units_of(df)

@@ -14,8 +14,8 @@ Polars refuses arithmetic on extension-typed columns (there is no third-party ke
 or supertype resolution), so the dtype is deliberately *only* a persistence and
 guardrail layer: unit algebra lives in :class:`encomp.units.Quantity`, which is
 exposed by validated :class:`QuantityFrame` descriptors and written back through
-:meth:`QuantityFrame.derive`. The :func:`with_units`, :func:`quantities`, and
-:func:`dataframe` helpers remain available for schema-less bulk interop.
+:meth:`QuantityFrame.derive`. The :func:`with_units` and :func:`quantities` helpers
+remain available for schema-less bulk interop.
 
 .. warning::
     The underlying polars extension-type API is marked unstable by polars. encomp
@@ -28,7 +28,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, ClassVar, Self, cast, overload
 
-import numpy as np
 import polars as pl
 
 from . import utypes as _ut
@@ -43,7 +42,6 @@ __all__ = [
     "QuantityFrame",
     "UnitDType",
     "canonical_unit_string",
-    "dataframe",
     "quantities",
     "unit",
     "units_of",
@@ -466,33 +464,3 @@ def quantities(
     if isinstance(frame, pl.LazyFrame):
         return {name: Quantity(pl.col(name).ext.storage(), unit) for name, unit in units.items()}
     return {name: Quantity(frame.get_column(name).ext.storage(), unit) for name, unit in units.items()}
-
-
-def dataframe(
-    quantities: Mapping[str, Quantity[Any, pl.Series] | Quantity[Any, Any]],
-    *,
-    to: Mapping[str, str | Unit[Any]] | None = None,
-) -> pl.DataFrame:
-    """Build a ``DataFrame`` of unit-typed columns from quantities.
-
-    Each quantity is converted to the target unit from ``to`` (if given), its
-    magnitude becomes the column values, and its (converted) unit becomes the column's
-    unit dtype. Magnitudes must be data (``pl.Series``, 1-D numpy array or scalar
-    ``float``) — a ``pl.Expr`` magnitude is a deferred plan, not data, and raises.
-    """
-    columns: list[pl.Series] = []
-    for name, quantity in quantities.items():
-        if to is not None and name in to:
-            quantity = quantity.to(to[name])
-        magnitude = quantity.m
-        if isinstance(magnitude, pl.Expr):
-            raise TypeError(
-                f"column {name!r}: a pl.Expr magnitude is a deferred plan, not data; evaluate it in a "
-                "polars context with QuantityFrame.derive(...) instead"
-            )
-        if isinstance(magnitude, pl.Series):
-            series = magnitude.alias(name)
-        else:
-            series = pl.Series(name, np.atleast_1d(magnitude))
-        columns.append(series.ext.to(UnitDType(quantity.u, storage=series.dtype)))
-    return pl.DataFrame(columns)
