@@ -20,6 +20,8 @@ Every physical quantity in `encomp` carries a magnitude, a unit, and a dimension
 
 - **Static unit checking.** Common dimensionalities are encoded as `Quantity.__new__` overloads, and their `*` / `/` / `**` combinations as arithmetic-operator overloads, so a type checker flags a `Temperature` passed where a `Power` is expected. `@typeguard.typechecked` extends the same checks to runtime.
 
+- **Unit-carrying Polars columns** (`encomp.polars`). Declare `pressure = unit("bar")` on a `QuantityFrame`; validated attributes are typed `Quantity[..., pl.Expr]` values, and the physical units round-trip through Parquet/IPC as Arrow field metadata.
+
 - **`Fluid` / `Water` / `HumidAir`** (`encomp.fluids`) wrap [CoolProp](http://www.coolprop.org): fix a state with two points (three for humid air) and read any property as an attribute. Inputs and outputs are `Quantity` objects, so units are converted and validated automatically.
 
 - **CoolProp as Polars expressions** (`encomp.coolprop`). Properties evaluate as native Polars expression plugins written in Rust, so independent properties in one `select` / `with_columns` run in parallel without holding the GIL. See [Parallel CoolProp evaluation with Polars](#parallel-coolprop-evaluation-with-polars).
@@ -210,6 +212,85 @@ q2 = Q(3, "delta_degF per (pound per fortnight)")
 assert q1 == q2
 assert type(q1) is type(q2)
 ```
+
+## Unit-carrying Polars columns
+
+`Quantity` is the computation layer, while `UnitDType` is the DataFrame and storage layer. A `QuantityFrame` declares each unit once, validates the metadata restored from storage, and exposes typed quantity expressions. The attribute name is the Polars column name by default.
+
+```python
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import polars as pl
+
+from encomp.polars import QuantityFrame, unit, units_of
+from encomp.units import Unit
+
+
+class Sensors(QuantityFrame):
+    pressure = unit("bar")
+    flow = unit("m³/h")
+
+
+class Report(QuantityFrame):
+    power = unit("kW")
+
+
+raw = pl.DataFrame({"pressure": [1.0, 2.0], "flow": [10.0, 20.0]})
+stored = Sensors.from_untyped(raw)
+
+with TemporaryDirectory() as directory:
+    path = Path(directory) / "sensors.parquet"
+    stored.lf.sink_parquet(path)
+
+    sensors = Sensors.scan_parquet(path)
+    power = (sensors.pressure * sensors.flow).to("kW")
+    report = Report.derive(sensors, Report.power.assign(power))
+
+    assert units_of(report.lf)["power"] == Unit("kW")
+    assert abs(report.lf.collect()["power"].ext.storage()[0] - 0.2778) < 0.0001
+```
+
+The boundary is explicit in both directions:
+
+1. `Sensors.from_untyped(raw)` is the conspicuous assertion that bare input magnitudes have the declared units.
+2. `Sensors.scan_parquet(...)` validates metadata before typed attribute access becomes available. Compatible stored units are converted to the declaration inside the lazy plan.
+3. `Report.power.assign(power)` checks dimensionality, and `Report.derive(...)` converts to `kW` and restores its metadata without collecting.
+
+Use `unit("bar", name="Suction pressure")` when an external column name cannot be the Python attribute. Registered unit literals infer dimensionality for static checkers. Pint still accepts its open unit grammar: an unlisted spelling such as `unit("kg/(m*s**2)")` is inferred at runtime and typed conservatively as unknown; add `asdim=Pressure` when precise static typing is required. The override is validated rather than cast.
+
+The validated expressions pass directly into the high-level fluid API. Non-SI declarations are converted before the native plugin runs, and the result can be persisted with another declaration:
+
+```python
+import polars as pl
+
+from encomp.fluids import Water
+from encomp.polars import QuantityFrame, unit, units_of
+from encomp.units import Unit
+
+
+class States(QuantityFrame):
+    pressure = unit("bar", name="P")
+    temperature = unit("degC", name="T")
+
+
+class Properties(QuantityFrame):
+    density = unit("kg/m³", name="rho")
+
+
+states = States.from_untyped(pl.LazyFrame({"P": [5.0], "T": [150.0]}))
+water = Water[pl.Expr](P=states.pressure, T=states.temperature)
+properties = Properties.derive(states, Properties.density.assign(water.D))
+
+assert units_of(properties.lf)["rho"] == Unit("kg/m³")
+assert properties.lf.collect()["rho"].ext.storage()[0] > 900.0
+```
+
+Raw arithmetic on a unit-typed column is refused because Polars cannot delegate third-party unit algebra. This prevents accidental operations such as adding pressure to flow; intentional computation goes through `Quantity`. Syntax normalization is conservative: `m^3` and `m³` produce the same dtype, while dimensionally equivalent renderings such as `Pa` and `N/m²` remain different metadata identities.
+
+The persisted Arrow field contract is `ARROW:extension:name = "encomp.unit"` and `ARROW:extension:metadata = <canonical unit>`. Import `encomp.polars`—or `encomp.coolprop`, which registers the same dtype—before reading with Polars 1.x. For readers that do not import encomp, `POLARS_UNKNOWN_EXTENSION_TYPE_BEHAVIOR=load_as_extension` preserves generic extension metadata; otherwise current Polars 1.x warns and loads the numeric storage type.
+
+The Polars extension API is marked unstable upstream, so this integration is experimental even though encomp pins its required behavior in tests.
 
 ## The `Fluid` class
 

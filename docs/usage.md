@@ -305,6 +305,91 @@ type(Q(pl.lit(5), "kg").m)  # pl.Expr
 
 A `Quantity` with a `pl.Expr` magnitude is a deferred plan, not data. Only unit algebra (arithmetic, comparison, `.to`, `abs`) is meaningful on it; reach the underlying Polars object with `.m` to compute inside a `select` / `with_columns`. This is also how the parallel CoolProp evaluation described below is driven.
 
+### Persisting units in Polars schemas
+
+A bare `Quantity(pl.col("P"), "bar")` carries its unit only in the Python wrapper. The association disappears if another service reads the underlying Parquet file. `encomp.polars` supplies the missing frame-level layer: `UnitDType` stores the unit in Arrow field metadata, while the numeric values remain the extension dtype's storage.
+
+Declare the producer contract once on a {py:class}`encomp.polars.QuantityFrame`. Constructing it normally validates units already present in the Polars schema; {py:meth}`encomp.polars.QuantityFrame.from_untyped` is the explicit operation that assigns declared units to bare input data:
+
+```python
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import polars as pl
+
+from encomp.polars import QuantityFrame, unit, units_of
+from encomp.units import Unit
+
+
+class Sensors(QuantityFrame):
+    pressure = unit("bar", name="P")
+    flow = unit("m³/h", name="V")
+
+
+class Report(QuantityFrame):
+    power = unit("kW", name="Hydraulic power")
+
+
+source = Sensors.from_untyped(pl.DataFrame({"P": [1.0, 2.0], "V": [10.0, 20.0]}))
+
+with TemporaryDirectory() as directory:
+    path = Path(directory) / "source.parquet"
+    source.lf.sink_parquet(path)
+    sensors = Sensors.scan_parquet(path)
+
+    power = sensors.pressure * sensors.flow
+    result = Report.derive(sensors, Report.power.assign(power))
+
+    assert units_of(result.lf) == {
+        "P": Unit("bar"),
+        "V": Unit("m³/h"),
+        "Hydraulic power": Unit("kW"),
+    }
+    assert result.lf.collect()["Hydraulic power"].ext.storage().to_list() == [
+        0.2777777777777778,
+        1.1111111111111112,
+    ]
+```
+
+The declaration `pressure = unit("bar", name="P")` contains the physical information once. `name=` is only needed because the external name differs from the attribute; `pressure = unit("bar")` would target a column named `"pressure"`. Known unit literals make `sensors.pressure` statically `Quantity[Pressure, pl.Expr]`. Class access returns the typed target declaration instead, so `Report.power.assign(...)` rejects a pressure quantity under all three supported type checkers. The lazy magnitude is still an ordinary `pl.col("P").ext.storage()` expression, so Polars can optimize it normally.
+
+Unit strings are not restricted to the literal autocomplete list. Pint parses other valid expressions and encomp infers their dimensionality at runtime. Since a static checker cannot execute Pint's registry, an unlisted string produces `Column[UnknownDimensionality]`; supply the exceptional `asdim=Pressure` argument when that column needs precise static typing. Compatibility is checked immediately.
+
+Construction safely converts compatible stored units to the declaration inside the lazy plan; incompatible dimensionalities fail before data is read. Schema classes compose through ordinary inheritance when one validated view needs columns from multiple schemas.
+
+The same bridge composes with the high-level fluid API without dropping to raw expressions. `Water` accepts the descriptor quantities, performs its required SI conversions, and returns a typed expression quantity that can be assigned straight back to a declared output:
+
+```python
+import polars as pl
+
+from encomp.fluids import Water
+from encomp.polars import QuantityFrame, unit, units_of
+from encomp.units import Unit
+
+
+class States(QuantityFrame):
+    pressure = unit("bar", name="P")
+    temperature = unit("degC", name="T")
+
+
+class Properties(QuantityFrame):
+    density = unit("kg/m³", name="rho")
+
+
+states = States.from_untyped(pl.LazyFrame({"P": [5.0], "T": [150.0]}))
+water = Water[pl.Expr](P=states.pressure, T=states.temperature)
+properties = Properties.derive(states, Properties.density.assign(water.D))
+
+assert units_of(properties.lf)["rho"] == Unit("kg/m³")
+assert properties.lf.collect()["rho"].ext.storage()[0] > 900.0
+```
+
+This convenience belongs to `Water`/`Fluid`, where units are present in the `Quantity` inputs. The lower-level `encomp.coolprop.water()` function accepts bare Polars columns and therefore cannot insert unit conversions: extension-typed inputs must already carry the exact SI unit, or callers must pass an explicitly converted magnitude such as `states.pressure.to("Pa").m`.
+
+Polars has no extension hook for encomp's multiplication or supertype rules. It therefore refuses value-producing operations directly on unit-typed columns; computation must explicitly cross into `Quantity`. Value-preserving operations such as filtering, sorting, aliases, join keys and group keys keep the dtype, and incompatible unit dtypes cannot be concatenated.
+
+Parquet and IPC store `ARROW:extension:name = "encomp.unit"` and `ARROW:extension:metadata = <canonical unit>` on each field. The canonical rendering normalizes syntax, not dimensional equivalence: `m^3` and `m³` match, but `Pa` and `N/m²` remain distinct dtype identities. The upstream Polars extension API is unstable, so encomp treats this integration as experimental and pins its required I/O and refusal behavior in tests.
+
 ### Combining quantities
 
 The output of an operation on quantities is always consistent with the input dimensionalities.
@@ -312,6 +397,8 @@ Inconsistent or ambiguous operations raise descriptive errors.
 
 Units do not always cancel out automatically.
 Call {py:meth}`encomp.units.Quantity.to_base_units` to simplify to base SI units, {py:meth}`encomp.units.Quantity.to` when the target unit is known, or {py:meth}`encomp.units.Quantity.to_reduced_units` to cancel units without converting to base SI units.
+
+When only the converted magnitude is needed, {py:meth}`encomp.units.Quantity.m_as` is the typed shorthand for `.to(unit).m`; it preserves the magnitude container type and applies the same dimensionality and temperature checks.
 
 ```python
 from encomp.units import Quantity as Q

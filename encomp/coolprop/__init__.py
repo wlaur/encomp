@@ -32,11 +32,13 @@ import sys
 import warnings
 from functools import cache, lru_cache
 from pathlib import Path
-from typing import Any, Literal, TypeIs, get_args
+from typing import Any, Literal, TypeIs, cast, get_args
 
 import CoolProp.CoolProp as _CoolProp
 import polars as pl
 from polars.plugins import register_plugin_function
+
+from .._polars_dtype import canonical_unit_string as _canonical_unit_string
 
 # CoolProp ships incomplete type stubs; treat the module as Any (mirrors encomp).
 _cp: Any = _CoolProp
@@ -502,6 +504,32 @@ def _input_name(x: str | pl.Expr) -> str:
     return x if isinstance(x, str) else x.meta.output_name()
 
 
+@cache
+def _expected_si_unit(name: str) -> str:
+    """Canonical rendering of the SI unit CoolProp expects for state input ``name``.
+
+    Derived from CoolProp's own parameter metadata (no unit table of our own) and
+    rendered by the same internal canonicalization the unit dtype applies to its
+    metadata, so the plugin can accept a unit-typed
+    input by comparing the two strings for equality.
+    """
+    return _canonical_unit_string(_cp.get_parameter_information(_cp.get_parameter_index(name), "units"))
+
+
+@cache
+def _expected_ha_si_unit(name: str) -> str:
+    """Canonical SI unit for HAPropsSI input ``name`` (see :func:`_expected_si_unit`).
+
+    HAPropsSI has no parameter-information API, so this reads
+    :meth:`encomp.fluids.HumidAir.get_coolprop_unit` -- the existing single source for
+    humid-air units (a lookup failure means that mapping has a gap and raises here).
+    """
+    from ..fluids import CProperty, HumidAir  # deferred: encomp.fluids imports this module at top level
+
+    # runtime-validated dynamic lookup: get_coolprop_unit raises for an unknown name
+    return _canonical_unit_string(HumidAir.get_coolprop_unit(cast(CProperty, name)))
+
+
 def _reject_duplicate_input_keys(kind: str, keyed_names: tuple[tuple[str, int | str], ...]) -> None:
     seen: dict[int | str, str] = {}
 
@@ -632,6 +660,13 @@ def fluid(
     column read from it; an expression by its output name (``pl.col("P")`` or
     ``pl.col("p").alias("P")``). Both must be CoolProp state inputs (P/T/Q/D/H/S/U,
     any pair: PT, PH, PQ, ...).
+
+    Inputs are numeric columns holding SI magnitudes. A unit-carrying extension dtype
+    (:mod:`encomp.polars`) is accepted when its unit is already the SI unit CoolProp
+    expects for that input (verified against CoolProp's own parameter metadata); any
+    other unit is refused at schema-resolution time with the expected unit named --
+    convert first (e.g. ``encomp.polars.quantities`` + ``.to(...)``), or pass raw SI
+    values via ``.ext.storage()``.
     """
     name1, name2 = _input_name(input1), _input_name(input2)
     for nm in (name1, name2):
@@ -647,6 +682,7 @@ def fluid(
     )
     pair_idx, swap = _resolve_pair(name1, name2)
     a, b = (input2, input1) if swap else (input1, input2)  # canonical order
+    name_a, name_b = (name2, name1) if swap else (name1, name2)
     a_expr, b_expr = _as_expr(a), _as_expr(b)
     backend, fluids, fractions = resolve_fluid_spec(name, composition)
     phase = _phase_from_assumed(assume_phase) if assume_phase is not None else None
@@ -677,6 +713,7 @@ def fluid(
             "phase": phase,
             "fractions": fractions,
             "scalar_mask": [_is_scalar(a_expr), _is_scalar(b_expr)],
+            "expected_units": [_expected_si_unit(name_a), _expected_si_unit(name_b)],
         },
         is_elementwise=True,
         use_abs_path=True,
@@ -711,6 +748,9 @@ def humid_air(
 
     Each input identifies its property by name (the string, or the expression's
     output name); all three must be HAPropsSI state inputs (T, P, R, W, B, ...).
+    Like :func:`fluid`, inputs hold SI magnitudes: a unit-carrying extension dtype is
+    accepted only when its unit is already the expected SI unit, and refused with the
+    expected unit named otherwise.
     """
     # Unlike the fluid path (validated by CoolProp's param_index in the plugin), HAPropsSI
     # returns _HUGE -> null for an unknown output, so a typo'd output would silently yield
@@ -745,6 +785,7 @@ def humid_air(
             "name2": name2,
             "name3": name3,
             "scalar_mask": [_is_scalar(e1), _is_scalar(e2), _is_scalar(e3)],
+            "expected_units": [_expected_ha_si_unit(name1), _expected_ha_si_unit(name2), _expected_ha_si_unit(name3)],
         },
         is_elementwise=True,
         use_abs_path=True,

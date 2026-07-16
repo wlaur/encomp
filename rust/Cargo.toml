@@ -24,7 +24,11 @@ extension-module = ["pyo3/extension-module"]
 # Versions pinned to match the installed Python polars 1.42.0 (Rust polars 0.54.4).
 # pyo3-polars 0.27.0 -> polars ^0.54.4, pyo3 ^0.28. A plugin's polars-ffi version
 # must match the host polars or it won't load (see README).
-polars = { version = "0.54.4", default-features = false }
+# dtype-extension: without it, an extension-typed input column (e.g. encomp's
+# "encomp.unit" dtype) PANICS inside the FFI field import (polars-core
+# from_arrow_field) before any plugin code runs. With it, the dtype arrives intact
+# and lib.rs refuses it with an actionable schema-time error instead.
+polars = { version = "0.54.4", default-features = false, features = ["dtype-extension"] }
 pyo3-polars = { version = "0.27.0", features = ["derive"] }
 pyo3 = { version = "0.28", features = ["abi3-py313"] }
 serde = { version = "1", features = ["derive"] }

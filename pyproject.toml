@@ -1,6 +1,6 @@
 [project]
 name = "encomp"
-version = "1.7.2"
+version = "1.8.0"
 description = "General-purpose library for engineering computations"
 authors = [{ name = "William Laurén", email = "lauren.william.a@gmail.com" }]
 requires-python = ">=3.13"
@@ -85,6 +85,7 @@ dev = [
     "hvplot>=0.12.2",
     "pyparsing>=3.3.1",
     "altair>=6.0.0",
+    "pyarrow",
     "microsoft-python-type-stubs",
     "numpydoc>=1.10.0",
 ]

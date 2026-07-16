@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+from pathlib import Path
 from typing import Any, cast
 
 import CoolProp.CoolProp as _CP
@@ -362,6 +363,120 @@ def test_duplicate_state_inputs_raise() -> None:
 
     with pytest.raises(ValueError, match="same state input"):
         cp.humid_air("W", "P", "R", "RH")
+
+
+def test_si_unit_typed_inputs_accepted() -> None:
+    # a unit-typed column (encomp.polars extension dtype) whose unit is ALREADY the SI
+    # unit CoolProp expects passes straight through: the wrapper derives the expected
+    # unit from CoolProp's own parameter metadata (no unit table of its own) and the
+    # plugin compares it against the dtype metadata -- both in canonical registry form
+    from encomp.polars import with_units
+
+    df = with_units(pl.DataFrame({"P": [50e5], "T": [400.0]}), {"P": "Pa", "T": "K"})
+    out = df.select(cp.water("D", "P", "T"))
+    ref = CP.PropsSI("D", "P", 50e5, "T", 400.0, "IF97::Water")
+    assert out["D"][0] == pytest.approx(ref, rel=RTOL)
+    assert out.schema["D"] == pl.Float64  # the output stays a plain column
+
+    # different spelling of the same unit canonicalizes on attach, so it matches too
+    df2 = with_units(pl.DataFrame({"P": [50e5], "T": [400.0]}), {"P": "pascal", "T": "kelvin"})
+    assert df2.select(cp.water("D", "P", "T"))["D"][0] == pytest.approx(ref, rel=RTOL)
+
+    # user-chosen input order: the expected units follow the canonical pair reordering
+    assert df.select(cp.water("D", "T", "P"))["D"][0] == pytest.approx(ref, rel=RTOL)
+
+    # a unit-typed Float32 column keeps the Float32-in -> Float32-out rule (the rule
+    # looks through the extension dtype to its storage)
+    df32 = pl.DataFrame({"P": pl.Series([50e5], dtype=pl.Float32), "T": pl.Series([400.0], dtype=pl.Float32)})
+    df32 = with_units(df32, {"P": "Pa", "T": "K"})
+    out32 = df32.select(cp.water("D", "P", "T"))
+    assert out32.schema["D"] == pl.Float32
+
+    # humid air: expected units come from HumidAir.get_coolprop_unit (R is dimensionless)
+    dfh = with_units(pl.DataFrame({"T": [300.0], "P": [101325.0], "R": [0.5]}), {"T": "K", "P": "Pa", "R": ""})
+    ref_w = CP.HAPropsSI("W", "T", 300.0, "P", 101325.0, "R", 0.5)
+    assert dfh.select(cp.humid_air("W", "T", "P", "R"))["W"][0] == pytest.approx(ref_w, rel=RTOL)
+
+
+def test_si_unit_typed_inputs_from_parquet(tmp_path: Path) -> None:
+    # the real user story: a unit-typed Parquet file feeds the plugin directly, through
+    # plain polars I/O, on both the in-memory and streaming engines
+    from encomp.polars import units_of, with_units
+
+    path = str(tmp_path / "sensors.parquet")
+    with_units(pl.DataFrame({"P": [50e5, 60e5], "T": [400.0, 420.0]}), {"P": "Pa", "T": "K"}).write_parquet(path)
+
+    lf = pl.scan_parquet(path).select(cp.water("D", "P", "T"))
+    ref = CP.PropsSI("D", "P", np.array([50e5, 60e5]), "T", np.array([400.0, 420.0]), "IF97::Water")
+    assert np.allclose(lf.collect()["D"].to_numpy(), ref, rtol=RTOL)
+    assert np.allclose(lf.collect(engine="streaming")["D"].to_numpy(), ref, rtol=RTOL)
+    assert units_of(pl.scan_parquet(path)) != {}  # the units really came from the file
+
+
+def test_unit_match_independent_of_display_format() -> None:
+    # both sides of the plugin's unit comparison use the FIXED canonical rendering
+    # (encomp.polars.canonical_unit_string), not the process-wide display format --
+    # otherwise set_quantity_format("siunitx") would turn both the dtype metadata and
+    # the expected units into LaTeX and the match would silently depend on a setting
+    from encomp.coolprop import _expected_ha_si_unit, _expected_si_unit  # pyright: ignore[reportPrivateUsage]
+    from encomp.polars import with_units
+    from encomp.units import set_quantity_format
+
+    _expected_si_unit.cache_clear()
+    _expected_ha_si_unit.cache_clear()
+    try:
+        set_quantity_format("siunitx")
+        df = with_units(pl.DataFrame({"P": [50e5], "T": [400.0]}), {"P": "Pa", "T": "K"})
+        out = df.select(cp.water("D", "P", "T"))
+        ref = CP.PropsSI("D", "P", 50e5, "T", 400.0, "IF97::Water")
+        assert out["D"][0] == pytest.approx(ref, rel=RTOL)
+    finally:
+        set_quantity_format("compact")
+        _expected_si_unit.cache_clear()
+        _expected_ha_si_unit.cache_clear()
+
+
+def test_wrong_unit_typed_inputs_refused_cleanly() -> None:
+    # a unit-typed column in any OTHER unit must not be interpreted as raw SI
+    # magnitudes. Without the plugin's dtype-extension feature + validation this was a
+    # PANIC inside the FFI field import; now it is an actionable error at
+    # schema-resolution time (before any flash runs) naming both units.
+    from encomp.polars import QuantityFrame, unit, with_units
+
+    class Inputs(QuantityFrame):
+        P = unit("bar")
+        T = unit("K")
+
+    df = with_units(pl.DataFrame({"P": [5.0], "T": [400.0]}), {"P": "bar", "T": "K"})
+
+    with pytest.raises(Exception, match=r"carries unit 'bar'.*expects 'Pa'"):
+        df.lazy().select(cp.water("D", "P", "T")).collect_schema()
+    with pytest.raises(Exception, match="carries unit 'bar'"):
+        df.select(cp.water("D", "P", "T"))
+
+    # escape hatch 1: convert through Quantity (unit-checked, folds to plain arithmetic)
+    inputs = Inputs(df.lazy())
+    out = inputs.lf.select(cp.water("D", inputs.P.to("Pa").m, inputs.T.to("K").m)).collect()
+    ref = CP.PropsSI("D", "P", 5e5, "T", 400.0, "IF97::Water")
+    assert out["D"][0] == pytest.approx(ref, rel=RTOL)
+
+    # escape hatch 2: explicit storage unwrap asserts "these values are already SI"
+    out2 = df.select(cp.water("D", (pl.col("P").ext.storage() * 1e5), pl.col("T").ext.storage()))
+    assert out2["D"][0] == pytest.approx(ref, rel=RTOL)
+
+    # a non-encomp extension type is always refused (nothing to compare units against)
+    class _OtherType(pl.BaseExtension):
+        def __init__(self) -> None:
+            super().__init__("test.other", pl.Float64(), None)
+
+    df_other = pl.DataFrame({"P": [50e5], "T": [400.0]}).with_columns(pl.col("P").ext.to(_OtherType()))
+    with pytest.raises(Exception, match=r"does not interpret this extension type"):
+        df_other.select(cp.water("D", "P", "T"))
+
+    # humid air refuses with the expected unit named, too ("degC" canonicalizes to "°C")
+    dfh = with_units(pl.DataFrame({"T": [26.85], "P": [101325.0], "R": [0.5]}), {"T": "degC"})
+    with pytest.raises(Exception, match=r"carries unit '°C'.*expects 'K'"):
+        dfh.select(cp.humid_air("W", "T", "P", "R"))
 
 
 def test_scalar_literal_inputs_on_empty_frames_return_empty() -> None:

@@ -1501,6 +1501,17 @@ class Quantity(
 
         return converted
 
+    def m_as(
+        self,
+        units: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number] | Quantity[DT, Any],
+    ) -> MT:
+        """Return the magnitude converted to ``unit``.
+
+        This is the typed shorthand for ``self.to(unit).m`` and applies exactly the
+        same dimensionality and temperature-safety checks as :meth:`to`.
+        """
+        return self.to(units).m
+
     def ito(self, unit: AllUnits | Unit[DT] | UnitsContainer | str | dict[str, numbers.Number]) -> None:
         """Convert this quantity in place to ``unit``.
 
