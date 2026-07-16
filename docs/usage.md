@@ -309,7 +309,7 @@ A `Quantity` with a `pl.Expr` magnitude is a deferred plan, not data. Only unit 
 
 A bare `Quantity(pl.col("P"), "bar")` carries its unit only in the Python wrapper. The association disappears if another service reads the underlying Parquet file. `encomp.polars` supplies the missing frame-level layer: `UnitDType` stores the unit in Arrow field metadata, while the numeric values remain the extension dtype's storage.
 
-Use {py:func}`encomp.polars.with_units` once where the producer's raw unit schema is known. Later readers use {py:func}`encomp.polars.quantity` to enter Quantity computation and {py:func}`encomp.polars.attach` to return a result to the frame:
+Declare the producer contract once on a {py:class}`encomp.polars.QuantityFrame`. Constructing it normally validates units already present in the Polars schema; {py:meth}`encomp.polars.QuantityFrame.from_untyped` is the explicit operation that assigns declared units to bare input data:
 
 ```python
 from pathlib import Path
@@ -317,30 +317,43 @@ from tempfile import TemporaryDirectory
 
 import polars as pl
 
-from encomp.polars import attach, quantity, units_of, with_units
+from encomp.polars import QuantityFrame, unit, units_of
 from encomp.units import Unit
-from encomp.utypes import Pressure, VolumeFlow
 
-source = with_units(
-    pl.DataFrame({"P": [1.0, 2.0], "V": [10.0, 20.0]}),
-    {"P": "bar", "V": "m³/h"},
-)
+
+class Sensors(QuantityFrame):
+    pressure = unit("bar", name="P")
+    flow = unit("m³/h", name="V")
+
+
+class Report(QuantityFrame):
+    power = unit("kW", name="Hydraulic power")
+
+
+source = Sensors.from_untyped(pl.DataFrame({"P": [1.0, 2.0], "V": [10.0, 20.0]}))
 
 with TemporaryDirectory() as directory:
     path = Path(directory) / "source.parquet"
-    source.write_parquet(path)
-    lf = pl.scan_parquet(path)
+    source.lf.sink_parquet(path)
+    sensors = Sensors(pl.scan_parquet(path))
 
-    pressure = quantity(lf, "P", Pressure)
-    flow = quantity(lf, "V", VolumeFlow)
-    power = (pressure * flow).to("kW")
-    result = attach(lf, W=power)
+    power = sensors.pressure * sensors.flow
+    result = Report.derive(sensors, Report.power.assign(power))
 
-    assert units_of(result) == {"P": Unit("bar"), "V": Unit("m³/h"), "W": Unit("kW")}
-    assert result.collect()["W"].ext.storage().to_list() == [0.2777777777777778, 1.1111111111111112]
+    assert units_of(result.lf) == {
+        "P": Unit("bar"),
+        "V": Unit("m³/h"),
+        "Hydraulic power": Unit("kW"),
+    }
+    assert result.lf.collect()["Hydraulic power"].ext.storage().to_list() == [
+        0.2777777777777778,
+        1.1111111111111112,
+    ]
 ```
 
-`quantity(lf, "P", Pressure)` performs two jobs at the boundary: it reads the unit from the dtype and checks that its runtime dimensions are pressure, while its overload returns `Quantity[Pressure, pl.Expr]` to static type checkers. The magnitude becomes `pl.col("P").ext.storage()`, so the lazy optimizer still sees an ordinary numeric expression. `attach` performs the inverse operation and infers the expression's storage dtype, including `Float32`, before applying the result unit.
+The declaration `pressure = unit("bar", name="P")` contains the physical information once. `name=` is only needed because the external name differs from the attribute; `pressure = unit("bar")` would target a column named `"pressure"`. Known unit literals make `sensors.pressure` statically `Quantity[Pressure, pl.Expr]`. Class access returns the typed target declaration instead, so `Report.power.assign(...)` rejects a pressure quantity under all three supported type checkers. The lazy magnitude is still an ordinary `pl.col("P").ext.storage()` expression, so Polars can optimize it normally.
+
+Unit strings are not restricted to the literal autocomplete list. Pint parses other valid expressions and encomp infers their dimensionality at runtime. Since a static checker cannot execute Pint's registry, an unlisted string produces `Column[UnknownDimensionality]`; supply the exceptional `asdim=Pressure` argument when that column needs precise static typing. Compatibility is checked immediately.
 
 Polars has no extension hook for encomp's multiplication or supertype rules. It therefore refuses value-producing operations directly on unit-typed columns; computation must explicitly cross into `Quantity`. Value-preserving operations such as filtering, sorting, aliases, join keys and group keys keep the dtype, and incompatible unit dtypes cannot be concatenated.
 

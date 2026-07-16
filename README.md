@@ -20,7 +20,7 @@ Every physical quantity in `encomp` carries a magnitude, a unit, and a dimension
 
 - **Static unit checking.** Common dimensionalities are encoded as `Quantity.__new__` overloads, and their `*` / `/` / `**` combinations as arithmetic-operator overloads, so a type checker flags a `Temperature` passed where a `Power` is expected. `@typeguard.typechecked` extends the same checks to runtime.
 
-- **Unit-carrying Polars columns** (`encomp.polars`). A physical unit is stored in the column dtype and round-trips through Parquet/IPC as Arrow field metadata. `quantity(...)` moves a column into typed `Quantity[DT, pl.Series | pl.Expr]` computation; `attach(...)` writes the result back with its unit metadata.
+- **Unit-carrying Polars columns** (`encomp.polars`). Declare `pressure = unit("bar")` on a `QuantityFrame`; validated attributes are typed `Quantity[..., pl.Expr]` values, and the physical units round-trip through Parquet/IPC as Arrow field metadata.
 
 - **`Fluid` / `Water` / `HumidAir`** (`encomp.fluids`) wrap [CoolProp](http://www.coolprop.org): fix a state with two points (three for humid air) and read any property as an attribute. Inputs and outputs are `Quantity` objects, so units are converted and validated automatically.
 
@@ -215,7 +215,7 @@ assert type(q1) is type(q2)
 
 ## Unit-carrying Polars columns
 
-`Quantity` is the computation layer, while `UnitDType` is the DataFrame and storage layer. Units are attached explicitly when raw data enters the pipeline; after a Parquet round-trip, `quantity(...)` recovers the unit from the dtype and validates the requested dimensionality. `attach(...)` stores a computed quantity back into the frame without collecting a lazy plan.
+`Quantity` is the computation layer, while `UnitDType` is the DataFrame and storage layer. A `QuantityFrame` declares each unit once, validates the metadata restored from storage, and exposes typed quantity expressions. The attribute name is the Polars column name by default.
 
 ```python
 from pathlib import Path
@@ -223,32 +223,41 @@ from tempfile import TemporaryDirectory
 
 import polars as pl
 
-from encomp.polars import attach, quantity, units_of, with_units
+from encomp.polars import QuantityFrame, unit, units_of
 from encomp.units import Unit
-from encomp.utypes import Pressure, VolumeFlow
 
-raw = pl.DataFrame({"P": [1.0, 2.0], "V": [10.0, 20.0]})
-stored = with_units(raw, {"P": "bar", "V": "m³/h"})
+
+class Sensors(QuantityFrame):
+    pressure = unit("bar")
+    flow = unit("m³/h")
+
+
+class Report(QuantityFrame):
+    power = unit("kW")
+
+
+raw = pl.DataFrame({"pressure": [1.0, 2.0], "flow": [10.0, 20.0]})
+stored = Sensors.from_untyped(raw)
 
 with TemporaryDirectory() as directory:
     path = Path(directory) / "sensors.parquet"
-    stored.write_parquet(path)
+    stored.lf.sink_parquet(path)
 
-    lf = pl.scan_parquet(path)
-    pressure = quantity(lf, "P", Pressure)
-    flow = quantity(lf, "V", VolumeFlow)
-    power = (pressure * flow).to("kW")
+    sensors = Sensors(pl.scan_parquet(path))
+    power = (sensors.pressure * sensors.flow).to("kW")
+    report = Report.derive(sensors, Report.power.assign(power))
 
-    result = attach(lf, W=power)
-    assert units_of(result)["W"] == Unit("kW")
-    assert abs(result.collect()["W"].ext.storage()[0] - 0.2778) < 0.0001
+    assert units_of(report.lf)["power"] == Unit("kW")
+    assert abs(report.lf.collect()["power"].ext.storage()[0] - 0.2778) < 0.0001
 ```
 
-The bridge is explicit in both directions:
+The boundary is explicit in both directions:
 
-1. `with_units` turns known raw magnitudes into guarded, persistent columns.
-2. `quantity` unwraps the storage values as a Polars expression while carrying the dtype unit into encomp's runtime and static unit algebra.
-3. `attach` asks Polars for the result expression's storage dtype and restores the computed unit as column metadata.
+1. `Sensors.from_untyped(raw)` is the conspicuous assertion that bare input magnitudes have the declared units.
+2. `Sensors(pl.scan_parquet(...))` validates metadata before typed attribute access becomes available. Compatible stored units are converted to the declaration inside the lazy plan.
+3. `Report.power.assign(power)` checks dimensionality, and `Report.derive(...)` converts to `kW` and restores its metadata without collecting.
+
+Use `unit("bar", name="Suction pressure")` when an external column name cannot be the Python attribute. Registered unit literals infer dimensionality for static checkers. Pint still accepts its open unit grammar: an unlisted spelling such as `unit("kg/(m*s**2)")` is inferred at runtime and typed conservatively as unknown; add `asdim=Pressure` when precise static typing is required. The override is validated rather than cast.
 
 Raw arithmetic on a unit-typed column is refused because Polars cannot delegate third-party unit algebra. This prevents accidental operations such as adding pressure to flow; intentional computation goes through `Quantity`. Syntax normalization is conservative: `m^3` and `m³` produce the same dtype, while dimensionally equivalent renderings such as `Pa` and `N/m²` remain different metadata identities.
 

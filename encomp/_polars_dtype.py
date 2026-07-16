@@ -48,8 +48,9 @@ class UnitDType(pl.BaseExtension):
 
     A dtype instance consists of the stable extension name ``"encomp.unit"``, a
     numeric storage dtype, and a canonical unit string. Polars refuses value-producing
-    arithmetic on extension columns; use :func:`encomp.polars.quantity` to enter
-    Quantity unit algebra and :func:`encomp.polars.attach` to return to a frame.
+    arithmetic on extension columns; validated :class:`encomp.polars.QuantityFrame`
+    descriptors enter Quantity unit algebra and ``QuantityFrame.derive`` returns
+    results to a frame.
     """
 
     def __init__(self, unit: str | Unit[Any], storage: pl.DataType | None = None) -> None:

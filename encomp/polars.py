@@ -13,9 +13,9 @@ extension (the planned Polars 2.0 default).
 Polars refuses arithmetic on extension-typed columns (there is no third-party kernel
 or supertype resolution), so the dtype is deliberately *only* a persistence and
 guardrail layer: unit algebra lives in :class:`encomp.units.Quantity`, which is
-constructed from unit-typed columns via :func:`quantity` and written back via
-:func:`attach`. The plural :func:`quantities` and :func:`dataframe` helpers remain
-available for schema-less bulk interop.
+exposed by validated :class:`QuantityFrame` descriptors and written back through
+:meth:`QuantityFrame.derive`. The :func:`with_units`, :func:`quantities`, and
+:func:`dataframe` helpers remain available for schema-less bulk interop.
 
 .. warning::
     The underlying polars extension-type API is marked unstable by polars. encomp
