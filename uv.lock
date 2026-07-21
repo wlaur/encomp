@@ -517,7 +517,6 @@ name = "encomp"
 version = "1.8.0"
 source = { editable = "." }
 dependencies = [
-    { name = "coolprop" },
     { name = "numpy" },
     { name = "pint" },
     { name = "polars" },
@@ -558,10 +557,12 @@ dev = [
     { name = "sphinx-inline-tabs" },
     { name = "ty" },
 ]
+oracle = [
+    { name = "coolprop" },
+]
 
 [package.metadata]
 requires-dist = [
-    { name = "coolprop", specifier = ">=8.0.0,<9" },
     { name = "numpy", specifier = ">=2.1" },
     { name = "pint", specifier = ">=0.25.3" },
     { name = "polars", specifier = ">=1.42" },
@@ -602,6 +603,7 @@ dev = [
     { name = "sphinx-inline-tabs" },
     { name = "ty" },
 ]
+oracle = [{ name = "coolprop", specifier = "==8.0.0" }]
 
 [[package]]
 name = "executing"

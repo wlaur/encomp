@@ -11,8 +11,6 @@ confusingly (or silently loses typing), so this module asserts they are identica
 import typing
 from collections.abc import Iterable
 
-import CoolProp.CoolProp as _CoolProp
-
 from .. import coolprop as cp
 from ..fluids import CoolPropFluid, Fluid, FluidState, HumidAir, HumidAirState
 from ..units import Quantity
@@ -80,10 +78,10 @@ def test_typed_properties_are_known_names() -> None:
                 assert name in cls.ALL_PROPERTIES, f"{cls.__name__}.{name} is not in its PROPERTY_MAP"
 
 
-def test_fluid_params_are_valid_per_coolprop() -> None:
-    # CoolProp's parameter index is the runtime authority for the fluid namespace;
+def test_fluid_params_are_valid_per_bundled_coolprop() -> None:
+    # The bundled library's parameter index is the runtime authority for the fluid namespace;
     # every FluidParam Literal must resolve (guards against typos in the Literal).
     # (HAPropsSI has no equivalent lookup, so the humid-air names are locked only
     # against fluids.HumidAir.PROPERTY_MAP above.)
     for name in sorted(cp.FLUID_PARAMS):
-        _CoolProp.get_parameter_index(name)  # raises ValueError for unknown names
+        cp._native().parameter_index(name)  # pyright: ignore[reportPrivateUsage]

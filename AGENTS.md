@@ -73,9 +73,9 @@ assert pressure.to("kPa").m == 100.0
   comparison and pickling overrides on `Quantity` intentionally narrow pint's
   signatures — that's the point of the library, not an LSP bug to fix.
 - CoolProp evaluation is **one property per DAG node** by design; don't batch multiple
-  output properties into one plugin call. All CoolProp paths hold the GIL — the Rust
-  plugin (`rust/`) exists precisely to evaluate without it; don't add Python-side
-  parallelism around CoolProp.
+  output properties into one plugin call. Scalars detach from the GIL in the direct
+  PyO3 bridge and own thread-local native states; arrays run through the Rust/Polars
+  plugin. Don't add Python-side parallelism around CoolProp.
 
 ## Tooling
 

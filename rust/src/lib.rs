@@ -8,16 +8,77 @@
 
 mod coolprop;
 
-use coolprop::{CoolProp, CpError};
+use coolprop::{CoolProp, CpError, State};
 use polars::prelude::*;
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::prelude::*;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
-use std::sync::{Mutex, OnceLock};
+use std::cell::RefCell;
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex, OnceLock};
 
 // One loaded libCoolProp per process (lib_path is constant for a session).
 static CP: OnceLock<CoolProp> = OnceLock::new();
 // serialises the one-time load + warmup (see `coolprop`); untouched on the hot path
 static INIT: Mutex<()> = Mutex::new(());
+
+/// Prepared scalar configurations contain only owned Rust values. Python caches
+/// their integer IDs, so a hot scalar call crosses PyO3 with four integers and two
+/// floats rather than repeatedly allocating backend/fluid/property strings.
+#[derive(Debug, PartialEq)]
+struct FluidConfig {
+    backend: String,
+    fluid: String,
+    fractions: Option<Vec<f64>>,
+    phase: Option<String>,
+}
+
+#[derive(Debug, PartialEq)]
+struct HumidAirConfig {
+    output: String,
+    name1: String,
+    name2: String,
+    name3: String,
+}
+
+static FLUID_CONFIGS: Mutex<Vec<Arc<FluidConfig>>> = Mutex::new(Vec::new());
+static HUMID_AIR_CONFIGS: Mutex<Vec<Arc<HumidAirConfig>>> = Mutex::new(Vec::new());
+
+const SCALAR_STATE_CACHE_CAPACITY: usize = 16;
+
+struct ScalarStateCache {
+    /// Least recently used at the front, most recently used at the back.
+    entries: VecDeque<(usize, State<'static>)>,
+    hits: u64,
+    misses: u64,
+    evictions: u64,
+}
+
+impl ScalarStateCache {
+    const fn new() -> Self {
+        Self {
+            entries: VecDeque::new(),
+            hits: 0,
+            misses: 0,
+            evictions: 0,
+        }
+    }
+
+    fn clear(&mut self) {
+        // Dropping each State frees its native handle under CoolProp's narrow
+        // handle-table lock. This also makes destruction directly testable.
+        self.entries.clear();
+        self.hits = 0;
+        self.misses = 0;
+        self.evictions = 0;
+    }
+}
+
+thread_local! {
+    /// Mutable AbstractState handles never leave their owning OS thread.
+    static SCALAR_STATES: RefCell<ScalarStateCache> = const { RefCell::new(ScalarStateCache::new()) };
+}
 
 fn perr(e: CpError) -> PolarsError {
     PolarsError::ComputeError(e.0.into())
@@ -25,6 +86,14 @@ fn perr(e: CpError) -> PolarsError {
 
 fn compute_error(msg: impl Into<String>) -> PolarsError {
     PolarsError::ComputeError(msg.into().into())
+}
+
+fn cp_error(e: CpError) -> PyErr {
+    PyValueError::new_err(e.0)
+}
+
+fn runtime_error(message: impl Into<String>) -> PyErr {
+    PyRuntimeError::new_err(message.into())
 }
 
 fn validate_input_count(kind: &str, got: usize, expected: usize) -> PolarsResult<()> {
@@ -129,7 +198,7 @@ fn to_f64(s: &Series) -> PolarsResult<Vec<f64>> {
     Ok(s.f64()?.iter().map(|o| o.unwrap_or(f64::NAN)).collect())
 }
 
-fn coolprop(lib_path: &str) -> PolarsResult<&'static CoolProp> {
+fn load_coolprop(lib_path: &str) -> Result<&'static CoolProp, CpError> {
     if let Some(c) = CP.get() {
         return Ok(c); // fast path: already initialised, no lock
     }
@@ -139,14 +208,415 @@ fn coolprop(lib_path: &str) -> PolarsResult<&'static CoolProp> {
     // (CoolProp::ensure_warmed_*), so an unused backend is never warmed.
     let _guard = INIT
         .lock()
-        .map_err(|_| compute_error("CoolProp init lock was poisoned"))?;
+        .map_err(|_| CpError("CoolProp init lock was poisoned".into()))?;
     if let Some(c) = CP.get() {
         return Ok(c);
     }
-    let c = CoolProp::load(lib_path).map_err(perr)?;
+    let c = CoolProp::load(lib_path)?;
     CP.set(c)
-        .map_err(|_| compute_error("CoolProp was initialized concurrently"))?;
-    CP.get().ok_or_else(|| compute_error("CoolProp failed to initialize"))
+        .map_err(|_| CpError("CoolProp was initialized concurrently".into()))?;
+    CP.get().ok_or_else(|| CpError("CoolProp failed to initialize".into()))
+}
+
+fn coolprop(lib_path: &str) -> PolarsResult<&'static CoolProp> {
+    load_coolprop(lib_path).map_err(perr)
+}
+
+fn initialized_coolprop() -> Result<&'static CoolProp, CpError> {
+    CP.get()
+        .ok_or_else(|| CpError("native CoolProp is not initialized; call initialize(lib_path) first".into()))
+}
+
+fn get_fluid_config(config_id: usize) -> Result<Arc<FluidConfig>, CpError> {
+    FLUID_CONFIGS
+        .lock()
+        .map_err(|_| CpError("fluid configuration registry lock was poisoned".into()))?
+        .get(config_id)
+        .cloned()
+        .ok_or_else(|| CpError(format!("unknown fluid configuration id {config_id}")))
+}
+
+fn get_humid_air_config(config_id: usize) -> Result<Arc<HumidAirConfig>, CpError> {
+    HUMID_AIR_CONFIGS
+        .lock()
+        .map_err(|_| CpError("humid-air configuration registry lock was poisoned".into()))?
+        .get(config_id)
+        .cloned()
+        .ok_or_else(|| CpError(format!("unknown humid-air configuration id {config_id}")))
+}
+
+fn configured_state(cp: &'static CoolProp, config: &FluidConfig) -> Result<State<'static>, CpError> {
+    cp.ensure_warmed_fluid(&config.backend, &config.fluid)?;
+    let mut state = cp.state(&config.backend, &config.fluid)?;
+    if let Some(fractions) = &config.fractions {
+        state.set_fractions(fractions)?;
+    }
+    if let Some(phase) = &config.phase {
+        state.specify_phase(phase)?;
+    }
+    Ok(state)
+}
+
+fn evaluate_scalar_fluid(
+    cp: &'static CoolProp,
+    config_id: usize,
+    input_pair: i64,
+    value1: f64,
+    value2: f64,
+    output: i64,
+) -> Result<f64, CpError> {
+    SCALAR_STATES.with(|cache_cell| {
+        let mut cache = cache_cell.borrow_mut();
+        let position = cache.entries.iter().position(|(id, _)| *id == config_id);
+        let mut entry = if let Some(position) = position {
+            cache.hits += 1;
+            cache
+                .entries
+                .remove(position)
+                .ok_or_else(|| CpError("scalar state cache entry disappeared".into()))?
+        } else {
+            cache.misses += 1;
+            let config = get_fluid_config(config_id)?;
+            let state = configured_state(cp, &config)?;
+            if cache.entries.len() == SCALAR_STATE_CACHE_CAPACITY {
+                cache.entries.pop_front();
+                cache.evictions += 1;
+            }
+            (config_id, state)
+        };
+        let output = std::ffi::c_long::try_from(output)
+            .map_err(|_| CpError(format!("output parameter {output} exceeds the C API integer range")))?;
+        let value = entry.1.update_and_1_out_scalar(input_pair, value1, value2, output)?;
+        cache.entries.push_back(entry);
+        Ok(value)
+    })
+}
+
+#[derive(Clone, Copy)]
+struct ResolvedInputPair {
+    first: std::ffi::c_long,
+    second: std::ffi::c_long,
+    pair: i64,
+}
+
+/// Mirrors CoolProp's reviewed `generate_update_pair` table, but asks the loaded
+/// library for every parameter and pair number at runtime. Enum integers therefore
+/// never cross a version boundary or live in encomp source.
+const INPUT_PAIR_NAMES: &[(&str, &str, &str)] = &[
+    ("Q", "T", "QT_INPUTS"),
+    ("Qmass", "T", "QmassT_INPUTS"),
+    ("P", "Q", "PQ_INPUTS"),
+    ("P", "Qmass", "PQmass_INPUTS"),
+    ("P", "T", "PT_INPUTS"),
+    ("Dmolar", "T", "DmolarT_INPUTS"),
+    ("Dmass", "T", "DmassT_INPUTS"),
+    ("Hmolar", "T", "HmolarT_INPUTS"),
+    ("Hmass", "T", "HmassT_INPUTS"),
+    ("Smolar", "T", "SmolarT_INPUTS"),
+    ("Smass", "T", "SmassT_INPUTS"),
+    ("T", "Umolar", "TUmolar_INPUTS"),
+    ("T", "Umass", "TUmass_INPUTS"),
+    ("Dmass", "Hmass", "DmassHmass_INPUTS"),
+    ("Dmolar", "Hmolar", "DmolarHmolar_INPUTS"),
+    ("Dmass", "Smass", "DmassSmass_INPUTS"),
+    ("Dmolar", "Smolar", "DmolarSmolar_INPUTS"),
+    ("Dmass", "Umass", "DmassUmass_INPUTS"),
+    ("Dmolar", "Umolar", "DmolarUmolar_INPUTS"),
+    ("Dmass", "P", "DmassP_INPUTS"),
+    ("Dmolar", "P", "DmolarP_INPUTS"),
+    ("Dmass", "Q", "DmassQ_INPUTS"),
+    ("Dmass", "Qmass", "DmassQmass_INPUTS"),
+    ("Dmolar", "Q", "DmolarQ_INPUTS"),
+    ("Dmolar", "Qmass", "DmolarQmass_INPUTS"),
+    ("Hmass", "P", "HmassP_INPUTS"),
+    ("Hmolar", "P", "HmolarP_INPUTS"),
+    ("P", "Smass", "PSmass_INPUTS"),
+    ("P", "Smolar", "PSmolar_INPUTS"),
+    ("P", "Umass", "PUmass_INPUTS"),
+    ("P", "Umolar", "PUmolar_INPUTS"),
+    ("Hmass", "Smass", "HmassSmass_INPUTS"),
+    ("Hmolar", "Smolar", "HmolarSmolar_INPUTS"),
+    ("Smass", "Umass", "SmassUmass_INPUTS"),
+    ("Smolar", "Umolar", "SmolarUmolar_INPUTS"),
+];
+
+static RESOLVED_INPUT_PAIRS: OnceLock<Result<Vec<ResolvedInputPair>, String>> = OnceLock::new();
+
+fn resolved_input_pairs(cp: &CoolProp) -> Result<&[ResolvedInputPair], CpError> {
+    RESOLVED_INPUT_PAIRS
+        .get_or_init(|| {
+            INPUT_PAIR_NAMES
+                .iter()
+                .map(|(first, second, pair)| {
+                    Ok(ResolvedInputPair {
+                        first: cp.param_index(first).map_err(|e| e.0)?,
+                        second: cp.param_index(second).map_err(|e| e.0)?,
+                        pair: cp.input_pair_index(pair).map_err(|e| e.0)?,
+                    })
+                })
+                .collect()
+        })
+        .as_deref()
+        .map_err(|message| CpError(message.clone()))
+}
+
+fn resolve_pair_native(cp: &CoolProp, name1: &str, name2: &str) -> Result<(i64, bool), CpError> {
+    let key1 = cp.param_index(name1)?;
+    let key2 = cp.param_index(name2)?;
+    for resolved in resolved_input_pairs(cp)? {
+        if key1 == resolved.first && key2 == resolved.second {
+            return Ok((resolved.pair, false));
+        }
+        if key1 == resolved.second && key2 == resolved.first {
+            return Ok((resolved.pair, true));
+        }
+    }
+    Err(CpError(format!(
+        "unsupported CoolProp input pair: {name1:?}, {name2:?}"
+    )))
+}
+
+/// Fallback implementation of CoolProp's documented fraction grammar. Upstream
+/// exposes backend splitting through C but not `extract_fractions`, so this parser
+/// is parity-tested against the Python binding in the oracle CI job.
+fn extract_fractions(fluid: &str) -> Result<(String, Option<Vec<f64>>), CpError> {
+    if fluid.contains('[') && fluid.contains(']') {
+        let parts: Vec<&str> = fluid.split('&').collect();
+        let mut names = Vec::with_capacity(parts.len());
+        let mut fractions = Vec::with_capacity(parts.len());
+        for part in &parts {
+            let without_close = part
+                .strip_suffix(']')
+                .ok_or_else(|| CpError(format!("Fluid entry [{part}] must end with ']' character")))?;
+            let mut pieces = without_close.split('[');
+            let name = pieces.next().unwrap_or_default();
+            let fraction_text = pieces
+                .next()
+                .ok_or_else(|| CpError(format!("Could not break [{without_close}] into name/fraction")))?;
+            if name.is_empty() || pieces.next().is_some() {
+                return Err(CpError(format!("Could not break [{without_close}] into name/fraction")));
+            }
+            let fraction = fraction_text
+                .parse::<f64>()
+                .map_err(|_| CpError(format!("fraction [{fraction_text}] was not converted fully")))?;
+            if !fraction.is_finite() || !(0.0..=1.0).contains(&fraction) {
+                return Err(CpError(format!(
+                    "fraction [{fraction_text}] was not converted to a value between 0 and 1 inclusive"
+                )));
+            }
+            // CoolProp removes zero-fraction components from multi-fluid names, but
+            // retains a zero single-fluid INCOMP concentration.
+            if fraction > 10.0 * f64::EPSILON || parts.len() == 1 {
+                names.push(name);
+                fractions.push(fraction);
+            }
+        }
+        return Ok((names.join("&"), Some(fractions)));
+    }
+
+    if fluid.contains('-') && fluid.contains('%') {
+        let parts: Vec<&str> = fluid.split('-').collect();
+        if parts.len() != 2 || parts[0].is_empty() {
+            return Err(CpError(format!(
+                "format of incompressible solution {fluid:?} is invalid; expected EG-20%"
+            )));
+        }
+        let fraction_text = parts[1]
+            .strip_suffix('%')
+            .ok_or_else(|| CpError(format!("invalid incompressible concentration {fluid:?}")))?;
+        let fraction = fraction_text
+            .parse::<f64>()
+            .map_err(|_| CpError(format!("invalid incompressible concentration {fluid:?}")))?
+            * 0.01;
+        if !fraction.is_finite() {
+            return Err(CpError(format!("invalid incompressible concentration {fluid:?}")));
+        }
+        return Ok((parts[0].to_string(), Some(vec![fraction])));
+    }
+
+    Ok((fluid.to_string(), None))
+}
+
+#[pyfunction(name = "initialize")]
+fn py_initialize(lib_path: &str) -> PyResult<()> {
+    load_coolprop(lib_path).map(|_| ()).map_err(cp_error)
+}
+
+#[pyfunction(name = "parameter_index")]
+fn py_parameter_index(name: &str) -> PyResult<i64> {
+    let index = initialized_coolprop()
+        .and_then(|cp| cp.param_index(name))
+        .map_err(cp_error)?;
+    #[allow(clippy::useless_conversion)]
+    Ok(i64::from(index))
+}
+
+#[pyfunction(name = "parameter_information")]
+fn py_parameter_information(name: &str, field: &str) -> PyResult<String> {
+    initialized_coolprop()
+        .and_then(|cp| cp.parameter_information(name, field))
+        .map_err(cp_error)
+}
+
+#[pyfunction(name = "resolve_input_pair")]
+fn py_resolve_input_pair(name1: &str, name2: &str) -> PyResult<(i64, bool)> {
+    resolve_pair_native(initialized_coolprop().map_err(cp_error)?, name1, name2).map_err(cp_error)
+}
+
+#[pyfunction(name = "resolve_fluid_name")]
+fn py_resolve_fluid_name(name: &str) -> PyResult<(String, String, Option<Vec<f64>>)> {
+    let cp = initialized_coolprop().map_err(cp_error)?;
+    let (backend, fluid) = cp.extract_backend(name).map_err(cp_error)?;
+    let (fluid, fractions) = extract_fractions(&fluid).map_err(cp_error)?;
+    let backend = if backend == "?" { "HEOS".to_string() } else { backend };
+    Ok((backend, fluid, fractions))
+}
+
+#[pyfunction(name = "validate_fluid", signature = (backend, fluid, fractions=None))]
+fn py_validate_fluid(py: Python<'_>, backend: String, fluid: String, fractions: Option<Vec<f64>>) -> PyResult<()> {
+    let cp = initialized_coolprop().map_err(cp_error)?;
+    py.detach(move || {
+        cp.ensure_warmed_fluid(&backend, &fluid)?;
+        let mut state = cp.state(&backend, &fluid)?;
+        if let Some(fractions) = fractions {
+            state.set_fractions(&fractions)?;
+        }
+        Ok(())
+    })
+    .map_err(cp_error)
+}
+
+#[pyfunction(name = "prepare_fluid", signature = (backend, fluid, fractions=None, phase=None))]
+fn py_prepare_fluid(
+    backend: String,
+    fluid: String,
+    fractions: Option<Vec<f64>>,
+    phase: Option<String>,
+) -> PyResult<usize> {
+    let candidate = FluidConfig {
+        backend,
+        fluid,
+        fractions,
+        phase,
+    };
+    let mut configs = FLUID_CONFIGS
+        .lock()
+        .map_err(|_| runtime_error("fluid configuration registry lock was poisoned"))?;
+    if let Some(id) = configs.iter().position(|config| config.as_ref() == &candidate) {
+        return Ok(id);
+    }
+    let id = configs.len();
+    configs.push(Arc::new(candidate));
+    Ok(id)
+}
+
+#[pyfunction(name = "prepare_humid_air")]
+fn py_prepare_humid_air(output: String, name1: String, name2: String, name3: String) -> PyResult<usize> {
+    let candidate = HumidAirConfig {
+        output,
+        name1,
+        name2,
+        name3,
+    };
+    let mut configs = HUMID_AIR_CONFIGS
+        .lock()
+        .map_err(|_| runtime_error("humid-air configuration registry lock was poisoned"))?;
+    if let Some(id) = configs.iter().position(|config| config.as_ref() == &candidate) {
+        return Ok(id);
+    }
+    let id = configs.len();
+    configs.push(Arc::new(candidate));
+    Ok(id)
+}
+
+#[pyfunction(name = "fluid_scalar")]
+fn py_fluid_scalar(
+    py: Python<'_>,
+    config_id: usize,
+    input_pair: i64,
+    value1: f64,
+    value2: f64,
+    output: i64,
+) -> PyResult<f64> {
+    let cp = initialized_coolprop().map_err(cp_error)?;
+    py.detach(move || evaluate_scalar_fluid(cp, config_id, input_pair, value1, value2, output))
+        .map_err(cp_error)
+}
+
+#[pyfunction(name = "humid_air_scalar")]
+fn py_humid_air_scalar(py: Python<'_>, config_id: usize, value1: f64, value2: f64, value3: f64) -> PyResult<f64> {
+    let cp = initialized_coolprop().map_err(cp_error)?;
+    let config = get_humid_air_config(config_id).map_err(cp_error)?;
+    py.detach(move || {
+        cp.ensure_warmed_humid_air()?;
+        let mut out = [f64::NAN];
+        cp.ha_props_si_batch(
+            &config.output,
+            &config.name1,
+            &[value1],
+            &config.name2,
+            &[value2],
+            &config.name3,
+            &[value3],
+            &mut out,
+        )?;
+        Ok(out[0])
+    })
+    .map_err(cp_error)
+}
+
+#[pyfunction(name = "lib_version")]
+fn py_lib_version() -> PyResult<String> {
+    initialized_coolprop()
+        .and_then(|cp| cp.global_param_string("version"))
+        .map_err(cp_error)
+}
+
+#[pyfunction(name = "clear_scalar_cache")]
+fn py_clear_scalar_cache() {
+    SCALAR_STATES.with(|cache| cache.borrow_mut().clear());
+}
+
+#[pyfunction(name = "scalar_cache_info")]
+fn py_scalar_cache_info() -> (usize, usize, u64, u64, u64) {
+    SCALAR_STATES.with(|cache| {
+        let cache = cache.borrow();
+        (
+            cache.entries.len(),
+            SCALAR_STATE_CACHE_CAPACITY,
+            cache.hits,
+            cache.misses,
+            cache.evictions,
+        )
+    })
+}
+
+#[pyfunction(name = "handle_counts")]
+fn py_handle_counts() -> PyResult<(u64, u64)> {
+    initialized_coolprop().map(CoolProp::handle_counts).map_err(cp_error)
+}
+
+/// The PyO3 API and Polars plugin C ABI intentionally coexist in this cdylib.
+/// No Python object is stored in native global state; scalar handles are bounded
+/// and thread-local, so the module is safe to import without enabling the GIL.
+#[pymodule]
+#[pyo3(gil_used = false)]
+fn _internal(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(py_initialize, module)?)?;
+    module.add_function(wrap_pyfunction!(py_parameter_index, module)?)?;
+    module.add_function(wrap_pyfunction!(py_parameter_information, module)?)?;
+    module.add_function(wrap_pyfunction!(py_resolve_input_pair, module)?)?;
+    module.add_function(wrap_pyfunction!(py_resolve_fluid_name, module)?)?;
+    module.add_function(wrap_pyfunction!(py_validate_fluid, module)?)?;
+    module.add_function(wrap_pyfunction!(py_prepare_fluid, module)?)?;
+    module.add_function(wrap_pyfunction!(py_prepare_humid_air, module)?)?;
+    module.add_function(wrap_pyfunction!(py_fluid_scalar, module)?)?;
+    module.add_function(wrap_pyfunction!(py_humid_air_scalar, module)?)?;
+    module.add_function(wrap_pyfunction!(py_lib_version, module)?)?;
+    module.add_function(wrap_pyfunction!(py_clear_scalar_cache, module)?)?;
+    module.add_function(wrap_pyfunction!(py_scalar_cache_info, module)?)?;
+    module.add_function(wrap_pyfunction!(py_handle_counts, module)?)?;
+    Ok(())
 }
 
 /// Output dtype preserves the input precision: Float32 only when every non-scalar
@@ -342,6 +812,23 @@ mod tests {
         assert_eq!(ca.get(1), None);
         assert_eq!(ca.get(2), None);
         assert_eq!(ca.get(3), Some(-2.5));
+    }
+
+    #[test]
+    fn fraction_parser_covers_mixtures_and_incompressibles() {
+        assert_eq!(extract_fractions("Water").unwrap(), ("Water".into(), None));
+        assert_eq!(
+            extract_fractions("CO2[0.5]&O2[0.5]").unwrap(),
+            ("CO2&O2".into(), Some(vec![0.5, 0.5]))
+        );
+        assert_eq!(
+            extract_fractions("CO2[0]&O2[1]").unwrap(),
+            ("O2".into(), Some(vec![1.0]))
+        );
+        assert_eq!(extract_fractions("MEG[0.5]").unwrap(), ("MEG".into(), Some(vec![0.5])));
+        assert_eq!(extract_fractions("EG-20%").unwrap(), ("EG".into(), Some(vec![0.2])));
+        assert!(extract_fractions("CO2[1.2]&O2[-0.2]").is_err());
+        assert!(extract_fractions("CO2[abc]&O2[1]").is_err());
     }
 }
 

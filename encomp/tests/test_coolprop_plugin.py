@@ -12,14 +12,13 @@ import logging
 from pathlib import Path
 from typing import Any, cast
 
-import CoolProp.CoolProp as _CP
 import numpy as np
 import polars as pl
 import pytest
 
 from encomp import coolprop as cp
 
-CP: Any = _CP
+CP: Any = pytest.importorskip("CoolProp.CoolProp", reason="Python CoolProp oracle group is not installed")
 
 RTOL = 1e-5
 
@@ -45,17 +44,9 @@ if not _plugin_built():
 
 
 def _bundled_lib_expected_version() -> str:
-    # the bundled libCoolProp is built at the LOWER BOUND of the coolprop requirement
-    # (scripts/build_libcoolprop.py derives its git tag from the same bound); read it
-    # from the installed package metadata so this also holds for installed wheels
-    import importlib.metadata
-    import re
+    from encomp.coolprop._build_info import BUNDLED_COOLPROP_VERSION
 
-    requires = importlib.metadata.requires("encomp") or []
-    requirement = next(r for r in requires if r.startswith("coolprop"))
-    match = re.search(r">=\s*([\w.]+)", requirement)
-    assert match, f"no lower bound in the coolprop requirement: {requirement!r}"
-    return match.group(1)
+    return BUNDLED_COOLPROP_VERSION
 
 
 def test_self_check_version_and_lib_path() -> None:

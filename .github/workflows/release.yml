@@ -8,6 +8,10 @@ name: encomp CI/release
 #                     plus source-only doc/static tests
 #   docs-rtd       -> rebuild the docs in a ReadTheDocs-equivalent environment (no project
 #                     install, no compiled plugin) so an RTD-only break fails the PR
+#   oracle-parity  -> install Python CoolProp only as a test oracle and compare it with
+#                     the bundled implementation
+#   free-threaded-smoke -> visible, non-publishing Python 3.14t readiness probe; allowed
+#                     to fail until the released dependency stack supports it completely
 #   dependency-floors -> install at the LOWEST versions the declared bounds allow and run the
 #                     suite, so a too-low bound fails here rather than on a user's machine
 #   rust           -> cargo fmt, clippy, and in-crate tests
@@ -96,6 +100,24 @@ jobs:
           READTHEDOCS: "True"
         run: uv run --no-sync python -m sphinx -T -W --keep-going -b html docs docs/_build/html
 
+  oracle-parity:
+    name: bundled CoolProp parity oracle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          python-version: "3.13"
+      - name: Install development tools and the test-only Python CoolProp oracle
+        run: uv sync --locked --no-install-project --group oracle
+      - name: Build the one bundled CoolProp implementation and native artifact
+        run: |
+          python -m pip install cmake
+          uv run --no-sync python scripts/build_libcoolprop.py
+          uv run --no-sync maturin develop --release
+      - name: Compare native scalar/plugin results with Python CoolProp 8.0.0
+        run: uv run --no-sync pytest encomp/tests/test_coolprop_plugin.py encomp/tests/test_rust_parity.py -q
+
   dependency-floors:
     # The `test` job below installs the wheel's dependencies from PyPI at their LATEST
     # versions, so it can never notice that a declared lower bound is too low. Resolve the
@@ -157,11 +179,15 @@ jobs:
           import importlib.metadata as metadata
           from pathlib import Path
 
-          names = ("encomp", "pint", "pydantic", "typeguard", "typing_extensions", "numpy", "polars", "sympy", "uncertainties", "coolprop")
+          names = ("encomp", "pint", "pydantic", "typeguard", "typing_extensions", "numpy", "polars", "sympy", "uncertainties")
           for name in names:
               print(f"{name:20s} {metadata.version(name)}")
 
+          import importlib.util
           import encomp.coolprop as cp
+
+          assert importlib.util.find_spec("CoolProp") is None, "Python CoolProp must not be installed"
+          assert not any(r.lower().startswith("coolprop") for r in (metadata.requires("encomp") or []))
 
           package = Path(cp.__file__).parent
           print(f"\nencomp.coolprop imported from {package}")
@@ -194,6 +220,44 @@ jobs:
       - run: cargo fmt --manifest-path rust/Cargo.toml -- --check
       - run: cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
       - run: PYO3_PYTHON="$(which python)" cargo test --manifest-path rust/Cargo.toml --no-default-features
+
+  free-threaded-smoke:
+    name: Python 3.14t smoke (experimental)
+    runs-on: ubuntu-latest
+    # This preparatory signal must not block normal-GIL releases. Python 3.15t wheels
+    # remain gated on a released Polars/PyO3 stack and the full verification in PLAN.md.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          python-version: "3.14t"
+      - name: Install and build without the Python CoolProp package
+        run: |
+          python -m pip install cmake
+          uv sync --locked --no-install-project
+          uv run --no-sync python scripts/build_libcoolprop.py
+          uv run --no-sync maturin develop --release
+      - name: Keep the GIL disabled while importing and exercising both native interfaces
+        env:
+          PYTHON_GIL: "0"
+        run: |
+          uv run --no-sync python -W error - <<'PY'
+          import importlib.util
+          import sys
+
+          import polars as pl
+
+          from encomp import coolprop as cp
+          from encomp.fluids import Water
+          from encomp.units import Quantity as Q
+
+          assert not sys._is_gil_enabled()
+          assert importlib.util.find_spec("CoolProp") is None
+          assert Water(P=Q(5e6, "Pa"), T=Q(400.0, "K")).D.m > 900.0
+          assert pl.DataFrame({"P": [5e6], "T": [400.0]}).select(cp.water("DMASS", "P", "T"))[0, 0] > 900.0
+          assert not sys._is_gil_enabled()
+          PY
 
   build-wheels:
     name: build ${{ matrix.os }}
@@ -240,16 +304,26 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          # install the PREBUILT encomp wheel (abi3 cp313 installs on 3.14 too) by
-          # name so it is not rebuilt from source; deps + test deps come from PyPI
-          version=$(python -c 'from pathlib import Path; wheels = sorted(Path("wheelhouse").glob("encomp-*.whl")); assert len(wheels) == 1, f"expected exactly one encomp wheel, found {len(wheels)}"; print(wheels[0].name.split("-")[1])')
-          pip install --find-links wheelhouse "encomp==$version" pytest hypothesis
-          python -c "from encomp import coolprop as cp; assert cp.self_check(), 'plugin self_check failed'"
+          # Install the downloaded artifact by its exact path. PR builds deliberately
+          # retain the current released version, so asking pip for `encomp==$version`
+          # can select that same-version wheel from PyPI instead of this candidate.
+          wheel=$(python -c 'from pathlib import Path; wheels = sorted(Path("wheelhouse").glob("encomp-*.whl")); assert len(wheels) == 1, f"expected exactly one encomp wheel, found {len(wheels)}"; print(wheels[0])')
+          pip install "$wheel" pytest hypothesis
+          python - <<'PY'
+          import importlib.metadata as metadata
+          import importlib.util
+
+          from encomp import coolprop as cp
+
+          assert cp.self_check(), "plugin self_check failed"
+          assert importlib.util.find_spec("CoolProp") is None, "Python CoolProp was unexpectedly installed"
+          assert not any(r.lower().startswith("coolprop") for r in (metadata.requires("encomp") or []))
+          PY
           python -m pytest --pyargs encomp.tests -q
 
   publish:
     name: publish to PyPI
-    needs: [typecheck, docs-rtd, dependency-floors, rust, build-wheels, test]
+    needs: [typecheck, docs-rtd, oracle-parity, dependency-floors, rust, build-wheels, test]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment: pypi               # configure the Trusted Publisher against this env

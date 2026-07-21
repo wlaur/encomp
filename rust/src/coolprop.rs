@@ -32,7 +32,8 @@
 
 use libloading::Library;
 use std::collections::HashSet;
-use std::ffi::{CString, c_char, c_double, c_long};
+use std::ffi::{CString, c_char, c_double, c_int, c_long};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 const BUFLEN: c_long = 1024;
@@ -53,7 +54,11 @@ type Batch1Fn = unsafe extern "C" fn(
 );
 type SetFracFn = unsafe extern "C" fn(c_long, *const c_double, c_long, *mut c_long, *mut c_char, c_long);
 type SpecPhaseFn = unsafe extern "C" fn(c_long, *const c_char, *mut c_long, *mut c_char, c_long);
+type UpdateFn = unsafe extern "C" fn(c_long, c_long, c_double, c_double, *mut c_long, *mut c_char, c_long);
+type KeyedOutputFn = unsafe extern "C" fn(c_long, c_long, *mut c_long, *mut c_char, c_long) -> c_double;
 type IndexFn = unsafe extern "C" fn(*const c_char) -> c_long;
+type StringFn = unsafe extern "C" fn(*const c_char, *mut c_char, c_int) -> c_long;
+type ExtractBackendFn = unsafe extern "C" fn(*const c_char, *mut c_char, c_long, *mut c_char, c_long) -> c_int;
 type HAPropsSIFn = unsafe extern "C" fn(
     *const c_char,
     *const c_char,
@@ -100,8 +105,13 @@ pub struct CoolProp {
     batch1: Batch1Fn,
     set_fractions: SetFracFn,
     specify_phase: SpecPhaseFn,
+    update: UpdateFn,
+    keyed_output: KeyedOutputFn,
     get_param_index: IndexFn,
     get_input_pair_index: IndexFn,
+    get_global_param_string: StringFn,
+    get_parameter_information_string: StringFn,
+    extract_backend: ExtractBackendFn,
     ha_props_si: HAPropsSIFn,
     /// NARROW lock: guards ONLY handle create/destroy (the shared handle table),
     /// never the evaluation path -- so concurrent flashing stays parallel.
@@ -109,6 +119,8 @@ pub struct CoolProp {
     /// keys ("F\0<backend>\0<fluid>", or "HA") already warmed up. Read-locked on the hot
     /// path (concurrent, no contention once warm); write-locked only for a first-time warmup.
     warmed: RwLock<HashSet<String>>,
+    handles_created: AtomicU64,
+    handles_freed: AtomicU64,
 }
 
 impl CoolProp {
@@ -128,15 +140,34 @@ impl CoolProp {
         // yield plain `extern "C"` fn pointers that do not borrow `lib`, so `lib`
         // can be moved into `_lib` afterwards and the pointers stay valid for its
         // lifetime.
-        let (factory, free, batch1, set_fractions, specify_phase, get_param_index, get_input_pair_index, ha_props_si) = unsafe {
+        let (
+            factory,
+            free,
+            batch1,
+            set_fractions,
+            specify_phase,
+            update,
+            keyed_output,
+            get_param_index,
+            get_input_pair_index,
+            get_global_param_string,
+            get_parameter_information_string,
+            extract_backend,
+            ha_props_si,
+        ) = unsafe {
             (
                 sym!(FactoryFn, b"AbstractState_factory\0"),
                 sym!(FreeFn, b"AbstractState_free\0"),
                 sym!(Batch1Fn, b"AbstractState_update_and_1_out\0"),
                 sym!(SetFracFn, b"AbstractState_set_fractions\0"),
                 sym!(SpecPhaseFn, b"AbstractState_specify_phase\0"),
+                sym!(UpdateFn, b"AbstractState_update\0"),
+                sym!(KeyedOutputFn, b"AbstractState_keyed_output\0"),
                 sym!(IndexFn, b"get_param_index\0"),
                 sym!(IndexFn, b"get_input_pair_index\0"),
+                sym!(StringFn, b"get_global_param_string\0"),
+                sym!(StringFn, b"get_parameter_information_string\0"),
+                sym!(ExtractBackendFn, b"C_extract_backend\0"),
                 sym!(HAPropsSIFn, b"HAPropsSI\0"),
             )
         };
@@ -147,11 +178,18 @@ impl CoolProp {
             batch1,
             set_fractions,
             specify_phase,
+            update,
+            keyed_output,
             get_param_index,
             get_input_pair_index,
+            get_global_param_string,
+            get_parameter_information_string,
+            extract_backend,
             ha_props_si,
             handle_lock: Mutex::new(()),
             warmed: RwLock::new(HashSet::new()),
+            handles_created: AtomicU64::new(0),
+            handles_freed: AtomicU64::new(0),
         })
     }
 
@@ -178,6 +216,62 @@ impl CoolProp {
         #[allow(clippy::useless_conversion)]
         let index = i64::from(i);
         Ok(index)
+    }
+
+    /// Read a process-global metadata string such as the bundled library version.
+    /// Successful calls use only caller-owned buffers. Errors deliberately return a
+    /// narrow Rust message rather than consulting CoolProp's process-global error
+    /// outbox, whose text is not safe to associate with one concurrent caller.
+    pub fn global_param_string(&self, name: &str) -> Result<String, CpError> {
+        let name = cstr(name)?;
+        let mut out = [0 as c_char; BUFLEN as usize];
+        // SAFETY: `name` is NUL terminated and alive for the call; `out` is a writable
+        // BUFLEN-byte caller-owned buffer, and BUFLEN fits the C `int` parameter.
+        let ok = unsafe { (self.get_global_param_string)(name.as_ptr(), out.as_mut_ptr(), BUFLEN as c_int) };
+        if ok != 1 {
+            return Err(CpError("CoolProp global metadata lookup failed".into()));
+        }
+        Ok(read_msg(&out))
+    }
+
+    /// Return one parameter-information field (currently used for SI units).
+    pub fn parameter_information(&self, name: &str, field: &str) -> Result<String, CpError> {
+        let name = cstr(name)?;
+        let field = cstr(field)?;
+        let mut out = [0 as c_char; BUFLEN as usize];
+        let field_bytes = field.as_bytes_with_nul();
+        if field_bytes.len() > out.len() {
+            return Err(CpError("CoolProp parameter-information selector is too long".into()));
+        }
+        for (dest, source) in out.iter_mut().zip(field_bytes) {
+            *dest = *source as c_char;
+        }
+        // CoolProp uses this buffer as both input (the information selector) and
+        // output (the resulting string). Both pointers remain valid for the call.
+        // SAFETY: `name` is NUL terminated; `out` is initialized with a NUL-terminated
+        // selector and provides BUFLEN writable bytes.
+        let ok = unsafe { (self.get_parameter_information_string)(name.as_ptr(), out.as_mut_ptr(), BUFLEN as c_int) };
+        if ok != 1 {
+            return Err(CpError(format!(
+                "unknown parameter {name:?} or information field {field:?}"
+            )));
+        }
+        Ok(read_msg(&out))
+    }
+
+    /// Split an optional ``BACKEND::`` prefix using CoolProp's own parser.
+    pub fn extract_backend(&self, name: &str) -> Result<(String, String), CpError> {
+        let name = cstr(name)?;
+        let mut backend = [0 as c_char; BUFLEN as usize];
+        let mut fluid = [0 as c_char; BUFLEN as usize];
+        // SAFETY: `name` is NUL terminated; both output buffers are caller-owned,
+        // writable, and their exact lengths are supplied.
+        let code =
+            unsafe { (self.extract_backend)(name.as_ptr(), backend.as_mut_ptr(), BUFLEN, fluid.as_mut_ptr(), BUFLEN) };
+        if code != 0 {
+            return Err(CpError("CoolProp backend/fluid name exceeds the native buffer".into()));
+        }
+        Ok((read_msg(&backend), read_msg(&fluid)))
     }
 
     /// Warm up ONE (backend, fluid) config, lazily. The FIRST call (any config) also runs
@@ -260,7 +354,7 @@ impl CoolProp {
             // state we touch (8.0 per-thread backends), so the loop is lock-free.
             let val =
                 unsafe { (self.ha_props_si)(o.as_ptr(), a.as_ptr(), v1[i], b.as_ptr(), v2[i], c.as_ptr(), v3[i]) };
-            out[i] = if val.is_finite() { val } else { f64::NAN }; // CoolProp returns _HUGE on error
+            out[i] = if valid_result(val) { val } else { f64::NAN }; // CoolProp returns _HUGE on error
         }
         Ok(())
     }
@@ -281,8 +375,22 @@ impl CoolProp {
         if err != 0 {
             return Err(CpError(format!("factory({backend},{fluid}): {}", read_msg(&msg))));
         }
+        self.handles_created.fetch_add(1, Ordering::Relaxed);
         Ok(State { cp: self, handle })
     }
+
+    pub fn handle_counts(&self) -> (u64, u64) {
+        (
+            self.handles_created.load(Ordering::Relaxed),
+            self.handles_freed.load(Ordering::Relaxed),
+        )
+    }
+}
+
+/// CoolProp's C wrapper returns `_HUGE` (currently 1e300) for several failures.
+/// No physical property encomp supports approaches this sentinel.
+fn valid_result(value: f64) -> bool {
+    value.is_finite() && value.abs() < 1e290
 }
 
 /// An owned AbstractState handle. RAII-frees on drop (under the narrow lock).
@@ -380,6 +488,52 @@ impl State<'_> {
         }
         Ok(())
     }
+
+    /// Fast scalar evaluation through the same batched C entry point as the array
+    /// plugin. The successful path is one FFI call. If that call leaves its output
+    /// untouched, retry through the individually error-reporting update/keyed-output
+    /// functions so Python receives the existing narrow `ValueError` behavior without
+    /// putting the global PropsSI error outbox back on the hot path.
+    pub fn update_and_1_out_scalar(
+        &mut self,
+        input_pair: i64,
+        value1: f64,
+        value2: f64,
+        out_key: c_long,
+    ) -> Result<f64, CpError> {
+        let mut out = [f64::NAN];
+        self.update_and_1_out(input_pair, &[value1], &[value2], out_key, &mut out)?;
+        if valid_result(out[0]) {
+            return Ok(out[0]);
+        }
+
+        let pair = c_long::try_from(input_pair)
+            .map_err(|_| CpError(format!("input pair {input_pair} exceeds the C API integer range")))?;
+        let mut err: c_long = 0;
+        let mut msg = [0 as c_char; BUFLEN as usize];
+        // SAFETY: `self.handle` is live and thread-owned; scalar values are passed by
+        // value; error buffers are caller-owned and valid for BUFLEN bytes.
+        unsafe {
+            (self.cp.update)(self.handle, pair, value1, value2, &mut err, msg.as_mut_ptr(), BUFLEN);
+        }
+        if err != 0 {
+            return Err(CpError(read_msg(&msg)));
+        }
+
+        err = 0;
+        msg.fill(0);
+        // SAFETY: `self.handle` remains live after the successful update; the output
+        // key came from this same library; error buffers are caller-owned.
+        let value = unsafe { (self.cp.keyed_output)(self.handle, out_key, &mut err, msg.as_mut_ptr(), BUFLEN) };
+        if err != 0 {
+            return Err(CpError(read_msg(&msg)));
+        }
+        if valid_result(value) {
+            Ok(value)
+        } else {
+            Err(CpError("CoolProp returned a non-finite result".into()))
+        }
+    }
 }
 
 impl Drop for State<'_> {
@@ -390,6 +544,7 @@ impl Drop for State<'_> {
         // SAFETY: frees a handle we own exactly once (Drop runs once); the
         // handle-table write is serialised by `handle_lock` held here.
         unsafe { (self.cp.free)(self.handle, &mut err, msg.as_mut_ptr(), BUFLEN) };
+        self.cp.handles_freed.fetch_add(1, Ordering::Relaxed);
     }
 }
 

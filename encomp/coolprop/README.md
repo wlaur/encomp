@@ -1,11 +1,11 @@
 # encomp.coolprop
 
-Parallel CoolProp property evaluation as **native Polars expression plugins**
-(Rust, `pyo3-polars`). Independent property nodes in one `collect()` run in
-parallel on the Polars thread pool — GIL-free — instead of a `map_batches` Python
-UDF that holds the GIL and serializes. Usable directly, or as the evaluation path
-of `encomp.fluids` for `pl.Expr` inputs and large eager arrays (≥1000 elements);
-small eager inputs (scalars, short arrays) use the Python CoolProp path.
+One bundled CoolProp implementation behind a dual-purpose native Rust artifact.
+Its private PyO3 interface handles scalar evaluation, metadata, parsing, and
+validation; its Polars plugin ABI handles every array and expression size.
+Independent property nodes in one `collect()` run in parallel on the Polars
+thread pool without holding the GIL. The Python `CoolProp` package is neither a
+runtime dependency nor imported by `encomp`.
 
 ## Usage
 
@@ -39,43 +39,54 @@ The API mirrors `encomp.fluids.Fluid`:
 - `water(output, in1, in2)` — the IF97 water/steam shorthand, mirroring
   `encomp.fluids.Water`. Equivalent to `fluid(..., name="IF97::Water")`. It takes no
   `composition` (water is pure) and no `assume_phase` (IF97 would ignore it).
-- `humid_air(output, in1, in2, in3)` — same naming rule for the three HAPropsSI inputs.
+- `humid_air(output, in1, in2, in3)` — same naming rule for the three humid-air inputs.
 - `FluidInput` / `HumidAirInput` (state inputs), `FluidParam` / `HumidAirParam` /
   `Backend` / `Phase` / `AssumedPhase` are `Literal`s; `CName` / `Composition` mirror
   `encomp.fluids`. The matching `frozenset`s and `is_*` `TypeIs` predicates are exported
   too, along with `resolve_fluid_spec` (name → backend/fluids/fractions).
 
-## Performance (CoolProp 8.0, 14-thread pool)
+## Performance regression gate
 
-```
-CORRECTNESS  plugin vs raw PropsSI (IF97 water): 0.0e+00 exact (D/H/S/Cp)
+Apple M4 Pro, CPython 3.14.3, Polars 1.42.1, CoolProp 8.0.0; medians of seven
+warmed runs. Lower is better. The baseline is the unmodified `v1.8.0` wheel.
 
-SPEED (property D)            raw PropsSI | encomp map_batches | rust plugin | vs m_b
-  N=1                            0.003 ms |          0.114 ms |    0.029 ms |  3.98x
-  N=1M                         177.6   ms |        184.1   ms |   86.6   ms |  2.12x
+| workload | v1.8.0 | native-only | change |
+| --- | ---: | ---: | ---: |
+| public IF97 scalar | 62.49 us | 59.68 us | -4.5% |
+| public HEOS scalar | 97.36 us | 65.14 us | -33.1% |
+| public humid-air scalar | 57.35 us | 55.30 us | -3.6% |
+| HEOS array, 100k rows | 470.49 ms | 469.92 ms | -0.1% |
+| three independent HEOS properties, 100k rows | 534.06 ms | 537.51 ms | +0.6% |
 
-PARALLELISM  4 independent props, ONE collect(), 1M rows
-  encomp map_batches : combined 823 ms,  1.00x   serial (GIL)
-  rust plugin        : combined 178 ms,  2.57x   PARALLEL  (4.6x faster than encomp)
+The direct bridge itself takes 0.20 us for a warm IF97 state, 4.88 us for a
+varying-temperature cached HEOS state, and 2.05 us for humid air. The matching
+high-level bundled C calls take 1.06 us, 31.05 us, and 2.33 us respectively;
+the state-owning bridge is faster where it can reuse `AbstractState`. A cold
+first IF97 call is 28.54 us, and a fill-plus-eviction pass across 17 HEOS
+configurations averages 29.37 us/configuration. Reproduce with
+`scripts/benchmark_coolprop.py`.
 
-8 enthalpy calcs, 1M rows: 4.9x faster, ~6 cores vs 1, ~half the peak memory.
-```
+The matching macOS arm64 package check reduces the combined wheel download from
+19.61 MB (`encomp` plus Python CoolProp) to 9.08 MB for `encomp` alone (-53.7%).
+The encomp wheel itself is about 35 KB larger because the old Python binding was
+a separate distribution; removing that 10.57 MB wheel produces the net saving.
 
 ## Design
 
-The GIL is not the only serialization point: CoolProp's C-API takes a global
-handle-table lock on every call, so per-row calls serialize even in Rust. The
-plugin uses the batched C-API (`AbstractState_update_and_1_out`): one
-call per chunk, the handle lock taken once at construction, then the flash loop
-runs lock-free in C++ — so independent chunks/expressions parallelize.
+The direct scalar interface keeps a bounded LRU of `AbstractState` handles in
+thread-local storage. A handle is mutated only by its owning thread and is freed
+on eviction or thread shutdown. The plugin uses the batched C-API
+(`AbstractState_update_and_1_out`): one call per chunk, with the handle-table lock
+taken only for construction/destruction and the flash loop lock-free in C++.
 
 Thread-safety (is it safe to evaluate concurrently?): the math is pure — a flash on
 a per-handle `AbstractState` mutates no global state — safe to run concurrently
 **iff** (a) each thread owns its handle (never shared; a state caches its last
 flash), (b) handle create/destroy is synchronized (the global handle table is the
 one shared structure — `coolprop.rs` guards `factory`/`free` with a narrow mutex,
-never the hot path), and (c) global config isn't mutated during evaluation. Results
-are bit-identical across thread-pool sizes (1/4/8 are covered by `test_thread_count_parity`).
+never the hot path), and (c) global config isn't mutated during evaluation. The
+PyO3 module stores no Python objects in global state and explicitly declares that
+it does not require the GIL.
 
 All `unsafe` is confined to `rust/src/coolprop.rs` (the FFI boundary); `lib.rs` has none.
 Every `unsafe` block carries a `// SAFETY:` comment (rationale + error modes),
@@ -84,9 +95,8 @@ enforced by `clippy::undocumented_unsafe_blocks`. The safe wrapper uses an RAII
 buffers. libCoolProp is loaded at runtime via `libloading`, so the same plugin
 works on macOS/Linux/Windows by shipping that platform's `.dylib`/`.so`/`.dll`.
 
-HumidAir caveat: `humid_air` is correct and GIL-free, but `HAPropsSI` is internally
-more serialized than the Fluid path — it parallelizes only ~1.25x (vs ~2.5x) and is
-much slower per call (iterative solver). Still better than the Python path.
+Humid-air caveat: `humid_air` is correct and GIL-free, but CoolProp's humid-air
+solver is internally iterative and more serialized than the fluid path.
 
 ## Caveats
 
@@ -100,12 +110,9 @@ much slower per call (iterative solver). Still better than the Python path.
   (bumping `pyo3-polars` to the new Rust polars) is needed only if polars bumps the ffi
   ABI **major** — rare and announced. `self_check()` evaluates a known value at first use,
   so a genuinely incompatible polars surfaces as a clear error, never a silent wrong result.
-- **Version match**: CoolProp enum integers can differ across major versions. `encomp`
-  requires Python `coolprop>=8.0.0,<9`, while the bundled Rust lib is built at 8.0.0.
-  The Rust side resolves the *output* parameter index via CoolProp at runtime, never
-  hardcoded. The one integer that crosses from Python into the bundled lib is the
-  `input_pairs` enum index, computed by the Python `coolprop` (`generate_update_pair`);
-  that enum is stable within a CoolProp major, which is why the requirement caps it.
+- **One version source**: `encomp/coolprop/_build_info.py` pins the bundled version and
+  upstream commit. Parameter indexes and input-pair enum values are resolved at runtime
+  from that bundled library; no numeric CoolProp enum is hardcoded in Python or Rust.
 - **One property per node (no output batching).** Each `fluid(...)` / `humid_air(...)` is an
   independent plugin node, so selecting K properties of one state runs K flashes of it —
   Polars cannot reuse (CSE) the shared flash across opaque plugin nodes. Independent
@@ -113,9 +120,10 @@ much slower per call (iterative solver). Still better than the Python path.
 
 ## Build / install
 
-This is part of `encomp`: the whole package (Python + this compiled plugin +
-bundled `libCoolProp`) ships in ONE per-platform wheel. `libCoolProp` is built from
-source once and bundled, so every build starts with `scripts/build_libcoolprop.py`.
+This is part of `encomp`: the whole package (Python + the dual-purpose `_internal`
+artifact + bundled `libCoolProp`) ships in one per-platform wheel. `libCoolProp` is
+built from source once and bundled, so every build starts with
+`scripts/build_libcoolprop.py`.
 
 Dev (from the repo root, editable):
 
@@ -148,6 +156,6 @@ PYO3_PYTHON=$(pwd)/.venv/bin/python cargo test --manifest-path rust/Cargo.toml -
 ## Files
 
 - `encomp/coolprop/__init__.py` — public Python API (`fluid`, `water`, `humid_air`).
-- `rust/src/lib.rs` — the `cp_evaluate` / `ha_evaluate` plugin expressions (crate at repo root).
+- `rust/src/lib.rs` — the PyO3 scalar API plus `cp_evaluate` / `ha_evaluate` plugin expressions.
 - `rust/src/coolprop.rs` — the CoolProp C-API bindings + thread-safety model (all `unsafe`).
 - `scripts/build_libcoolprop.py` — builds + bundles CoolProp's shared library.

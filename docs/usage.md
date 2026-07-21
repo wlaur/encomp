@@ -716,7 +716,7 @@ density = Fluid("HEOS::CO2[0.7]&O2[0.3]", P=Q(10, "bar"), T=Q(300, "K")).assume_
 
 ### Using vector inputs
 
-CoolProp evaluates vector inputs in a single backend call.
+CoolProp evaluates vector inputs through encomp's batched native plugin path.
 The inputs are {py:class}`encomp.units.Quantity` instances with vector magnitudes: one-dimensional NumPy arrays or `pl.Series`, all of the same length (or a single scalar, which is repeated).
 
 ```python
@@ -757,7 +757,7 @@ Missing or out-of-range results surface as `NaN` (for a numpy magnitude) or `nul
 ### Parallel evaluation with Polars
 
 {py:class}`encomp.fluids.Fluid` properties also accept `Quantity`-wrapped Polars expressions (`pl.Expr`) and return a `pl.Expr`. Independent property nodes in one `select` / `with_columns` / `collect()` (eager or lazy) are evaluated in parallel by the `encomp.coolprop` plugin -- a native Rust extension over the CoolProp C-API that runs without holding the GIL.
-`pl.Expr` (lazy) inputs are evaluated exclusively through this plugin (there is no `map_batches` fallback). Eager `float` / NumPy / `pl.Series` inputs use the Python CoolProp path, except vector magnitudes of at least `EAGER_PLUGIN_MIN_SIZE` (1000) elements, which also route through the plugin (results are bit-identical when the installed `coolprop` matches the bundled build, 8.0.0).
+`encomp` bundles CoolProp once. Scalar inputs use a direct PyO3 bridge with per-thread cached native states; NumPy arrays, `pl.Series`, and `pl.Expr` inputs use the batched plugin at every size (there is no Python `CoolProp` or `map_batches` fallback). `EAGER_PLUGIN_MIN_SIZE` is retained only as a deprecated no-op.
 
 ```python
 import polars as pl
