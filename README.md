@@ -44,7 +44,9 @@ The remaining modules (`encomp.gases`, `encomp.conversion`, `encomp.constants`, 
 pip install encomp
 ```
 
-`encomp` ships as a single per-platform wheel that bundles the compiled Rust plugin and the CoolProp shared library, so supported platforms have nothing to build. Wheels are provided for Windows (x86_64), Linux (x86_64 and arm64), and macOS (Apple Silicon only). PyPI does not publish an sdist; unsupported platforms, including Intel Macs, need a build from the git repository; see [Tests](#tests).
+`encomp` ships as a single per-platform wheel containing its dual-purpose native Rust artifact and one bundled CoolProp shared library, so supported platforms have nothing to build and do not install the Python `CoolProp` package. Wheels are provided for Windows (x86_64), Linux (x86_64 and arm64), and macOS (Apple Silicon only). PyPI does not publish an sdist; unsupported platforms, including Intel Macs, need a build from the git repository; see [Tests](#tests).
+
+On the macOS arm64 wheel measured for the native-only change, the resolver's combined wheel download falls from 19.61 MB (`encomp` plus the separate Python CoolProp wheel) to 9.08 MB for `encomp` alone, a 53.7% reduction. The `encomp` artifact itself grows by about 35 KB for the scalar bridge and bundled license; removing the separate 10.57 MB wheel is where the installation-size saving comes from.
 
 ## The `Quantity` class
 
@@ -378,7 +380,7 @@ w: Water[pl.Expr] = Water(P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K"))
 df.select(w.D.m.alias("rho"), w.H.m.alias("h"), w.S.m.alias("s"))
 ```
 
-`pl.Expr` (lazy) inputs are evaluated exclusively through the plugin (there is no `map_batches` fallback). Eager `float` / NumPy / `pl.Series` inputs use the Python CoolProp path, except arrays of at least `EAGER_PLUGIN_MIN_SIZE` (1000) elements, which also route through the plugin. The two paths are verified to agree on value, `NaN`/null handling, and dtype; results are bit-identical when the installed `coolprop` matches the bundled build (8.0.0).
+`encomp` contains one thermodynamic implementation: the bundled CoolProp shared library. Scalars call it through a direct PyO3 bridge with a bounded per-thread state cache; NumPy arrays, `pl.Series`, and `pl.Expr` inputs use the batched Polars plugin path at every size. Both private interfaces live in the same `_internal` artifact and share the same loaded library. The Python `CoolProp` package is not installed or imported. `EAGER_PLUGIN_MIN_SIZE` remains temporarily as a deprecated no-op for compatibility.
 
 The plugin is also usable directly on any Polars expression, independent of the `Fluid` class (the `encomp.coolprop` package):
 
@@ -402,15 +404,9 @@ df.select(
 
 ### Implementation
 
-The GIL is not the only serialization point: the CoolProp C-API takes a global handle-table lock on every call, so per-row calls serialize even in Rust. The plugin uses the batched C-API (`AbstractState_update_and_1_out`): one call per chunk, the handle lock taken once at construction, then the flash loop runs lock-free in C++. Independent chunks and independent property expressions parallelize.
+Scalar calls reuse a bounded thread-local cache of native `AbstractState` handles; a handle is never shared between threads. Arrays use the batched C API (`AbstractState_update_and_1_out`), with handle-table locking confined to construction and destruction. The flash loop itself runs lock-free in C++, so independent chunks and property expressions can execute in parallel.
 
-Benchmarks (CoolProp 8.0, 14-thread pool):
-
-| workload | vs `map_batches` | notes |
-| --- | --- | --- |
-| single property `D`, 1M rows | ~2.1x | also ~2x faster than vectorized `PropsSI` |
-| 4 independent properties, one `collect()`, 1M rows | ~4.6x | `map_batches` is serial on the GIL; the plugin runs ~4 cores |
-| 8 enthalpy evaluations, 1M rows | ~4.9x | ~6 cores vs 1, roughly half the peak memory |
+On the normal-GIL macOS benchmark used for this change, public scalar calls improved by 4-33%. The existing 100k-row HEOS array path changed from 470.49 ms to 469.92 ms, while three independent properties changed from 534.06 ms to 537.51 ms (+0.6%). See `encomp/coolprop/README.md` and `scripts/benchmark_coolprop.py` for the full reproducible measurements.
 
 Each `fluid(...)` / `humid_air(...)` is an independent plugin node, so selecting *K* properties of one state runs *K* flashes of it — Polars cannot reuse the shared flash across opaque plugin nodes. Independent properties still parallelize, so this is total work, not wall-clock. See `encomp/coolprop/README.md` for the design, thread-safety model, and caveats.
 
@@ -439,7 +435,7 @@ For array magnitudes, convert the expression to a NumPy-aware function with `enc
 
 ## Tests
 
-Development checkouts build the native CoolProp plugin locally. Install Rust, CMake, git, and a C++ compiler, then from the repository root run:
+Development checkouts build the dual-purpose native CoolProp artifact locally. Install Rust, CMake, git, and a C++ compiler, then from the repository root run:
 
 ```bash
 python scripts/build_libcoolprop.py
@@ -447,7 +443,7 @@ uv sync --all-extras --all-groups
 uv run pytest
 ```
 
-See `encomp/coolprop/README.md` for the plugin build details.
+See `encomp/coolprop/README.md` for native build details.
 
 The test suite ships inside the wheel, so an installed `encomp` doubles as its own post-install smoke test (it needs only `pytest` and `hypothesis`):
 
