@@ -75,12 +75,13 @@ def _grid(name: str, kwargs: dict[str, Any]) -> pl.DataFrame:
     return pl.DataFrame({"P": pp.ravel(), "T": tt.ravel()})
 
 
-def _evaluate(name: str, kwargs: dict[str, Any], prop: str, mode: str, df: pl.DataFrame) -> np.ndarray:
+def _evaluate_native(name: str, kwargs: dict[str, Any], prop: str, df: pl.DataFrame) -> np.ndarray:
     clear_expr_evaluation_cache()
-    if mode == "native":
-        expression = cast(Any, encomp_coolprop.fluid)(prop, "P", "T", name=name, **kwargs)
-        return df.select(expression.alias("x"))["x"].to_numpy().astype(float)
+    expression = cast(Any, encomp_coolprop.fluid)(prop, "P", "T", name=name, **kwargs)
+    return df.select(expression.alias("x"))["x"].to_numpy().astype(float)
 
+
+def _evaluate_oracle(name: str, kwargs: dict[str, Any], prop: str, df: pl.DataFrame) -> np.ndarray:
     # Independent test-only Python CoolProp numerical reference. Explicit
     # composition is rendered into the equivalent name syntax for PropsSI.
     composition = kwargs.get("composition")
@@ -96,8 +97,8 @@ def test_native_python_oracle_parity(label: str, name: str, kwargs: dict[str, An
 
     df = _grid(name, kwargs)
     for prop in PROPS:
-        oracle = _evaluate(name, kwargs, prop, "oracle", df)
-        native = _evaluate(name, kwargs, prop, "native", df)
+        oracle = _evaluate_oracle(name, kwargs, prop, df)
+        native = _evaluate_native(name, kwargs, prop, df)
         assert oracle.shape == native.shape
 
         # the two paths must agree on WHICH points are finite -- otherwise a path that
@@ -207,21 +208,14 @@ def test_native_python_oracle_parity_input_pairs() -> None:
 
     for second, unit, vals in [("HMASS", "J/kg", h), ("SMASS", "J/kg/K", s)]:
         df = pl.DataFrame({"P": p, second: vals})
-
-        def density(mode: str, second: str = second, unit: str = unit, df: pl.DataFrame = df) -> np.ndarray:
-            clear_expr_evaluation_cache()
-            second_point: dict[str, Any]
-            if mode == "native":
-                second_point = {second: Q(pl.col(second), unit)}
-                fluid = Fluid("HEOS::Water", P=Q(pl.col("P"), "Pa"), **second_point)
-                return df.select(fluid.D.m.alias("d"))["d"].to_numpy().astype(float)
-            return np.asarray(
-                CP.PropsSI("DMASS", "P", df["P"].to_numpy(), second, df[second].to_numpy(), "HEOS::Water"),
-                dtype=float,
-            )
-
-        oracle = density("oracle")
-        native = density("native")
+        clear_expr_evaluation_cache()
+        second_point: dict[str, Any] = {second: Q(pl.col(second), unit)}
+        fluid = Fluid("HEOS::Water", P=Q(pl.col("P"), "Pa"), **second_point)
+        native = df.select(fluid.D.m.alias("d"))["d"].to_numpy().astype(float)
+        oracle = np.asarray(
+            CP.PropsSI("DMASS", "P", df["P"].to_numpy(), second, df[second].to_numpy(), "HEOS::Water"),
+            dtype=float,
+        )
         finite_oracle, finite_native = np.isfinite(oracle), np.isfinite(native)
         assert np.array_equal(finite_oracle, finite_native), (
             f"P,{second}: finite/NaN masks differ ({int((finite_oracle != finite_native).sum())} points)"
@@ -232,7 +226,7 @@ def test_native_python_oracle_parity_input_pairs() -> None:
         assert rel.max() <= RTOL, f"P,{second}: max rel {rel.max():.2e}"
 
 
-def test_eager_rust_non_pt_parity() -> None:
+def test_eager_native_non_pt_parity() -> None:
     """The eager plugin's non-PT canonical order matches the oracle PropsSI path."""
     assert encomp_coolprop.self_check()
 
