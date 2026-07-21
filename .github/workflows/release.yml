@@ -225,7 +225,7 @@ jobs:
     name: Python 3.14t smoke (experimental)
     runs-on: ubuntu-latest
     # This preparatory signal must not block normal-GIL releases. Python 3.15t wheels
-    # remain gated on a released Polars/PyO3 stack and the full verification in PLAN.md.
+    # remain gated on a released Polars/PyO3 stack and full free-threaded verification.
     continue-on-error: true
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
