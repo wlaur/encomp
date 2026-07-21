@@ -304,10 +304,11 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          # install the PREBUILT encomp wheel (abi3 cp313 installs on 3.14 too) by
-          # name so it is not rebuilt from source; deps + test deps come from PyPI
-          version=$(python -c 'from pathlib import Path; wheels = sorted(Path("wheelhouse").glob("encomp-*.whl")); assert len(wheels) == 1, f"expected exactly one encomp wheel, found {len(wheels)}"; print(wheels[0].name.split("-")[1])')
-          pip install --find-links wheelhouse "encomp==$version" pytest hypothesis
+          # Install the downloaded artifact by its exact path. PR builds deliberately
+          # retain the current released version, so asking pip for `encomp==$version`
+          # can select that same-version wheel from PyPI instead of this candidate.
+          wheel=$(python -c 'from pathlib import Path; wheels = sorted(Path("wheelhouse").glob("encomp-*.whl")); assert len(wheels) == 1, f"expected exactly one encomp wheel, found {len(wheels)}"; print(wheels[0])')
+          pip install "$wheel" pytest hypothesis
           python - <<'PY'
           import importlib.metadata as metadata
           import importlib.util
