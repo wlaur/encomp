@@ -2,7 +2,6 @@
 # pyright: reportConstantRedefinition=false, reportPrivateUsage=false
 
 import logging
-from collections.abc import Callable
 from typing import Any, assert_type, cast
 
 import numpy as np
@@ -239,7 +238,10 @@ def test_humid_air_out_of_range_logs_warning(caplog: pytest.LogCaptureFixture, m
 
     assert np.isnan(float(value.m))
     assert 'CoolProp could not calculate "W" for fluid "Humid air"' in caplog.text
-    assert "outside the range of validity" in caplog.text
+    # The C HAPropsSI interface exposes details only through a process-global error
+    # outbox. The native bridge deliberately does not read it, so concurrent failures
+    # cannot attach another thread's message to this warning.
+    assert "native evaluation returned no finite result" in caplog.text
 
     caplog.clear()
     monkeypatch.setattr(SETTINGS, "ignore_coolprop_warnings", True)
@@ -617,21 +619,21 @@ def test_polars_fluids() -> None:
 
 
 def _count_water_h_evaluations(monkeypatch: pytest.MonkeyPatch) -> list[int]:
-    # pl.Expr inputs are built into a rust-plugin expr by _rust_expr; the expr cache
-    # dedups identical requests *before* that call, so counting _rust_expr invocations
+    # pl.Expr inputs are built into a native plugin expression; the expression cache
+    # deduplicates identical requests before that call, so counting invocations
     # counts the distinct (cache-missing) expressions actually built.
     calls = [0]
-    original_rust_expr = CoolPropFluid._rust_expr
+    original_plugin_expr = CoolPropFluid._plugin_expr
 
-    def counted_rust_expr(
+    def counted_plugin_expr(
         self: CoolPropFluid[pl.Expr], output: str, points: tuple[tuple[str, pl.Expr], ...]
     ) -> pl.Expr:
         if getattr(self, "name", "") == "IF97::Water" and output == "H":
             calls[0] += 1
 
-        return cast(pl.Expr, cast(Any, original_rust_expr)(self, output, points))
+        return cast(pl.Expr, cast(Any, original_plugin_expr)(self, output, points))
 
-    monkeypatch.setattr(CoolPropFluid, "_rust_expr", counted_rust_expr)
+    monkeypatch.setattr(CoolPropFluid, "_plugin_expr", counted_plugin_expr)
 
     return calls
 
@@ -693,8 +695,7 @@ def test_polars_fluids_rust_backend() -> None:
     T = np.linspace(300.0, 500.0, 7)
     df = pl.DataFrame({"P": P, "T": T})
 
-    # pl.Expr inputs go through the rust plugin; eager numpy inputs go through the
-    # Python CoolProp path. The two must match to float precision.
+    # pl.Expr and eager NumPy inputs both use the native batch path and must match.
     clear_expr_evaluation_cache()
     w = Water[pl.Expr](P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K"))
     rust = df.select(w.D.m.alias("D"), w.H.m.alias("H"), w.S.m.alias("S"), w.C.m.alias("C"))
@@ -710,86 +711,74 @@ def test_polars_fluids_rust_backend() -> None:
     assert bad.is_null().all()
 
 
-def _eager_both_paths(
-    monkeypatch: pytest.MonkeyPatch, build: Callable[[], Q[Any, Any]]
-) -> tuple[np.ndarray, np.ndarray]:
-    # run build() once forcing the Python path and once forcing the rust plugin, by
-    # moving the eager size threshold above / below the input length.
-    monkeypatch.setattr("encomp.fluids.EAGER_PLUGIN_MIN_SIZE", 10**18)
-    py = build().m
-    monkeypatch.setattr("encomp.fluids.EAGER_PLUGIN_MIN_SIZE", 1)
-    ru = build().m
-    return py, ru
-
-
-def _assert_eager_parity(label: str, py: np.ndarray, ru: np.ndarray) -> None:
-    assert py.dtype == np.float64 and ru.dtype == np.float64, f"{label}: dtype {py.dtype}/{ru.dtype}"
-    assert not np.isinf(py).any() and not np.isinf(ru).any(), f"{label}: inf present"
-    assert np.array_equal(np.isnan(py), np.isnan(ru)), f"{label}: NaN positions differ"
-    finite = ~np.isnan(py)
-    assert np.allclose(py[finite], ru[finite], rtol=1e-9, atol=1e-12), f"{label}: values differ"
-
-
-def test_eager_plugin_parity(monkeypatch: pytest.MonkeyPatch) -> None:
-    # eager numpy arrays >= EAGER_PLUGIN_MIN_SIZE route through the rust plugin; the
-    # result must match the Python CoolProp path exactly -- dtype (float64), value, and
-    # NaN/inf/invalid handling -- including injected non-finite / out-of-range rows.
+def test_eager_plugin_matches_direct_scalar_bridge() -> None:
+    # Every eager array size now uses the plugin. Compare it with the independent
+    # direct-PyO3 scalar interface, including invalid rows and special configs.
     rng = np.random.default_rng(0)
-    n = 1500
+    n = 24
     P = np.full(n, 50e5)
     T = 300.0 + 250.0 * rng.random(n)
     T[0] = np.nan  # non-finite input -> NaN
     P[1] = -1.0  # invalid (negative pressure) -> NaN
     T[2] = 50.0  # below the IF97 range -> NaN
 
-    fluid_cases = {
-        "IF97": lambda: Water(P=Q(P, "Pa"), T=Q(T, "K")).D,
-        "HEOS": lambda: Fluid("HEOS::Water", P=Q(P, "Pa"), T=Q(T, "K")).D,
-        "assumed-phase": lambda: Fluid("HEOS::Water", P=Q(P, "Pa"), T=Q(T, "K")).assume_phase("gas").D,
-        "composition": lambda: (
-            Fluid("HEOS", composition={"CO2": 0.5, "O2": 0.5}, P=Q(P, "Pa"), T=Q(T, "K"))
-            .assume_phase("supercritical_gas")
-            .D
-        ),
-    }
-    for label, build in fluid_cases.items():
-        py, ru = _eager_both_paths(monkeypatch, build)
-        _assert_eager_parity(label, py, ru)
+    def compare_array_and_scalars(array: np.ndarray, scalars: np.ndarray) -> None:
+        assert array.dtype == np.float64
+        assert not np.isinf(array).any()
+        assert np.array_equal(np.isnan(array), np.isnan(scalars))
+        finite = np.isfinite(array)
+        assert np.allclose(array[finite], scalars[finite], rtol=1e-9, atol=1e-12)
 
-    # humid air: the plugin loops HAPropsSI per row, matching evaluate_multiple_separately
+    array = cast(np.ndarray, Water(P=Q(P, "Pa"), T=Q(T, "K")).D.m)
+    scalars = np.array([Water(P=Q(float(p), "Pa"), T=Q(float(t), "K")).D.m for p, t in zip(P, T, strict=True)])
+    compare_array_and_scalars(array, scalars)
+
+    array = cast(
+        np.ndarray,
+        Fluid("HEOS", composition={"CO2": 0.5, "O2": 0.5}, P=Q(P, "Pa"), T=Q(T, "K"))
+        .assume_phase("supercritical_gas")
+        .D.m,
+    )
+    scalars = np.array(
+        [
+            Fluid("HEOS", composition={"CO2": 0.5, "O2": 0.5}, P=Q(float(p), "Pa"), T=Q(float(t), "K"))
+            .assume_phase("supercritical_gas")
+            .D.m
+            for p, t in zip(P, T, strict=True)
+        ]
+    )
+    compare_array_and_scalars(array, scalars)
+
     Pa = np.full(n, 101325.0)
     Tdb = 290.0 + 20.0 * rng.random(n)
     R = 0.2 + 0.6 * rng.random(n)
     Tdb[0] = np.nan
     R[1] = 5.0  # relative humidity > 1 -> invalid
-    py, ru = _eager_both_paths(monkeypatch, lambda: HumidAir(P=Q(Pa, "Pa"), T=Q(Tdb, "K"), R=Q(R, "")).W)
-    _assert_eager_parity("humid-air", py, ru)
+    array = cast(np.ndarray, HumidAir(P=Q(Pa, "Pa"), T=Q(Tdb, "K"), R=Q(R, "")).W.m)
+    scalars = np.array(
+        [
+            HumidAir(P=Q(float(p), "Pa"), T=Q(float(t), "K"), R=Q(float(r), "")).W.m
+            for p, t, r in zip(Pa, Tdb, R, strict=True)
+        ]
+    )
+    compare_array_and_scalars(array, scalars)
 
 
-def test_eager_plugin_threshold_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
-    # below EAGER_PLUGIN_MIN_SIZE -> Python (evaluate_multiple); at/above -> rust plugin
+def test_eager_plugin_threshold_is_deprecated_noop(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("encomp.fluids.EAGER_PLUGIN_MIN_SIZE", 1000)
-    counts = {"rust": 0, "multiple": 0}
-    orig_rust = CoolPropFluid._rust_eager
-    orig_mult = CoolPropFluid.evaluate_multiple
+    calls = 0
+    original_array = CoolPropFluid._evaluate_array
 
     def spy_rust(self: CoolPropFluid[Any], output: str, points: tuple[tuple[str, np.ndarray], ...]) -> np.ndarray:
-        counts["rust"] += 1
-        return cast(np.ndarray, cast(Any, orig_rust)(self, output, points))
+        nonlocal calls
+        calls += 1
+        return cast(np.ndarray, cast(Any, original_array)(self, output, points))
 
-    def spy_mult(self: CoolPropFluid[Any], output: str, *points: tuple[str, np.ndarray]) -> np.ndarray:
-        counts["multiple"] += 1
-        return cast(np.ndarray, cast(Any, orig_mult)(self, output, *points))
-
-    monkeypatch.setattr(CoolPropFluid, "_rust_eager", spy_rust)
-    monkeypatch.setattr(CoolPropFluid, "evaluate_multiple", spy_mult)
-
-    Water(P=Q(np.full(999, 50e5), "Pa"), T=Q(np.full(999, 400.0), "K")).D.m
-    assert counts == {"rust": 0, "multiple": 1}
-
-    counts["rust"] = counts["multiple"] = 0
-    Water(P=Q(np.full(1000, 50e5), "Pa"), T=Q(np.full(1000, 400.0), "K")).D.m
-    assert counts == {"rust": 1, "multiple": 0}
+    monkeypatch.setattr(CoolPropFluid, "_evaluate_array", spy_rust)
+    Water(P=Q(np.full(2, 50e5), "Pa"), T=Q(np.full(2, 400.0), "K")).D.m
+    monkeypatch.setattr("encomp.fluids.EAGER_PLUGIN_MIN_SIZE", 10**18)
+    Water(P=Q(np.full(3, 50e5), "Pa"), T=Q(np.full(3, 400.0), "K")).D.m
+    assert calls == 2
 
 
 def test_polars_dtype_preservation() -> None:
@@ -894,13 +883,13 @@ def test_assume_phase() -> None:
         Fluid(mix, P=Q(50.0, "bar"), T=Q(350.0, "degC")).assume_phase(cast(Any, "plasma"))
 
 
-def test_assume_phase_changes_value(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_assume_phase_changes_value() -> None:
     # test_assume_phase only checks single-phase regions where assumed == auto, so a
     # regression that silently dropped assume_phase would pass it. Here a DISCRIMINATING
     # state (HEOS::Water at 1 bar, 110 C) is auto-phase GAS (steam, ~0.57 kg/m3); forcing
     # "liquid" must return the metastable subcooled-liquid root (~950 kg/m3). This proves
-    # assume_phase actually takes effect, and that the scalar low-level path and the
-    # large-eager rust path agree on the forced value. (An independent CoolProp
+    # assume_phase actually takes effect, and that the direct scalar and batch paths
+    # agree on the forced value. (An independent CoolProp
     # specify_phase reference for the same state lives in test_coolprop_plugin.)
     auto = Water(P=Q(1.0, "bar"), T=Q(110.0, "degC")).D.to("kg/m3")
     assert float(auto.m) < 10.0  # auto-phase water here is steam
@@ -909,8 +898,7 @@ def test_assume_phase_changes_value(monkeypatch: pytest.MonkeyPatch) -> None:
     assert float(scalar.m) > 900.0  # forcing liquid gives the subcooled-liquid root
     assert float(scalar.m) != approx(float(auto.m), rel=0.5)  # unmistakably not the auto (steam) value
 
-    # same config, large-eager array -> rust plugin path; must match the scalar low-level path
-    monkeypatch.setattr("encomp.fluids.EAGER_PLUGIN_MIN_SIZE", 1000)
+    # same config, eager array -> plugin path; must match the direct scalar path
     n = 1200
     eager = (
         Fluid("HEOS::Water", P=Q(np.full(n, 1e5), "Pa"), T=Q(np.full(n, 383.15), "K"))
@@ -977,8 +965,8 @@ def test_composition() -> None:
 
 def test_assume_phase_if97_noop(caplog: pytest.LogCaptureFixture) -> None:
     # Water uses IF97, which is region-explicit and ignores an assumed phase:
-    # assume_phase must be a no-op (warn + keep the fast vectorized path), not a
-    # pessimisation. The returned value must equal the auto-phase value.
+    # assume_phase must be a no-op with a warning. The returned value must equal
+    # the automatic-phase value.
     auto = Water(P=Q(50.0, "bar"), T=Q(150.0, "degC")).D
     w = Water(P=Q(50.0, "bar"), T=Q(150.0, "degC"))
     with caplog.at_level(logging.WARNING):
@@ -1046,13 +1034,12 @@ def test_composition_rejects_non_float_fractions() -> None:
 
 def test_incompressible_mixture_all_paths_agree() -> None:
     # regression: an INCOMP concentration mixture (INCOMP::MEG[0.5], ...) used to lose its
-    # concentration on the rust path (expr / large-eager), silently diverging from the
-    # PropsSI scalar/small-eager path. All paths must agree, mass- AND volume-based.
+    # concentration identically in scalar, eager-array, and expression forms.
     assert encomp_coolprop.self_check()
     for name, temp in [("INCOMP::MEG[0.5]", 300.0), ("INCOMP::MITSW[0.035]", 290.0), ("INCOMP::AEG[0.4]", 300.0)]:
         pressure = np.full(6, 3e5)
         temperature = np.linspace(temp - 12.0, temp + 12.0, 6)
-        ref = Fluid(name, P=Q(pressure, "Pa"), T=Q(temperature, "K")).D.m  # small-eager -> PropsSI
+        ref = Fluid(name, P=Q(pressure, "Pa"), T=Q(temperature, "K")).D.m
 
         clear_expr_evaluation_cache()
         expr = (
@@ -1062,10 +1049,10 @@ def test_incompressible_mixture_all_paths_agree() -> None:
         )
         assert np.asarray(expr, dtype=float) == approx(ref, rel=1e-4), f"expr {name}"
 
-        clear_expr_evaluation_cache()  # large-eager (>= EAGER_PLUGIN_MIN_SIZE) -> plugin
+        clear_expr_evaluation_cache()
         big = Fluid(name, P=Q(np.full(1200, 3e5), "Pa"), T=Q(np.full(1200, temp), "K")).D.m
         small = float(Fluid(name, P=Q(3e5, "Pa"), T=Q(temp, "K")).D.m)
-        assert float(np.asarray(big, dtype=float)[0]) == approx(small, rel=1e-4), f"large-eager {name}"
+        assert float(np.asarray(big, dtype=float)[0]) == approx(small, rel=1e-4), f"array {name}"
 
 
 def test_dimensional_property_missing_is_nan_never_zero() -> None:
@@ -1093,14 +1080,14 @@ def test_dimensional_property_missing_is_nan_never_zero() -> None:
         present = series.drop_nulls().to_numpy()
         assert np.all(np.isfinite(present)) and not np.any(present == 0.0), "present rows: non-zero, never 0.0"
 
-    reps = 300  # 4 * 300 = 1200 >= EAGER_PLUGIN_MIN_SIZE -> plugin
+    reps = 300  # exercise the same native array path with a larger vector
     big_p, big_t, big_missing = np.tile(pressure, reps), np.tile(temperature, reps), int(missing.sum()) * reps
 
-    # numpy magnitude: eager (PropsSI) and large-eager (plugin)
+    # NumPy magnitudes of different lengths use the same native array path.
     check_numpy(Water(P=Q(pressure, "Pa"), T=Q(temperature, "K")).D.m, missing)
     check_numpy(Water(P=Q(big_p, "Pa"), T=Q(big_t, "K")).D.m, np.tile(missing, reps))
 
-    # pl.Series magnitude: small (PropsSI) and large (plugin) -- missing surfaces as null
+    # pl.Series magnitudes of different lengths use the same native array path.
     check_polars(
         Water[pl.Series](P=Q(pl.Series(pressure), "Pa"), T=Q(pl.Series(temperature), "K")).D.m, int(missing.sum())
     )
