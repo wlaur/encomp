@@ -25,6 +25,7 @@ phase by ``assume_phase``.
 
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import logging
 import math
@@ -32,18 +33,47 @@ import sys
 import warnings
 from functools import cache, lru_cache
 from pathlib import Path
-from typing import Any, Literal, TypeIs, cast, get_args
+from typing import Literal, Protocol, TypeIs, cast, get_args
 
-import CoolProp.CoolProp as _CoolProp
 import polars as pl
 from polars.plugins import register_plugin_function
 
 from .._polars_dtype import canonical_unit_string as _canonical_unit_string
 
-# CoolProp ships incomplete type stubs; treat the module as Any (mirrors encomp).
-_cp: Any = _CoolProp
-
 _LOGGER = logging.getLogger(__name__)
+
+
+class _NativeModule(Protocol):
+    """Typed view of the private PyO3 API in ``_internal``."""
+
+    def initialize(self, lib_path: str) -> None: ...
+    def parameter_index(self, name: str) -> int: ...
+    def parameter_information(self, name: str, field: str) -> str: ...
+    def resolve_input_pair(self, name1: str, name2: str) -> tuple[int, bool]: ...
+    def resolve_fluid_name(self, name: str) -> tuple[str, str, list[float] | None]: ...
+    def validate_fluid(self, backend: str, fluid: str, fractions: list[float] | None = None) -> None: ...
+    def prepare_fluid(
+        self,
+        backend: str,
+        fluid: str,
+        fractions: list[float] | None = None,
+        phase: str | None = None,
+    ) -> int: ...
+    def prepare_humid_air(self, output: str, name1: str, name2: str, name3: str) -> int: ...
+    def fluid_scalar(
+        self,
+        config_id: int,
+        input_pair: int,
+        value1: float,
+        value2: float,
+        output: int,
+    ) -> float: ...
+    def humid_air_scalar(self, config_id: int, value1: float, value2: float, value3: float) -> float: ...
+    def lib_version(self) -> str: ...
+    def clear_scalar_cache(self) -> None: ...
+    def scalar_cache_info(self) -> tuple[int, int, int, int, int]: ...
+    def handle_counts(self) -> tuple[int, int]: ...
+
 
 # mole fractions may sum this far from 1 (float rounding) before it is an error
 COMPOSITION_SUM_TOLERANCE = 0.01
@@ -454,6 +484,20 @@ def lib_path() -> str:
 
 
 @lru_cache(maxsize=1)
+def _native() -> _NativeModule:
+    """Import and initialize the private PyO3 side of the dual-purpose artifact.
+
+    The import stays lazy so ReadTheDocs can import the source tree without a locally
+    built native artifact. Released wheels always contain both this module and the
+    bundled library.
+    """
+
+    module = cast(_NativeModule, importlib.import_module("encomp.coolprop._internal"))
+    module.initialize(lib_path())
+    return module
+
+
+@lru_cache(maxsize=1)
 def _plugin_path() -> str:
     """Absolute path to the compiled plugin extension (``_internal.*``).
 
@@ -479,12 +523,14 @@ def _plugin_path() -> str:
 
 @cache
 def _resolve_pair(name1: str, name2: str) -> tuple[int, bool]:
-    # CoolProp's generate_update_pair gives the canonical input_pairs index and
-    # value order; the swap decision is value-independent, so resolve it once.
-    pair, a, _ = _cp.generate_update_pair(_cp.get_parameter_index(name1), 1.0, _cp.get_parameter_index(name2), 2.0)
-    if int(pair) == 0:
-        raise ValueError(f"unsupported CoolProp input pair: {name1!r}, {name2!r}")
-    return int(pair), (a == 2.0)
+    # Rust normalizes aliases with the bundled library's parameter indexes, matches
+    # a reviewed pair table, and obtains the pair enum from that same library.
+    return _native().resolve_input_pair(name1, name2)
+
+
+@cache
+def _parameter_index(name: str) -> int:
+    return _native().parameter_index(name)
 
 
 def _as_expr(x: str | pl.Expr) -> pl.Expr:
@@ -513,7 +559,7 @@ def _expected_si_unit(name: str) -> str:
     metadata, so the plugin can accept a unit-typed
     input by comparing the two strings for equality.
     """
-    return _canonical_unit_string(_cp.get_parameter_information(_cp.get_parameter_index(name), "units"))
+    return _canonical_unit_string(_native().parameter_information(name, "units"))
 
 
 @cache
@@ -610,14 +656,10 @@ def resolve_fluid_spec(
         fractions: list[float] | None = mole_fractions
         is_concentration = False
     else:
-        backend_raw, fluid_str = _cp.extract_backend(name)
-        backend = "HEOS" if backend_raw == "?" else backend_raw
-        species, fracs = _cp.extract_fractions(fluid_str)
-        fluids = "&".join(species)
-        # extract_fractions validates + returns fractions only when the name carries them; a
-        # single species with a fraction is an incompressible concentration (absolute basis).
-        fractions = [float(x) for x in fracs] if fracs else None
-        is_concentration = fractions is not None and len(species) == 1
+        backend, fluids, fractions = _native().resolve_fluid_name(name)
+        # The native parser validates + returns fractions only when the name carries
+        # them; one remaining species is an incompressible concentration (absolute basis).
+        is_concentration = fractions is not None and "&" not in fluids
     # mixture mole fractions must sum to 1; a concentration is absolute and passes through
     if fractions is not None and not is_concentration:
         total = sum(fractions)
@@ -628,6 +670,58 @@ def resolve_fluid_spec(
             )
         fractions = [x / total for x in fractions]
     return backend, fluids, fractions
+
+
+@cache
+def _prepared_fluid_config(
+    backend: str,
+    fluids: str,
+    fractions: tuple[float, ...] | None,
+    phase: Phase | None,
+) -> int:
+    return _native().prepare_fluid(backend, fluids, None if fractions is None else list(fractions), phase)
+
+
+@cache
+def _prepared_humid_air_config(output: str, name1: str, name2: str, name3: str) -> int:
+    return _native().prepare_humid_air(output, name1, name2, name3)
+
+
+def _fluid_scalar(  # pyright: ignore[reportUnusedFunction] - private sibling-module bridge
+    output: str,
+    name1: str,
+    value1: float,
+    name2: str,
+    value2: float,
+    *,
+    name: CName,
+    assume_phase: AssumedPhase | None = None,
+    composition: Composition | None = None,
+) -> float:
+    """Private direct native scalar adapter used by :mod:`encomp.fluids`."""
+
+    pair, swap = _resolve_pair(name1, name2)
+    a, b = (value2, value1) if swap else (value1, value2)
+    backend, fluids, fractions = resolve_fluid_spec(name, composition)
+    phase = _phase_from_assumed(assume_phase) if assume_phase is not None else None
+    fraction_key = None if fractions is None else tuple(fractions)
+    config_id = _prepared_fluid_config(backend, fluids, fraction_key, phase)
+    return _native().fluid_scalar(config_id, pair, a, b, _parameter_index(output))
+
+
+def _humid_air_scalar(  # pyright: ignore[reportUnusedFunction] - private sibling-module bridge
+    output: str,
+    name1: str,
+    value1: float,
+    name2: str,
+    value2: float,
+    name3: str,
+    value3: float,
+) -> float:
+    """Private direct native humid-air scalar adapter used by :mod:`encomp.fluids`."""
+
+    config_id = _prepared_humid_air_config(output, name1, name2, name3)
+    return _native().humid_air_scalar(config_id, value1, value2, value3)
 
 
 def fluid(
@@ -678,7 +772,7 @@ def fluid(
             )
     _reject_duplicate_input_keys(
         "fluid",
-        ((name1, _cp.get_parameter_index(name1)), (name2, _cp.get_parameter_index(name2))),
+        ((name1, _parameter_index(name1)), (name2, _parameter_index(name2))),
     )
     pair_idx, swap = _resolve_pair(name1, name2)
     a, b = (input2, input1) if swap else (input1, input2)  # canonical order
@@ -795,12 +889,7 @@ def humid_air(
 @lru_cache(maxsize=1)
 def lib_version() -> str:
     """CoolProp version of the bundled library (cached; the bundled lib never changes)."""
-    import ctypes
-
-    lib = ctypes.CDLL(lib_path())
-    buf = ctypes.create_string_buffer(256)
-    lib.get_global_param_string(b"version", buf, 256)
-    return buf.value.decode()
+    return _native().lib_version()
 
 
 @lru_cache(maxsize=1)

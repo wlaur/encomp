@@ -10,7 +10,7 @@ CoolProp ships no prebuilt 8.0 shared libraries, hence the from-source build.
 from __future__ import annotations
 
 import os
-import re
+import runpy
 import shutil
 import subprocess
 import sys
@@ -18,32 +18,9 @@ from pathlib import Path
 
 PROJECT = Path(__file__).resolve().parent.parent  # repo root
 PKG = PROJECT / "encomp" / "coolprop"
-
-
-def _coolprop_version() -> str:
-    """The CoolProp git tag to build, derived from the LOWER BOUND of the ``coolprop``
-    requirement in pyproject.toml (single source of truth). The bundled C++ library is
-    built at this floor; the Python ``coolprop`` package may be any version the
-    requirement allows (>= the floor, same major). The two must share the CoolProp major
-    so the ``input_pairs`` enum index encomp computes on the Python side stays valid for
-    the bundled library.
-
-    Parsed with a small regex because only one dependency spec is needed here."""
-    text = (PROJECT / "pyproject.toml").read_text()
-    match = re.search(r"""["']coolprop\s*(?:==|>=)\s*([\w.]+)""", text)
-    if match:
-        return f"v{match.group(1)}"
-    raise RuntimeError("no 'coolprop==' or 'coolprop>=' requirement found in pyproject.toml [project.dependencies]")
-
-
-COOLPROP_VERSION = _coolprop_version()  # e.g. "v8.0.0" (the floor of the coolprop requirement)
-
-# A git tag is mutable, and this clone produces the C++ library that ships inside the wheel.
-# Pin the commit each supported tag must resolve to, and verify it after cloning. Submodules
-# are pinned by the superproject commit, so this covers them too.
-COOLPROP_COMMITS = {
-    "v8.0.0": "ae81610e7d23efc57f9d051c8e70a4d66e87537f",
-}
+BUILD_INFO = runpy.run_path(str(PKG / "_build_info.py"))
+COOLPROP_VERSION = str(BUILD_INFO["BUNDLED_COOLPROP_TAG"])
+COOLPROP_COMMIT = str(BUILD_INFO["BUNDLED_COOLPROP_COMMIT"])
 
 
 def run(*cmd: str, cwd: Path | None = None) -> None:
@@ -52,14 +29,6 @@ def run(*cmd: str, cwd: Path | None = None) -> None:
 
 
 def verify_commit(src: Path) -> None:
-    expected = COOLPROP_COMMITS.get(COOLPROP_VERSION)
-    if expected is None:
-        raise RuntimeError(
-            f"no pinned commit for CoolProp {COOLPROP_VERSION}. Resolve the tag "
-            f"(git ls-remote --tags https://github.com/CoolProp/CoolProp.git {COOLPROP_VERSION}) "
-            "and add the commit it peels to under COOLPROP_COMMITS."
-        )
-
     head = subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=src,
@@ -68,9 +37,9 @@ def verify_commit(src: Path) -> None:
         check=True,
     ).stdout.strip()
 
-    if head != expected:
+    if head != COOLPROP_COMMIT:
         raise RuntimeError(
-            f"CoolProp {COOLPROP_VERSION} resolved to commit {head}, expected {expected}. "
+            f"CoolProp {COOLPROP_VERSION} resolved to commit {head}, expected {COOLPROP_COMMIT}. "
             "The upstream tag moved; do not build from it until this is understood."
         )
 

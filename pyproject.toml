@@ -48,16 +48,6 @@ dependencies = [
     "polars>=1.42",
     "sympy>=1.13",
     "uncertainties>=3.2",
-    # encomp uses TWO copies of CoolProp: the Python `coolprop` package (scalar /
-    # small-eager PropsSI path) and the bundled libCoolProp the Rust plugin dlopens
-    # (lazy / large-eager path). The only integer crossing from Python into the bundled
-    # lib is the `input_pairs` enum index (via generate_update_pair); that enum is stable
-    # within a CoolProp major, so allow any 8.x but cap the major (a 9.x could renumber
-    # it -> silently wrong results). The bundled lib is built at the floor 8.0.0
-    # (scripts/build_libcoolprop.py); exact value-parity between the two paths holds when
-    # the installed coolprop equals that floor (a newer 8.x may differ slightly for a
-    # fluid whose reference EOS was updated).
-    "coolprop>=8.0.0,<9",
 ]
 
 [dependency-groups]
@@ -89,6 +79,9 @@ dev = [
     "microsoft-python-type-stubs",
     "numpydoc>=1.10.0",
 ]
+# Test-only numerical oracle. Runtime and installed-wheel tests deliberately omit
+# this group: encomp evaluates exclusively through its bundled native library.
+oracle = ["coolprop==8.0.0"]
 
 [project.urls]
 Homepage = "https://github.com/wlaur/encomp"
@@ -112,6 +105,7 @@ include = [
     # the bundled CoolProp lib: libCoolProp.{dylib,so} on macOS/Linux, but MSVC names
     # the Windows DLL CoolProp.dll (no "lib" prefix) -- match both spellings.
     { path = "encomp/coolprop/*CoolProp.*", format = "wheel" },
+    { path = "encomp/coolprop/LICENSE.CoolProp", format = "wheel" },
 ]
 
 # Per-platform binary wheels (the plugin + bundled libCoolProp are native). abi3 ->
@@ -204,6 +198,7 @@ target-version = "py313"
 max-complexity = 10
 
 [tool.pytest.ini_options]
+testpaths = ["encomp/tests"]
 filterwarnings = [
     "ignore::pint.UnitStrippedWarning",
 ]
