@@ -46,7 +46,7 @@ pip install encomp
 
 `encomp` ships as a single per-platform wheel containing its dual-purpose native Rust artifact and one bundled CoolProp shared library, so supported platforms have nothing to build and do not install the Python `CoolProp` package. Wheels are provided for Windows (x86_64), Linux (x86_64 and arm64), and macOS (Apple Silicon only). PyPI does not publish an sdist; unsupported platforms, including Intel Macs, need a build from the git repository; see [Tests](#tests).
 
-On the macOS arm64 wheel measured for the native-only change, the resolver's combined wheel download falls from 19.61 MB (`encomp` plus the separate Python CoolProp wheel) to 9.08 MB for `encomp` alone, a 53.7% reduction. The `encomp` artifact itself grows by about 35 KB for the scalar bridge and bundled license; removing the separate 10.57 MB wheel is where the installation-size saving comes from.
+On macOS arm64, the native-only package reduces the resolver's combined wheel download from about 19.6 MB (`encomp` plus the separate Python CoolProp wheel) to about 9 MB for `encomp` alone—roughly a 54% reduction. The `encomp` artifact itself grows only slightly for the scalar bridge and bundled license; removing the separate CoolProp wheel is where the installation-size saving comes from.
 
 ## The `Quantity` class
 

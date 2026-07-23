@@ -354,7 +354,12 @@ class QuantityFrame:
             if dtype.unit == declaration.unit:
                 continue
 
-            source = Quantity(pl.col(declaration.name).ext.storage(), dtype.unit).asdim(declaration.dimensionality)
+            # Persisted units are data, not an instruction to reinterpret physical
+            # meaning. Ordinary compatible-unit conversions are allowed, while `.to`
+            # deliberately refuses absolute-temperature ↔ temperature-difference
+            # crossings. `asdim` remains available only at the explicit declaration
+            # boundary (`unit(..., asdim=...)`).
+            source = Quantity(pl.col(declaration.name).ext.storage(), dtype.unit)
             converted = source.to(declaration.unit).m.alias(declaration.name)
             storage = lf.select(converted).collect_schema()[declaration.name]
             conversions.append(converted.ext.to(UnitDType(declaration.unit, storage=storage)).alias(declaration.name))

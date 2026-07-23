@@ -13,6 +13,7 @@ from typing import Any, assert_type, cast
 
 import polars as pl
 import pytest
+from pint.errors import UndefinedUnitError
 from polars.exceptions import InvalidOperationError, SchemaError
 from pytest import raises
 
@@ -28,7 +29,16 @@ from ..polars import (
 )
 from ..units import Quantity as Q
 from ..units import Unit
-from ..utypes import Density, Power, Pressure, Temperature, UnknownDimensionality, Velocity, VolumeFlow
+from ..utypes import (
+    Density,
+    Power,
+    Pressure,
+    Temperature,
+    TemperatureDifference,
+    UnknownDimensionality,
+    Velocity,
+    VolumeFlow,
+)
 
 
 def _sensor_df() -> pl.DataFrame:
@@ -94,13 +104,32 @@ def test_quantity_frame_validates_and_normalizes_stored_units() -> None:
     assert units_of(sensors.lf) == {"pressure": Unit("bar"), "Volume flow": Unit("m³/h")}
     assert sensors.lf.select(sensors.pressure.m).collect().to_series().to_list() == [1.0, 2.0]
 
-    with raises(Exception, match=r"[Dd]imension"):
+    with raises(Exception, match=r"Cannot convert"):
         Sensors(
             with_units(
                 pl.DataFrame({"pressure": [1.0], "Volume flow": [1.0]}),
                 {"pressure": "m", "Volume flow": "m³/h"},
             )
         )
+
+
+def test_quantity_frame_refuses_temperature_reinterpretation() -> None:
+    class Absolute(QuantityFrame):
+        value = unit("degC")
+
+    class Difference(QuantityFrame):
+        value = unit("delta_degC")
+
+    absolute = with_units(pl.DataFrame({"value": [25.0]}), {"value": "degC"})
+    difference = with_units(pl.DataFrame({"value": [5.0]}), {"value": "delta_degC"})
+
+    with raises(Exception, match=r"[Tt]emperature"):
+        Difference(absolute)
+    with raises(Exception, match=r"[Tt]emperature"):
+        Absolute(difference)
+
+    assert_type(Absolute.value, Column[Temperature])
+    assert_type(Difference.value, Column[TemperatureDifference])
 
 
 def test_quantity_frame_boundaries_are_explicit() -> None:
@@ -144,10 +173,14 @@ def test_unit_dtype_normalization() -> None:
     # Canonicalization normalizes syntax, not physical equivalence. This conservative
     # identity is what lets the Rust plugin compare metadata without embedding Pint.
     assert UnitDType("Pa") != UnitDType("N/m²")
+    assert UnitDType("Nm3/h") == UnitDType("Nm³/h")
+    assert UnitDType("-").unit == Unit("")
 
     # an unknown unit fails at dtype construction, not at attach or write time
     with raises(Exception, match="asdfgh"):
         UnitDType("asdfgh")
+    with raises(UndefinedUnitError):
+        UnitDType("(")
 
 
 def test_unit_dtype_metadata_ignores_display_format() -> None:

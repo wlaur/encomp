@@ -157,6 +157,26 @@ fn validate_extension_input(kind: &str, name: &str, dtype: &DataType, expected_u
     ))
 }
 
+/// Accept only plain numeric columns (or Null, so an all-null column can flow to an
+/// all-null result). Extension inputs are validated separately and compute on their
+/// numeric storage. In particular, do not let Polars' non-strict f64 cast turn Boolean
+/// or numeric-looking String sensor columns into physical values.
+fn validate_numeric_input(kind: &str, name: &str, dtype: &DataType) -> PolarsResult<()> {
+    let storage = match dtype {
+        DataType::Extension(_, storage) => storage.as_ref(),
+        other => other,
+    };
+    if storage.is_primitive_numeric() || storage == &DataType::Null {
+        return Ok(());
+    }
+    Err(PolarsError::InvalidOperation(
+        format!(
+            "{kind}: input '{name}' must be a numeric column, got {dtype}. Boolean, String, nested, and temporal columns cannot represent a CoolProp state input."
+        )
+        .into(),
+    ))
+}
+
 /// Broadcast a length-1 input to `n` (Polars passes a scalar `pl.lit` input as
 /// length 1 alongside full columns; map_batches broadcasts via its struct, we
 /// must do it here). No copy when the length already matches.
@@ -187,10 +207,9 @@ fn broadcast_len(values: &[Vec<f64>], scalar_mask: &[bool]) -> usize {
     n.unwrap_or_else(|| values.iter().map(Vec::len).max().unwrap_or(0))
 }
 
-/// Materialize a Series as `Vec<f64>` with nulls mapped to NaN. CoolProp turns a NaN
-/// input into a failed flash (NaN output -> null via `nan_to_null`), so a null input
-/// row becomes a null output row -- matching the eager numpy path, rather than the old
-/// `cont_slice()` hard error on the first null (nulls are ubiquitous in real frames).
+/// Materialize a Series as `Vec<f64>` with nulls mapped to NaN. The kernels explicitly
+/// mask every row containing a non-finite input after evaluation: some backends return
+/// finite state-independent constants for a NaN input instead of failing the flash.
 fn to_f64(s: &Series) -> PolarsResult<Vec<f64>> {
     // to_storage: an accepted extension-typed input (validate_extension_input) computes
     // on its storage values; the identity for plain columns
@@ -286,9 +305,12 @@ fn evaluate_scalar_fluid(
         };
         let output = std::ffi::c_long::try_from(output)
             .map_err(|_| CpError(format!("output parameter {output} exceeds the C API integer range")))?;
-        let value = entry.1.update_and_1_out_scalar(input_pair, value1, value2, output)?;
+        let value = entry.1.update_and_1_out_scalar(input_pair, value1, value2, output);
+        // A failed flash does not invalidate the AbstractState. Return it to the LRU
+        // before propagating the error so intermittent bad sensor rows do not turn
+        // every following scalar evaluation into a cold state construction.
         cache.entries.push_back(entry);
-        Ok(value)
+        value
     })
 }
 
@@ -428,8 +450,10 @@ fn extract_fractions(fluid: &str) -> Result<(String, Option<Vec<f64>>), CpError>
             .parse::<f64>()
             .map_err(|_| CpError(format!("invalid incompressible concentration {fluid:?}")))?
             * 0.01;
-        if !fraction.is_finite() {
-            return Err(CpError(format!("invalid incompressible concentration {fluid:?}")));
+        if !fraction.is_finite() || !(0.0..=1.0).contains(&fraction) {
+            return Err(CpError(format!(
+                "incompressible concentration {fluid:?} must be between 0% and 100% inclusive"
+            )));
         }
         return Ok((parts[0].to_string(), Some(vec![fraction])));
     }
@@ -658,6 +682,7 @@ fn cp_output(input_fields: &[Field], kwargs: EvalKwargs) -> PolarsResult<Field> 
             f.dtype(),
             expected_unit(&kwargs.expected_units, i),
         )?;
+        validate_numeric_input("cp_evaluate", f.name(), f.dtype())?;
     }
     let dtypes: Vec<DataType> = input_fields.iter().map(|f| f.dtype().clone()).collect();
     Ok(Field::new(
@@ -675,6 +700,7 @@ fn ha_output(input_fields: &[Field], kwargs: HaKwargs) -> PolarsResult<Field> {
             f.dtype(),
             expected_unit(&kwargs.expected_units, i),
         )?;
+        validate_numeric_input("ha_evaluate", f.name(), f.dtype())?;
     }
     let dtypes: Vec<DataType> = input_fields.iter().map(|f| f.dtype().clone()).collect();
     Ok(Field::new(
@@ -715,6 +741,7 @@ fn cp_evaluate(inputs: &[Series], kwargs: EvalKwargs) -> PolarsResult<Series> {
             s.dtype(),
             expected_unit(&kwargs.expected_units, i),
         )?;
+        validate_numeric_input("cp_evaluate", s.name(), s.dtype())?;
     }
     let cp = coolprop(&kwargs.lib_path)?;
     // warm THIS (backend, fluid) once, single-threaded, before the parallel flash below
@@ -748,6 +775,11 @@ fn cp_evaluate(inputs: &[Series], kwargs: EvalKwargs) -> PolarsResult<Series> {
 
     let mut out = vec![0.0f64; n]; // update_and_1_out fills finite-or-NaN (failed rows -> NaN)
     st.update_and_1_out(pair, &v1, &v2, okey, &mut out).map_err(perr)?;
+    for ((result, a), b) in out.iter_mut().zip(v1.iter()).zip(v2.iter()) {
+        if !a.is_finite() || !b.is_finite() {
+            *result = f64::NAN;
+        }
+    }
     nan_to_null(out).cast(&out_dtype)
 }
 
@@ -859,6 +891,7 @@ fn ha_evaluate(inputs: &[Series], kwargs: HaKwargs) -> PolarsResult<Series> {
             s.dtype(),
             expected_unit(&kwargs.expected_units, i),
         )?;
+        validate_numeric_input("ha_evaluate", s.name(), s.dtype())?;
     }
     let cp = coolprop(&kwargs.lib_path)?;
     cp.ensure_warmed_humid_air().map_err(perr)?; // one-time HAPropsSI global init, single-threaded
@@ -881,5 +914,10 @@ fn ha_evaluate(inputs: &[Series], kwargs: HaKwargs) -> PolarsResult<Series> {
         &mut out,
     )
     .map_err(perr)?;
+    for (((result, a), b), c) in out.iter_mut().zip(b0.iter()).zip(b1.iter()).zip(b2.iter()) {
+        if !a.is_finite() || !b.is_finite() || !c.is_finite() {
+            *result = f64::NAN;
+        }
+    }
     nan_to_null(out).cast(&out_dtype)
 }

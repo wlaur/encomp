@@ -28,9 +28,21 @@ def canonical_unit_string(unit: str | Unit[Any]) -> str:
     is an on-disk, cross-process contract. It normalizes spelling (``"m^3"`` and
     ``"m³"``), not physical equivalence (``"Pa"`` and ``"N/m²"`` remain distinct).
     """
-    from .units import Unit
+    from tokenize import TokenError
 
-    parsed = Unit(unit) if isinstance(unit, str) else unit
+    from pint.errors import UndefinedUnitError
+
+    from .units import Quantity, Unit
+
+    if isinstance(unit, str):
+        try:
+            parsed = Unit(Quantity.correct_unit(unit))
+        except (AssertionError, TokenError) as e:
+            # Pint's tokenizer uses internal assertions for a few malformed strings.
+            # Do not leak that implementation detail from a public dtype constructor.
+            raise UndefinedUnitError(unit) from e
+    else:
+        parsed = unit
     return format(parsed, _CANONICAL_UNIT_FORMAT)
 
 

@@ -257,6 +257,19 @@ def test_incorrect_inputs() -> None:
     with pytest.raises(ValueError, match="could not be initialized"):
         Fluid("this fluid name does not exist", P=Q(2, "bar"), T=Q(25, "°C"))
 
+    with pytest.raises(ValueError, match="requires mole fractions"):
+        Fluid("HEOS::CO2&O2", P=Q(50.0, "bar"), T=Q(300.0, "K"))
+
+    with pytest.raises(ValueError, match="sum to 1"):
+        Fluid("HEOS::CO2[0.5]", P=Q(50.0, "bar"), T=Q(300.0, "K"))
+
+    pure = Fluid("HEOS::CO2", P=Q(50.0, "bar"), T=Q(300.0, "K")).D
+    unit_fraction = Fluid("HEOS::CO2[1.0]", P=Q(50.0, "bar"), T=Q(300.0, "K")).D
+    assert unit_fraction.m == approx(pure.m)
+
+    with pytest.raises(ValueError, match="unsupported CoolProp input pair"):
+        _ = Water(H=Q(1000.0, "kJ/kg"), Q=Q(0.5)).T
+
     p = np.zeros((5, 5))
     t = np.zeros(5)
 

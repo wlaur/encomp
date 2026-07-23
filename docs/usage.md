@@ -599,7 +599,7 @@ Fluid("toluene", T=Q(25, "°C"), P=Q(2, "bar"))
 state: Any = {"P": Q(1, "bar"), "Q": Q(2)}
 
 invalid_inputs = Fluid("water", **state)
-# <Fluid "water", P=100 kPa, T=nan °C, D=nan kg/m³, V=nan cP>
+# <Fluid "water", P=nan kPa, T=nan °C, D=nan kg/m³, V=nan cP>
 
 # derived properties are nan (and may log a warning about the invalid state)
 temperature = invalid_inputs.T  # nan °C
@@ -904,7 +904,7 @@ x, y, z = sp.symbols("x, y, z")  # pyright: ignore[reportUnknownMemberType]
 
 # output is a Quantity with a symbolic magnitude
 Q(1) * x  # 1.0*x dimensionless
-Q(10, "%") * x  # 10.0*x percent
+Q(10, "%") * x  # 10.0*x %
 
 # output is a sympy object
 x * Q(1)  # 1.0*x

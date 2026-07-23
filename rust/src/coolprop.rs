@@ -444,7 +444,7 @@ impl State<'_> {
     /// errors already surfaced from `state()`.
     pub fn update_and_1_out(
         &mut self,
-        input_pair: i64, // cast to c_long at the FFI call: c_long is i32 on Windows (LLP64)
+        input_pair: i64,
         v1: &[f64],
         v2: &[f64],
         out_key: c_long,
@@ -461,6 +461,8 @@ impl State<'_> {
                 "update_and_1_out: chunk of {n} rows exceeds the C API length limit"
             ))
         })?;
+        let pair = c_long::try_from(input_pair)
+            .map_err(|_| CpError(format!("input pair {input_pair} exceeds the C API integer range")))?;
         out.fill(f64::NAN);
         let mut err: c_long = 0;
         let mut msg = [0 as c_char; BUFLEN as usize];
@@ -470,7 +472,7 @@ impl State<'_> {
         unsafe {
             (self.cp.batch1)(
                 self.handle,
-                input_pair as c_long,
+                pair,
                 v1.as_ptr(),
                 v2.as_ptr(),
                 n_c,
