@@ -27,8 +27,8 @@ from ..polars import (
     units_of,
     with_units,
 )
+from ..units import DimensionalityTypeError, Unit
 from ..units import Quantity as Q
-from ..units import Unit
 from ..utypes import (
     Density,
     Power,
@@ -117,16 +117,43 @@ def test_quantity_frame_refuses_temperature_reinterpretation() -> None:
     class Absolute(QuantityFrame):
         value = unit("degC")
 
+    class KelvinAbsolute(QuantityFrame):
+        value = unit("K")
+
+    class RankineAbsolute(QuantityFrame):
+        value = unit("degR")
+
     class Difference(QuantityFrame):
         value = unit("delta_degC")
 
+    class ExplicitAbsolute(QuantityFrame):
+        value = unit("K", asdim=Temperature)
+
+    class KelvinDifference(QuantityFrame):
+        value = unit("K", asdim=TemperatureDifference)
+
     absolute = with_units(pl.DataFrame({"value": [25.0]}), {"value": "degC"})
     difference = with_units(pl.DataFrame({"value": [5.0]}), {"value": "delta_degC"})
+    ambiguous_kelvin = with_units(pl.DataFrame({"value": [5.0]}), {"value": "K"})
 
-    with raises(Exception, match=r"[Tt]emperature"):
+    with raises(DimensionalityTypeError, match=r"[Tt]emperature"):
         Difference(absolute)
-    with raises(Exception, match=r"[Tt]emperature"):
+    with raises(DimensionalityTypeError, match=r"[Tt]emperature"):
         Absolute(difference)
+    with raises(DimensionalityTypeError, match=r"TemperatureDifference.*Temperature"):
+        KelvinAbsolute(difference)
+    with raises(DimensionalityTypeError, match=r"TemperatureDifference.*Temperature"):
+        RankineAbsolute(difference)
+
+    kelvin = KelvinAbsolute(absolute)
+    assert kelvin.lf.select(kelvin.value.m).collect().item() == pytest.approx(298.15)
+
+    explicitly_reinterpreted = ExplicitAbsolute(difference)
+    assert explicitly_reinterpreted.lf.select(explicitly_reinterpreted.value.m).collect().item() == 5.0
+
+    assert KelvinAbsolute(ambiguous_kelvin).value.dt is Temperature
+    assert KelvinDifference(ambiguous_kelvin).value.dt is TemperatureDifference
+    assert KelvinDifference(difference).lf.select(pl.col("value").ext.storage()).collect().item() == 5.0
 
     assert_type(Absolute.value, Column[Temperature])
     assert_type(Difference.value, Column[TemperatureDifference])
