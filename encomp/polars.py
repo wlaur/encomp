@@ -33,7 +33,7 @@ import polars as pl
 
 from . import utypes as _ut
 from ._polars_dtype import EXTENSION_NAME, UnitDType
-from .units import Quantity, Unit
+from .units import DimensionalityTypeError, Quantity, Unit
 from .utypes import Dimensionality, UnknownDimensionality
 
 __all__ = [
@@ -55,10 +55,18 @@ class Column[DT: Dimensionality]:
     validated schema instance returns a ``Quantity[DT, pl.Expr]``.
     """
 
-    def __init__(self, value: str | Unit[Any], dimensionality: type[DT], *, name: str | None = None) -> None:
+    def __init__(
+        self,
+        value: str | Unit[Any],
+        dimensionality: type[DT],
+        *,
+        name: str | None = None,
+        _explicit_dimensionality: bool = True,
+    ) -> None:
         validated = Quantity(1.0, value).asdim(dimensionality)
         self.unit = validated.u
         self.dimensionality = dimensionality
+        self._explicit_dimensionality = _explicit_dimensionality
         self._explicit_name = name
         self._attribute_name: str | None = None
 
@@ -73,6 +81,11 @@ class Column[DT: Dimensionality]:
         if self._attribute_name is None:
             raise RuntimeError("unit column declaration is not bound to a QuantityFrame class")
         return self._attribute_name
+
+    @property
+    def dimensionality_is_explicit(self) -> bool:
+        """Whether the declaration explicitly selected its dimensionality."""
+        return self._explicit_dimensionality
 
     @overload
     def __get__(self, instance: None, owner: type[object] | None = None) -> Column[DT]: ...
@@ -305,7 +318,7 @@ def unit(
     """
     probe = Quantity(1.0, value)
     dimensionality = probe.dt if asdim is None else asdim
-    return Column(probe.u, dimensionality, name=name)
+    return Column(probe.u, dimensionality, name=name, _explicit_dimensionality=asdim is not None)
 
 
 class QuantityFrame:
@@ -355,12 +368,21 @@ class QuantityFrame:
                 continue
 
             # Persisted units are data, not an instruction to reinterpret physical
-            # meaning. Ordinary compatible-unit conversions are allowed, while `.to`
-            # deliberately refuses absolute-temperature ↔ temperature-difference
-            # crossings. `asdim` remains available only at the explicit declaration
-            # boundary (`unit(..., asdim=...)`).
+            # meaning. Pint permits scale-only conversions such as delta_degC -> K,
+            # so compare semantic dimensionality after converting as well.
             source = Quantity(pl.col(declaration.name).ext.storage(), dtype.unit)
-            converted = source.to(declaration.unit).m.alias(declaration.name)
+            converted_quantity = source.to(declaration.unit)
+            if converted_quantity.dt is not declaration.dimensionality:
+                if not declaration.dimensionality_is_explicit:
+                    raise DimensionalityTypeError(
+                        f"Cannot read column {declaration.name!r} carrying {dtype.unit} "
+                        f"(dimensionality {converted_quantity.dt.__name__}) as {declaration.unit} "
+                        f"(dimensionality {declaration.dimensionality.__name__}); use unit(..., asdim=...) "
+                        "to explicitly reinterpret it"
+                    )
+                converted_quantity = converted_quantity.asdim(declaration.dimensionality)
+
+            converted = converted_quantity.m.alias(declaration.name)
             storage = lf.select(converted).collect_schema()[declaration.name]
             conversions.append(converted.ext.to(UnitDType(declaration.unit, storage=storage)).alias(declaration.name))
 

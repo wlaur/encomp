@@ -82,6 +82,13 @@ Common dimensionalities are defined in the `encomp.utypes` module.
 A newly created dimensionality gets a class name of the form `Dimensionality[...]` (for example `Quantity[Dimensionality[[mass] ** 2 / [length] ** 3]]`).
 The second type parameter is the magnitude container. It defaults to `Numpy1DArray`, so annotate scalar quantities explicitly as `Quantity[Pressure, float]` (or `Q[Pressure, float]`).
 
+`Temperature` and `TemperatureDifference` deliberately remain distinct even though
+both have the physical dimension `[temperature]`. Offset units such as `degC` and
+`degF` denote absolute temperatures; `delta_degC` and `delta_degF` denote
+differences. Multiplicative units such as `K` and `degR` can express either concept,
+but default to absolute `Temperature`; use `.asdim(TemperatureDifference)` when a
+value in one of those units explicitly represents a difference.
+
 ```python
 from typing import Any
 
@@ -260,6 +267,13 @@ The boundary is explicit in both directions:
 3. `Report.power.assign(power)` checks dimensionality, and `Report.derive(...)` converts to `kW` and restores its metadata without collecting.
 
 Use `unit("bar", name="Suction pressure")` when an external column name cannot be the Python attribute. Registered unit literals infer dimensionality for static checkers. Pint still accepts its open unit grammar: an unlisted spelling such as `unit("kg/(m*s**2)")` is inferred at runtime and typed conservatively as unknown; add `asdim=Pressure` when precise static typing is required. The override is validated rather than cast.
+
+For temperature columns, persisted `K` or `degR` metadata is inherently ambiguous
+between an absolute temperature and a difference. A declaration such as `unit("K")`
+means absolute `Temperature`; use `unit("K", asdim=TemperatureDifference)` to
+declare difference data explicitly. Explicit delta metadata such as `delta_degC`
+cannot be read through an absolute-temperature declaration without an explicit
+`asdim=` override.
 
 The validated expressions pass directly into the high-level fluid API. Non-SI declarations are converted before the native plugin runs, and the result can be persisted with another declaration:
 
