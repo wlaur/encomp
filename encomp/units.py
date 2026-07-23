@@ -452,9 +452,9 @@ class Quantity(
 
     ``Quantity`` extends Pint's quantity type with runtime dimensionality subclasses
     (for example ``Quantity[Pressure, float]``) and magnitude containers such as
-    ``float``, numpy arrays, Polars ``Series`` and Polars ``Expr``. Construction
-    validates that the unit's physical dimensions match the requested dimensionality
-    subclass.
+    ``float``, numpy arrays, Polars ``Series`` and Polars ``Expr``. The runtime
+    dimensionality subclass is selected from the unit; explicit semantic
+    reinterpretation is validated by :meth:`asdim`.
 
     Absolute temperature and temperature-difference quantities deliberately remain
     separate dimensionality types even though both have Pint dimension
@@ -626,14 +626,16 @@ class Quantity(
             raise TypeError(f"Invalid magnitude type: {mt} (origin {origin})")
 
     @classmethod
-    def _check_comparable_magnitudes(cls, m: object, other_m: object) -> None:
-        # Mixed containers do not compare elementwise: numpy-vs-polars raises an opaque
+    def _check_comparable_magnitudes(
+        cls, m: object, other_m: object, operation: Literal["compare", "combine"] = "compare"
+    ) -> None:
+        # Mixed containers do not interoperate reliably: numpy-vs-polars raises an opaque
         # ufunc-loop TypeError or dtype error, and pl.Expr silently lifts an ndarray OR a
         # pl.Series into a literal and compares EXACTLY, skipping the (rtol, atol) tolerance
         # every sanctioned path applies -- with a length mismatch surfacing only at collect()
-        # time as a ShapeError pointing into the plan. None of these combinations is in the
-        # typed API (the __eq__/__gt__/... overloads pair a magnitude type with itself or with
-        # a scalar), so reject them here with an actionable message instead
+        # time as a ShapeError pointing into the plan. Arithmetic has the same problem and
+        # can even change behavior after numpy/pint dispatch has been warmed. None of these
+        # combinations is in the typed API, so reject them with an actionable message.
         if cls._is_mixed_container(m, other_m):
             if isinstance(m, pl.Expr) or isinstance(other_m, pl.Expr):
                 hint = (
@@ -644,7 +646,7 @@ class Quantity(
                 hint = 'convert one side first, e.g. with .astype("pl.Series") or .astype("ndarray")'
 
             raise TypeError(
-                f"Cannot compare a Quantity with {cls._describe_magnitude(m)} magnitude to one with "
+                f"Cannot {operation} a Quantity with {cls._describe_magnitude(m)} magnitude with one with "
                 f"{cls._describe_magnitude(other_m)} magnitude; {hint}"
             )
 
@@ -668,6 +670,14 @@ class Quantity(
             return "pl.Expr"
 
         return type(value).__name__
+
+    @staticmethod
+    def _floor_magnitude(value: Any) -> Any:  # noqa: ANN401
+        if isinstance(value, (pl.Series, pl.Expr)):
+            return value.floor()
+        if isinstance(value, np.ndarray):
+            return np.floor(cast("Numpy1DArray", value))
+        return float(np.floor(value))
 
     @staticmethod
     def _get_magnitude_type_from_name(mt_name: MagnitudeTypeName) -> type:
@@ -876,7 +886,18 @@ class Quantity(
             if len(val.shape) != 1:
                 raise ValueError(f"Only 1-dimensional NumPy arrays can be used as magnitude, got shape {val.shape}")
             return cast("MT", Quantity._cast_array_float(val))
-        elif isinstance(val, (pl.Series, pl.Expr)):
+        elif isinstance(val, pl.Series):
+            if val.dtype == pl.Null:
+                return cast("MT", val.cast(pl.Float64))
+            if val.dtype.is_integer():
+                return cast("MT", val.cast(pl.Float64))
+            if not val.dtype.is_float():
+                raise TypeError(
+                    f"Polars Series magnitude must have a float or integer dtype, got {val.dtype!r}. "
+                    "Boolean, non-numeric, nested, and unit-typed Series are not valid magnitudes."
+                )
+            return cast("MT", val)
+        elif isinstance(val, pl.Expr):
             return cast("MT", val)
         elif hasattr(val, "is_Atom"):
             # implicit way of checking if the value is a sympy symbol without having to import SymPy
@@ -2175,6 +2196,10 @@ class Quantity(
             vals = np.array(_m)
             return cast("Quantity[DT, Any]", self.get_subclass(dt, np.ndarray)(vals, u))
         elif magnitude_type is pl.Series:
+            if isinstance(m, pl.Expr):
+                raise TypeError(
+                    "Cannot convert a pl.Expr magnitude to pl.Series; evaluate the expression in a Polars frame first"
+                )
             _m = [m] if not isinstance(m, Iterable) else m
             vals = pl.Series(values=_m)
             return cast("Quantity[DT, Any]", self.get_subclass(dt, pl.Series)(vals, u))
@@ -2196,6 +2221,8 @@ class Quantity(
     @overload
     def __pow__(self, other: Quantity[Dimensionless, MT]) -> Quantity[UnknownDimensionality, MT]: ...
     def __pow__(self, other: Quantity[Dimensionless, Any] | float) -> Quantity[Any, Any]:
+        if isinstance(other, Quantity):
+            self._check_comparable_magnitudes(self.m, other.m, "combine")  # ty: ignore[invalid-argument-type]
         ret = cast("Quantity[DT, MT]", self._pint_super.__pow__(other))
         return self._call_subclass(ret.m, ret.u)
 
@@ -2235,6 +2262,8 @@ class Quantity(
     @overload
     def __add__(self: Quantity[DT, float], other: Quantity[DT, MT_]) -> Quantity[DT, MT_]: ...
     def __add__(self, other: Quantity[Any, Any] | float) -> Quantity[Any, Any]:
+        if isinstance(other, Quantity):
+            self._check_comparable_magnitudes(self.m, other.m, "combine")  # ty: ignore[invalid-argument-type]
         try:
             self.check_compatibility(other)
         except DimensionalityTypeError as e:
@@ -2293,6 +2322,8 @@ class Quantity(
     @overload
     def __sub__(self: Quantity[DT, float], other: Quantity[DT, MT_]) -> Quantity[DT, MT_]: ...
     def __sub__(self, other: Quantity[Any, Any] | float) -> Quantity[Any, Any]:
+        if isinstance(other, Quantity):
+            self._check_comparable_magnitudes(self.m, other.m, "combine")  # ty: ignore[invalid-argument-type]
         try:
             self.check_compatibility(other)
         except DimensionalityTypeError as e:
@@ -3121,6 +3152,8 @@ class Quantity(
     @overload
     def __mul__(self, other: Quantity[DT_, MT]) -> Quantity[UnknownDimensionality, MT]: ...
     def __mul__(self, other: Quantity[Any, Any] | float) -> Quantity[Any, Any]:
+        if isinstance(other, Quantity):
+            self._check_comparable_magnitudes(self.m, other.m, "combine")  # ty: ignore[invalid-argument-type]
         ret = cast("Quantity[DT, MT]", self._pint_super.__mul__(other))
 
         # preserve the dimensionality for other
@@ -3589,6 +3622,8 @@ class Quantity(
     @overload
     def __truediv__(self, other: Quantity[DT_, MT]) -> Quantity[UnknownDimensionality, MT]: ...
     def __truediv__(self, other: Quantity[Any, Any] | float) -> Quantity[Any, Any]:
+        if isinstance(other, Quantity):
+            self._check_comparable_magnitudes(self.m, other.m, "combine")  # ty: ignore[invalid-argument-type]
         ret = cast("Quantity[DT, MT]", self._pint_super.__truediv__(other))
 
         # preserve the dimensionality for other
@@ -3641,14 +3676,27 @@ class Quantity(
     @overload
     def __floordiv__(self: Quantity[DT, MT], other: float) -> Quantity[DT, MT]: ...
     def __floordiv__(self, other: Quantity[Any, Any] | float) -> Quantity[Any, Any]:
+        if isinstance(other, Quantity):
+            self._check_comparable_magnitudes(self.m, other.m, "combine")  # ty: ignore[invalid-argument-type]
+
         if isinstance(other, (float, int)):
-            return self._call_subclass(cast("MT", self.m // other), self.u)
-        elif other.dimensionless:
-            return self._call_subclass(self.m // other.to_base_units().m, self.u)
+            return self._call_subclass(cast("MT", self._floor_magnitude(self.m / other)), self.u)
+
+        if other.dimensionless:
+            magnitude = self._floor_magnitude(self.m / other.to_base_units().m)
+            return self._call_subclass(magnitude, self.u)
 
         ret = self._pint_super.__floordiv__(other)
+        if self.is_compatible_with(other):
+            divisor = other.to(self.u).m
+        else:
+            return self._call_subclass(ret.m, ret.u)
 
-        return self._call_subclass(ret.m, ret.u)
+        # Floor the quotient rather than using each container's `//` kernel: Python
+        # and numpy implement floating floor-division with subtly different rounding
+        # from Polars (e.g. 1 m // 1 cm used to be 99 vs 100).
+        magnitude = self._floor_magnitude(self.m / divisor)
+        return self._call_subclass(magnitude, ret.u)
 
     def __ifloordiv__(self, other: Any) -> Any:  # noqa: ANN401
         return cast("Quantity[Any, Any]", cast(Any, self).__floordiv__(other))

@@ -24,6 +24,7 @@ from .coolprop import (
     _fluid_scalar,  # pyright: ignore[reportPrivateUsage]
     _humid_air_scalar,  # pyright: ignore[reportPrivateUsage]
     _native,  # pyright: ignore[reportPrivateUsage]
+    _resolve_pair,  # pyright: ignore[reportPrivateUsage]
     is_fluid_param,
     is_humid_air_param,
     resolve_fluid_spec,
@@ -689,10 +690,12 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             _LOGGER.warning(f'CoolProp could not calculate "{prop}" for fluid "{self.name}", output is NaN: {msg}')
 
     def check_exception(self, prop: CProperty, e: ValueError) -> None:
-        """Re-raise ``e``, or return so the caller can yield ``NaN`` for ``prop``.
+        """Classify an evaluation error before the caller yields ``NaN`` for ``prop``.
 
         CoolProp signals both "out of range" and "not implemented" with ``ValueError``;
-        those cases warn (or stay silent) and produce ``NaN``. Anything else re-raises.
+        those cases warn (or stay silent) and produce ``NaN``. Fluid initialization
+        errors are rewritten and re-raised; other native evaluation failures warn and
+        produce ``NaN`` because CoolProp does not expose a stable error taxonomy.
         """
 
         msg = str(e)
@@ -794,6 +797,13 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         # input. Mask here so scalar and batch/plugin paths agree.
         if not all(np.isfinite(value) for _, value in points):
             return np.nan
+
+        # Pair resolution is request validation, not a failed state evaluation. Do it
+        # outside the try/NaN normalization so all magnitude containers reject an
+        # unsupported pair consistently.
+        if self.BACKEND_KIND != "humid_air":
+            (name1, _), (name2, _) = points
+            _resolve_pair(name1, name2)
 
         try:
             if self.BACKEND_KIND == "humid_air":
@@ -1094,7 +1104,7 @@ class Fluid(CoolPropFluid[MT]):
         else:
             self.name = name
 
-        _validate_fluid_name(self.name)
+        _validate_fluid_name(self.name, self._composition)
 
         points = self._build_points(kwargs)
 

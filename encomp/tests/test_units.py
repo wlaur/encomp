@@ -1835,6 +1835,9 @@ def test_astype() -> None:
     with pytest.raises(TypeError, match="scalar"):
         Q([1, 2, 3]).astype("float")
 
+    with pytest.raises(TypeError, match=r"pl\.Expr.*pl\.Series"):
+        Q(pl.lit(1.5), "m").astype(pl.Series)
+
 
 def test_single_element_array_magnitude() -> None:
     s1_list = [1.0]
@@ -2171,6 +2174,63 @@ def test_bool_magnitude_is_rejected() -> None:
     # comparing against a bool still works (the bool never becomes a magnitude)
     assert Q(1.0) == True  # noqa: E712
     assert Q(0.5) != True  # noqa: E712
+
+
+def test_polars_series_magnitude_validation() -> None:
+    with pytest.raises(TypeError, match="float or integer dtype"):
+        Q(cast(Any, pl.Series([True, False])), "m")
+    with pytest.raises(TypeError, match="float or integer dtype"):
+        Q(cast(Any, pl.Series(["a", "b"])), "m")
+    with pytest.raises(TypeError, match="float or integer dtype"):
+        Q(cast(Any, pl.Series([[1.0], [2.0]])), "m")
+
+    from ..polars import with_units
+
+    unit_typed = with_units(pl.DataFrame({"x": [1.0, 2.0]}), {"x": "bar"})["x"]
+    with pytest.raises(TypeError, match="unit-typed"):
+        Q(cast(Any, unit_typed), "m")
+
+    integers = Q(pl.Series([1, 2]), "m")
+    assert integers.m.dtype == pl.Float64
+
+    values = Q(pl.Series([1.0, 2.0]), "m")
+    with pytest.raises(TypeError, match="float or integer dtype"):
+        values.m = cast(Any, pl.Series([True, False]))
+
+
+def test_floordiv_is_consistent_across_magnitude_containers() -> None:
+    scalar = Q(1.0, "m") // Q(1.0, "cm")
+    array = Q(np.array([1.0]), "m") // Q(np.array([1.0]), "cm")
+    series = Q(pl.Series([1.0]), "m") // Q(pl.Series([1.0]), "cm")
+    expression = Q(pl.lit(1.0), "m") // Q(pl.lit(1.0), "cm")
+
+    assert scalar.m == 100.0
+    assert array.m.tolist() == [100.0]
+    assert series.m.to_list() == [100.0]
+    assert pl.select(expression.m).item() == 100.0
+
+    negative_infinity = Q(1.0, "m") // Q(float("-inf"), "cm")
+    assert negative_infinity.m == 0.0
+    assert np.signbit(negative_infinity.m)
+
+
+def test_mixed_container_arithmetic_is_rejected() -> None:
+    array = cast(Any, Q(np.array([1.0, 2.0]), "m"))
+    series = cast(Any, Q(pl.Series([1.0, 2.0]), "m"))
+    expression = cast(Any, Q(pl.lit(2.0), "m"))
+    exponent = cast(Any, Q(pl.Series([2.0, 2.0])))
+
+    operations = (
+        lambda: array + series,
+        lambda: array - series,
+        lambda: array * expression,
+        lambda: array / series,
+        lambda: array // series,
+        lambda: array**exponent,
+    )
+    for operation in operations:
+        with pytest.raises(TypeError, match="Cannot combine"):
+            operation()
 
 
 def test_quantity_as_unit_is_rejected() -> None:

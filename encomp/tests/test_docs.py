@@ -50,14 +50,23 @@ import re
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 
 def _repo_root() -> Path | None:
     for parent in Path(__file__).resolve().parents:
-        if (parent / "pyproject.toml").is_file() and (parent / "docs").is_dir():
+        pyproject = parent / "pyproject.toml"
+        if not pyproject.is_file() or not (parent / "docs").is_dir():
+            continue
+        try:
+            project = tomllib.loads(pyproject.read_text()).get("project", {})
+        except (OSError, tomllib.TOMLDecodeError):
+            continue
+        if isinstance(project, dict) and cast("dict[str, object]", project).get("name") == "encomp":
             return parent
     return None
 
@@ -129,6 +138,18 @@ _CODES = [code for _, code in _CASES]
 def test_docs_have_blocks() -> None:
     # tripwire: if extraction silently finds nothing, the checks below vacuously pass
     assert len(_CASES) > 20, f"expected many doc code blocks, found {len(_CASES)}"
+
+
+def test_repo_root_rejects_unrelated_user_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    project = tmp_path / "user-project"
+    installed_test = project / ".venv" / "lib" / "python3.13" / "site-packages" / "encomp" / "tests" / "test_docs.py"
+    installed_test.parent.mkdir(parents=True)
+    (project / "docs").mkdir()
+    (project / "pyproject.toml").write_text('[project]\nname = "user-project"\n')
+
+    module = sys.modules[__name__]
+    monkeypatch.setattr(module, "__file__", str(installed_test))
+    assert _repo_root() is None
 
 
 def test_doc_block_discovery_covers_public_docs() -> None:

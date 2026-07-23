@@ -115,8 +115,5 @@ def test_datetimes() -> None:
         }
     )
 
-    qty = Q(df["time"])
-    assert qty.m[0] == datetime(2025, 1, 1)
-
-    with raises(TypeError):
-        qty[0]
+    with raises(TypeError, match="float or integer dtype"):
+        Q(df["time"])

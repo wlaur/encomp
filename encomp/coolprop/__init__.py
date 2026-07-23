@@ -658,8 +658,14 @@ def resolve_fluid_spec(
     else:
         backend, fluids, fractions = _native().resolve_fluid_name(name)
         # The native parser validates + returns fractions only when the name carries
-        # them; one remaining species is an incompressible concentration (absolute basis).
-        is_concentration = fractions is not None and "&" not in fluids
+        # them. Only INCOMP uses a one-species absolute concentration; every other
+        # bracket value is a mole-fraction vector and must therefore sum to one.
+        is_concentration = fractions is not None and backend.upper() == "INCOMP" and "&" not in fluids
+        if fractions is None and "&" in fluids:
+            raise ValueError(
+                f"mixture {fluids!r} requires mole fractions; include them in the name "
+                "(e.g. 'HEOS::CO2[0.5]&O2[0.5]') or pass composition=."
+            )
     # mixture mole fractions must sum to 1; a concentration is absolute and passes through
     if fractions is not None and not is_concentration:
         total = sum(fractions)

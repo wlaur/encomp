@@ -282,10 +282,19 @@ def test_null_inputs_become_null() -> None:
     # NULL input cells (not just out-of-range values) yield NULL outputs, matching the
     # eager numpy/NaN path -- the lazy plugin must not hard-error on the first null
     # (nulls are ubiquitous in real frames: joins, sensor dropouts)
-    df = pl.DataFrame({"P": [50e5, None, 60e5], "T": [400.0, 450.0, None]})
-    rho = df.select(rho=cp.water("DMASS", "P", "T"))["rho"]
+    df = pl.DataFrame({"P": [50e5, None, float("nan"), 60e5], "T": [400.0, 450.0, 450.0, None]})
+    out = df.select(
+        rho=cp.water("DMASS", "P", "T"),
+        quality=cp.water("Q", "P", "T"),
+        critical_temperature=cp.water("TCRIT", "P", "T"),
+    )
+    rho = out["rho"]
     assert rho[0] is not None and np.isfinite(rho[0])
-    assert rho[1] is None and rho[2] is None  # null P, then null T -> null
+    assert rho[1:].null_count() == 3
+    # IF97 can return finite state-independent/trivial values for a NaN input. The
+    # kernel must mask from the inputs rather than relying on the flash to fail.
+    assert out["quality"][1:].null_count() == 3
+    assert out["critical_temperature"][1:].null_count() == 3
     # humid air path handles nulls the same way
     df2 = pl.DataFrame({"P": [101325.0, None], "T": [293.15, 300.0], "R": [0.5, 0.5]})
     w = df2.select(w=cp.humid_air("W", "P", "T", "R"))["w"]
@@ -494,6 +503,36 @@ def test_fluid_composition_validation_matches_fluids() -> None:
         cp.fluid("DMASS", "P", "T", name="HEOS", composition={"Water": 1.0})
     with pytest.raises(ValueError, match="non-negative"):  # invalid fraction
         cp.fluid("DMASS", "P", "T", name="HEOS", composition={"CO2": -0.7, "O2": 0.3})
+    with pytest.raises(ValueError, match="sum to 1"):
+        cp.fluid("DMASS", "P", "T", name="HEOS::CO2[0.5]")
+    # A unit single-species vector is accepted and is equivalent to the pure fluid.
+    pure = pl.DataFrame({"P": [5e6], "T": [300.0]}).select(
+        cp.fluid("DMASS", "P", "T", name="HEOS::CO2[1.0]").alias("D")
+    )
+    reference = pl.DataFrame({"P": [5e6], "T": [300.0]}).select(
+        cp.fluid("DMASS", "P", "T", name="HEOS::CO2").alias("D")
+    )
+    assert pure["D"][0] == pytest.approx(reference["D"][0])
+
+
+@pytest.mark.parametrize("dtype", [pl.Int8, pl.Int16, pl.UInt8, pl.UInt16])
+def test_small_integer_inputs_do_not_panic(dtype: type[pl.DataType]) -> None:
+    fluid = pl.DataFrame({"P": pl.Series([100, 120], dtype=dtype), "T": [400.0, 420.0]})
+    density = fluid.select(cp.water("DMASS", "P", "T"))["DMASS"]
+    assert density.len() == 2
+    assert density.dtype == pl.Float64
+
+    humid = pl.DataFrame({"P": [101325.0, 101325.0], "T": [300.0, 305.0], "R": pl.Series([0, 1], dtype=dtype)})
+    humidity = humid.select(cp.humid_air("W", "P", "T", "R"))["W"]
+    assert humidity.len() == 2
+    assert humidity.dtype == pl.Float64
+
+
+@pytest.mark.parametrize("values", [[True, False], ["100000", "120000"], [[100000], [120000]]])
+def test_nonnumeric_inputs_are_rejected(values: list[object]) -> None:
+    df = pl.DataFrame({"P": values, "T": [400.0, 420.0]})
+    with pytest.raises(Exception, match="must be a numeric column"):
+        df.select(cp.water("DMASS", "P", "T"))
 
 
 def test_composition_non_unit_sum_raises() -> None:

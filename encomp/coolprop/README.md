@@ -67,9 +67,11 @@ configurations averages 29.37 us/configuration. Reproduce with
 `scripts/benchmark_coolprop.py`.
 
 The matching macOS arm64 package check reduces the combined wheel download from
-19.61 MB (`encomp` plus Python CoolProp) to 9.08 MB for `encomp` alone (-53.7%).
-The encomp wheel itself is about 35 KB larger because the old Python binding was
-a separate distribution; removing that 10.57 MB wheel produces the net saving.
+about 19.6 MB (`encomp` plus Python CoolProp) to about 9 MB for `encomp` alone
+(roughly -54%). The encomp wheel itself is only slightly larger because the old
+Python binding was a separate distribution; removing that separate wheel produces
+the net saving. The bundled CoolProp distribution terms are shipped as
+`encomp/coolprop/LICENSE.CoolProp`.
 
 ## Design
 

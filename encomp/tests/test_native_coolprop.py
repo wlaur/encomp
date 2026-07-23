@@ -103,6 +103,8 @@ def test_native_name_parsing_and_validation() -> None:
     assert native.resolve_fluid_name("HEOS::CO2[0.5]&O2[0.5]") == ("HEOS", "CO2&O2", [0.5, 0.5])
     assert native.resolve_fluid_name("INCOMP::MEG[0.5]") == ("INCOMP", "MEG", [0.5])
     assert native.resolve_fluid_name("INCOMP::EG-20%") == ("INCOMP", "EG", [0.2])
+    with raises(ValueError, match="between 0% and 100%"):
+        native.resolve_fluid_name("INCOMP::EG-120%")
 
     native.validate_fluid("IF97", "Water")
     native.validate_fluid("HEOS", "CO2&O2", [0.5, 0.5])
@@ -171,6 +173,18 @@ def test_thread_local_cache_eviction_and_destruction() -> None:
     assert native.scalar_cache_info()[0] == 0
     _, freed_after = native.handle_counts()
     assert freed_after - freed_before >= len(fluids)
+
+
+def test_failed_scalar_flash_keeps_cached_state() -> None:
+    native = cp._native()
+    native.clear_scalar_cache()
+
+    assert math.isnan(Water(P=Q(-1.0, "Pa"), T=Q(300.0, "K")).D.m)
+    assert math.isfinite(Water(P=Q(1e5, "Pa"), T=Q(300.0, "K")).D.m)
+
+    size, _capacity, hits, misses, _evictions = native.scalar_cache_info()
+    assert size == 1
+    assert (hits, misses) == (1, 1)
 
 
 def test_concurrent_scalar_success_and_failure_are_isolated() -> None:

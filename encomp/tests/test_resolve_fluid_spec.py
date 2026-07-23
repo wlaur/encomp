@@ -64,6 +64,17 @@ def test_incompressible_concentration_is_not_normalised() -> None:
     assert fractions == pytest.approx([0.5])
 
 
+def test_single_species_fraction_is_only_a_concentration_for_incomp() -> None:
+    assert cp.resolve_fluid_spec("HEOS::CO2[1.0]") == ("HEOS", "CO2", [1.0])
+    with pytest.raises(ValueError, match="sum to 1"):
+        cp.resolve_fluid_spec("HEOS::CO2[0.5]")
+
+
+def test_mixture_without_fractions_is_rejected() -> None:
+    with pytest.raises(ValueError, match="requires mole fractions"):
+        cp.resolve_fluid_spec("HEOS::CO2&O2")
+
+
 @pytest.mark.parametrize(
     ("name", "composition", "match"),
     [
