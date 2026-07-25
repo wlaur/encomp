@@ -65,7 +65,9 @@ assert pressure.to("kPa").m == 100.0
 - **No implicit physical identities.** A fluid name, density or similar physical
   identity is never defaulted — APIs require it explicitly (`cp.fluid(name=...)`;
   `cp.water()` exists for the common case). Don't add parameter defaults that encode
-  physics.
+  physics. There are no exceptions left: `encomp.gases`' `fluid_name` was the last one and
+  is required and keyword-only since 1.9.4. A wrong fluid returns plausible numbers
+  instead of raising, which is exactly why it may not be guessed.
 - `bool` magnitudes are rejected at runtime (a bool is always a mistake), `int`
   magnitudes normalize to `float`, and only 1-D arrays are accepted.
 - `Temperature` and `TemperatureDifference` are distinct dimensionalities with
