@@ -907,7 +907,10 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             qty = qty.astype(self._mt)
 
         if isinstance(qty.m, pl.Series):
-            # missing values surface as null, never NaN (the library's single sentinel)
+            # A computed polars magnitude carries null for missing, never NaN. astype() above
+            # already translates the sentinel when it converts from the numpy result, so the
+            # fill_nan is belt-and-braces for any future path that arrives here with a Series
+            # magnitude already in hand (convert_magnitude=False); the cast is load-bearing
             qty.m = qty.m.fill_nan(None).cast(self._eager_series_output_dtype())  # ty: ignore[invalid-assignment]
 
         return cast("Quantity[Any, MT]", qty)

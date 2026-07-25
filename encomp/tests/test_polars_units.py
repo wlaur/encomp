@@ -159,6 +159,22 @@ def test_quantity_frame_refuses_temperature_reinterpretation() -> None:
     assert_type(Difference.value, Column[TemperatureDifference])
 
 
+def test_declaring_a_difference_with_an_offset_unit_rewrites_the_stored_unit() -> None:
+    # unit(..., asdim=...) goes through Quantity.asdim, which moves an offset unit onto the
+    # matching delta scale -- so the persisted metadata can never say "absolute °C" for a
+    # column declared to hold differences
+    class Differences(QuantityFrame):
+        value = unit("degC", asdim=TemperatureDifference)
+
+    assert Differences.value.unit == Unit("delta_degC")
+    assert Differences.value.dimensionality is TemperatureDifference
+
+    typed = Differences.from_untyped(pl.DataFrame({"value": [5.0]}))
+    assert units_of(typed.lf) == {"value": Unit("delta_degC")}
+    assert typed.value.dt is TemperatureDifference
+    assert typed.lf.collect()["value"].ext.storage().to_list() == [5.0]
+
+
 def test_quantity_frame_boundaries_are_explicit() -> None:
     with raises(TypeError, match="from_untyped"):
         Sensors(pl.DataFrame({"pressure": [1.0], "Volume flow": [1.0]}))
@@ -276,6 +292,27 @@ def test_parquet_round_trip(tmp_path: Path) -> None:
     sunk = tmp_path / "sunk.parquet"
     lf.sink_parquet(sunk)
     assert units_of(pl.read_parquet(sunk)) == {"P": Unit("bar"), "V": Unit("m³/h")}
+
+
+def test_parquet_round_trip_preserves_null_and_nan_distinctly(tmp_path: Path) -> None:
+    # null (missing) and NaN (a float value) are different things in polars, and the unit
+    # dtype must not collapse one into the other -- not even through an on-read conversion
+    path = tmp_path / "temperatures.parquet"
+    stored = with_units(pl.DataFrame({"value": [25.0, None, float("nan")]}), {"value": "degC"})
+    stored.write_parquet(path)
+
+    back = pl.read_parquet(path)["value"].ext.storage()
+    assert back.to_list()[0] == 25.0
+    assert back.null_count() == 1
+    assert back.is_nan().to_list() == [False, None, True]
+
+    class Kelvin(QuantityFrame):
+        value = unit("K")
+
+    converted = Kelvin.scan_parquet(path).lf.collect()["value"].ext.storage()
+    assert converted.to_list()[0] == pytest.approx(298.15)
+    assert converted.null_count() == 1
+    assert converted.is_nan().to_list() == [False, None, True]
 
 
 def test_coolprop_import_registers_before_parquet_read(tmp_path: Path) -> None:

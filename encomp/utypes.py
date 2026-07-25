@@ -799,12 +799,24 @@ class Dimensionality(metaclass=_DimensionalityMeta):
     def is_distinct(cls) -> bool:
         """Whether this class is the one :meth:`get_dimensionality` returns for its dimensions.
 
-        Unless ``_distinct`` is set explicitly, only the first registered subclass with a
-        given ``dimensions`` is distinct. The answer is registry-relative and can change
-        when a later subclass registers the same dimensions.
+        Unless ``_distinct`` is set explicitly on the class itself, only the first
+        registered subclass with a given ``dimensions`` is distinct. The answer is
+        registry-relative and can change when a later subclass registers the same
+        dimensions.
+
+        Subclassing a distinct dimensionality does not inherit its claim: a
+        ``class MyTemperature(Temperature)`` would otherwise take over unit resolution for
+        ``[temperature]`` process-wide, silently retyping every temperature quantity. An
+        inherited ``_distinct = False`` IS honoured -- :class:`IndistinctDimensionality`
+        exists to be subclassed.
         """
 
-        if cls._distinct is None:
+        distinct = cls._distinct
+
+        if distinct is True and "_distinct" not in cls.__dict__:
+            distinct = None
+
+        if distinct is None:
             # special case if dimensions was overridden to None
             if getattr(cls, "dimensions", None) is None:
                 return True
@@ -815,7 +827,7 @@ class Dimensionality(metaclass=_DimensionalityMeta):
             # might change when the registry is updated
             return ucs.count(cls.dimensions) == 1
 
-        return cls._distinct
+        return distinct
 
 
 _DimensionlessUC = UnitsContainer({})

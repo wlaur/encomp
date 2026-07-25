@@ -471,6 +471,10 @@ class Quantity(
     (``0.0 / 0.0``) can produce one in either world.
     """
 
+    # numpy array functions whose result is a DIFFERENCE of their input, so an absolute
+    # temperature input yields a TemperatureDifference (see __array_function__)
+    _DIFFERENCE_ARRAY_FUNCTIONS: ClassVar[frozenset[str]] = frozenset({"diff", "ediff1d", "gradient", "ptp", "std"})
+
     # constants
     NORMAL_M3_VARIANTS = ("nm³", "Nm³", "nm3", "Nm3", "nm**3", "Nm**3", "nm^3", "Nm^3")
     TEMPERATURE_DIFFERENCE_UCS = (
@@ -597,6 +601,52 @@ class Quantity(
                 return self._pint_super.__array__(t)
 
         return self._pint_super.__array__(t)
+
+    def __array_ufunc__(self, ufunc: Any, method: str, *inputs: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+        # np.subtract(a, b) must mean exactly a - b, and np.add(a, b) exactly a + b. numpy
+        # dispatch does not go through __sub__/__add__, and pint's ufunc path rebuilds the
+        # result from the unit alone -- which loses every rule those operators enforce:
+        # T - T is a TemperatureDifference (np.subtract typed it absolute, so a difference
+        # could go on to fix a CoolProp state as an absolute temperature), and T + T on an
+        # offset scale is ambiguous (np.add quietly answered 45 °C for 25 °C + 20 °C).
+        # Delegating keeps one implementation of the rules instead of two
+        if (
+            method == "__call__"
+            and not kwargs
+            and len(inputs) == 2
+            and all(isinstance(operand, Quantity) for operand in inputs)
+        ):
+            first, second = cast("tuple[Quantity[Any, Any], Quantity[Any, Any]]", inputs)
+
+            if ufunc is np.subtract:
+                return first - second
+
+            if ufunc is np.add:
+                return first + second
+
+        return self._pint_super.__array_ufunc__(ufunc, method, *inputs, **kwargs)
+
+    def __array_function__(self, func: Any, types: Any, args: Any, kwargs: Any) -> Any:  # noqa: ANN401
+        ret: Any = self._pint_super.__array_function__(func, types, args, kwargs)
+
+        # the same reasoning as __array_ufunc__, for the array functions that return a
+        # DIFFERENCE of their input: pint types the result from the unit, which is right for
+        # an offset spelling (degC -> delta_degC) but leaves a multiplicative one absolute
+        # (np.diff of a K array stayed a Temperature). Re-type so they agree with `-`
+        if (
+            isinstance(ret, Quantity)
+            and getattr(func, "__name__", "") in self._DIFFERENCE_ARRAY_FUNCTIONS
+            and issubclass(self.dt, Temperature)
+        ):
+            difference = cast("Quantity[Any, Any]", ret)  # pyrefly: ignore[redundant-cast]  # cast required by pyright
+
+            # np.var and friends leave [temperature]**2 -- only re-type an actual temperature
+            if difference.dimensionality == Temperature.dimensions:
+                return difference.asdim(TemperatureDifference)
+
+        # cast: the isinstance narrowing above leaves a partially-unknown pint type here,
+        # and this hook returns whatever numpy asked pint for
+        return cast(Any, ret)  # ty: ignore[redundant-cast]
 
     @staticmethod
     def validate_magnitude_type(mt: type) -> None:
@@ -1723,7 +1773,9 @@ class Quantity(
             "Δ%": "%",
             "‰": "permille",
             "r/min": "rpm",
-            # ΔK does not really make sense, it's not an offset scale
+            # "ΔK" spells a temperature difference in kelvin: K is not an offset scale, so
+            # pint has no delta unit for it and encomp defines delta_K itself
+            # (defs/units.txt) -- it is how a TemperatureDifference is written in kelvin
             "Δ": "delta_",
         }
 
@@ -2115,16 +2167,18 @@ class Quantity(
         other: Quantity[TemperatureDifference, Any] | Quantity[Temperature, Any],
         operator: Literal["add", "sub"],
     ) -> Quantity[Temperature, MT]:
-        if self.dt == Temperature:
-            assert other._dimensionality_type == TemperatureDifference
+        # issubclass, not identity: a user-defined subclass of either dimensionality takes
+        # part in the same arithmetic (it does in every other T/ΔT rule)
+        if issubclass(self.dt, Temperature):
+            assert issubclass(other._dimensionality_type, TemperatureDifference)
             v1 = self.to("degC").m
             v2 = other.to("delta_degC").m
 
             val = v1 + v2 if operator == "add" else v1 - v2
             temperature_unit = self.u
         else:
-            assert self.dt == TemperatureDifference
-            assert other._dimensionality_type == Temperature
+            assert issubclass(self.dt, TemperatureDifference)
+            assert issubclass(other._dimensionality_type, Temperature)
 
             v1 = self.to("delta_degC").m
             v2 = other.to("degC").m
@@ -2270,7 +2324,10 @@ class Quantity(
             return cast("Quantity[DT, Any]", self)
         elif magnitude_type is pl.Expr:
             if isinstance(m, float):
-                return cast("Quantity[DT, Any]", self.get_subclass(dt, pl.Expr)(pl.lit(m), u))
+                # translate the missing-value sentinel, exactly like the pl.Series branch
+                # below: this crosses into the polars world, where missing is null
+                literal = pl.lit(None, dtype=pl.Float64) if math.isnan(m) else pl.lit(m)
+                return cast("Quantity[DT, Any]", self.get_subclass(dt, pl.Expr)(literal, u))
 
             raise TypeError(
                 f"Cannot convert magnitude with type {type(m)} to Polars expression, "
@@ -2370,8 +2427,8 @@ class Quantity(
             if not isinstance(other, Quantity):
                 raise e
 
-            self_is_temp_or_diff_temp = self.dt in (Temperature, TemperatureDifference)
-            other_is_temp_or_diff_temp = other._dimensionality_type in (Temperature, TemperatureDifference)
+            self_is_temp_or_diff_temp = issubclass(self.dt, (Temperature, TemperatureDifference))
+            other_is_temp_or_diff_temp = issubclass(other._dimensionality_type, (Temperature, TemperatureDifference))
 
             if self_is_temp_or_diff_temp and other_is_temp_or_diff_temp:
                 return self._temperature_difference_add_sub(other, "add")  # ty: ignore[invalid-argument-type]
@@ -2432,14 +2489,18 @@ class Quantity(
 
             # only Temperature - TemperatureDifference is meaningful here; the
             # reverse (ΔT - T) is not a temperature and stays an error
-            if self.dt == Temperature and other._dimensionality_type == TemperatureDifference:
+            if issubclass(self.dt, Temperature) and issubclass(other._dimensionality_type, TemperatureDifference):
                 return self._temperature_difference_add_sub(other, "sub")  # ty: ignore[invalid-argument-type]
 
             raise e
 
         ret = cast("Quantity[DT, MT]", self._pint_super.__sub__(other))
 
-        if isinstance(other, Quantity) and self.dt == Temperature and other._dimensionality_type == Temperature:
+        if (
+            isinstance(other, Quantity)
+            and issubclass(self.dt, Temperature)
+            and issubclass(other._dimensionality_type, Temperature)
+        ):
             _mt = type(ret.m)
             subcls = self._get_dimensional_subclass(TemperatureDifference, _mt)  # ty: ignore[invalid-argument-type]
             return subcls(ret.m, ret.u)

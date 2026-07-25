@@ -1833,6 +1833,84 @@ def test_unit_and_dimensionality_never_contradict_for_temperature() -> None:
     assert Q(300.0, "K").asdim(TemperatureDifference).asdim(Temperature).u == Unit("K")
 
 
+def test_numpy_dispatch_types_temperature_differences_like_the_operator() -> None:
+    # numpy dispatch does not go through __sub__, and pint rebuilds the result from the
+    # unit: np.diff of a kelvin array used to come back as an absolute Temperature (and
+    # could then fix a CoolProp state as one), while `-` typed the same computation as a
+    # difference. degC was already correct because pint emits delta_degC there
+    kelvin = Q(np.array([300.0, 600.0, 900.0]), "K")
+    celsius = Q(np.array([25.0, 20.0, 30.0]), "degC")
+
+    for func in (np.diff, np.ediff1d, np.gradient, np.ptp, np.std):
+        for absolute in (kelvin, celsius):
+            result = cast(Any, func(absolute))
+            assert result.dt is TemperatureDifference, f"{func.__name__} on {absolute.u}"
+
+    # np.subtract(a, b) is exactly a - b, and np.add(a, b) exactly a + b
+    # numpy's stubs type these as arrays, so the dimensionality is a runtime guarantee
+    assert cast(Any, np.subtract(kelvin[:1], kelvin[1:2])).dt is TemperatureDifference
+    subtracted = cast(Any, np.subtract(celsius[:1], celsius[1:2]))
+    assert subtracted.dt is TemperatureDifference
+    assert subtracted.u == Unit("delta_degC")
+    assert subtracted.m[0] == approx((celsius[0] - celsius[1]).m)
+
+    # ... including the ambiguity the operator refuses: pint's ufunc path answered 45 °C
+    with pytest.raises(OffsetUnitCalculusError):
+        _ = np.add(celsius[:1], celsius[1:2])
+
+    difference = Q(np.array([5.0, 10.0]), "delta_degC")
+    assert cast(Any, np.add(Q(np.array([25.0, 25.0]), "degC"), difference)).dt is Temperature
+    assert cast(Any, np.diff(difference)).dt is TemperatureDifference
+
+    # a mean of absolute temperatures stays absolute, and a squared result is neither
+    assert cast(Any, np.mean(celsius)).dt is Temperature
+    assert cast(Any, np.var(celsius)).dimensionality == Temperature.dimensions**2
+
+
+def test_temperature_arithmetic_includes_dimensionality_subclasses() -> None:
+    # a subclass takes part in every other T/ΔT rule (construction, asdim, conversion
+    # guards), so it takes part in the arithmetic that defines the concept too
+    class CustomDifference(TemperatureDifference):
+        dimensions = TemperatureDifference.dimensions
+
+    class CustomTemperature(Temperature):
+        dimensions = Temperature.dimensions
+
+    difference = Q[CustomDifference, float](5.0, "delta_degC")
+    absolute = Q[CustomTemperature, float](25.0, "degC")
+
+    assert (Q(25.0, "degC") + difference).m == approx(30.0)
+    assert (Q(25.0, "degC") - difference).m == approx(20.0)
+    assert (difference + Q(25.0, "degC")).m == approx(30.0)
+    assert (absolute + Q(5.0, "delta_degC")).m == approx(30.0)
+    assert (absolute - Q(35.0, "degC")).dt is TemperatureDifference
+
+    # ΔT - T stays an error for a subclass too (it is not a temperature)
+    with pytest.raises(DimensionalityTypeError):
+        _ = cast(Any, difference) - Q(25.0, "degC")
+
+
+def test_subclassing_a_distinct_dimensionality_does_not_hijack_unit_resolution() -> None:
+    # _distinct is a claim by the class that sets it, not by its subclasses: inheriting it
+    # would make every degC/K quantity in the process resolve to the subclass instead
+    with _reset_dimensionality_registry():
+
+        class CustomTemperature(Temperature):
+            dimensions = Temperature.dimensions
+
+        assert not CustomTemperature.is_distinct()
+        assert Q(25.0, "degC").dt is Temperature
+        assert Q(300.0, "K").dt is Temperature
+
+        # an explicit claim still works, and an inherited False is still honoured
+        class ExplicitTemperature(Temperature):
+            _distinct = True
+            dimensions = Temperature.dimensions
+
+        assert ExplicitTemperature.is_distinct()
+        assert Q(25.0, "degC").dt is ExplicitTemperature
+
+
 def test_temperature_unit_inputs() -> None:
     for unit in [
         "degC",
@@ -2350,6 +2428,15 @@ def test_missing_values_follow_each_containers_own_sentinel() -> None:
     nulls = Q(pl.Series([1.0, None]), "bar")
     assert nulls.to("kPa").m.to_list() == [100.0, None]
     assert (nulls * 2.0).m.to_list() == [2.0, None]
+
+    # pl.Expr is the polars world too, so astype translates there as well
+    assert pl.select(v=Q(float("nan"), "m").astype("pl.Expr").m).to_series().to_list() == [None]
+    assert pl.select(v=Q(2.0, "m").astype("pl.Expr").m).to_series().to_list() == [2.0]
+
+    # the polars -> numpy -> polars direction cannot round trip a data-NaN: numpy has one
+    # spelling for both meanings, so it comes back as missing. Deliberate and documented
+    collapsed = Q(pl.Series([1.0, float("nan")]), "m").astype("ndarray").astype("pl.Series")
+    assert collapsed.m.to_list() == [1.0, None]
 
 
 def test_ndim_reports_one_for_every_vector_container() -> None:
