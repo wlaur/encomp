@@ -1332,8 +1332,9 @@ def test_indexing() -> None:
 
 
 def test_round() -> None:
-    # TODO: should this even work?
-    # type numpy.ndarray doesn't define __round__ method
+    # numpy does not define __round__ on ndarray and polars spells rounding as a method,
+    # so every container is routed explicitly -- round() must work identically for all of
+    # them, like abs() and the arithmetic operators do
 
     q = Q(25.12312312312, "kg/s")
 
@@ -1348,8 +1349,21 @@ def test_round() -> None:
     assert q_r2.m[0] == 25.1
     assert q_r2.m[1] == 25.1
 
-    with pytest.raises(TypeError, match="round"):
-        round(Q([25.12312312312], "kg/s").astype(pl.Series), 1)
+    q_series = round(Q([25.12312312312], "kg/s").astype(pl.Series), 1)
+
+    assert isinstance(q_series.m, pl.Series)
+    assert q_series.m.to_list() == [25.1]
+    assert q_series.u == Unit("kg/s")
+
+    q_expr = round(Q(25.12312312312, "kg/s").astype(pl.Expr), 1)
+
+    assert isinstance(q_expr.m, pl.Expr)
+    assert pl.select(q_expr.m).item() == 25.1
+
+    # round() with no digits, for every container
+    assert round(Q(25.6, "kg/s")).m == 26.0
+    assert round(Q([25.6], "kg/s")).m[0] == 26.0
+    assert round(Q([25.6], "kg/s").astype(pl.Series)).m.to_list() == [26.0]
 
 
 def test_abs() -> None:
@@ -1457,9 +1471,44 @@ def test_pydantic_integration() -> None:
 
 
 def test_float_cast() -> None:
-    assert isinstance(Q([False, False]).m[0], float)
+    # non-float numeric sequences normalize to a float64 magnitude
+    assert isinstance(Q([1, 2]).m[0], float)
+    assert Q([1, 2]).m.dtype == np.float64
+    assert Q(np.array([1, 2], dtype=np.int8)).m.dtype == np.float64
+    assert Q(np.array([1.5], dtype=np.float32)).m.dtype == np.float64
 
-    assert (Q([False, True]) == Q(np.array([False, True]))).all()
+
+def test_non_numeric_array_magnitudes_are_rejected() -> None:
+    # a bool magnitude is always a mistake (typically a comparison mask fed back in as
+    # data), and every other non-numeric dtype numpy would silently coerce is wrong data:
+    # a complex array loses its imaginary part, a datetime64 becomes its raw tick count.
+    # the pl.Series magnitude path refuses exactly the same set
+    for values in (
+        [False, True],
+        np.array([False, True]),
+        np.array([True], dtype=object),
+    ):
+        with pytest.raises(TypeError, match="not a bool"):
+            Q(cast(Any, values), "m")
+
+    for array in (
+        np.array([1 + 2j, 3 + 4j]),
+        np.array([1, 2], dtype="datetime64[s]"),
+        np.array([1, 2], dtype="timedelta64[s]"),
+    ):
+        with pytest.raises(TypeError, match="must contain real numbers"):
+            Q(cast(Any, array), "m")
+
+    with pytest.raises(TypeError, match="must contain real numbers"):
+        Q(cast(Any, [1 + 2j]), "m")
+
+    # the in-place magnitude setter validates identically
+    qty = Q(np.array([1.0]), "m")
+
+    with pytest.raises(TypeError, match="not a bool"):
+        qty.m = cast(Any, np.array([True]))
+
+    assert qty.m.tolist() == [1.0]
 
 
 def test_temperature_difference() -> None:
@@ -2212,6 +2261,44 @@ def test_floordiv_is_consistent_across_magnitude_containers() -> None:
     negative_infinity = Q(1.0, "m") // Q(float("-inf"), "cm")
     assert negative_infinity.m == 0.0
     assert np.signbit(negative_infinity.m)
+
+
+def test_division_by_zero_follows_the_container() -> None:
+    # this is the one arithmetic divergence between the containers, and it is deliberate:
+    # a float magnitude follows Python (dividing a float by zero raises, and a Quantity
+    # must not swallow that), while the vector containers follow IEEE elementwise, which
+    # is what their kernels do and what makes a per-row zero not abort a whole column
+    with pytest.raises(ZeroDivisionError):
+        _ = Q(1.0, "m") / Q(0.0, "s")
+
+    with pytest.raises(ZeroDivisionError):
+        _ = Q(1.0, "m") // Q(0.0, "m")
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        assert np.isinf((Q(np.array([1.0]), "m") // Q(np.array([0.0]), "m")).m).all()
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        assert np.isinf((Q(np.array([1.0]), "m") / Q(np.array([0.0]), "s")).m).all()
+        assert np.isnan((Q(np.array([0.0]), "m") / Q(np.array([0.0]), "s")).m).all()
+
+    series = Q(pl.Series([1.0, 0.0]), "m") / Q(pl.Series([0.0, 0.0]), "s")
+    assert series.m.to_list() == [float("inf"), pytest.approx(float("nan"), nan_ok=True)]
+
+    expression = Q(pl.lit(1.0), "m") / Q(pl.lit(0.0), "s")
+    assert pl.select(expression.m).item() == float("inf")
+
+
+def test_ndim_reports_one_for_every_vector_container() -> None:
+    assert Q(1.0, "m").ndim == 0
+    assert Q(np.array([1.0, 2.0]), "m").ndim == 1
+
+    # neither polars type has an ndim attribute; a Series/Expr magnitude is still a vector
+    series = Q(pl.Series([1.0, 2.0]), "m")
+    assert series.ndim == 1
+    assert not series.is_scalar
+    assert len(series) == 2
+
+    assert Q(pl.col("x"), "m").ndim == 1
 
 
 def test_mixed_container_arithmetic_is_rejected() -> None:

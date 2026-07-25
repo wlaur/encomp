@@ -11,6 +11,7 @@ import pytest
 from encomp import coolprop as encomp_coolprop
 
 from .. import utypes as ut
+from ..coolprop import validate_fluid_config
 from ..fluids import (
     CoolPropFluid,
     CProperty,
@@ -19,7 +20,6 @@ from ..fluids import (
     HumidAir,
     HumidAirState,
     Water,
-    _resolve_fluid_name,
     clear_expr_evaluation_cache,
 )
 from ..settings import SETTINGS
@@ -330,25 +330,25 @@ def test_invalid_fluid_name_rejected_at_construction() -> None:
 
 def test_fluid_name_validation_is_cached() -> None:
     # a valid name is resolved by CoolProp once; every later construction is a cache hit
-    _resolve_fluid_name.cache_clear()
+    validate_fluid_config.cache_clear()
 
     for _ in range(50):
         Fluid("Water", P=Q(2, "bar"), T=Q(25, "degC"))
 
-    info = _resolve_fluid_name.cache_info()
+    info = validate_fluid_config.cache_info()
 
     assert info.misses == 1
     assert info.hits == 49
 
     # an invalid name is NOT cached: functools.cache stores return values, not exceptions,
     # so a transient CoolProp failure can never be remembered as "this fluid is invalid"
-    _resolve_fluid_name.cache_clear()
+    validate_fluid_config.cache_clear()
 
     for _ in range(3):
         with pytest.raises(ValueError, match="could not be initialized"):
             Fluid("Watr", P=Q(2, "bar"), T=Q(25, "degC"))
 
-    assert _resolve_fluid_name.cache_info().currsize == 0
+    assert validate_fluid_config.cache_info().currsize == 0
 
 
 def test_invalid_fluid_state_repr_does_not_raise() -> None:

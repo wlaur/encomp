@@ -72,12 +72,12 @@ mf = Q(25, ureg.kg / ureg.h)
 ```
 
 :::{warning}
-`import encomp` installs {py:data}`encomp.units.UNIT_REGISTRY` as `pint`'s process-wide
-*application registry*. Every quantity in the process must come from it, or the
-dimensionality subclasses, the custom `[currency]` / `[normal]` dimensions and
-`on_redefinition="raise"` would silently not apply. Another `pint`-based library in the
-same process therefore gets `encomp`'s registry (and its unit definitions) after the
-import. The registry options `force_ndarray`, `force_ndarray_like` and
+Importing `encomp.units` (directly, or via any `encomp` submodule that uses it) installs
+{py:data}`encomp.units.UNIT_REGISTRY` as `pint`'s process-wide *application registry*.
+Every quantity in the process must come from it, or the dimensionality subclasses, the
+custom `[currency]` / `[normal]` dimensions and `on_redefinition="raise"` would silently
+not apply. Another `pint`-based library in the same process therefore gets `encomp`'s
+registry (and its unit definitions) from that point on. The registry options `force_ndarray`, `force_ndarray_like` and
 `autoconvert_offset_to_baseunit` are pinned: a write that would change one is discarded and
 logs a warning.
 :::

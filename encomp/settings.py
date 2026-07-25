@@ -39,8 +39,10 @@ class Settings(BaseSettings):
 
         Because the ``.env``-file is resolved relative to the *current working
         directory*, a stray ``.env`` containing an invalid ``ENCOMP_*`` value
-        (e.g. ``ENCOMP_UNITS`` pointing to a missing file) makes ``import encomp``
-        fail with a ``ValidationError`` -- even in an unrelated project.
+        (e.g. ``ENCOMP_UNITS`` pointing to a missing file) makes importing any
+        ``encomp`` submodule (e.g. ``encomp.units``) fail with a ``ValidationError``
+        -- even in an unrelated project. The bare ``import encomp`` succeeds: the
+        top-level package exposes only ``__version__``.
 
     * ``UNITS``: path to a file with unit definitions for ``pint``
     * ``TYPESET_SYMBOL_SCRIPTS``: whether to typeset SymPy symbol sub- and superscripts

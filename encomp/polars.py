@@ -25,15 +25,17 @@ remain available for explicit low-level ingestion and metadata inspection.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, ClassVar, Self, cast, overload
 
 import polars as pl
+from pint.errors import UndefinedUnitError
 
 from . import utypes as _ut
 from ._polars_dtype import EXTENSION_NAME, UnitDType
-from .units import DimensionalityTypeError, Quantity, Unit
+from .units import DimensionalityError, DimensionalityTypeError, Quantity, Unit
 from .utypes import Dimensionality, UnknownDimensionality
 
 __all__ = [
@@ -321,6 +323,22 @@ def unit(
     return Column(probe.u, dimensionality, name=name, _explicit_dimensionality=asdim is not None)
 
 
+def _shield_extension_pushdown(lf: pl.LazyFrame) -> pl.LazyFrame:
+    """Re-wrap every unit-typed column so predicates cannot be pushed into the scan.
+
+    Polars' Parquet statistics reader has no implementation for extension dtypes and
+    aborts the process thread with a Rust ``PanicException`` when a pushed-down predicate
+    makes it decode statistics for one. The re-wrap is a metadata-only identity
+    (``storage`` -> same dtype) that the optimizer will not push a predicate through.
+    """
+    unit_columns = [(name, dtype) for name, dtype in lf.collect_schema().items() if isinstance(dtype, UnitDType)]
+
+    if not unit_columns:
+        return lf
+
+    return lf.with_columns(pl.col(name).ext.storage().ext.to(dtype).alias(name) for name, dtype in unit_columns)
+
+
 class QuantityFrame:
     """Validated, lazy Polars frame with typed quantity-column descriptors."""
 
@@ -371,7 +389,14 @@ class QuantityFrame:
             # meaning. Pint permits scale-only conversions such as delta_degC -> K,
             # so compare semantic dimensionality after converting as well.
             source = Quantity(pl.col(declaration.name).ext.storage(), dtype.unit)
-            converted_quantity = source.to(declaration.unit)
+            try:
+                converted_quantity = source.to(declaration.unit)
+            except DimensionalityError as e:
+                # pint's own message names the two units but never the column, which is
+                # the one thing the caller needs to act on in a wide frame
+                raise DimensionalityTypeError(
+                    f"Cannot read column {declaration.name!r} carrying {dtype.unit} as {declaration.unit}: {e}"
+                ) from e
             if converted_quantity.dt is not declaration.dimensionality:
                 if not declaration.dimensionality_is_explicit:
                     raise DimensionalityTypeError(
@@ -387,6 +412,17 @@ class QuantityFrame:
             conversions.append(converted.ext.to(UnitDType(declaration.unit, storage=storage)).alias(declaration.name))
 
         self.lf = lf.with_columns(conversions)
+
+    def __repr__(self) -> str:
+        # a summary that never collects the frame: the declared columns and their units,
+        # which is what a notebook user evaluating the object wants to see
+        declarations: list[str] = []
+
+        for declaration in self._unit_columns.values():
+            unit_repr = f"{declaration.unit:~P}" or "dimensionless"
+            declarations.append(f"{declaration.name} [{unit_repr}]")
+
+        return f"<{type(self).__name__}: {', '.join(declarations) or 'no declared columns'} (lazy)>"
 
     @classmethod
     def from_untyped(cls, frame: pl.DataFrame | pl.LazyFrame) -> Self:
@@ -405,8 +441,17 @@ class QuantityFrame:
 
     @classmethod
     def scan_parquet(cls, source: str | Path) -> Self:
-        """Lazily scan a Parquet file and validate its persisted unit schema."""
-        return cls(pl.scan_parquet(source))
+        """Lazily scan a Parquet file and validate its persisted unit schema.
+
+        A predicate on a unit-typed column is deliberately *not* pushed into the Parquet
+        scan: polars' Parquet statistics reader panics on any extension dtype
+        (``polars-parquet`` ``statistics.rs``, an upstream limitation, still present in
+        1.43). An identity re-wrap of every unit-typed column shields the scan, at the
+        cost of row-group skipping for those columns. Filtering a bare
+        ``pl.scan_parquet(...)`` on a unit-typed column is what triggers the panic; go
+        through this method, or ``pl.read_parquet``, instead.
+        """
+        return cls(_shield_extension_pushdown(pl.scan_parquet(source)))
 
     @classmethod
     def derive(
@@ -444,8 +489,31 @@ def units_of(frame: pl.DataFrame | pl.LazyFrame) -> dict[str, Unit[Any]]:
 
     Reads only schema metadata: no data pass, and a ``LazyFrame`` (e.g. a
     ``pl.scan_parquet``) is not collected. Columns without a unit dtype are omitted.
+
+    ``EXTENSION_NAME`` is a cross-process contract, so a file written by another producer
+    can carry unit metadata Pint cannot parse. Such a column is omitted and reported in a
+    ``UserWarning`` naming it, rather than making the whole frame uninspectable.
     """
-    return {name: dtype.unit for name, dtype in frame.collect_schema().items() if isinstance(dtype, UnitDType)}
+    units: dict[str, Unit[Any]] = {}
+    unparseable: list[str] = []
+
+    for name, dtype in frame.collect_schema().items():
+        if not isinstance(dtype, UnitDType):
+            continue
+
+        try:
+            units[name] = dtype.unit
+        except UndefinedUnitError:
+            unparseable.append(f"{name!r} ({dtype.ext_metadata()!r})")
+
+    if unparseable:
+        warnings.warn(
+            f"ignoring {EXTENSION_NAME!r} columns whose unit metadata is not a known unit: {', '.join(unparseable)}",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    return units
 
 
 @overload
@@ -468,6 +536,16 @@ def with_units(frame: pl.DataFrame | pl.LazyFrame, units: Mapping[str, str | Uni
     missing = sorted(set(units) - set(schema))
     if missing:
         raise ValueError(f"unit schema keys are not columns of the frame: {missing}")
-    return frame.with_columns(
-        pl.col(name).ext.to(UnitDType(unit, storage=schema[name])) for name, unit in units.items()
-    )
+
+    dtypes: dict[str, UnitDType] = {}
+    for name, unit in units.items():
+        try:
+            dtypes[name] = UnitDType(unit, storage=schema[name])
+        except (TypeError, UndefinedUnitError) as e:
+            # the dtype constructor knows the bad storage dtype or unit string, but not
+            # which column it came from -- which is what the caller has to fix. A note
+            # adds that without rewriting an exception that renders its own message
+            e.add_note(f"offending unit schema entry: {name!r}: {unit!r}")
+            raise
+
+    return frame.with_columns(pl.col(name).ext.to(dtype) for name, dtype in dtypes.items())

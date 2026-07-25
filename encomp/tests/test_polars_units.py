@@ -437,6 +437,65 @@ def test_quantity_frame_derive_validates_assignments() -> None:
         Report.power.assign(cast(Any, sensors.pressure))
 
 
+def test_scan_parquet_survives_predicate_pushdown(tmp_path: Path) -> None:
+    # polars' parquet statistics reader has no implementation for extension dtypes and
+    # aborts a worker thread with a Rust panic when a pushed-down predicate makes it decode
+    # them (upstream; reproduced on 1.42 and 1.43). QuantityFrame.scan_parquet inserts an
+    # identity re-wrap that the optimizer will not push a predicate through
+    path = tmp_path / "sensors.parquet"
+    frame = pl.DataFrame({"pressure": [10.0, 60.0, 100.0], "Volume flow": [1.0, 2.0, 3.0]})
+    Sensors.from_untyped(frame).lf.sink_parquet(path)
+
+    scanned = Sensors.scan_parquet(path)
+    filtered = scanned.lf.filter(pl.col("pressure").ext.storage() > 50.0).collect()
+
+    assert filtered["pressure"].ext.storage().to_list() == [60.0, 100.0]
+    assert filtered.schema["pressure"] == UnitDType("bar")
+
+    # is_null() decodes statistics too, and a non-declared unit column is shielded as well
+    assert scanned.lf.filter(pl.col("Volume flow").ext.storage().is_null()).collect().height == 0
+
+    # pin the upstream bug itself: when it is fixed, this fails and the shield (and the
+    # note in QuantityFrame.scan_parquet) can be revisited
+    with raises(BaseException, match=r"not yet implemented|statistics"):
+        pl.scan_parquet(path).filter(pl.col("pressure").ext.storage() > 50.0).collect()
+
+
+def test_units_of_degrades_per_column_for_unparseable_metadata() -> None:
+    # EXTENSION_NAME is a cross-process contract: another producer can write metadata pint
+    # cannot parse. That must not make the well-formed columns of the frame uninspectable
+    good = with_units(pl.DataFrame({"good": [1.0]}), {"good": "bar"})
+    bad_dtype = pl.BaseExtension(EXTENSION_NAME, pl.Float64(), "totally_bogus")
+    frame = good.with_columns(pl.Series("bad", [2.0]).cast(pl.Float64).ext.to(bad_dtype))
+
+    with pytest.warns(UserWarning, match="totally_bogus"):
+        assert units_of(frame) == {"good": Unit("bar")}
+
+
+def test_typed_read_errors_name_the_column() -> None:
+    stored = with_units(pl.DataFrame({"pressure": [300.0], "Volume flow": [1.0]}), {"pressure": "degC"})
+
+    with raises(DimensionalityTypeError, match="column 'pressure'"):
+        Sensors(stored)
+
+    with raises(TypeError, match="float or integer") as excinfo:
+        with_units(pl.DataFrame({"tag": ["a"]}), {"tag": "bar"})
+
+    assert any("'tag'" in note for note in excinfo.value.__notes__)
+
+    with raises(UndefinedUnitError) as unit_excinfo:
+        with_units(pl.DataFrame({"P": [1.0]}), {"P": "bogus_unit"})
+
+    assert any("'P'" in note for note in unit_excinfo.value.__notes__)
+
+
+def test_quantity_frame_repr_summarizes_declarations() -> None:
+    sensors = Sensors.from_untyped(pl.DataFrame({"pressure": [1.0], "Volume flow": [10.0]}))
+
+    # a collection-free summary: the repr of a lazy frame must not evaluate it
+    assert repr(sensors) == "<Sensors: pressure [bar], Volume flow [m³/h] (lazy)>"
+
+
 def test_quantity_frame_round_trips_fluid_expression_output(tmp_path: Path) -> None:
     source_path = tmp_path / "states.parquet"
     result_path = tmp_path / "properties.parquet"

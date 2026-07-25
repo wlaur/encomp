@@ -328,8 +328,9 @@ setattr(UNIT_REGISTRY, "_static_options_pinned", True)  # noqa: B010
 # Quantity in the process must come from encomp's registry, or the dimensionality
 # subclasses, the custom dimensions (currency, normal) and on_redefinition="raise" would
 # silently not apply. The trade-off is documented (README "Settings"): another pint-based
-# library in the same process sees encomp's registry after `import encomp`. This is an
-# intentional, settled design decision -- not an oversight to be re-flagged.
+# library in the same process sees encomp's registry once this module is imported (the
+# top-level `encomp` package exposes only __version__ and does NOT trigger this). This is
+# an intentional, settled design decision -- not an oversight to be re-flagged.
 setattr(pint, "_DEFAULT_REGISTRY", UNIT_REGISTRY)  # noqa: B010
 cast(Any, pint.application_registry).set(UNIT_REGISTRY)
 
@@ -973,17 +974,36 @@ class Quantity(
 
     @staticmethod
     def _cast_array_float(inp: np.ndarray) -> Numpy1DArray:
-        # don't fail in case the array contains unsupported objects,
-        # cast to float64, matches the Numpy1DArray type definition
+        # cast to float64, matching the Numpy1DArray type definition. The accepted dtype
+        # kinds are allow-listed rather than reject-listed, because the cast below is
+        # deliberately unsafe (float16 / int64 / ... must be accepted) and every other kind
+        # numpy can force into a float is silently WRONG data: a bool mask becomes 1.0/0.0,
+        # a complex array loses its imaginary part, and a datetime64/timedelta64 becomes its
+        # raw tick count. The pl.Series branch of _validate_magnitude refuses exactly the
+        # same set, so both vector containers agree on what a magnitude is
+        if inp.dtype.kind == "b":
+            # same message as the scalar check: a bool magnitude (typically a comparison
+            # mask fed back in as data) is always a mistake
+            raise TypeError("magnitude must be a real number, not a bool")
+
         if inp.dtype.kind in {"S", "U"}:
             raise ValueError("magnitude sequences must contain real numbers, not strings")
 
         if inp.dtype.kind == "O":
             for item in inp:
+                # bool is an int subclass and passes numbers.Real, so it needs its own check
+                if isinstance(item, bool):
+                    raise TypeError("magnitude must be a real number, not a bool")
+
                 if item is None or isinstance(item, (str, bytes)) or not isinstance(item, numbers.Real):
                     raise ValueError(
                         f"magnitude sequences must contain real numbers; got {type(item).__name__}: {item!r}"
                     )
+        elif inp.dtype.kind not in {"f", "i", "u"}:
+            raise TypeError(
+                f"magnitude sequences must contain real numbers, got dtype {inp.dtype!r}. "
+                "Complex, datetime, timedelta and other non-numeric arrays are not valid magnitudes"
+            )
 
         if inp.dtype == np.float64:
             return cast("Numpy1DArray", inp)
@@ -1986,7 +2006,11 @@ class Quantity(
         """
 
         if not isinstance(other, Quantity):
-            if not self.dimensionless:
+            # self.u.dimensionless, not self.dimensionless: pint's quantity-level property
+            # converts the whole magnitude to root units (an O(n) pass and a temporary on
+            # every q + 1.0 / q == 5.0 with a vector magnitude), while the unit-level check
+            # is magnitude-independent and answers identically for every registered unit
+            if not self.u.dimensionless:
                 raise DimensionalityTypeError(
                     f"Value {other} ({type(other)}) is not compatible with dimensional quantity {self} ({type(self)})"
                 )
@@ -2021,7 +2045,7 @@ class Quantity(
                 )
 
             raise DimensionalityTypeError(
-                f"Quantities with different dimensionalities are not compatible: {type(self)} and {type(other)}. "
+                f"Quantities with different dimensionalities are not compatible: {type(self)} and {type(other)}."
             )
 
     def is_compatible_with(
@@ -2075,12 +2099,19 @@ class Quantity(
         if ndigits is None:
             ndigits = 0
 
-        if isinstance(self.m, float):
+        m = self.m
+
+        if isinstance(m, float):
             return cast("Quantity[DT, MT]", super().__round__(ndigits))
-        elif isinstance(self.m, np.ndarray):
-            return cast("Quantity[DT, MT]", self.__class__(np.round(self.m, ndigits), self.u))
+        elif isinstance(m, np.ndarray):
+            return cast("Quantity[DT, MT]", self.__class__(np.round(cast("Numpy1DArray", m), ndigits), self.u))
+        elif isinstance(m, (pl.Series, pl.Expr)):
+            # every container rounds: polars spells it as a method on the object rather
+            # than through __round__, so route to it explicitly (a negative ndigits is
+            # rejected by polars, unlike numpy -- that difference is polars', not ours)
+            return self._call_subclass(cast("MT", m.round(ndigits)), self.u)
         else:
-            raise TypeError(f"round() is not supported for magnitude type {type(self.m)}")
+            raise TypeError(f"round() is not supported for magnitude type {type(m)}")
 
     @property
     def is_scalar(self) -> bool:
@@ -2090,10 +2121,19 @@ class Quantity(
 
     @property
     def ndim(self) -> int:
-        """Number of magnitude dimensions: 0 for a scalar, 1 for a vector magnitude."""
+        """Number of magnitude dimensions: 0 for a scalar, 1 for a vector magnitude.
+
+        A ``pl.Expr`` magnitude is a column expression, so it counts as a vector even
+        though its length is unknown until the plan is collected.
+        """
 
         if isinstance(self.m, (float, int)):
             return 0
+
+        # neither pl.Series nor pl.Expr has an ndim attribute, and only 1-dimensional
+        # magnitudes exist in this library, so the vector containers answer 1 directly
+        if isinstance(self.m, (pl.Series, pl.Expr)):
+            return 1
 
         return getattr(self.m, "ndim", 0)
 
@@ -3158,7 +3198,12 @@ class Quantity(
 
         # preserve the dimensionality for other
         # it might be a distinct subclass with identical units as another dimensionality
-        if self.dimensionless and isinstance(other, Quantity):
+        # NOTE: isinstance first, and self.u.dimensionless rather than self.dimensionless:
+        # pint's quantity-level property converts the whole magnitude to root units, which
+        # is an extra O(n) pass plus a temporary on the hottest operator in the library --
+        # even for q * 2.0, where this branch can never be taken. The unit-level check is
+        # magnitude-independent and answers identically for every registered unit
+        if isinstance(other, Quantity) and self.u.dimensionless:
             subcls = self.get_subclass(other._dimensionality_type, type(ret.m))
             return subcls(ret)
 
@@ -3624,11 +3669,19 @@ class Quantity(
     def __truediv__(self, other: Quantity[Any, Any] | float) -> Quantity[Any, Any]:
         if isinstance(other, Quantity):
             self._check_comparable_magnitudes(self.m, other.m, "combine")  # ty: ignore[invalid-argument-type]
+
+        # NOTE: division by zero deliberately follows each container's own semantics rather
+        # than being normalized: a float magnitude raises ZeroDivisionError (Python's rule
+        # for floats, which a Quantity must not swallow), while ndarray and polars
+        # magnitudes yield IEEE ±inf / nan elementwise (numpy warns, polars is silent).
+        # Normalizing either way would mean lying about one container to match the other;
+        # pinned by test_division_by_zero_follows_the_container
         ret = cast("Quantity[DT, MT]", self._pint_super.__truediv__(other))
 
         # preserve the dimensionality for other
         # it might be a distinct subclass with identical units as another dimensionality
-        if self.dimensionless and isinstance(other, Quantity):
+        # (see __mul__ for why this is a unit-level check with isinstance first)
+        if isinstance(other, Quantity) and self.u.dimensionless:
             subcls = self.get_subclass(other._dimensionality_type, type(ret.m))
             return subcls(ret)
 
@@ -3682,7 +3735,9 @@ class Quantity(
         if isinstance(other, (float, int)):
             return self._call_subclass(cast("MT", self._floor_magnitude(self.m / other)), self.u)
 
-        if other.dimensionless:
+        # unit-level check: the quantity-level property would convert other's whole
+        # magnitude to root units just to answer a question about its unit (see __mul__)
+        if other.u.dimensionless:
             magnitude = self._floor_magnitude(self.m / other.to_base_units().m)
             return self._call_subclass(magnitude, self.u)
 
