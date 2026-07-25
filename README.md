@@ -46,7 +46,7 @@ pip install encomp
 
 `encomp` ships as a single per-platform wheel containing its dual-purpose native Rust artifact and one bundled CoolProp shared library, so supported platforms have nothing to build and do not install the Python `CoolProp` package. Wheels are provided for Windows (x86_64), Linux (x86_64 and arm64), and macOS (Apple Silicon only). PyPI does not publish an sdist; unsupported platforms, including Intel Macs, need a build from the git repository; see [Tests](#tests).
 
-On macOS arm64, the native-only package reduces the resolver's combined wheel download from about 19.6 MB (`encomp` plus the separate Python CoolProp wheel) to about 9 MB for `encomp` alone—roughly a 54% reduction. The `encomp` artifact itself grows only slightly for the scalar bridge and bundled license; removing the separate CoolProp wheel is where the installation-size saving comes from.
+On macOS arm64, the native-only package reduces the resolver's combined wheel download from about 19.6 MB (`encomp` plus the separate Python CoolProp wheel) to about 10 MB for `encomp` alone—roughly half. The `encomp` artifact itself grows only slightly for the scalar bridge and bundled license; removing the separate CoolProp wheel is where the installation-size saving comes from.
 
 ## The `Quantity` class
 
@@ -66,6 +66,8 @@ Q([1, 2, 3], "bar") * 2  # [2.0 4.0 6.0] bar
 # without a unit, the quantity is dimensionless
 assert Q(0.1) == Q(10, "%")
 ```
+
+Give a quantity the whole column: a magnitude may be a `float`, a 1-D NumPy array, a Polars `Series` or a Polars `Expr`, and the dimensionality machinery is paid *per operation*, not per element. A scalar operation carries single-digit-microsecond overhead over raw pint arithmetic, which caps a Python loop over scalar quantities at roughly 10⁴–10⁵ ops/s; the same work on a vector magnitude amortizes to within ~20% of the underlying NumPy or Polars kernel at 10⁶ elements. Port scalar pint loops to array/`Series`/`Expr` magnitudes rather than iterating.
 
 ### `Quantity` type system
 
@@ -306,7 +308,7 @@ Raw arithmetic on a unit-typed column is refused because Polars cannot delegate 
 
 The persisted Arrow field contract is `ARROW:extension:name = "encomp.unit"` and `ARROW:extension:metadata = <canonical unit>`. Import `encomp.polars`—or `encomp.coolprop`, which registers the same dtype—before reading with Polars 1.x. For readers that do not import encomp, `POLARS_UNKNOWN_EXTENSION_TYPE_BEHAVIOR=load_as_extension` preserves generic extension metadata; otherwise current Polars 1.x warns and loads the numeric storage type.
 
-The Polars extension API is marked unstable upstream, so this integration is experimental even though encomp pins its required behavior in tests.
+The Polars extension API is marked unstable upstream, so this integration is experimental even though encomp pins its required behavior in tests. One upstream limitation is worth knowing: Polars' Parquet *statistics* reader has no implementation for extension dtypes, so a predicate that gets pushed into a `pl.scan_parquet(...)` on a unit-typed column aborts with a Rust panic. `QuantityFrame.scan_parquet` shields the scan (at the cost of row-group skipping on those columns), and eager `pl.read_parquet` is unaffected—filter through one of those rather than a bare lazy scan.
 
 ## The `Fluid` class
 
@@ -416,6 +418,8 @@ df.select(
 # composition={species: mole fraction} dict, and a fixed phase via assume_phase='gas'
 ```
 
+The fluid name, the output property, the input pair and the input units are all validated where the expression is *built*, so a typo raises there rather than inside a plugin node at `collect()` time. What remains deferred is per-row evaluation: a state CoolProp cannot fix yields `null` for that row (`NaN` on the NumPy path), not an error.
+
 ### Implementation
 
 Scalar calls reuse a bounded thread-local cache of native `AbstractState` handles; a handle is never shared between threads. Arrays use the batched C API (`AbstractState_update_and_1_out`), with handle-table locking confined to construction and destruction. The flash loop itself runs lock-free in C++, so independent chunks and property expressions can execute in parallel.
@@ -472,14 +476,14 @@ The attributes of `encomp.settings.Settings` are overridden with a file named `.
 Attribute names are prefixed with `ENCOMP_`.
 Settings are loaded when `encomp.settings` is imported; for runtime changes to quantity and unit rendering, use `encomp.units.set_quantity_format()`.
 
-Because the `.env` file is resolved relative to the current working directory, a stray `.env` that sets an invalid `ENCOMP_*` value (for example `ENCOMP_UNITS` pointing at a missing file) makes `import encomp` fail with a `pydantic.ValidationError`, even in an unrelated project. Remove or correct the offending value; unrelated keys in the `.env` are ignored.
+Because the `.env` file is resolved relative to the current working directory, a stray `.env` that sets an invalid `ENCOMP_*` value (for example `ENCOMP_UNITS` pointing at a missing file) makes importing any `encomp` submodule (such as `encomp.units`) fail with a `pydantic.ValidationError`, even in an unrelated project. The bare `import encomp` still succeeds—it only exposes `__version__`—so the traceback points at the first real import. Remove or correct the offending value; unrelated keys in the `.env` are ignored.
 
 Importing `encomp.units` also registers a `typeguard` checker for `Quantity`, so `@typeguard.typechecked` and `encomp.misc.isinstance_types` compare dimensionality and magnitude type rather than falling back to a plain `isinstance`.
 
-`import encomp` also installs `encomp.units.UNIT_REGISTRY` as pint's process-wide *application registry*. This is deliberate: every quantity in the process must come from that registry, or the dimensionality subclasses, the custom `[currency]` / `[normal]` dimensions and `on_redefinition="raise"` would silently not apply. The consequence is that another pint-based library in the same process gets encomp's registry (and its unit definitions, including the `Nm³` reinterpretation) after `import encomp`. Registry options that encomp pins — `force_ndarray`, `force_ndarray_like`, `autoconvert_offset_to_baseunit` — cannot be reassigned; a write that would change one is discarded and logs a warning.
+Importing `encomp.units` (directly, or via any encomp submodule that uses it) also installs `encomp.units.UNIT_REGISTRY` as pint's process-wide *application registry*. This is deliberate: every quantity in the process must come from that registry, or the dimensionality subclasses, the custom `[currency]` / `[normal]` dimensions and `on_redefinition="raise"` would silently not apply. The consequence is that another pint-based library in the same process gets encomp's registry (and its unit definitions, including the `Nm³` reinterpretation) from that point on. Registry options that encomp pins — `force_ndarray`, `force_ndarray_like`, `autoconvert_offset_to_baseunit` — cannot be reassigned; a write that would change one is discarded and logs a warning.
 
 ## Documentation
 
-The usage guide, example notebooks, and API reference are at [encomp.readthedocs.io](https://encomp.readthedocs.io).
+The usage guide, example notebooks, and API reference are at [encomp.readthedocs.io](https://encomp.readthedocs.io). The [getting-started notebook](https://encomp.readthedocs.io/en/latest/notebooks/getting-started.html) is the shortest path from installation to working code.
 
 Release notes for each version are published as [GitHub Releases](https://github.com/wlaur/encomp/releases).

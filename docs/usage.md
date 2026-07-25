@@ -72,12 +72,12 @@ mf = Q(25, ureg.kg / ureg.h)
 ```
 
 :::{warning}
-`import encomp` installs {py:data}`encomp.units.UNIT_REGISTRY` as `pint`'s process-wide
-*application registry*. Every quantity in the process must come from it, or the
-dimensionality subclasses, the custom `[currency]` / `[normal]` dimensions and
-`on_redefinition="raise"` would silently not apply. Another `pint`-based library in the
-same process therefore gets `encomp`'s registry (and its unit definitions) after the
-import. The registry options `force_ndarray`, `force_ndarray_like` and
+Importing `encomp.units` (directly, or via any `encomp` submodule that uses it) installs
+{py:data}`encomp.units.UNIT_REGISTRY` as `pint`'s process-wide *application registry*.
+Every quantity in the process must come from it, or the dimensionality subclasses, the
+custom `[currency]` / `[normal]` dimensions and `on_redefinition="raise"` would silently
+not apply. Another `pint`-based library in the same process therefore gets `encomp`'s
+registry (and its unit definitions) from that point on. The registry options `force_ndarray`, `force_ndarray_like` and
 `autoconvert_offset_to_baseunit` are pinned: a write that would change one is discarded and
 logs a warning.
 :::
@@ -291,6 +291,53 @@ Q(arr, "bar")
 # [0.0 0.2 0.4 0.6000000000000001 0.8 1.0] bar
 ```
 
+Missing values follow the convention of whichever container holds them: `NaN` in the NumPy
+world, `null` in the Polars world (where `NaN` is an ordinary float value, not a missing
+marker — `mean()` propagates it while it skips `null`). `encomp` never *produces* a `NaN`
+in a Polars magnitude: a CoolProp state that cannot be fixed yields `null` for that row,
+and the corresponding NumPy result is `NaN`. {py:meth}`encomp.units.Quantity.astype`
+translates between the two spellings at the boundary:
+
+```python
+import numpy as np
+import polars as pl
+
+from encomp.units import Quantity as Q
+
+# crossing into the Polars world turns the NumPy missing marker into null
+assert Q(np.array([1.0, np.nan]), "bar").astype("pl.Series").m.to_list() == [1.0, None]
+
+# and back again, since NumPy has no other spelling for it
+assert np.isnan(Q(pl.Series([1.0, None]), "bar").astype("ndarray").m[1])
+
+# a NaN you put in a Series is kept as-is: it is data, not a missing marker
+assert Q(pl.Series([1.0, float("nan")]), "bar").m.null_count() == 0
+```
+
+The translation is lossless from NumPy and back, but not the other way around: NumPy has a
+single spelling for both meanings, so a *data* `NaN` that goes out to NumPy and comes back
+returns as missing. The same one-way collapse happens at the CoolProp boundary, where a
+`NaN` input is a state that cannot be fixed and the polars result is therefore `null`:
+
+```python
+import polars as pl
+
+from encomp.fluids import Water
+from encomp.units import Quantity as Q
+
+data_nan = Q(pl.Series([1.0, float("nan")]), "bar")
+assert data_nan.astype("ndarray").astype("pl.Series").m.to_list() == [1.0, None]
+
+water = Water[pl.Series](P=Q(pl.Series([1e5, 1e5]), "Pa"), T=Q(pl.Series([300.0, float("nan")]), "K"))
+density = water.D
+assert density.m.null_count() == 1
+assert not density.m.is_nan().any()
+```
+
+Arithmetic is the exception the rule names explicitly: `0.0 / 0.0` on a polars magnitude
+produces a `NaN` in the polars world, exactly as it does in plain polars, because that is
+IEEE float arithmetic on data rather than a missing value encomp introduced.
+
 ### Quantities with expression magnitudes
 
 Polars Expressions can be used as magnitude:
@@ -452,6 +499,66 @@ Q(4.19, "kJ/kg/K") * Q(5, "K")  # ≈ 20.95 kJ/kg
 :::{note}
 `pint.errors.OffsetUnitCalculusError` is raised when doing ambiguous unit conversions.
 The environment variable `ENCOMP_AUTOCONVERT_OFFSET_TO_BASEUNIT` can be set to `True` to disable this error (this is not recommended).
+:::
+
+Only the *multiplicative* temperature units (`K`, `degR`, `mK`, ...) are ambiguous between
+the two dimensionalities; `degC`/`degF` mean absolute and `delta_degC`/`delta_degF` mean a
+difference. The unit is therefore what decides the dimensionality, and
+{py:meth}`encomp.units.Quantity.asdim` — the explicit reinterpretation — rewrites the unit
+so it can never contradict the dimensionality it is paired with:
+
+```python
+from encomp.units import Quantity as Q
+from encomp.utypes import Temperature, TemperatureDifference
+
+# K expresses both readings, so the unit is unchanged by the reinterpretation
+assert Q(300, "K").dt is Temperature
+assert Q(300, "K").asdim(TemperatureDifference).u == Q.get_unit("K")
+
+# an offset or delta unit is not ambiguous, so asdim() moves it onto the matching scale
+assert Q(5, "delta_degC").asdim(Temperature).u == Q.get_unit("degC")
+assert Q(5, "degC").asdim(TemperatureDifference).u == Q.get_unit("delta_degC")
+
+# a Quantity[...] annotation that disagrees with the unit is re-resolved from the unit
+assert Q[Temperature, float](5.0, "delta_degC").dt is TemperatureDifference
+```
+
+A temperature difference is refused wherever an absolute temperature is required, even
+though it converts to `K` by scale alone: {py:class}`encomp.fluids.Fluid` state inputs,
+{py:func}`encomp.gases.ideal_gas_density` and the gas-condition tuples all raise
+{py:class}`encomp.units.ExpectedDimensionalityError` rather than flash a difference as an
+absolute state.
+
+NumPy functions type their results the same way the operators do: `np.subtract(a, b)` is
+exactly `a - b`, `np.add(a, b)` is exactly `a + b`, and the functions that return a
+*difference* of their input — `np.diff`, `np.ediff1d`, `np.gradient`, `np.ptp`, `np.std` —
+return a `TemperatureDifference` for an absolute-temperature input:
+
+```python
+import numpy as np
+
+from encomp.misc import isinstance_types
+from encomp.units import Quantity as Q
+from encomp.utypes import Numpy1DArray, Temperature, TemperatureDifference
+
+temperatures = Q(np.array([300.0, 600.0, 900.0]), "K")
+
+# a difference of absolute temperatures ...
+assert isinstance_types(np.diff(temperatures), Q[TemperatureDifference, Numpy1DArray])
+
+# ... while a mean of them is still an absolute temperature
+assert isinstance_types(np.mean(temperatures), Q[Temperature, float])
+```
+
+NumPy's own type stubs describe these functions as returning arrays, so the dimensionality
+of the result is a runtime guarantee rather than a static one — use
+{py:func}`encomp.misc.isinstance_types` (as above) or the operators, which are typed.
+
+:::{note}
+Adding two absolute temperatures is refused for the offset spellings (`Q(25, "degC") + Q(25, "degC")`
+raises `pint.errors.OffsetUnitCalculusError`) but not for the multiplicative ones: `Q(300, "K") + Q(300, "K")`
+returns `600 K`, because `K` is a plain scale that pint cannot object to. Summing absolute
+temperatures is rarely what you want in either spelling — subtract them, or add a difference.
 :::
 
 ### Currency units

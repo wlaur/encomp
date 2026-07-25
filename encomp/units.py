@@ -328,8 +328,9 @@ setattr(UNIT_REGISTRY, "_static_options_pinned", True)  # noqa: B010
 # Quantity in the process must come from encomp's registry, or the dimensionality
 # subclasses, the custom dimensions (currency, normal) and on_redefinition="raise" would
 # silently not apply. The trade-off is documented (README "Settings"): another pint-based
-# library in the same process sees encomp's registry after `import encomp`. This is an
-# intentional, settled design decision -- not an oversight to be re-flagged.
+# library in the same process sees encomp's registry once this module is imported (the
+# top-level `encomp` package exposes only __version__ and does NOT trigger this). This is
+# an intentional, settled design decision -- not an oversight to be re-flagged.
 setattr(pint, "_DEFAULT_REGISTRY", UNIT_REGISTRY)  # noqa: B010
 cast(Any, pint.application_registry).set(UNIT_REGISTRY)
 
@@ -460,7 +461,19 @@ class Quantity(
     separate dimensionality types even though both have Pint dimension
     ``[temperature]``. Use :meth:`to` for unit conversion and :meth:`asdim` only for
     explicit semantic reinterpretation between compatible dimensionality classes.
+
+    Missing values follow the container's own convention: ``NaN`` in the numpy world,
+    ``null`` in the Polars world. encomp never *produces* a ``NaN`` in a Polars
+    magnitude -- anything it computes without a value (a CoolProp state that cannot be
+    fixed, for instance) is ``null`` -- and :meth:`astype` translates between the two
+    spellings at the boundary. A ``NaN`` the caller puts into a ``pl.Series`` is kept
+    as-is: it is a float value, not a missing marker, and IEEE arithmetic
+    (``0.0 / 0.0``) can produce one in either world.
     """
+
+    # numpy array functions whose result is a DIFFERENCE of their input, so an absolute
+    # temperature input yields a TemperatureDifference (see __array_function__)
+    _DIFFERENCE_ARRAY_FUNCTIONS: ClassVar[frozenset[str]] = frozenset({"diff", "ediff1d", "gradient", "ptp", "std"})
 
     # constants
     NORMAL_M3_VARIANTS = ("nm³", "Nm³", "nm3", "Nm3", "nm**3", "Nm**3", "nm^3", "Nm^3")
@@ -588,6 +601,52 @@ class Quantity(
                 return self._pint_super.__array__(t)
 
         return self._pint_super.__array__(t)
+
+    def __array_ufunc__(self, ufunc: Any, method: str, *inputs: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+        # np.subtract(a, b) must mean exactly a - b, and np.add(a, b) exactly a + b. numpy
+        # dispatch does not go through __sub__/__add__, and pint's ufunc path rebuilds the
+        # result from the unit alone -- which loses every rule those operators enforce:
+        # T - T is a TemperatureDifference (np.subtract typed it absolute, so a difference
+        # could go on to fix a CoolProp state as an absolute temperature), and T + T on an
+        # offset scale is ambiguous (np.add quietly answered 45 °C for 25 °C + 20 °C).
+        # Delegating keeps one implementation of the rules instead of two
+        if (
+            method == "__call__"
+            and not kwargs
+            and len(inputs) == 2
+            and all(isinstance(operand, Quantity) for operand in inputs)
+        ):
+            first, second = cast("tuple[Quantity[Any, Any], Quantity[Any, Any]]", inputs)
+
+            if ufunc is np.subtract:
+                return first - second
+
+            if ufunc is np.add:
+                return first + second
+
+        return self._pint_super.__array_ufunc__(ufunc, method, *inputs, **kwargs)
+
+    def __array_function__(self, func: Any, types: Any, args: Any, kwargs: Any) -> Any:  # noqa: ANN401
+        ret: Any = self._pint_super.__array_function__(func, types, args, kwargs)
+
+        # the same reasoning as __array_ufunc__, for the array functions that return a
+        # DIFFERENCE of their input: pint types the result from the unit, which is right for
+        # an offset spelling (degC -> delta_degC) but leaves a multiplicative one absolute
+        # (np.diff of a K array stayed a Temperature). Re-type so they agree with `-`
+        if (
+            isinstance(ret, Quantity)
+            and getattr(func, "__name__", "") in self._DIFFERENCE_ARRAY_FUNCTIONS
+            and issubclass(self.dt, Temperature)
+        ):
+            difference = cast("Quantity[Any, Any]", ret)  # pyrefly: ignore[redundant-cast]  # cast required by pyright
+
+            # np.var and friends leave [temperature]**2 -- only re-type an actual temperature
+            if difference.dimensionality == Temperature.dimensions:
+                return difference.asdim(TemperatureDifference)
+
+        # cast: the isinstance narrowing above leaves a partially-unknown pint type here,
+        # and this hook returns whatever numpy asked pint for
+        return cast(Any, ret)  # ty: ignore[redundant-cast]
 
     @staticmethod
     def validate_magnitude_type(mt: type) -> None:
@@ -887,6 +946,10 @@ class Quantity(
                 raise ValueError(f"Only 1-dimensional NumPy arrays can be used as magnitude, got shape {val.shape}")
             return cast("MT", Quantity._cast_array_float(val))
         elif isinstance(val, pl.Series):
+            # nulls (the polars missing sentinel) and NaNs are both kept verbatim: the
+            # magnitude is the caller's data, and a NaN here is a float value rather than
+            # a missing marker. Only values encomp itself computes are normalized to null
+            # (see the class docstring, and CoolPropFluid.construct_quantity)
             if val.dtype == pl.Null:
                 return cast("MT", val.cast(pl.Float64))
             if val.dtype.is_integer():
@@ -973,17 +1036,36 @@ class Quantity(
 
     @staticmethod
     def _cast_array_float(inp: np.ndarray) -> Numpy1DArray:
-        # don't fail in case the array contains unsupported objects,
-        # cast to float64, matches the Numpy1DArray type definition
+        # cast to float64, matching the Numpy1DArray type definition. The accepted dtype
+        # kinds are allow-listed rather than reject-listed, because the cast below is
+        # deliberately unsafe (float16 / int64 / ... must be accepted) and every other kind
+        # numpy can force into a float is silently WRONG data: a bool mask becomes 1.0/0.0,
+        # a complex array loses its imaginary part, and a datetime64/timedelta64 becomes its
+        # raw tick count. The pl.Series branch of _validate_magnitude refuses exactly the
+        # same set, so both vector containers agree on what a magnitude is
+        if inp.dtype.kind == "b":
+            # same message as the scalar check: a bool magnitude (typically a comparison
+            # mask fed back in as data) is always a mistake
+            raise TypeError("magnitude must be a real number, not a bool")
+
         if inp.dtype.kind in {"S", "U"}:
             raise ValueError("magnitude sequences must contain real numbers, not strings")
 
         if inp.dtype.kind == "O":
             for item in inp:
+                # bool is an int subclass and passes numbers.Real, so it needs its own check
+                if isinstance(item, bool):
+                    raise TypeError("magnitude must be a real number, not a bool")
+
                 if item is None or isinstance(item, (str, bytes)) or not isinstance(item, numbers.Real):
                     raise ValueError(
                         f"magnitude sequences must contain real numbers; got {type(item).__name__}: {item!r}"
                     )
+        elif inp.dtype.kind not in {"f", "i", "u"}:
+            raise TypeError(
+                f"magnitude sequences must contain real numbers, got dtype {inp.dtype!r}. "
+                "Complex, datetime, timedelta and other non-numeric arrays are not valid magnitudes"
+            )
 
         if inp.dtype == np.float64:
             return cast("Numpy1DArray", inp)
@@ -1254,9 +1336,21 @@ class Quantity(
                 f"Cannot construct TemperatureDifference with offset unit {valid_unit}; use a delta unit instead"
             )
 
+        # The mirror case -- a delta unit under an absolute-temperature subclass -- cannot be
+        # an error, because pint itself takes that path: T - T builds the difference as
+        # self.__class__(magnitude, delta_unit) on the absolute class. It also cannot be
+        # accepted as-is (that is how a Quantity[Temperature] ended up carrying Δ°C), and the
+        # dimensions check below cannot catch it since Temperature and TemperatureDifference
+        # share pint's [temperature]. So re-resolve the subclass from the unit, exactly as
+        # the constructor does for every other mismatched hint (Q[Mass](1, "m") is a Length):
+        # the unit wins, and the result is a TemperatureDifference.
+        delta_unit_on_absolute_subclass = issubclass(
+            cls._dimensionality_type, Temperature
+        ) and cls._is_temperature_difference_unit(valid_unit)
+
         is_valid_subclass = True
 
-        if cls._is_incomplete_dimensionality(cls._dimensionality_type):
+        if cls._is_incomplete_dimensionality(cls._dimensionality_type) or delta_unit_on_absolute_subclass:
             is_valid_subclass = False
         else:
             # compare dimensionalities with tolerance for float precision
@@ -1380,6 +1474,25 @@ class Quantity(
 
         registry = cast(Any, cls._REGISTRY)  # _is_multiplicative is a stable pint internal
         return not all(registry._is_multiplicative(u) for u in unit._units)
+
+    @classmethod
+    def _as_absolute_temperature_unit(cls, unit: Unit[Any]) -> Unit[Temperature]:
+        # the mirror of _as_temperature_difference_unit: reinterpreting a difference as an
+        # absolute temperature moves a delta unit back onto its own absolute scale, so the
+        # unit can never contradict the dimensionality (5 Δ°C -> 5 °C, not 5 K)
+        if unit._units == Unit("delta_degC")._units:
+            return Unit("degC")
+
+        if unit._units == Unit("delta_degF")._units:
+            return Unit("degF")
+
+        if unit._units == Unit("delta_degRe")._units:
+            return Unit("degRe")
+
+        if unit._units == Unit("delta_K")._units:
+            return Unit("K")
+
+        return cast("Unit[Temperature]", unit)
 
     @classmethod
     def _as_temperature_difference_unit(cls, unit: Unit[Any]) -> Unit[TemperatureDifference]:
@@ -1660,7 +1773,9 @@ class Quantity(
             "Δ%": "%",
             "‰": "permille",
             "r/min": "rpm",
-            # ΔK does not really make sense, it's not an offset scale
+            # "ΔK" spells a temperature difference in kelvin: K is not an offset scale, so
+            # pint has no delta unit for it and encomp defines delta_K itself
+            # (defs/units.txt) -- it is how a TemperatureDifference is written in kelvin
             "Δ": "delta_",
         }
 
@@ -1986,7 +2101,11 @@ class Quantity(
         """
 
         if not isinstance(other, Quantity):
-            if not self.dimensionless:
+            # self.u.dimensionless, not self.dimensionless: pint's quantity-level property
+            # converts the whole magnitude to root units (an O(n) pass and a temporary on
+            # every q + 1.0 / q == 5.0 with a vector magnitude), while the unit-level check
+            # is magnitude-independent and answers identically for every registered unit
+            if not self.u.dimensionless:
                 raise DimensionalityTypeError(
                     f"Value {other} ({type(other)}) is not compatible with dimensional quantity {self} ({type(self)})"
                 )
@@ -2021,7 +2140,7 @@ class Quantity(
                 )
 
             raise DimensionalityTypeError(
-                f"Quantities with different dimensionalities are not compatible: {type(self)} and {type(other)}. "
+                f"Quantities with different dimensionalities are not compatible: {type(self)} and {type(other)}."
             )
 
     def is_compatible_with(
@@ -2048,16 +2167,18 @@ class Quantity(
         other: Quantity[TemperatureDifference, Any] | Quantity[Temperature, Any],
         operator: Literal["add", "sub"],
     ) -> Quantity[Temperature, MT]:
-        if self.dt == Temperature:
-            assert other._dimensionality_type == TemperatureDifference
+        # issubclass, not identity: a user-defined subclass of either dimensionality takes
+        # part in the same arithmetic (it does in every other T/ΔT rule)
+        if issubclass(self.dt, Temperature):
+            assert issubclass(other._dimensionality_type, TemperatureDifference)
             v1 = self.to("degC").m
             v2 = other.to("delta_degC").m
 
             val = v1 + v2 if operator == "add" else v1 - v2
             temperature_unit = self.u
         else:
-            assert self.dt == TemperatureDifference
-            assert other._dimensionality_type == Temperature
+            assert issubclass(self.dt, TemperatureDifference)
+            assert issubclass(other._dimensionality_type, Temperature)
 
             v1 = self.to("delta_degC").m
             v2 = other.to("degC").m
@@ -2075,12 +2196,19 @@ class Quantity(
         if ndigits is None:
             ndigits = 0
 
-        if isinstance(self.m, float):
+        m = self.m
+
+        if isinstance(m, float):
             return cast("Quantity[DT, MT]", super().__round__(ndigits))
-        elif isinstance(self.m, np.ndarray):
-            return cast("Quantity[DT, MT]", self.__class__(np.round(self.m, ndigits), self.u))
+        elif isinstance(m, np.ndarray):
+            return cast("Quantity[DT, MT]", self.__class__(np.round(cast("Numpy1DArray", m), ndigits), self.u))
+        elif isinstance(m, (pl.Series, pl.Expr)):
+            # every container rounds: polars spells it as a method on the object rather
+            # than through __round__, so route to it explicitly (a negative ndigits is
+            # rejected by polars, unlike numpy -- that difference is polars', not ours)
+            return self._call_subclass(cast("MT", m.round(ndigits)), self.u)
         else:
-            raise TypeError(f"round() is not supported for magnitude type {type(self.m)}")
+            raise TypeError(f"round() is not supported for magnitude type {type(m)}")
 
     @property
     def is_scalar(self) -> bool:
@@ -2090,10 +2218,19 @@ class Quantity(
 
     @property
     def ndim(self) -> int:
-        """Number of magnitude dimensions: 0 for a scalar, 1 for a vector magnitude."""
+        """Number of magnitude dimensions: 0 for a scalar, 1 for a vector magnitude.
+
+        A ``pl.Expr`` magnitude is a column expression, so it counts as a vector even
+        though its length is unknown until the plan is collected.
+        """
 
         if isinstance(self.m, (float, int)):
             return 0
+
+        # neither pl.Series nor pl.Expr has an ndim attribute, and only 1-dimensional
+        # magnitudes exist in this library, so the vector containers answer 1 directly
+        if isinstance(self.m, (pl.Series, pl.Expr)):
+            return 1
 
         return getattr(self.m, "ndim", 0)
 
@@ -2131,8 +2268,13 @@ class Quantity(
             )
 
         unit: Unit[Any] = self.u
-        if dim == TemperatureDifference:
+        if issubclass(dim, TemperatureDifference):  # ty: ignore[invalid-argument-type]
             unit = self._as_temperature_difference_unit(unit)
+        elif issubclass(dim, Temperature):  # ty: ignore[invalid-argument-type]
+            # the reverse reinterpretation: a delta unit moves back onto its absolute scale,
+            # so a Quantity[Temperature] never carries a Δ unit (the constructor re-resolves
+            # such a pair to TemperatureDifference -- asdim is the deliberate escape hatch)
+            unit = self._as_absolute_temperature_unit(unit)
 
         subcls = self._get_dimensional_subclass(dim, type(self.m))  # ty: ignore[invalid-argument-type]
         return cast("Quantity[DT_, MT]", subcls(self.m, unit))
@@ -2164,6 +2306,11 @@ class Quantity(
         Polars ``Expr``, or the corresponding string names. Units and dimensionality
         are unchanged. Converting to ``pl.Expr`` is only defined for scalar quantities,
         which become a literal expression.
+
+        Crossing between the numpy and Polars worlds translates the missing-value
+        sentinel, because each world has its own: a ``NaN`` in a numpy magnitude becomes
+        a ``null`` in the Polars magnitude, and a ``null`` becomes ``NaN`` on the way
+        back.
         """
         if isinstance(magnitude_type, str):
             magnitude_type = self._get_magnitude_type_from_name(magnitude_type)
@@ -2177,7 +2324,10 @@ class Quantity(
             return cast("Quantity[DT, Any]", self)
         elif magnitude_type is pl.Expr:
             if isinstance(m, float):
-                return cast("Quantity[DT, Any]", self.get_subclass(dt, pl.Expr)(pl.lit(m), u))
+                # translate the missing-value sentinel, exactly like the pl.Series branch
+                # below: this crosses into the polars world, where missing is null
+                literal = pl.lit(None, dtype=pl.Float64) if math.isnan(m) else pl.lit(m)
+                return cast("Quantity[DT, Any]", self.get_subclass(dt, pl.Expr)(literal, u))
 
             raise TypeError(
                 f"Cannot convert magnitude with type {type(m)} to Polars expression, "
@@ -2202,6 +2352,13 @@ class Quantity(
                 )
             _m = [m] if not isinstance(m, Iterable) else m
             vals = pl.Series(values=_m)
+
+            # translate the missing-value sentinel: NaN is how the numpy world spells
+            # missing, null is how the polars world does. The reverse direction needs no
+            # code -- np.array() of a Series already renders null as NaN
+            if vals.dtype.is_float():
+                vals = vals.fill_nan(None)
+
             return cast("Quantity[DT, Any]", self.get_subclass(dt, pl.Series)(vals, u))
         else:
             raise TypeError(f"Cannot convert magnitude from type {type(m)} to {magnitude_type}")
@@ -2270,8 +2427,8 @@ class Quantity(
             if not isinstance(other, Quantity):
                 raise e
 
-            self_is_temp_or_diff_temp = self.dt in (Temperature, TemperatureDifference)
-            other_is_temp_or_diff_temp = other._dimensionality_type in (Temperature, TemperatureDifference)
+            self_is_temp_or_diff_temp = issubclass(self.dt, (Temperature, TemperatureDifference))
+            other_is_temp_or_diff_temp = issubclass(other._dimensionality_type, (Temperature, TemperatureDifference))
 
             if self_is_temp_or_diff_temp and other_is_temp_or_diff_temp:
                 return self._temperature_difference_add_sub(other, "add")  # ty: ignore[invalid-argument-type]
@@ -2332,14 +2489,18 @@ class Quantity(
 
             # only Temperature - TemperatureDifference is meaningful here; the
             # reverse (ΔT - T) is not a temperature and stays an error
-            if self.dt == Temperature and other._dimensionality_type == TemperatureDifference:
+            if issubclass(self.dt, Temperature) and issubclass(other._dimensionality_type, TemperatureDifference):
                 return self._temperature_difference_add_sub(other, "sub")  # ty: ignore[invalid-argument-type]
 
             raise e
 
         ret = cast("Quantity[DT, MT]", self._pint_super.__sub__(other))
 
-        if isinstance(other, Quantity) and self.dt == Temperature and other._dimensionality_type == Temperature:
+        if (
+            isinstance(other, Quantity)
+            and issubclass(self.dt, Temperature)
+            and issubclass(other._dimensionality_type, Temperature)
+        ):
             _mt = type(ret.m)
             subcls = self._get_dimensional_subclass(TemperatureDifference, _mt)  # ty: ignore[invalid-argument-type]
             return subcls(ret.m, ret.u)
@@ -3158,7 +3319,12 @@ class Quantity(
 
         # preserve the dimensionality for other
         # it might be a distinct subclass with identical units as another dimensionality
-        if self.dimensionless and isinstance(other, Quantity):
+        # NOTE: isinstance first, and self.u.dimensionless rather than self.dimensionless:
+        # pint's quantity-level property converts the whole magnitude to root units, which
+        # is an extra O(n) pass plus a temporary on the hottest operator in the library --
+        # even for q * 2.0, where this branch can never be taken. The unit-level check is
+        # magnitude-independent and answers identically for every registered unit
+        if isinstance(other, Quantity) and self.u.dimensionless:
             subcls = self.get_subclass(other._dimensionality_type, type(ret.m))
             return subcls(ret)
 
@@ -3624,11 +3790,19 @@ class Quantity(
     def __truediv__(self, other: Quantity[Any, Any] | float) -> Quantity[Any, Any]:
         if isinstance(other, Quantity):
             self._check_comparable_magnitudes(self.m, other.m, "combine")  # ty: ignore[invalid-argument-type]
+
+        # NOTE: division by zero deliberately follows each container's own semantics rather
+        # than being normalized: a float magnitude raises ZeroDivisionError (Python's rule
+        # for floats, which a Quantity must not swallow), while ndarray and polars
+        # magnitudes yield IEEE ±inf / nan elementwise (numpy warns, polars is silent).
+        # Normalizing either way would mean lying about one container to match the other;
+        # pinned by test_division_by_zero_follows_the_container
         ret = cast("Quantity[DT, MT]", self._pint_super.__truediv__(other))
 
         # preserve the dimensionality for other
         # it might be a distinct subclass with identical units as another dimensionality
-        if self.dimensionless and isinstance(other, Quantity):
+        # (see __mul__ for why this is a unit-level check with isinstance first)
+        if isinstance(other, Quantity) and self.u.dimensionless:
             subcls = self.get_subclass(other._dimensionality_type, type(ret.m))
             return subcls(ret)
 
@@ -3682,7 +3856,9 @@ class Quantity(
         if isinstance(other, (float, int)):
             return self._call_subclass(cast("MT", self._floor_magnitude(self.m / other)), self.u)
 
-        if other.dimensionless:
+        # unit-level check: the quantity-level property would convert other's whole
+        # magnitude to root units just to answer a question about its unit (see __mul__)
+        if other.u.dimensionless:
             magnitude = self._floor_magnitude(self.m / other.to_base_units().m)
             return self._call_subclass(magnitude, self.u)
 

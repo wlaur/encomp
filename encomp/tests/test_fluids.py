@@ -11,6 +11,7 @@ import pytest
 from encomp import coolprop as encomp_coolprop
 
 from .. import utypes as ut
+from ..coolprop import validate_fluid_config
 from ..fluids import (
     CoolPropFluid,
     CProperty,
@@ -19,10 +20,10 @@ from ..fluids import (
     HumidAir,
     HumidAirState,
     Water,
-    _resolve_fluid_name,
     clear_expr_evaluation_cache,
 )
 from ..settings import SETTINGS
+from ..units import ExpectedDimensionalityError
 from ..units import Quantity as Q
 from ..utypes import DT, Density, SpecificEntropy
 
@@ -330,25 +331,25 @@ def test_invalid_fluid_name_rejected_at_construction() -> None:
 
 def test_fluid_name_validation_is_cached() -> None:
     # a valid name is resolved by CoolProp once; every later construction is a cache hit
-    _resolve_fluid_name.cache_clear()
+    validate_fluid_config.cache_clear()
 
     for _ in range(50):
         Fluid("Water", P=Q(2, "bar"), T=Q(25, "degC"))
 
-    info = _resolve_fluid_name.cache_info()
+    info = validate_fluid_config.cache_info()
 
     assert info.misses == 1
     assert info.hits == 49
 
     # an invalid name is NOT cached: functools.cache stores return values, not exceptions,
     # so a transient CoolProp failure can never be remembered as "this fluid is invalid"
-    _resolve_fluid_name.cache_clear()
+    validate_fluid_config.cache_clear()
 
     for _ in range(3):
         with pytest.raises(ValueError, match="could not be initialized"):
             Fluid("Watr", P=Q(2, "bar"), T=Q(25, "degC"))
 
-    assert _resolve_fluid_name.cache_info().currsize == 0
+    assert validate_fluid_config.cache_info().currsize == 0
 
 
 def test_invalid_fluid_state_repr_does_not_raise() -> None:
@@ -1220,3 +1221,28 @@ def test_unknown_property_error_message_points_at_search() -> None:
     # dunder probing (copy, pickle, inspect) still fails plainly
     with pytest.raises(AttributeError):
         fluid.__deepcopy__
+
+
+def test_state_inputs_refuse_a_temperature_difference() -> None:
+    # Temperature and TemperatureDifference share pint's [temperature], and a difference
+    # converts to K by scale alone, so .to() alone would let a difference fix a state:
+    # 300 ΔK would silently flash as 300 K. No CoolProp state input is a difference
+    difference = Q(300.0, "K").asdim(ut.TemperatureDifference)
+
+    with pytest.raises(ExpectedDimensionalityError, match="absolute Temperature"):
+        Water(P=Q(1.0, "bar"), T=cast(Any, difference)).D
+
+    with pytest.raises(ExpectedDimensionalityError, match="absolute Temperature"):
+        Fluid("Water", P=Q(1.0, "bar"), T=cast(Any, Q(5.0, "delta_degC"))).D
+
+    with pytest.raises(ExpectedDimensionalityError, match="absolute Temperature"):
+        HumidAir(T=cast(Any, difference), P=Q(1.0, "bar"), R=Q(0.5)).W
+
+    # explicitly reinterpreted, the same value is accepted
+    absolute = difference.asdim(ut.Temperature)
+    assert Water(P=Q(1.0, "bar"), T=absolute).D.m == approx(996.5, abs=1.0)
+
+    # a difference is still fine where CoolProp expects one dimensionally: none of the
+    # state inputs do, so the guard covers every temperature input including Tdb/Twb
+    with pytest.raises(ExpectedDimensionalityError, match="absolute Temperature"):
+        HumidAir(Tdb=cast(Any, difference), P=Q(1.0, "bar"), R=Q(0.5)).W

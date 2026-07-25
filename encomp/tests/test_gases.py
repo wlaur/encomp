@@ -12,6 +12,7 @@ from ..gases import (
     mass_to_normal_volume,
     normal_volume_to_actual_volume,
 )
+from ..units import ExpectedDimensionalityError
 from ..units import Quantity as Q
 from ..utypes import (
     Density,
@@ -20,6 +21,8 @@ from ..utypes import (
     NormalVolume,
     NormalVolumeFlow,
     Numpy1DArray,
+    Temperature,
+    TemperatureDifference,
     Volume,
     VolumeFlow,
 )
@@ -86,6 +89,21 @@ def test_ideal_gas_density() -> None:
     assert_type(vector, Q[Density, Numpy1DArray])
 
     assert mixed.m[0] == approx(vector.m[0])
+
+
+def test_ideal_gas_density_refuses_a_temperature_difference() -> None:
+    # a ΔT converts to K by scale alone, so without this guard a difference would flow
+    # into the gas law as an absolute temperature and silently produce a density
+    difference = Q(300.0, "K").asdim(TemperatureDifference)
+
+    with pytest.raises(ExpectedDimensionalityError, match="absolute"):
+        # pyrefly cannot solve the constrained magnitude TypeVar across several arguments
+        ideal_gas_density(Q(1.0, "bar"), cast(Any, difference), Q(29.0, "g/mol"))  # pyrefly: ignore[bad-specialization]
+
+    # the same value, explicitly reinterpreted as absolute, is accepted
+    absolute = difference.asdim(Temperature)
+    density = ideal_gas_density(Q(1.0, "bar"), absolute, Q(29.0, "g/mol"))  # pyrefly: ignore[bad-specialization]
+    assert density.m == approx(1.1626, abs=1e-3)
 
 
 def test_gas_conversion() -> None:

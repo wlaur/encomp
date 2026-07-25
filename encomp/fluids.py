@@ -5,7 +5,6 @@ import logging
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Mapping
-from functools import cache
 from threading import Lock
 from typing import Annotated, Any, ClassVar, Generic, Literal, Self, TypedDict, Unpack, cast
 
@@ -23,11 +22,11 @@ from .coolprop import (
     HumidAirParam,
     _fluid_scalar,  # pyright: ignore[reportPrivateUsage]
     _humid_air_scalar,  # pyright: ignore[reportPrivateUsage]
-    _native,  # pyright: ignore[reportPrivateUsage]
     _resolve_pair,  # pyright: ignore[reportPrivateUsage]
     is_fluid_param,
     is_humid_air_param,
     resolve_fluid_spec,
+    validate_fluid_name,
 )
 from .settings import SETTINGS
 from .structures import flatten
@@ -59,6 +58,7 @@ from .utypes import (
     SpecificInternalEnergy,
     SurfaceTension,
     Temperature,
+    TemperatureDifference,
     ThermalConductivity,
     Velocity,
 )
@@ -98,7 +98,11 @@ FluidPhase = Literal[
     "Variable",
     "N/A",
 ]
-BackendKind = Literal["fluid", "humid_air"]
+# Which native CoolProp interface evaluates a property: AbstractState (fluid) or
+# HAPropsSI (humid air). NOT a CoolProp *backend* -- that word is reserved for the
+# equation of state in a fluid name ("HEOS", "IF97", "INCOMP", ...), and encomp has
+# exactly one evaluation implementation (the bundled library) to choose between
+NativeInterface = Literal["fluid", "humid_air"]
 
 
 class FluidState(TypedDict, Generic[MT], total=False):  # noqa: UP046
@@ -215,32 +219,6 @@ def clear_expr_evaluation_cache() -> None:
         _EXPR_EVALUATION_CACHE.clear()
 
 
-@cache
-def _resolve_fluid_name(backend: str, fluids: str, fractions: tuple[float, ...] | None) -> None:
-    # Constructing the AbstractState is the only reliable way to ask CoolProp whether a
-    # name resolves (it covers pure fluids, INCOMP, and mixtures alike). It costs tens of
-    # microseconds for the usual backends -- and seconds the very first time a tabular
-    # backend builds its tables, a cost that would otherwise be paid at the first property
-    # access anyway. Cached per (backend, fluids), so the 1000th Fluid("Water", ...) pays
-    # a dict lookup rather than another CoolProp initialization.
-    #
-    # functools.cache stores return values, never exceptions, so only a resolved name is
-    # remembered: a failure (an invalid name, or a transient CoolProp error) is re-checked
-    # on the next call instead of being cached as "this fluid does not exist".
-    _native().validate_fluid(backend, fluids, None if fractions is None else list(fractions))
-
-
-def _validate_fluid_name(name: CName, composition: Composition | None = None) -> None:
-    backend, fluids, fractions = resolve_fluid_spec(name, composition)
-
-    try:
-        _resolve_fluid_name(backend, fluids, None if fractions is None else tuple(fractions))
-    except Exception as e:
-        raise ValueError(
-            f"Fluid '{name}' could not be initialized, ensure that the name is a valid CoolProp fluid name"
-        ) from e
-
-
 def _expr_cache_digest(expr: pl.Expr) -> str:
     serialized = expr.meta.undo_aliases().meta.serialize(format="json")
     return hashlib.blake2s(serialized.encode(), digest_size=16).hexdigest()
@@ -264,7 +242,7 @@ def _get_expr_evaluation_cache_key(
         fluid_any._assumed_phase,
         comp_key,
         output,
-        type(fluid).BACKEND_KIND,
+        type(fluid).NATIVE_INTERFACE,
         tuple((prop, _expr_cache_digest(expr)) for prop, expr in points),
     )
 
@@ -290,7 +268,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     name: CName
     points: list[tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]]]
 
-    BACKEND_KIND: ClassVar[BackendKind] = "fluid"
+    NATIVE_INTERFACE: ClassVar[NativeInterface] = "fluid"
 
     # Assumed phase passed to both native interfaces. None means CoolProp determines
     # the phase; a value skips the expensive mixture phase-stability search.
@@ -741,7 +719,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             )
         names = [p[0] for p in points]
         exprs = [p[1] for p in points]
-        if self.BACKEND_KIND == "humid_air":
+        if self.NATIVE_INTERFACE == "humid_air":
             n1, n2, n3 = names
             # the plugin reads each input's property from its (aliased) name
             expr = _cprust.humid_air(
@@ -801,12 +779,12 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         # Pair resolution is request validation, not a failed state evaluation. Do it
         # outside the try/NaN normalization so all magnitude containers reject an
         # unsupported pair consistently.
-        if self.BACKEND_KIND != "humid_air":
+        if self.NATIVE_INTERFACE != "humid_air":
             (name1, _), (name2, _) = points
             _resolve_pair(name1, name2)
 
         try:
-            if self.BACKEND_KIND == "humid_air":
+            if self.NATIVE_INTERFACE == "humid_air":
                 (name1, value1), (name2, value2), (name3, value3) = points
                 value = _humid_air_scalar(output, name1, value1, name2, value2, name3, value3)
             else:
@@ -926,11 +904,14 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             qty.ito(ret_unit)
 
         if convert_magnitude:
-            qty = qty.astype(self._mt)  # ty: ignore[no-matching-overload]
+            qty = qty.astype(self._mt)
 
         if isinstance(qty.m, pl.Series):
-            # missing values surface as null, never NaN (the library's single sentinel)
-            qty.m = qty.m.fill_nan(None).cast(self._eager_series_output_dtype())
+            # A computed polars magnitude carries null for missing, never NaN. astype() above
+            # already translates the sentinel when it converts from the numpy result, so the
+            # fill_nan is belt-and-braces for any future path that arrives here with a Series
+            # magnitude already in hand (convert_magnitude=False); the cast is load-bearing
+            qty.m = qty.m.fill_nan(None).cast(self._eager_series_output_dtype())  # ty: ignore[invalid-assignment]
 
         return cast("Quantity[Any, MT]", qty)
 
@@ -944,6 +925,17 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         """
 
         unit = self.get_coolprop_unit(prop)
+
+        # Temperature and TemperatureDifference share pint's [temperature] dimension, and a
+        # difference converts to K by scale alone, so .to() below would silently accept a
+        # difference wherever CoolProp wants an absolute temperature (300 ΔK flashing as
+        # 300 K). No CoolProp state input is a difference, so refuse the whole class here
+        if issubclass(qty.dt, TemperatureDifference) and unit.dimensionality == Temperature.dimensions:
+            raise ExpectedDimensionalityError(
+                f'CoolProp input for property "{prop}" must be an absolute Temperature, '
+                f"passed a TemperatureDifference ({qty.u}); use .asdim(Temperature) if the "
+                "value really is an absolute temperature"
+            )
 
         try:
             m = qty.to(unit).m
@@ -1081,6 +1073,12 @@ class Fluid(CoolPropFluid[MT]):
             Name of the fluid. With ``composition`` this is the backend only
             (e.g. ``"HEOS"``); otherwise the full CoolProp name, optionally with
             fixed fractions (e.g. ``"HEOS::CO2[0.5]&O2[0.5]"``).
+
+            For an incompressible solution the concentration is part of the name and is
+            **not** optional in practice: CoolProp reads a bare ``"INCOMP::MEG"`` as a
+            0 % solution, i.e. pure water, without warning (996 kg/m³ at 25 °C, and NaN
+            at -20 °C where the intended glycol mixture is still liquid). Spell it out:
+            ``"INCOMP::MEG[0.5]"``.
         composition : Composition | None
             Fixed mixture composition as ``{species: mole fraction}`` (like CoolProp's
             ``"HEOS::CO2[0.5]&O2[0.5]"`` name syntax). Mole fractions must sum to 1.
@@ -1104,7 +1102,7 @@ class Fluid(CoolPropFluid[MT]):
         else:
             self.name = name
 
-        _validate_fluid_name(self.name, self._composition)
+        validate_fluid_name(self.name, self._composition)
 
         points = self._build_points(kwargs)
 
@@ -1428,7 +1426,7 @@ class HumidAir(CoolPropFluid[MT]):
     viscosity. This differs from ``Fluid.M``, which returns molar mass.
     """
 
-    BACKEND_KIND: ClassVar[BackendKind] = "humid_air"
+    NATIVE_INTERFACE: ClassVar[NativeInterface] = "humid_air"
     STATE_INPUTS: ClassVar[frozenset[str]] = frozenset(HUMID_AIR_INPUTS)
 
     # CoolProp humid-air property names, units, and descriptions

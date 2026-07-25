@@ -17,8 +17,8 @@ from encomp import coolprop as cp
 df = pl.DataFrame({"P": [50e5, 60e5], "T": [400.0, 450.0], "R": [0.4, 0.6]})  # Pa, K, -
 
 df.select(
-    cp.water("DMASS", "P", "T").alias("rho"),   # IF97 water/steam
-    cp.water("HMASS", "P", "T").alias("h"),     # runs in parallel
+    cp.water("DMASS", "P", "T").alias("rho"),  # IF97 water/steam
+    cp.water("HMASS", "P", "T").alias("h"),  # runs in parallel
     cp.humid_air("W", "P", "T", "R").alias("humidity_ratio"),
 )
 ```

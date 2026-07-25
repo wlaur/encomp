@@ -71,7 +71,28 @@ assert pressure.to("kPa").m == 100.0
 - `Temperature` and `TemperatureDifference` are distinct dimensionalities with
   deliberate arithmetic (`T - T -> ΔT`, `T ± ΔT -> T`, `ΔT - T` is an error). The
   comparison and pickling overrides on `Quantity` intentionally narrow pint's
-  signatures — that's the point of the library, not an LSP bug to fix.
+  signatures — that's the point of the library, not an LSP bug to fix. Two consequences
+  that are easy to break:
+  - **The unit decides the dimensionality**, and the two must never contradict each
+    other. `degC`/`degF` are absolute, `delta_degC`/`delta_K` are differences, and only
+    the multiplicative spellings (`K`, `degR`, `mK`) are genuinely ambiguous — those
+    default to `Temperature`. `asdim` rewrites the unit onto the matching scale in both
+    directions; a `Quantity[...]` hint that disagrees with the unit is re-resolved from
+    the unit (as for any dimensionality: `Q[Mass](1, "m")` is a `Length`).
+  - **A difference must never reach an absolute-temperature API.** ΔT converts to `K` by
+    scale alone, so `.to()` cannot catch it: CoolProp state inputs and
+    `ideal_gas_density` check the dimensionality explicitly. numpy dispatch does not go
+    through the operators, so `__array_ufunc__`/`__array_function__` route `np.add`/
+    `np.subtract` to `+`/`-` and re-type the difference-producing array functions
+    (`_DIFFERENCE_ARRAY_FUNCTIONS`). Add to that set rather than duplicating the rules.
+- **Missing values follow each container's own sentinel**: `NaN` in the numpy world,
+  `null` in the polars world (where `NaN` is an ordinary float *value* — polars skips
+  `null` in `mean()` and propagates `NaN`). encomp never *produces* a `NaN` in a polars
+  magnitude (an unfixable CoolProp state is `null`); a `NaN` the caller puts in a
+  `pl.Series` is data and is kept verbatim; IEEE arithmetic (`0.0 / 0.0`) may create one
+  in either world; and `astype` — the boundary between the worlds — translates the
+  sentinel both ways. Don't normalize magnitudes anywhere else: it would rewrite the
+  caller's data and cost an O(n) pass per operation.
 - CoolProp evaluation is **one property per DAG node** by design; don't batch multiple
   output properties into one plugin call. Scalars detach from the GIL in the direct
   PyO3 bridge and own thread-local native states; arrays run through the Rust/Polars

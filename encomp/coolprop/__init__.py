@@ -112,6 +112,8 @@ __all__ = [
     "lib_version",
     "resolve_fluid_spec",
     "self_check",
+    "validate_fluid_config",
+    "validate_fluid_name",
     "water",
 ]
 
@@ -529,6 +531,51 @@ def _resolve_pair(name1: str, name2: str) -> tuple[int, bool]:
 
 
 @cache
+def validate_fluid_config(backend: Backend | str, fluids: str, fractions: tuple[float, ...] | None) -> None:
+    """Raise unless CoolProp can construct an ``AbstractState`` for a resolved fluid spec.
+
+    Takes the ``(backend, fluids, fractions)`` triple :func:`resolve_fluid_spec` produces;
+    :func:`validate_fluid_name` is the name-level entry point most callers want.
+
+    ``backend`` is the ``AbstractState`` backend (``"HEOS"``, ``"IF97"``, ``"INCOMP"``,
+    ``"BICUBIC&HEOS"``, ...) and ``fluids`` the ``&``-joined species (``"Water"``,
+    ``"CO2&O2"``). The backend is annotated as the :data:`Backend` Literal widened with
+    ``str``, like :data:`CName`: the Literal is what editors suggest, but CoolProp -- not
+    encomp -- is the authority on the name, so an unlisted backend must still pass.
+
+    Cached per triple, so the 1000th ``Fluid("Water", ...)`` pays a dict lookup rather than
+    another CoolProp initialization. Only *resolved* names are remembered:
+    ``functools.cache`` stores return values, never exceptions, so an invalid name (or a
+    transient CoolProp error) is re-checked on the next call instead of being cached as
+    "this fluid does not exist". Use ``validate_fluid_config.cache_clear()`` to drop it.
+    """
+    # Constructing the AbstractState is the only reliable way to ask CoolProp whether a
+    # name resolves (it covers pure fluids, INCOMP, and mixtures alike). It costs tens of
+    # microseconds for the usual backends -- and seconds the very first time a tabular
+    # backend builds its tables, a cost that would otherwise be paid at the first property
+    # access anyway.
+    _native().validate_fluid(backend, fluids, None if fractions is None else list(fractions))
+
+
+def validate_fluid_name(name: CName, composition: Composition | None = None) -> None:
+    """Raise ``ValueError`` unless ``name`` (+ ``composition``) is a CoolProp fluid.
+
+    The single eager fluid-name check, shared by :class:`encomp.fluids.Fluid` and the
+    expression builders here: a misspelled name must fail where it is written, not at
+    ``collect()`` time inside a plugin node. Results are cached by
+    :func:`validate_fluid_config`.
+    """
+    backend, fluids, fractions = resolve_fluid_spec(name, composition)
+
+    try:
+        validate_fluid_config(backend, fluids, None if fractions is None else tuple(fractions))
+    except Exception as e:
+        raise ValueError(
+            f"Fluid '{name}' could not be initialized, ensure that the name is a valid CoolProp fluid name"
+        ) from e
+
+
+@cache
 def _parameter_index(name: str) -> int:
     return _native().parameter_index(name)
 
@@ -768,6 +815,17 @@ def fluid(
     convert first (e.g. ``encomp.polars.quantities`` + ``.to(...)``), or pass raw SI
     values via ``.ext.storage()``.
     """
+    # The plugin resolves the output name and the fluid inside the query engine, so a typo
+    # in either would only surface at collect() time, in CoolProp's words and with the
+    # plugin .so path in the expression dump. Both checks are cheap and cached, and
+    # encomp.fluids validates eagerly, so do the same here.
+    try:
+        _parameter_index(output)
+    except ValueError as e:
+        raise ValueError(
+            f"fluid output must be a CoolProp property name (DMASS, HMASS, T, ...); got {output!r}."
+        ) from e
+
     name1, name2 = _input_name(input1), _input_name(input2)
     for nm in (name1, name2):
         if not is_fluid_input(nm):
@@ -784,6 +842,7 @@ def fluid(
     a, b = (input2, input1) if swap else (input1, input2)  # canonical order
     name_a, name_b = (name2, name1) if swap else (name1, name2)
     a_expr, b_expr = _as_expr(a), _as_expr(b)
+    validate_fluid_name(name, composition)
     backend, fluids, fractions = resolve_fluid_spec(name, composition)
     phase = _phase_from_assumed(assume_phase) if assume_phase is not None else None
 

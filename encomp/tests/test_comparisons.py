@@ -1,14 +1,15 @@
 import math
 import operator
 from collections.abc import Callable
-from typing import Any, assert_type
+from typing import Any, assert_type, cast
 
 import numpy as np
 import polars as pl
 import pytest
 
+from ..units import DimensionalityComparisonError
 from ..units import Quantity as Q
-from ..utypes import Numpy1DBoolArray
+from ..utypes import Numpy1DBoolArray, TemperatureDifference
 
 
 def _assert_type(val: object, typ: type) -> None:
@@ -330,3 +331,44 @@ def test_numpy_and_polars_disagree_on_nan_ordering() -> None:
     with_null = Q(pl.Series([1.0, None]), "m")
     assert (with_null > one).to_list() == [False, None]
     assert (with_null <= one).to_list() == [True, None]
+
+
+def test_temperature_and_difference_comparisons() -> None:
+    # Temperature and TemperatureDifference share [temperature] but are not comparable.
+    # == answers False (Python convention: 1 == "a" is False), while the ordering operators
+    # raise because no answer is correct -- in every magnitude container
+    absolute = Q(5.0, "degC")
+    difference = Q(5.0, "delta_degC")
+
+    # the type checkers reject these comparisons statically; cast to reach the runtime
+    assert (absolute == cast(Any, difference)) is False
+    assert (absolute != cast(Any, difference)) is True
+
+    for op in (operator.gt, operator.ge, operator.lt, operator.le):
+        with pytest.raises(DimensionalityComparisonError):
+            op(absolute, difference)
+        with pytest.raises(DimensionalityComparisonError):
+            op(difference, absolute)
+
+    # the same holds for the ambiguous kelvin spelling, where only the dimensionality differs
+    kelvin_absolute = Q(300.0, "K")
+    kelvin_difference = Q(300.0, "K").asdim(TemperatureDifference)
+
+    assert (kelvin_absolute == cast(Any, kelvin_difference)) is False
+    with pytest.raises(DimensionalityComparisonError):
+        _ = kelvin_absolute > cast(Any, kelvin_difference)
+
+    # within one dimensionality, comparisons work across scales as usual
+    assert Q(5.0, "delta_degC") == Q(5.0, "K").asdim(TemperatureDifference)
+    assert Q(25.0, "degC") > Q(200.0, "K")
+
+    # ... and elementwise for the vector containers
+    array_differences = Q(np.array([5.0, 10.0]), "delta_degC")
+    array_mask = array_differences > Q(6.0, "delta_degC")
+    # pyrefly resolves the constrained magnitude TypeVar to the scalar (bool) overload here
+    assert array_mask.tolist() == [False, True]  # pyrefly: ignore[missing-attribute]
+
+    series_absolute = Q(pl.Series([25.0, 30.0]), "degC")
+    assert (series_absolute > Q(26.0, "degC")).to_list() == [False, True]
+    with pytest.raises(DimensionalityComparisonError):
+        _ = series_absolute > cast(Any, array_differences.astype("pl.Series"))

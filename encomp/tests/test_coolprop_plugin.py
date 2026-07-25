@@ -342,13 +342,21 @@ def test_invalid_input_pair_raises_before_plugin_execution() -> None:
 
 
 def test_invalid_runtime_names_raise_python_exceptions() -> None:
-    df = pl.DataFrame({"P": [101325.0], "T": [300.0]})
+    # a bad output property or fluid name is rejected where the expression is BUILT, not
+    # at collect() time from inside a plugin node (which reports CoolProp's own words plus
+    # the plugin .so path in an expression dump)
+    with pytest.raises(ValueError, match="must be a CoolProp property name"):
+        cp.water(cast(Any, "NOT_A_PROPERTY"), "P", "T")
 
-    with pytest.raises(Exception, match="unknown parameter"):
-        df.select(cp.water(cast(Any, "NOT_A_PROPERTY"), "P", "T"))
+    with pytest.raises(ValueError, match="could not be initialized"):
+        cp.fluid("DMASS", "P", "T", name=cast(Any, "NotAFluid"))
 
     with pytest.raises(Exception, match="interior NUL"):
-        df.select(cp.fluid("DMASS", "P", "T", name=cast(Any, "Water\0bad")))
+        cp.fluid("DMASS", "P", "T", name=cast(Any, "Water\0bad"))
+
+    # a valid name and output still build a plan and evaluate
+    df = pl.DataFrame({"P": [101325.0], "T": [300.0]})
+    assert df.select(cp.water("DMASS", "P", "T")).item() == pytest.approx(996.5, abs=1.0)
 
 
 def test_duplicate_state_inputs_raise() -> None:

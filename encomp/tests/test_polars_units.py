@@ -159,6 +159,22 @@ def test_quantity_frame_refuses_temperature_reinterpretation() -> None:
     assert_type(Difference.value, Column[TemperatureDifference])
 
 
+def test_declaring_a_difference_with_an_offset_unit_rewrites_the_stored_unit() -> None:
+    # unit(..., asdim=...) goes through Quantity.asdim, which moves an offset unit onto the
+    # matching delta scale -- so the persisted metadata can never say "absolute °C" for a
+    # column declared to hold differences
+    class Differences(QuantityFrame):
+        value = unit("degC", asdim=TemperatureDifference)
+
+    assert Differences.value.unit == Unit("delta_degC")
+    assert Differences.value.dimensionality is TemperatureDifference
+
+    typed = Differences.from_untyped(pl.DataFrame({"value": [5.0]}))
+    assert units_of(typed.lf) == {"value": Unit("delta_degC")}
+    assert typed.value.dt is TemperatureDifference
+    assert typed.lf.collect()["value"].ext.storage().to_list() == [5.0]
+
+
 def test_quantity_frame_boundaries_are_explicit() -> None:
     with raises(TypeError, match="from_untyped"):
         Sensors(pl.DataFrame({"pressure": [1.0], "Volume flow": [1.0]}))
@@ -276,6 +292,27 @@ def test_parquet_round_trip(tmp_path: Path) -> None:
     sunk = tmp_path / "sunk.parquet"
     lf.sink_parquet(sunk)
     assert units_of(pl.read_parquet(sunk)) == {"P": Unit("bar"), "V": Unit("m³/h")}
+
+
+def test_parquet_round_trip_preserves_null_and_nan_distinctly(tmp_path: Path) -> None:
+    # null (missing) and NaN (a float value) are different things in polars, and the unit
+    # dtype must not collapse one into the other -- not even through an on-read conversion
+    path = tmp_path / "temperatures.parquet"
+    stored = with_units(pl.DataFrame({"value": [25.0, None, float("nan")]}), {"value": "degC"})
+    stored.write_parquet(path)
+
+    back = pl.read_parquet(path)["value"].ext.storage()
+    assert back.to_list()[0] == 25.0
+    assert back.null_count() == 1
+    assert back.is_nan().to_list() == [False, None, True]
+
+    class Kelvin(QuantityFrame):
+        value = unit("K")
+
+    converted = Kelvin.scan_parquet(path).lf.collect()["value"].ext.storage()
+    assert converted.to_list()[0] == pytest.approx(298.15)
+    assert converted.null_count() == 1
+    assert converted.is_nan().to_list() == [False, None, True]
 
 
 def test_coolprop_import_registers_before_parquet_read(tmp_path: Path) -> None:
@@ -435,6 +472,65 @@ def test_quantity_frame_derive_validates_assignments() -> None:
         Report.power.assign(cast(Any, Q(pl.Series([1.0]), "kW")))
     with raises(Exception, match="Cannot convert"):
         Report.power.assign(cast(Any, sensors.pressure))
+
+
+def test_scan_parquet_survives_predicate_pushdown(tmp_path: Path) -> None:
+    # polars' parquet statistics reader has no implementation for extension dtypes and
+    # aborts a worker thread with a Rust panic when a pushed-down predicate makes it decode
+    # them (upstream; reproduced on 1.42 and 1.43). QuantityFrame.scan_parquet inserts an
+    # identity re-wrap that the optimizer will not push a predicate through
+    path = tmp_path / "sensors.parquet"
+    frame = pl.DataFrame({"pressure": [10.0, 60.0, 100.0], "Volume flow": [1.0, 2.0, 3.0]})
+    Sensors.from_untyped(frame).lf.sink_parquet(path)
+
+    scanned = Sensors.scan_parquet(path)
+    filtered = scanned.lf.filter(pl.col("pressure").ext.storage() > 50.0).collect()
+
+    assert filtered["pressure"].ext.storage().to_list() == [60.0, 100.0]
+    assert filtered.schema["pressure"] == UnitDType("bar")
+
+    # is_null() decodes statistics too, and a non-declared unit column is shielded as well
+    assert scanned.lf.filter(pl.col("Volume flow").ext.storage().is_null()).collect().height == 0
+
+    # pin the upstream bug itself: when it is fixed, this fails and the shield (and the
+    # note in QuantityFrame.scan_parquet) can be revisited
+    with raises(BaseException, match=r"not yet implemented|statistics"):
+        pl.scan_parquet(path).filter(pl.col("pressure").ext.storage() > 50.0).collect()
+
+
+def test_units_of_degrades_per_column_for_unparseable_metadata() -> None:
+    # EXTENSION_NAME is a cross-process contract: another producer can write metadata pint
+    # cannot parse. That must not make the well-formed columns of the frame uninspectable
+    good = with_units(pl.DataFrame({"good": [1.0]}), {"good": "bar"})
+    bad_dtype = pl.BaseExtension(EXTENSION_NAME, pl.Float64(), "totally_bogus")
+    frame = good.with_columns(pl.Series("bad", [2.0]).cast(pl.Float64).ext.to(bad_dtype))
+
+    with pytest.warns(UserWarning, match="totally_bogus"):
+        assert units_of(frame) == {"good": Unit("bar")}
+
+
+def test_typed_read_errors_name_the_column() -> None:
+    stored = with_units(pl.DataFrame({"pressure": [300.0], "Volume flow": [1.0]}), {"pressure": "degC"})
+
+    with raises(DimensionalityTypeError, match="column 'pressure'"):
+        Sensors(stored)
+
+    with raises(TypeError, match="float or integer") as excinfo:
+        with_units(pl.DataFrame({"tag": ["a"]}), {"tag": "bar"})
+
+    assert any("'tag'" in note for note in excinfo.value.__notes__)
+
+    with raises(UndefinedUnitError) as unit_excinfo:
+        with_units(pl.DataFrame({"P": [1.0]}), {"P": "bogus_unit"})
+
+    assert any("'P'" in note for note in unit_excinfo.value.__notes__)
+
+
+def test_quantity_frame_repr_summarizes_declarations() -> None:
+    sensors = Sensors.from_untyped(pl.DataFrame({"pressure": [1.0], "Volume flow": [10.0]}))
+
+    # a collection-free summary: the repr of a lazy frame must not evaluate it
+    assert repr(sensors) == "<Sensors: pressure [bar], Volume flow [m³/h] (lazy)>"
 
 
 def test_quantity_frame_round_trips_fluid_expression_output(tmp_path: Path) -> None:

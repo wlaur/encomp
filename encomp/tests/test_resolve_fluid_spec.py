@@ -5,7 +5,7 @@
 and ``encomp.coolprop.fluid`` delegate to it.
 """
 
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
@@ -135,3 +135,21 @@ def test_is_humid_air_input() -> None:
 def test_phase_ignoring_backends() -> None:
     assert "IF97" in cp.PHASE_IGNORING_BACKENDS
     assert "HEOS" not in cp.PHASE_IGNORING_BACKENDS
+
+
+def test_fluid_expression_validates_the_name_and_output_eagerly() -> None:
+    # a typo in either must fail where it is written; deferring it to collect() surfaces
+    # CoolProp's own words plus the plugin .so path in an expression dump
+    with pytest.raises(ValueError, match="could not be initialized"):
+        cp.fluid("DMASS", "P", "T", name=cast(Any, "Watr"))
+
+    with pytest.raises(ValueError, match="must be a CoolProp property name"):
+        cp.water(cast(Any, "DMAS"), "P", "T")
+
+    with pytest.raises(ValueError, match="could not be initialized"):
+        cp.validate_fluid_name(cast(Any, "HEOS::NotAFluid"))
+
+    # valid names and outputs build a plan without touching the data
+    assert cp.fluid("DMASS", "P", "T", name="IF97::Water").meta.output_name() == "DMASS"
+    cp.validate_fluid_name("Water")
+    cp.validate_fluid_name("INCOMP::MEG[0.5]")

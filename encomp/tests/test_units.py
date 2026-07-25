@@ -1332,8 +1332,9 @@ def test_indexing() -> None:
 
 
 def test_round() -> None:
-    # TODO: should this even work?
-    # type numpy.ndarray doesn't define __round__ method
+    # numpy does not define __round__ on ndarray and polars spells rounding as a method,
+    # so every container is routed explicitly -- round() must work identically for all of
+    # them, like abs() and the arithmetic operators do
 
     q = Q(25.12312312312, "kg/s")
 
@@ -1348,8 +1349,21 @@ def test_round() -> None:
     assert q_r2.m[0] == 25.1
     assert q_r2.m[1] == 25.1
 
-    with pytest.raises(TypeError, match="round"):
-        round(Q([25.12312312312], "kg/s").astype(pl.Series), 1)
+    q_series = round(Q([25.12312312312], "kg/s").astype(pl.Series), 1)
+
+    assert isinstance(q_series.m, pl.Series)
+    assert q_series.m.to_list() == [25.1]
+    assert q_series.u == Unit("kg/s")
+
+    q_expr = round(Q(25.12312312312, "kg/s").astype(pl.Expr), 1)
+
+    assert isinstance(q_expr.m, pl.Expr)
+    assert pl.select(q_expr.m).item() == 25.1
+
+    # round() with no digits, for every container
+    assert round(Q(25.6, "kg/s")).m == 26.0
+    assert round(Q([25.6], "kg/s")).m[0] == 26.0
+    assert round(Q([25.6], "kg/s").astype(pl.Series)).m.to_list() == [26.0]
 
 
 def test_abs() -> None:
@@ -1457,9 +1471,44 @@ def test_pydantic_integration() -> None:
 
 
 def test_float_cast() -> None:
-    assert isinstance(Q([False, False]).m[0], float)
+    # non-float numeric sequences normalize to a float64 magnitude
+    assert isinstance(Q([1, 2]).m[0], float)
+    assert Q([1, 2]).m.dtype == np.float64
+    assert Q(np.array([1, 2], dtype=np.int8)).m.dtype == np.float64
+    assert Q(np.array([1.5], dtype=np.float32)).m.dtype == np.float64
 
-    assert (Q([False, True]) == Q(np.array([False, True]))).all()
+
+def test_non_numeric_array_magnitudes_are_rejected() -> None:
+    # a bool magnitude is always a mistake (typically a comparison mask fed back in as
+    # data), and every other non-numeric dtype numpy would silently coerce is wrong data:
+    # a complex array loses its imaginary part, a datetime64 becomes its raw tick count.
+    # the pl.Series magnitude path refuses exactly the same set
+    for values in (
+        [False, True],
+        np.array([False, True]),
+        np.array([True], dtype=object),
+    ):
+        with pytest.raises(TypeError, match="not a bool"):
+            Q(cast(Any, values), "m")
+
+    for array in (
+        np.array([1 + 2j, 3 + 4j]),
+        np.array([1, 2], dtype="datetime64[s]"),
+        np.array([1, 2], dtype="timedelta64[s]"),
+    ):
+        with pytest.raises(TypeError, match="must contain real numbers"):
+            Q(cast(Any, array), "m")
+
+    with pytest.raises(TypeError, match="must contain real numbers"):
+        Q(cast(Any, [1 + 2j]), "m")
+
+    # the in-place magnitude setter validates identically
+    qty = Q(np.array([1.0]), "m")
+
+    with pytest.raises(TypeError, match="not a bool"):
+        qty.m = cast(Any, np.array([True]))
+
+    assert qty.m.tolist() == [1.0]
 
 
 def test_temperature_difference() -> None:
@@ -1747,6 +1796,119 @@ def test_temperature_difference_to_multiplicative_units() -> None:
     # the absolute -> delta direction is unchanged (asdim is the escape hatch)
     with pytest.raises(DimensionalityTypeError):
         _ = Q(300.0, "K").to("delta_degC")
+
+
+def test_unit_and_dimensionality_never_contradict_for_temperature() -> None:
+    # a Quantity[Temperature] must never carry a Δ unit and a Quantity[TemperatureDifference]
+    # must never carry an offset one -- the unit and the dimensionality would then state
+    # different physical meanings. The two are handled differently on purpose:
+
+    # an offset unit under a difference subclass is a mistake with no safe reading
+    with pytest.raises(DimensionalityTypeError, match="delta unit"):
+        Q[TemperatureDifference, float](5.0, "degC")
+
+    # a delta unit under an absolute subclass re-resolves from the unit, exactly as every
+    # other mismatched subclass hint does (Q[Mass](1, "m") is a Length). It has to: pint
+    # builds T - T as self.__class__(magnitude, delta_unit) on the absolute class
+    reinterpreted = Q[Temperature, float](5.0, "delta_degC")
+    assert reinterpreted.dt is TemperatureDifference
+    assert reinterpreted.u == Unit("delta_degC")
+    assert (Q(35.0, "degC") - Q(25.0, "degC")).dt is TemperatureDifference
+
+    # asdim is the deliberate reinterpretation, and it moves the unit to the matching
+    # scale in BOTH directions so the result cannot be misread
+    absolute = Q(5.0, "delta_degC").asdim(Temperature)
+    assert absolute.dt is Temperature
+    assert absolute.u == Unit("degC")
+    assert absolute.to("K").m == approx(278.15)
+
+    difference = Q(5.0, "degC").asdim(TemperatureDifference)
+    assert difference.dt is TemperatureDifference
+    assert difference.u == Unit("delta_degC")
+
+    # a multiplicative unit is genuinely ambiguous and stays as it is under both readings
+    assert Q(300.0, "K").dt is Temperature
+    assert Q(300.0, "K").asdim(TemperatureDifference).u == Unit("K")
+    assert Q[TemperatureDifference, float](300.0, "K").dt is TemperatureDifference
+    assert Q(300.0, "K").asdim(TemperatureDifference).asdim(Temperature).u == Unit("K")
+
+
+def test_numpy_dispatch_types_temperature_differences_like_the_operator() -> None:
+    # numpy dispatch does not go through __sub__, and pint rebuilds the result from the
+    # unit: np.diff of a kelvin array used to come back as an absolute Temperature (and
+    # could then fix a CoolProp state as one), while `-` typed the same computation as a
+    # difference. degC was already correct because pint emits delta_degC there
+    kelvin = Q(np.array([300.0, 600.0, 900.0]), "K")
+    celsius = Q(np.array([25.0, 20.0, 30.0]), "degC")
+
+    for func in (np.diff, np.ediff1d, np.gradient, np.ptp, np.std):
+        for absolute in (kelvin, celsius):
+            result = cast(Any, func(absolute))
+            assert result.dt is TemperatureDifference, f"{func.__name__} on {absolute.u}"
+
+    # np.subtract(a, b) is exactly a - b, and np.add(a, b) exactly a + b
+    # numpy's stubs type these as arrays, so the dimensionality is a runtime guarantee
+    assert cast(Any, np.subtract(kelvin[:1], kelvin[1:2])).dt is TemperatureDifference
+    subtracted = cast(Any, np.subtract(celsius[:1], celsius[1:2]))
+    assert subtracted.dt is TemperatureDifference
+    assert subtracted.u == Unit("delta_degC")
+    assert subtracted.m[0] == approx((celsius[0] - celsius[1]).m)
+
+    # ... including the ambiguity the operator refuses: pint's ufunc path answered 45 °C
+    with pytest.raises(OffsetUnitCalculusError):
+        _ = np.add(celsius[:1], celsius[1:2])
+
+    difference = Q(np.array([5.0, 10.0]), "delta_degC")
+    assert cast(Any, np.add(Q(np.array([25.0, 25.0]), "degC"), difference)).dt is Temperature
+    assert cast(Any, np.diff(difference)).dt is TemperatureDifference
+
+    # a mean of absolute temperatures stays absolute, and a squared result is neither
+    assert cast(Any, np.mean(celsius)).dt is Temperature
+    assert cast(Any, np.var(celsius)).dimensionality == Temperature.dimensions**2
+
+
+def test_temperature_arithmetic_includes_dimensionality_subclasses() -> None:
+    # a subclass takes part in every other T/ΔT rule (construction, asdim, conversion
+    # guards), so it takes part in the arithmetic that defines the concept too
+    class CustomDifference(TemperatureDifference):
+        dimensions = TemperatureDifference.dimensions
+
+    class CustomTemperature(Temperature):
+        dimensions = Temperature.dimensions
+
+    difference = Q[CustomDifference, float](5.0, "delta_degC")
+    absolute = Q[CustomTemperature, float](25.0, "degC")
+
+    assert (Q(25.0, "degC") + difference).m == approx(30.0)
+    assert (Q(25.0, "degC") - difference).m == approx(20.0)
+    assert (difference + Q(25.0, "degC")).m == approx(30.0)
+    assert (absolute + Q(5.0, "delta_degC")).m == approx(30.0)
+    assert (absolute - Q(35.0, "degC")).dt is TemperatureDifference
+
+    # ΔT - T stays an error for a subclass too (it is not a temperature)
+    with pytest.raises(DimensionalityTypeError):
+        _ = cast(Any, difference) - Q(25.0, "degC")
+
+
+def test_subclassing_a_distinct_dimensionality_does_not_hijack_unit_resolution() -> None:
+    # _distinct is a claim by the class that sets it, not by its subclasses: inheriting it
+    # would make every degC/K quantity in the process resolve to the subclass instead
+    with _reset_dimensionality_registry():
+
+        class CustomTemperature(Temperature):
+            dimensions = Temperature.dimensions
+
+        assert not CustomTemperature.is_distinct()
+        assert Q(25.0, "degC").dt is Temperature
+        assert Q(300.0, "K").dt is Temperature
+
+        # an explicit claim still works, and an inherited False is still honoured
+        class ExplicitTemperature(Temperature):
+            _distinct = True
+            dimensions = Temperature.dimensions
+
+        assert ExplicitTemperature.is_distinct()
+        assert Q(25.0, "degC").dt is ExplicitTemperature
 
 
 def test_temperature_unit_inputs() -> None:
@@ -2212,6 +2374,82 @@ def test_floordiv_is_consistent_across_magnitude_containers() -> None:
     negative_infinity = Q(1.0, "m") // Q(float("-inf"), "cm")
     assert negative_infinity.m == 0.0
     assert np.signbit(negative_infinity.m)
+
+
+def test_division_by_zero_follows_the_container() -> None:
+    # this is the one arithmetic divergence between the containers, and it is deliberate:
+    # a float magnitude follows Python (dividing a float by zero raises, and a Quantity
+    # must not swallow that), while the vector containers follow IEEE elementwise, which
+    # is what their kernels do and what makes a per-row zero not abort a whole column
+    with pytest.raises(ZeroDivisionError):
+        _ = Q(1.0, "m") / Q(0.0, "s")
+
+    with pytest.raises(ZeroDivisionError):
+        _ = Q(1.0, "m") // Q(0.0, "m")
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        assert np.isinf((Q(np.array([1.0]), "m") // Q(np.array([0.0]), "m")).m).all()
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        assert np.isinf((Q(np.array([1.0]), "m") / Q(np.array([0.0]), "s")).m).all()
+        assert np.isnan((Q(np.array([0.0]), "m") / Q(np.array([0.0]), "s")).m).all()
+
+    series = Q(pl.Series([1.0, 0.0]), "m") / Q(pl.Series([0.0, 0.0]), "s")
+    assert series.m.to_list() == [float("inf"), pytest.approx(float("nan"), nan_ok=True)]
+
+    expression = Q(pl.lit(1.0), "m") / Q(pl.lit(0.0), "s")
+    assert pl.select(expression.m).item() == float("inf")
+
+
+def test_missing_values_follow_each_containers_own_sentinel() -> None:
+    # polars distinguishes null (absent) from NaN (a float value); numpy has only NaN for
+    # both. astype is the boundary between the two worlds, so it translates the sentinel
+    from_numpy = Q(np.array([1.0, np.nan]), "m").astype("pl.Series")
+    assert from_numpy.m.to_list() == [1.0, None]
+    assert not from_numpy.m.is_nan().any()
+
+    # and back again: numpy can only spell it as NaN
+    to_numpy = Q(pl.Series([1.0, None]), "m").astype("ndarray")
+    assert to_numpy.m[0] == 1.0
+    assert np.isnan(to_numpy.m[1])
+
+    # round trip through both worlds preserves the meaning
+    round_tripped = Q(np.array([1.0, np.nan]), "m").astype("pl.Series").astype("ndarray")
+    assert round_tripped.m[0] == 1.0
+    assert np.isnan(round_tripped.m[1])
+
+    # a NaN the caller puts in a Series is data, not a missing marker: kept as-is (and
+    # IEEE arithmetic can produce one in either world -- see the division-by-zero test)
+    kept = Q(pl.Series([1.0, float("nan")]), "m")
+    assert kept.m.is_nan().to_list() == [False, True]
+    assert kept.m.null_count() == 0
+
+    # nulls survive unit conversion and arithmetic as nulls
+    nulls = Q(pl.Series([1.0, None]), "bar")
+    assert nulls.to("kPa").m.to_list() == [100.0, None]
+    assert (nulls * 2.0).m.to_list() == [2.0, None]
+
+    # pl.Expr is the polars world too, so astype translates there as well
+    assert pl.select(v=Q(float("nan"), "m").astype("pl.Expr").m).to_series().to_list() == [None]
+    assert pl.select(v=Q(2.0, "m").astype("pl.Expr").m).to_series().to_list() == [2.0]
+
+    # the polars -> numpy -> polars direction cannot round trip a data-NaN: numpy has one
+    # spelling for both meanings, so it comes back as missing. Deliberate and documented
+    collapsed = Q(pl.Series([1.0, float("nan")]), "m").astype("ndarray").astype("pl.Series")
+    assert collapsed.m.to_list() == [1.0, None]
+
+
+def test_ndim_reports_one_for_every_vector_container() -> None:
+    assert Q(1.0, "m").ndim == 0
+    assert Q(np.array([1.0, 2.0]), "m").ndim == 1
+
+    # neither polars type has an ndim attribute; a Series/Expr magnitude is still a vector
+    series = Q(pl.Series([1.0, 2.0]), "m")
+    assert series.ndim == 1
+    assert not series.is_scalar
+    assert len(series) == 2
+
+    assert Q(pl.col("x"), "m").ndim == 1
 
 
 def test_mixed_container_arithmetic_is_rejected() -> None:

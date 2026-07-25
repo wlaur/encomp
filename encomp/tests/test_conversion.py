@@ -120,3 +120,25 @@ def test_nan_density_is_rejected_for_polars_inputs() -> None:
 
     # the same missing density is fine for float/numpy inputs, where NaN IS the sentinel
     assert np.isnan(convert_volume_mass(Q(2.0, "kg"), rho=Q(float("nan"), "kg/m³")).m)
+
+
+def test_nan_in_a_polars_input_is_data_not_a_missing_density() -> None:
+    # the NaN guard covers the DENSITY, where NaN means missing. A NaN inside inp is
+    # ordinary float data (Quantity's rule for polars magnitudes) and propagates through
+    # the arithmetic as IEEE requires -- it is not rewritten to null, and not rejected
+    result = convert_volume_mass(
+        Q(pl.Series([2.0, float("nan")]), "kg"),
+        rho=Q(pl.Series([1000.0, 1000.0]), "kg/m³"),
+    )
+
+    assert result.m.to_list()[0] == pytest.approx(0.002)
+    assert result.m.is_nan().to_list() == [False, True]
+    assert result.m.null_count() == 0
+
+    # a null inp stays the missing sentinel it already is
+    missing = convert_volume_mass(
+        Q(pl.Series([2.0, None]), "kg"),
+        rho=Q(pl.Series([1000.0, 1000.0]), "kg/m³"),
+    )
+
+    assert missing.m.to_list() == [pytest.approx(0.002), None]

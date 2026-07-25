@@ -28,7 +28,7 @@ from .constants import CONSTANTS
 from .conversion import convert_volume_mass
 from .fluids import Fluid
 from .misc import isinstance_types
-from .units import Quantity
+from .units import ExpectedDimensionalityError, Quantity
 from .utypes import (
     MT,
     Density,
@@ -39,6 +39,7 @@ from .utypes import (
     NormalVolumeFlow,
     Pressure,
     Temperature,
+    TemperatureDifference,
     Volume,
     VolumeFlow,
 )
@@ -77,7 +78,7 @@ _NORMAL = Quantity(1.0, "normal")
 def _resolve_gas_condition(condition: object, name: str) -> GasCondition:
     if isinstance(condition, str):
         if condition in ("N", "S"):
-            return _n_s_condition(condition)  # ty: ignore[invalid-argument-type]
+            return _n_s_condition(condition)
 
         raise ValueError(f"{name} must be 'N', 'S', or a (pressure, temperature) tuple, got {condition!r}")
 
@@ -136,9 +137,17 @@ def ideal_gas_density(
         Density of the ideal gas at the specified temperature and pressure
     """
 
+    # a temperature difference converts to K by scale alone, so it would flow into the gas
+    # law as an absolute temperature; the sibling _resolve_gas_condition rejects it too
+    if issubclass(T.dt, TemperatureDifference):
+        raise ExpectedDimensionalityError(
+            f"T must be an absolute Quantity[Temperature], passed a TemperatureDifference ({T.u}); "
+            "use .asdim(Temperature) if the value really is an absolute temperature"
+        )
+
     # directly from ideal gas law
     # override the inferred type here since it's sure to be Density
-    rho = (P * M) / (CONSTANTS.R * T.to("K").unknown())  # ty: ignore[unsupported-operator]
+    rho = (P * M) / (CONSTANTS.R * T.to("K").unknown())
 
     return rho.to("kg/m³").asdim(Density)
 

@@ -48,12 +48,18 @@ def convert_volume_mass(
         Input mass or volume (or flow)
     rho : Quantity[Density, Any]
         Density of the substance. A *missing* density is allowed and yields a missing
-        result at that position, exactly as a missing ``inp`` does: ``NaN`` for float and
-        numpy magnitudes, ``null`` for a Polars Series. A Polars result carries null
-        (never NaN), so with a Polars ``inp`` a NaN density is rejected -- spell the
-        missing density as a null in a ``pl.Series``. Every *present* value must be
-        finite and strictly positive. Polars Expr inputs are deferred and cannot be
-        data-validated here.
+        result at that position, spelled the way each magnitude container spells missing:
+        ``NaN`` for float and numpy magnitudes, ``null`` for a Polars Series. Because a
+        NaN would be the wrong spelling on the Polars side -- and would reach the result
+        as a float value rather than as missing -- a NaN density is rejected when ``inp``
+        is a Polars magnitude; spell it as a null in a ``pl.Series`` instead. Every
+        *present* value must be finite and strictly positive. Polars Expr inputs are
+        deferred and cannot be data-validated here.
+
+        This guards the density argument only, which is where NaN means *missing*. A NaN
+        inside a Polars ``inp`` is ordinary float data (see :class:`encomp.units.Quantity`)
+        and propagates through the arithmetic as IEEE requires, so the result can carry a
+        NaN that came from ``inp``.
 
     Returns
     -------
