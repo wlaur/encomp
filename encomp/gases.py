@@ -17,6 +17,11 @@ The functions here name their fluid parameter ``fluid_name``, whereas
 inconsistency: ``name`` is unambiguous on a fluid object, while a free function that
 also takes volumes, masses and conditions has to say *whose* name it is.
 
+``fluid_name`` is **required** and keyword-only, like ``encomp.coolprop.fluid``'s
+``name=`` and ``convert_volume_mass``'s density: a fluid identity is never defaulted,
+because a wrong one silently returns plausible numbers for the wrong gas. It used to
+default to ``"Air"``; pass ``fluid_name="Air"`` explicitly to keep that behavior.
+
 .. note::
     Humid-air-specific conversions are not implemented here; use
     :class:`encomp.fluids.HumidAir` for humid-air properties.
@@ -157,7 +162,8 @@ def convert_gas_volume(
     V1: Quantity[Volume, MT],
     condition_1: GasConditionInput = "N",
     condition_2: GasConditionInput = "N",
-    fluid_name: str = "Air",
+    *,
+    fluid_name: str,
 ) -> Quantity[Volume, MT]: ...
 
 
@@ -166,7 +172,8 @@ def convert_gas_volume(
     V1: Quantity[VolumeFlow, MT],
     condition_1: GasConditionInput = "N",
     condition_2: GasConditionInput = "N",
-    fluid_name: str = "Air",
+    *,
+    fluid_name: str,
 ) -> Quantity[VolumeFlow, MT]: ...
 
 
@@ -174,7 +181,8 @@ def convert_gas_volume(
     V1: Quantity[Volume, Any] | Quantity[VolumeFlow, Any],
     condition_1: GasConditionInput = "N",
     condition_2: GasConditionInput = "N",
-    fluid_name: str = "Air",
+    *,
+    fluid_name: str,
 ) -> Quantity[Volume, Any] | Quantity[VolumeFlow, Any]:
     """
     Converts the volume :math:`V_1` (at :math:`T_1, P_1`) to
@@ -203,8 +211,8 @@ def convert_gas_volume(
     condition_2 : tuple[Quantity[Pressure, Any], Quantity[Temperature, Any]] |
                   Literal['N', 'S'], optional
         Pressure and temperature at condition 2, by default 'N'
-    fluid_name : str, optional
-        CoolProp name of the fluid, by default 'Air'
+    fluid_name : str
+        CoolProp name of the gas, e.g. ``"Air"`` or ``"Nitrogen"`` (required)
 
     Returns
     -------
@@ -268,15 +276,15 @@ def _strip_normal(
 
 
 @overload
-def mass_to_normal_volume(mass: Quantity[Mass, MT], fluid_name: str = "Air") -> Quantity[NormalVolume, MT]: ...
+def mass_to_normal_volume(mass: Quantity[Mass, MT], *, fluid_name: str) -> Quantity[NormalVolume, MT]: ...
 
 
 @overload
-def mass_to_normal_volume(mass: Quantity[MassFlow, MT], fluid_name: str = "Air") -> Quantity[NormalVolumeFlow, MT]: ...
+def mass_to_normal_volume(mass: Quantity[MassFlow, MT], *, fluid_name: str) -> Quantity[NormalVolumeFlow, MT]: ...
 
 
 def mass_to_normal_volume(
-    mass: Quantity[Mass, Any] | Quantity[MassFlow, Any], fluid_name: str = "Air"
+    mass: Quantity[Mass, Any] | Quantity[MassFlow, Any], *, fluid_name: str
 ) -> Quantity[NormalVolume, Any] | Quantity[NormalVolumeFlow, Any]:
     """
     Convert mass to normal volume.
@@ -285,8 +293,8 @@ def mass_to_normal_volume(
     ----------
     mass : Quantity[Mass, MT] | Quantity[MassFlow, MT]
         Input mass or mass flow
-    fluid_name : str, optional
-        Name of the fluid, by default 'Air'
+    fluid_name : str
+        CoolProp name of the gas, e.g. ``"Air"`` or ``"Nitrogen"`` (required)
 
     Returns
     -------
@@ -309,7 +317,8 @@ def mass_to_normal_volume(
 def mass_to_actual_volume(
     mass: Quantity[Mass, MT],
     condition: GasConditionInput,
-    fluid_name: str = "Air",
+    *,
+    fluid_name: str,
 ) -> Quantity[Volume, MT]: ...
 
 
@@ -317,14 +326,16 @@ def mass_to_actual_volume(
 def mass_to_actual_volume(
     mass: Quantity[MassFlow, MT],
     condition: GasConditionInput,
-    fluid_name: str = "Air",
+    *,
+    fluid_name: str,
 ) -> Quantity[VolumeFlow, MT]: ...
 
 
 def mass_to_actual_volume(
     mass: Quantity[Mass, Any] | Quantity[MassFlow, Any],
     condition: GasConditionInput,
-    fluid_name: str = "Air",
+    *,
+    fluid_name: str,
 ) -> Quantity[Volume, Any] | Quantity[VolumeFlow, Any]:
     """
     Convert mass to actual volume.
@@ -335,8 +346,8 @@ def mass_to_actual_volume(
         Input mass or mass flow
     condition : tuple[Quantity[Pressure, Any], Quantity[Temperature, Any]] | Literal['N', 'S']
         Condition at which to calculate the actual volume
-    fluid_name : str, optional
-        Name of the fluid, by default 'Air'
+    fluid_name : str
+        CoolProp name of the gas, e.g. ``"Air"`` or ``"Nitrogen"`` (required)
 
     Returns
     -------
@@ -353,13 +364,11 @@ def mass_to_actual_volume(
 
 
 @overload
-def mass_from_normal_volume(volume: Quantity[NormalVolume, MT], fluid_name: str = "Air") -> Quantity[Mass, MT]: ...
+def mass_from_normal_volume(volume: Quantity[NormalVolume, MT], *, fluid_name: str) -> Quantity[Mass, MT]: ...
 
 
 @overload
-def mass_from_normal_volume(
-    volume: Quantity[NormalVolumeFlow, MT], fluid_name: str = "Air"
-) -> Quantity[MassFlow, MT]: ...
+def mass_from_normal_volume(volume: Quantity[NormalVolumeFlow, MT], *, fluid_name: str) -> Quantity[MassFlow, MT]: ...
 
 
 def mass_from_normal_volume(
@@ -369,7 +378,8 @@ def mass_from_normal_volume(
         | Quantity[Volume, Any]
         | Quantity[VolumeFlow, Any]
     ),
-    fluid_name: str = "Air",
+    *,
+    fluid_name: str,
 ) -> Quantity[Mass, Any] | Quantity[MassFlow, Any]:
     """
     Convert normal volume to mass.
@@ -382,8 +392,8 @@ def mass_from_normal_volume(
     ----------
     volume : Quantity[NormalVolume, MT] | Quantity[NormalVolumeFlow, MT]
         Input normal volume or normal volume flow
-    fluid_name : str, optional
-        Name of the fluid, by default 'Air'
+    fluid_name : str
+        CoolProp name of the gas, e.g. ``"Air"`` or ``"Nitrogen"`` (required)
 
     Returns
     -------
@@ -406,7 +416,8 @@ def mass_from_normal_volume(
 def mass_from_actual_volume(
     volume: Quantity[Volume, MT],
     condition: GasConditionInput,
-    fluid_name: str = "Air",
+    *,
+    fluid_name: str,
 ) -> Quantity[Mass, MT]: ...
 
 
@@ -414,14 +425,16 @@ def mass_from_actual_volume(
 def mass_from_actual_volume(
     volume: Quantity[VolumeFlow, MT],
     condition: GasConditionInput,
-    fluid_name: str = "Air",
+    *,
+    fluid_name: str,
 ) -> Quantity[MassFlow, MT]: ...
 
 
 def mass_from_actual_volume(
     volume: Quantity[Volume, Any] | Quantity[VolumeFlow, Any],
     condition: GasConditionInput,
-    fluid_name: str = "Air",
+    *,
+    fluid_name: str,
 ) -> Quantity[Mass, Any] | Quantity[MassFlow, Any]:
     """
     Convert actual volume to mass.
@@ -432,8 +445,8 @@ def mass_from_actual_volume(
         Input actual volume or actual volume flow
     condition : tuple[Quantity[Pressure, Any], Quantity[Temperature, Any]] | Literal['N', 'S']
         Condition at which to calculate the mass
-    fluid_name : str, optional
-        Name of the fluid, by default 'Air'
+    fluid_name : str
+        CoolProp name of the gas, e.g. ``"Air"`` or ``"Nitrogen"`` (required)
 
     Returns
     -------
@@ -453,7 +466,8 @@ def mass_from_actual_volume(
 def actual_volume_to_normal_volume(
     volume: Quantity[Volume, Any],
     condition: GasConditionInput,
-    fluid_name: str = "Air",
+    *,
+    fluid_name: str,
 ) -> Quantity[NormalVolume, Any]: ...
 
 
@@ -461,14 +475,16 @@ def actual_volume_to_normal_volume(
 def actual_volume_to_normal_volume(
     volume: Quantity[VolumeFlow, Any],
     condition: GasConditionInput,
-    fluid_name: str = "Air",
+    *,
+    fluid_name: str,
 ) -> Quantity[NormalVolumeFlow, Any]: ...
 
 
 def actual_volume_to_normal_volume(
     volume: Quantity[Volume, Any] | Quantity[VolumeFlow, Any],
     condition: GasConditionInput,
-    fluid_name: str = "Air",
+    *,
+    fluid_name: str,
 ) -> Quantity[NormalVolume, Any] | Quantity[NormalVolumeFlow, Any]:
     """
     Convert actual volume to normal volume.
@@ -479,8 +495,8 @@ def actual_volume_to_normal_volume(
         Input actual volume or actual volume flow
     condition : tuple[Quantity[Pressure, Any], Quantity[Temperature, Any]] | Literal['N', 'S']
         Condition at which the input volume is evaluated
-    fluid_name : str, optional
-        Name of the fluid, by default 'Air'
+    fluid_name : str
+        CoolProp name of the gas, e.g. ``"Air"`` or ``"Nitrogen"`` (required)
 
     Returns
     -------
@@ -497,7 +513,8 @@ def actual_volume_to_normal_volume(
 def normal_volume_to_actual_volume(
     volume: Quantity[NormalVolume, Any],
     condition: GasConditionInput,
-    fluid_name: str = "Air",
+    *,
+    fluid_name: str,
 ) -> Quantity[Volume, Any]: ...
 
 
@@ -505,7 +522,8 @@ def normal_volume_to_actual_volume(
 def normal_volume_to_actual_volume(
     volume: Quantity[NormalVolumeFlow, Any],
     condition: GasConditionInput,
-    fluid_name: str = "Air",
+    *,
+    fluid_name: str,
 ) -> Quantity[VolumeFlow, Any]: ...
 
 
@@ -517,7 +535,8 @@ def normal_volume_to_actual_volume(
         | Quantity[VolumeFlow, Any]
     ),
     condition: GasConditionInput,
-    fluid_name: str = "Air",
+    *,
+    fluid_name: str,
 ) -> Quantity[Volume, Any] | Quantity[VolumeFlow, Any]:
     """
     Convert normal volume to actual volume.
@@ -532,8 +551,8 @@ def normal_volume_to_actual_volume(
         Input normal volume or normal volume flow
     condition : tuple[Quantity[Pressure, Any], Quantity[Temperature, Any]] | Literal['N', 'S']
         Condition at which to calculate the actual volume
-    fluid_name : str, optional
-        Name of the fluid, by default 'Air'
+    fluid_name : str
+        CoolProp name of the gas, e.g. ``"Air"`` or ``"Nitrogen"`` (required)
 
     Returns
     -------

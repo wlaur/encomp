@@ -42,31 +42,31 @@ assert_type.__code__ = _assert_type.__code__
 
 def test_convert_gas_volume() -> None:
     # the dimensionality (Volume / VolumeFlow) and units of the input are preserved
-    ret = convert_gas_volume(Q(1, "m3"), "N", (Q(2, "bar"), Q(25, "degC")))
+    ret = convert_gas_volume(Q(1, "m3"), "N", (Q(2, "bar"), Q(25, "degC")), fluid_name="Air")
     assert_type(ret, Q[Volume, float])
     assert ret.check(Q(0, "liter"))
     assert str(ret.u) == str(Q(1, "m3").u)
 
-    ret2 = convert_gas_volume(Q(1, "m3/s"), "S", (Q(2, "bar"), Q(25, "degC")))
+    ret2 = convert_gas_volume(Q(1, "m3/s"), "S", (Q(2, "bar"), Q(25, "degC")), fluid_name="Air")
     assert_type(ret2, Q[VolumeFlow, float])
 
     with pytest.raises(ValueError, match=r"condition_1.*'N'.*'S'"):
-        convert_gas_volume(Q(1, "m3"), cast(Any, "n"), "N")
+        convert_gas_volume(Q(1, "m3"), cast(Any, "n"), "N", fluid_name="Air")
 
     with pytest.raises(ValueError, match=r"condition_1.*'N'.*'S'"):
-        convert_gas_volume(Q(1, "m3"), cast(Any, "NS"), "N")
+        convert_gas_volume(Q(1, "m3"), cast(Any, "NS"), "N", fluid_name="Air")
 
     with pytest.raises(TypeError, match=r"condition_2.*pressure, temperature"):
-        convert_gas_volume(Q(1, "m3"), "N", cast(Any, (Q(1, "bar"),)))
+        convert_gas_volume(Q(1, "m3"), "N", cast(Any, (Q(1, "bar"),)), fluid_name="Air")
 
     with pytest.raises(TypeError, match=r"condition_2.*pressure, temperature"):
-        convert_gas_volume(Q(1, "m3"), "N", cast(Any, (Q(25, "degC"), Q(1, "bar"))))
+        convert_gas_volume(Q(1, "m3"), "N", cast(Any, (Q(25, "degC"), Q(1, "bar"))), fluid_name="Air")
 
     with pytest.raises(TypeError, match="normal_volume_to_actual_volume"):
-        convert_gas_volume(cast(Any, Q(100.0, "Nm³")), "N", (Q(2, "bar"), Q(25, "degC")))
+        convert_gas_volume(cast(Any, Q(100.0, "Nm³")), "N", (Q(2, "bar"), Q(25, "degC")), fluid_name="Air")
 
     with pytest.raises(TypeError, match="normal_volume_to_actual_volume"):
-        convert_gas_volume(cast(Any, Q(100.0, "Nm³/h")), "N", (Q(2, "bar"), Q(25, "degC")))
+        convert_gas_volume(cast(Any, Q(100.0, "Nm³/h")), "N", (Q(2, "bar"), Q(25, "degC")), fluid_name="Air")
 
 
 def test_ideal_gas_density() -> None:
@@ -113,23 +113,23 @@ def test_gas_conversion() -> None:
     P = Q(1, "atm")
     T = Q(25, "degC")
 
-    assert_type(mass_from_actual_volume(V, (P, T)), Q[Mass, float])
-    assert_type(mass_from_actual_volume(V, "N"), Q[Mass, float])
+    assert_type(mass_from_actual_volume(V, (P, T), fluid_name="Air"), Q[Mass, float])
+    assert_type(mass_from_actual_volume(V, "N", fluid_name="Air"), Q[Mass, float])
 
-    assert_type(mass_to_actual_volume(m, (P, T)), Q[Volume, float])
-    assert_type(mass_to_actual_volume(m, "S"), Q[Volume, float])
+    assert_type(mass_to_actual_volume(m, (P, T), fluid_name="Air"), Q[Volume, float])
+    assert_type(mass_to_actual_volume(m, "S", fluid_name="Air"), Q[Volume, float])
 
     # the normal-volume side carries the NormalVolume dimensionality (Nm³)
     # (assert_type also verifies the runtime type via the monkeypatch above; a
     # narrowing `assert isinstance_types(...)` would poison later inference)
-    nv = actual_volume_to_normal_volume(V, (P, T))
+    nv = actual_volume_to_normal_volume(V, (P, T), fluid_name="Air")
     assert_type(nv, Q[NormalVolume, Any])
     assert nv.check(Q(0, "Nm³"))
-    assert_type(actual_volume_to_normal_volume(V, "N"), Q[NormalVolume, Any])
+    assert_type(actual_volume_to_normal_volume(V, "N", fluid_name="Air"), Q[NormalVolume, Any])
 
-    v_actual = normal_volume_to_actual_volume(nv, (P, T))
+    v_actual = normal_volume_to_actual_volume(nv, (P, T), fluid_name="Air")
     assert_type(v_actual, Q[Volume, Any])
-    assert_type(normal_volume_to_actual_volume(nv, "S"), Q[Volume, Any])
+    assert_type(normal_volume_to_actual_volume(nv, "S", fluid_name="Air"), Q[Volume, Any])
 
     # round trip recovers the original value
     assert v_actual.to("liter").m == approx(V.m, rel=1e-9)
@@ -138,21 +138,21 @@ def test_gas_conversion() -> None:
 def test_mass_normal_volume_round_trip() -> None:
     m = Q(1.0, "kg")
 
-    nv = mass_to_normal_volume(m)
+    nv = mass_to_normal_volume(m, fluid_name="Air")
     assert_type(nv, Q[NormalVolume, float])
     # air at 0 °C, 1 atm is roughly 1.276 kg/m³ -> ~0.78 Nm³ per kg
     assert nv.to("Nm³").m == approx(0.78, rel=0.05)
 
-    m_back = mass_from_normal_volume(nv)
+    m_back = mass_from_normal_volume(nv, fluid_name="Air")
     assert_type(m_back, Q[Mass, float])
     assert m_back.to("kg").m == approx(m.m, rel=1e-9)
 
     # flows map to NormalVolumeFlow / MassFlow
     mf = Q(3600.0, "kg/h")
-    nvf = mass_to_normal_volume(mf)
+    nvf = mass_to_normal_volume(mf, fluid_name="Air")
     assert_type(nvf, Q[NormalVolumeFlow, float])
 
-    mf_back = mass_from_normal_volume(nvf)
+    mf_back = mass_from_normal_volume(nvf, fluid_name="Air")
     assert_type(mf_back, Q[MassFlow, float])
     assert mf_back.to("kg/h").m == approx(mf.m, rel=1e-9)
 
@@ -164,17 +164,17 @@ def test_normal_volume_legacy_plain_inputs() -> None:
     T = Q(25.0, "degC")
 
     nv = Q(1.0, "Nm³")
-    v_typed = normal_volume_to_actual_volume(nv, (P, T))
+    v_typed = normal_volume_to_actual_volume(nv, (P, T), fluid_name="Air")
 
     # a legacy caller passes a plain m³ quantity where NormalVolume is expected
     # (statically a lie, hence the cast; the runtime accepts and interprets it)
     legacy = cast("Q[NormalVolume, float]", Q(1.0, "m³"))
 
-    v_legacy = normal_volume_to_actual_volume(legacy, (P, T))
+    v_legacy = normal_volume_to_actual_volume(legacy, (P, T), fluid_name="Air")
     assert v_legacy.to("m³").m == approx(v_typed.to("m³").m, rel=1e-9)
 
-    m_typed = mass_from_normal_volume(nv)
-    m_legacy = mass_from_normal_volume(legacy)
+    m_typed = mass_from_normal_volume(nv, fluid_name="Air")
+    m_legacy = mass_from_normal_volume(legacy, fluid_name="Air")
     assert m_legacy.to("kg").m == approx(m_typed.to("kg").m, rel=1e-9)
 
 
@@ -182,11 +182,35 @@ def test_convert_gas_volume_rejects_invalid_condition_type() -> None:
     # a condition that is neither a recognised string ("N"/"S") nor a
     # (pressure, temperature) tuple is a TypeError, naming the offending argument
     with pytest.raises(TypeError, match="condition_1"):
-        convert_gas_volume(Q(1.0, "m³"), cast(Any, 123), "N")
+        convert_gas_volume(Q(1.0, "m³"), cast(Any, 123), "N", fluid_name="Air")
 
     with pytest.raises(TypeError, match="condition_2"):
-        convert_gas_volume(Q(1.0, "m³"), "N", cast(Any, object()))
+        convert_gas_volume(Q(1.0, "m³"), "N", cast(Any, object()), fluid_name="Air")
 
     # an unrecognised string condition is a ValueError, not a TypeError
     with pytest.raises(ValueError, match="must be 'N', 'S'"):
-        convert_gas_volume(Q(1.0, "m³"), cast(Any, "X"), "N")
+        convert_gas_volume(Q(1.0, "m³"), cast(Any, "X"), "N", fluid_name="Air")
+
+
+def test_fluid_name_is_required_and_keyword_only() -> None:
+    # a fluid identity is never defaulted (it used to default to "Air"): the wrong gas
+    # returns plausible numbers rather than an error, so the caller has to name it. The
+    # type checkers reject these calls as well -- route them through Any to reach the
+    # runtime behavior, which is what an untyped caller hits
+    to_normal_volume = cast(Any, mass_to_normal_volume)
+    convert_volume = cast(Any, convert_gas_volume)
+
+    with pytest.raises(TypeError, match="fluid_name"):
+        to_normal_volume(Q(1.0, "kg"))
+
+    with pytest.raises(TypeError, match="fluid_name"):
+        convert_volume(Q(1.0, "m³"), "N", "S")
+
+    # keyword-only, so it cannot land in a condition parameter positionally
+    with pytest.raises(TypeError, match="positional"):
+        convert_volume(Q(1.0, "m³"), "N", "S", "Air")
+
+    # naming a different gas gives a different answer -- which is why it is required
+    air = mass_to_normal_volume(Q(1.0, "kg"), fluid_name="Air")
+    methane = mass_to_normal_volume(Q(1.0, "kg"), fluid_name="Methane")
+    assert air.to("Nm³").m != pytest.approx(methane.to("Nm³").m, rel=0.1)
