@@ -23,6 +23,7 @@ from ..fluids import (
     clear_expr_evaluation_cache,
 )
 from ..settings import SETTINGS
+from ..units import ExpectedDimensionalityError
 from ..units import Quantity as Q
 from ..utypes import DT, Density, SpecificEntropy
 
@@ -1220,3 +1221,28 @@ def test_unknown_property_error_message_points_at_search() -> None:
     # dunder probing (copy, pickle, inspect) still fails plainly
     with pytest.raises(AttributeError):
         fluid.__deepcopy__
+
+
+def test_state_inputs_refuse_a_temperature_difference() -> None:
+    # Temperature and TemperatureDifference share pint's [temperature], and a difference
+    # converts to K by scale alone, so .to() alone would let a difference fix a state:
+    # 300 ΔK would silently flash as 300 K. No CoolProp state input is a difference
+    difference = Q(300.0, "K").asdim(ut.TemperatureDifference)
+
+    with pytest.raises(ExpectedDimensionalityError, match="absolute Temperature"):
+        Water(P=Q(1.0, "bar"), T=cast(Any, difference)).D
+
+    with pytest.raises(ExpectedDimensionalityError, match="absolute Temperature"):
+        Fluid("Water", P=Q(1.0, "bar"), T=cast(Any, Q(5.0, "delta_degC"))).D
+
+    with pytest.raises(ExpectedDimensionalityError, match="absolute Temperature"):
+        HumidAir(T=cast(Any, difference), P=Q(1.0, "bar"), R=Q(0.5)).W
+
+    # explicitly reinterpreted, the same value is accepted
+    absolute = difference.asdim(ut.Temperature)
+    assert Water(P=Q(1.0, "bar"), T=absolute).D.m == approx(996.5, abs=1.0)
+
+    # a difference is still fine where CoolProp expects one dimensionally: none of the
+    # state inputs do, so the guard covers every temperature input including Tdb/Twb
+    with pytest.raises(ExpectedDimensionalityError, match="absolute Temperature"):
+        HumidAir(Tdb=cast(Any, difference), P=Q(1.0, "bar"), R=Q(0.5)).W

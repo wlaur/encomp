@@ -58,6 +58,7 @@ from .utypes import (
     SpecificInternalEnergy,
     SurfaceTension,
     Temperature,
+    TemperatureDifference,
     ThermalConductivity,
     Velocity,
 )
@@ -921,6 +922,17 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         """
 
         unit = self.get_coolprop_unit(prop)
+
+        # Temperature and TemperatureDifference share pint's [temperature] dimension, and a
+        # difference converts to K by scale alone, so .to() below would silently accept a
+        # difference wherever CoolProp wants an absolute temperature (300 ΔK flashing as
+        # 300 K). No CoolProp state input is a difference, so refuse the whole class here
+        if issubclass(qty.dt, TemperatureDifference) and unit.dimensionality == Temperature.dimensions:
+            raise ExpectedDimensionalityError(
+                f'CoolProp input for property "{prop}" must be an absolute Temperature, '
+                f"passed a TemperatureDifference ({qty.u}); use .asdim(Temperature) if the "
+                "value really is an absolute temperature"
+            )
 
         try:
             m = qty.to(unit).m

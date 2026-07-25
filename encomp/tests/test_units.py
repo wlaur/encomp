@@ -1798,6 +1798,41 @@ def test_temperature_difference_to_multiplicative_units() -> None:
         _ = Q(300.0, "K").to("delta_degC")
 
 
+def test_unit_and_dimensionality_never_contradict_for_temperature() -> None:
+    # a Quantity[Temperature] must never carry a Δ unit and a Quantity[TemperatureDifference]
+    # must never carry an offset one -- the unit and the dimensionality would then state
+    # different physical meanings. The two are handled differently on purpose:
+
+    # an offset unit under a difference subclass is a mistake with no safe reading
+    with pytest.raises(DimensionalityTypeError, match="delta unit"):
+        Q[TemperatureDifference, float](5.0, "degC")
+
+    # a delta unit under an absolute subclass re-resolves from the unit, exactly as every
+    # other mismatched subclass hint does (Q[Mass](1, "m") is a Length). It has to: pint
+    # builds T - T as self.__class__(magnitude, delta_unit) on the absolute class
+    reinterpreted = Q[Temperature, float](5.0, "delta_degC")
+    assert reinterpreted.dt is TemperatureDifference
+    assert reinterpreted.u == Unit("delta_degC")
+    assert (Q(35.0, "degC") - Q(25.0, "degC")).dt is TemperatureDifference
+
+    # asdim is the deliberate reinterpretation, and it moves the unit to the matching
+    # scale in BOTH directions so the result cannot be misread
+    absolute = Q(5.0, "delta_degC").asdim(Temperature)
+    assert absolute.dt is Temperature
+    assert absolute.u == Unit("degC")
+    assert absolute.to("K").m == approx(278.15)
+
+    difference = Q(5.0, "degC").asdim(TemperatureDifference)
+    assert difference.dt is TemperatureDifference
+    assert difference.u == Unit("delta_degC")
+
+    # a multiplicative unit is genuinely ambiguous and stays as it is under both readings
+    assert Q(300.0, "K").dt is Temperature
+    assert Q(300.0, "K").asdim(TemperatureDifference).u == Unit("K")
+    assert Q[TemperatureDifference, float](300.0, "K").dt is TemperatureDifference
+    assert Q(300.0, "K").asdim(TemperatureDifference).asdim(Temperature).u == Unit("K")
+
+
 def test_temperature_unit_inputs() -> None:
     for unit in [
         "degC",
@@ -2286,6 +2321,35 @@ def test_division_by_zero_follows_the_container() -> None:
 
     expression = Q(pl.lit(1.0), "m") / Q(pl.lit(0.0), "s")
     assert pl.select(expression.m).item() == float("inf")
+
+
+def test_missing_values_follow_each_containers_own_sentinel() -> None:
+    # polars distinguishes null (absent) from NaN (a float value); numpy has only NaN for
+    # both. astype is the boundary between the two worlds, so it translates the sentinel
+    from_numpy = Q(np.array([1.0, np.nan]), "m").astype("pl.Series")
+    assert from_numpy.m.to_list() == [1.0, None]
+    assert not from_numpy.m.is_nan().any()
+
+    # and back again: numpy can only spell it as NaN
+    to_numpy = Q(pl.Series([1.0, None]), "m").astype("ndarray")
+    assert to_numpy.m[0] == 1.0
+    assert np.isnan(to_numpy.m[1])
+
+    # round trip through both worlds preserves the meaning
+    round_tripped = Q(np.array([1.0, np.nan]), "m").astype("pl.Series").astype("ndarray")
+    assert round_tripped.m[0] == 1.0
+    assert np.isnan(round_tripped.m[1])
+
+    # a NaN the caller puts in a Series is data, not a missing marker: kept as-is (and
+    # IEEE arithmetic can produce one in either world -- see the division-by-zero test)
+    kept = Q(pl.Series([1.0, float("nan")]), "m")
+    assert kept.m.is_nan().to_list() == [False, True]
+    assert kept.m.null_count() == 0
+
+    # nulls survive unit conversion and arithmetic as nulls
+    nulls = Q(pl.Series([1.0, None]), "bar")
+    assert nulls.to("kPa").m.to_list() == [100.0, None]
+    assert (nulls * 2.0).m.to_list() == [2.0, None]
 
 
 def test_ndim_reports_one_for_every_vector_container() -> None:

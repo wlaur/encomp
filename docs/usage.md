@@ -291,6 +291,29 @@ Q(arr, "bar")
 # [0.0 0.2 0.4 0.6000000000000001 0.8 1.0] bar
 ```
 
+Missing values follow the convention of whichever container holds them: `NaN` in the NumPy
+world, `null` in the Polars world (where `NaN` is an ordinary float value, not a missing
+marker — `mean()` propagates it while it skips `null`). `encomp` never *produces* a `NaN`
+in a Polars magnitude: a CoolProp state that cannot be fixed yields `null` for that row,
+and the corresponding NumPy result is `NaN`. {py:meth}`encomp.units.Quantity.astype`
+translates between the two spellings at the boundary:
+
+```python
+import numpy as np
+import polars as pl
+
+from encomp.units import Quantity as Q
+
+# crossing into the Polars world turns the NumPy missing marker into null
+assert Q(np.array([1.0, np.nan]), "bar").astype("pl.Series").m.to_list() == [1.0, None]
+
+# and back again, since NumPy has no other spelling for it
+assert np.isnan(Q(pl.Series([1.0, None]), "bar").astype("ndarray").m[1])
+
+# a NaN you put in a Series is kept as-is: it is data, not a missing marker
+assert Q(pl.Series([1.0, float("nan")]), "bar").m.null_count() == 0
+```
+
 ### Quantities with expression magnitudes
 
 Polars Expressions can be used as magnitude:
@@ -453,6 +476,34 @@ Q(4.19, "kJ/kg/K") * Q(5, "K")  # ≈ 20.95 kJ/kg
 `pint.errors.OffsetUnitCalculusError` is raised when doing ambiguous unit conversions.
 The environment variable `ENCOMP_AUTOCONVERT_OFFSET_TO_BASEUNIT` can be set to `True` to disable this error (this is not recommended).
 :::
+
+Only the *multiplicative* temperature units (`K`, `degR`, `mK`, ...) are ambiguous between
+the two dimensionalities; `degC`/`degF` mean absolute and `delta_degC`/`delta_degF` mean a
+difference. The unit is therefore what decides the dimensionality, and
+{py:meth}`encomp.units.Quantity.asdim` — the explicit reinterpretation — rewrites the unit
+so it can never contradict the dimensionality it is paired with:
+
+```python
+from encomp.units import Quantity as Q
+from encomp.utypes import Temperature, TemperatureDifference
+
+# K expresses both readings, so the unit is unchanged by the reinterpretation
+assert Q(300, "K").dt is Temperature
+assert Q(300, "K").asdim(TemperatureDifference).u == Q.get_unit("K")
+
+# an offset or delta unit is not ambiguous, so asdim() moves it onto the matching scale
+assert Q(5, "delta_degC").asdim(Temperature).u == Q.get_unit("degC")
+assert Q(5, "degC").asdim(TemperatureDifference).u == Q.get_unit("delta_degC")
+
+# a Quantity[...] annotation that disagrees with the unit is re-resolved from the unit
+assert Q[Temperature, float](5.0, "delta_degC").dt is TemperatureDifference
+```
+
+A temperature difference is refused wherever an absolute temperature is required, even
+though it converts to `K` by scale alone: {py:class}`encomp.fluids.Fluid` state inputs,
+{py:func}`encomp.gases.ideal_gas_density` and the gas-condition tuples all raise
+{py:class}`encomp.units.ExpectedDimensionalityError` rather than flash a difference as an
+absolute state.
 
 ### Currency units
 
