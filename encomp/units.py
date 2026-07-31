@@ -19,7 +19,7 @@ import sys
 import warnings
 from collections.abc import Iterable, Iterator, Sequence, Sized
 from inspect import isclass
-from types import UnionType
+from types import NotImplementedType, UnionType
 from typing import (
     TYPE_CHECKING,
     Annotated,
@@ -668,6 +668,27 @@ class Quantity(
             return
 
         raise TypeError(f"Invalid magnitude type: {mt}, expected one of float, np.ndarray, pl.Series, pl.Expr")
+
+    @staticmethod
+    def _is_supported_arithmetic_operand(value: object) -> bool:
+        """Whether ``value`` belongs to the closed set handled directly by arithmetic.
+
+        An unrecognized object must be left to its reflected operator rather than being
+        passed through pint as a possible magnitude. The latter can either obscure pint's
+        ``NotImplemented`` result or make pint perform magnitude arithmetic first and then
+        attempt to construct a ``Quantity`` with an unsupported magnitude type.
+
+        This is deliberately a type check rather than a call to ``_validate_magnitude``:
+        validation can allocate and traverse a container, and invalid values of a supported
+        type must continue to raise their specific validation error.
+        """
+
+        return (
+            isinstance(value, (Quantity, Unit, numbers.Real, np.ndarray, pl.Series, pl.Expr, Sequence))
+            # SymPy is imported lazily, so use the same protocol check as
+            # _validate_magnitude to preserve symbolic arithmetic.
+            or hasattr(value, "is_Atom")
+        )
 
     @staticmethod
     def _get_magnitude_type_name(mt: object) -> MagnitudeTypeName:
@@ -2418,7 +2439,11 @@ class Quantity(
     def __add__(self, other: Quantity[DT, float]) -> Quantity[DT, MT]: ...
     @overload
     def __add__(self: Quantity[DT, float], other: Quantity[DT, MT_]) -> Quantity[DT, MT_]: ...
-    def __add__(self, other: Quantity[Any, Any] | float) -> Quantity[Any, Any]:
+    def __add__(self, other: object) -> Quantity[Any, Any] | NotImplementedType:
+        if not self._is_supported_arithmetic_operand(other):
+            return NotImplemented
+
+        other = cast("Quantity[Any, Any] | float", other)
         if isinstance(other, Quantity):
             self._check_comparable_magnitudes(self.m, other.m, "combine")  # ty: ignore[invalid-argument-type]
         try:
@@ -2435,8 +2460,11 @@ class Quantity(
 
             raise e
 
-        ret = cast("Quantity[DT, MT]", self._pint_super.__add__(other))
+        ret = self._pint_super.__add__(other)
+        if ret is NotImplemented:
+            return NotImplemented
 
+        ret = cast("Quantity[DT, MT]", ret)
         return self._call_subclass(ret.m, ret.u)
 
     def __iadd__(self, other: Any) -> Any:  # noqa: ANN401
@@ -2478,7 +2506,11 @@ class Quantity(
     def __sub__(self, other: Quantity[DT, float]) -> Quantity[DT, MT]: ...
     @overload
     def __sub__(self: Quantity[DT, float], other: Quantity[DT, MT_]) -> Quantity[DT, MT_]: ...
-    def __sub__(self, other: Quantity[Any, Any] | float) -> Quantity[Any, Any]:
+    def __sub__(self, other: object) -> Quantity[Any, Any] | NotImplementedType:
+        if not self._is_supported_arithmetic_operand(other):
+            return NotImplemented
+
+        other = cast("Quantity[Any, Any] | float", other)
         if isinstance(other, Quantity):
             self._check_comparable_magnitudes(self.m, other.m, "combine")  # ty: ignore[invalid-argument-type]
         try:
@@ -2494,8 +2526,11 @@ class Quantity(
 
             raise e
 
-        ret = cast("Quantity[DT, MT]", self._pint_super.__sub__(other))
+        ret = self._pint_super.__sub__(other)
+        if ret is NotImplemented:
+            return NotImplemented
 
+        ret = cast("Quantity[DT, MT]", ret)
         if (
             isinstance(other, Quantity)
             and issubclass(self.dt, Temperature)
@@ -3312,11 +3347,18 @@ class Quantity(
     def __mul__(self, other: Quantity[DT_, float]) -> Quantity[UnknownDimensionality, MT]: ...
     @overload
     def __mul__(self, other: Quantity[DT_, MT]) -> Quantity[UnknownDimensionality, MT]: ...
-    def __mul__(self, other: Quantity[Any, Any] | float) -> Quantity[Any, Any]:
+    def __mul__(self, other: object) -> Quantity[Any, Any] | NotImplementedType:
+        if not self._is_supported_arithmetic_operand(other):
+            return NotImplemented
+
+        other = cast("Quantity[Any, Any] | float", other)
         if isinstance(other, Quantity):
             self._check_comparable_magnitudes(self.m, other.m, "combine")  # ty: ignore[invalid-argument-type]
-        ret = cast("Quantity[DT, MT]", self._pint_super.__mul__(other))
+        ret = self._pint_super.__mul__(other)
+        if ret is NotImplemented:
+            return NotImplemented
 
+        ret = cast("Quantity[DT, MT]", ret)
         # preserve the dimensionality for other
         # it might be a distinct subclass with identical units as another dimensionality
         # NOTE: isinstance first, and self.u.dimensionless rather than self.dimensionless:
@@ -3787,7 +3829,11 @@ class Quantity(
     def __truediv__(self, other: Quantity[DT_, float]) -> Quantity[UnknownDimensionality, MT]: ...
     @overload
     def __truediv__(self, other: Quantity[DT_, MT]) -> Quantity[UnknownDimensionality, MT]: ...
-    def __truediv__(self, other: Quantity[Any, Any] | float) -> Quantity[Any, Any]:
+    def __truediv__(self, other: object) -> Quantity[Any, Any] | NotImplementedType:
+        if not self._is_supported_arithmetic_operand(other):
+            return NotImplemented
+
+        other = cast("Quantity[Any, Any] | float", other)
         if isinstance(other, Quantity):
             self._check_comparable_magnitudes(self.m, other.m, "combine")  # ty: ignore[invalid-argument-type]
 
@@ -3797,8 +3843,11 @@ class Quantity(
         # magnitudes yield IEEE ±inf / nan elementwise (numpy warns, polars is silent).
         # Normalizing either way would mean lying about one container to match the other;
         # pinned by test_division_by_zero_follows_the_container
-        ret = cast("Quantity[DT, MT]", self._pint_super.__truediv__(other))
+        ret = self._pint_super.__truediv__(other)
+        if ret is NotImplemented:
+            return NotImplemented
 
+        ret = cast("Quantity[DT, MT]", ret)
         # preserve the dimensionality for other
         # it might be a distinct subclass with identical units as another dimensionality
         # (see __mul__ for why this is a unit-level check with isinstance first)

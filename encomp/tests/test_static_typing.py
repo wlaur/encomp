@@ -61,6 +61,33 @@ from encomp.units import Quantity as Q
 q = Q(1, Q(2, "m"))
 """
 
+_VALID_REFLECTED_ARITHMETIC = """
+from typing import Any, assert_type
+
+from encomp.units import Quantity as Q
+
+class Expression:
+    def __radd__(self, other: Q[Any, Any]) -> "Expression":
+        return self
+
+    def __rsub__(self, other: Q[Any, Any]) -> "Expression":
+        return self
+
+    def __rmul__(self, other: Q[Any, Any]) -> "Expression":
+        return self
+
+    def __rtruediv__(self, other: Q[Any, Any]) -> "Expression":
+        return self
+
+quantity = Q(2.0, "m")
+expression = Expression()
+
+assert_type(quantity + expression, Expression)
+assert_type(quantity - expression, Expression)
+assert_type(quantity * expression, Expression)
+assert_type(quantity / expression, Expression)
+"""
+
 _VALID_QUANTITY_FRAME = """
 import polars as pl
 
@@ -187,6 +214,28 @@ def test_quantity_unit_rejected_by_ty(tmp_path: Path) -> None:
 def test_quantity_unit_rejected_at_runtime() -> None:
     with pytest.raises(TypeError, match="got Quantity"):
         Q(1, cast(Any, Q(2, "m")))
+
+
+@pytest.mark.skipif(_PYREFLY is None, reason="pyrefly not installed")
+@pytest.mark.skipif(_ROOT is None, reason=_NO_CONFIG)
+def test_reflected_arithmetic_accepted_by_pyrefly(tmp_path: Path) -> None:
+    assert _PYREFLY is not None and _ROOT is not None
+    cmd = [_PYREFLY, "check", "--config", str(_ROOT / "pyproject.toml")]
+    assert _check(cmd, _VALID_REFLECTED_ARITHMETIC, tmp_path) == 0
+
+
+@pytest.mark.skipif(_PYRIGHT is None, reason="pyright not installed")
+@pytest.mark.skipif(_ROOT is None, reason=_NO_CONFIG)
+def test_reflected_arithmetic_accepted_by_pyright(tmp_path: Path) -> None:
+    assert _PYRIGHT is not None
+    assert _check([_PYRIGHT], _VALID_REFLECTED_ARITHMETIC, tmp_path) == 0
+
+
+@pytest.mark.skipif(_TY is None, reason="ty not installed")
+@pytest.mark.skipif(_ROOT is None, reason=_NO_CONFIG)
+def test_reflected_arithmetic_accepted_by_ty(tmp_path: Path) -> None:
+    assert _TY is not None
+    assert _check([_TY, "check"], _VALID_REFLECTED_ARITHMETIC, tmp_path) == 0
 
 
 @pytest.mark.skipif(_PYREFLY is None, reason="pyrefly not installed")

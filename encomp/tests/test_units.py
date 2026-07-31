@@ -1186,6 +1186,35 @@ def test_convert_volume_mass() -> None:
     assert m.check(MassFlow)
 
 
+def test_arithmetic_defers_to_unknown_operand_reflected_methods() -> None:
+    class ReflectedArithmetic:
+        def __radd__(self, other: object) -> tuple[str, object]:
+            return ("radd", other)
+
+        def __rsub__(self, other: object) -> tuple[str, object]:
+            return ("rsub", other)
+
+        def __rmul__(self, other: object) -> tuple[str, object]:
+            return ("rmul", other)
+
+        def __rtruediv__(self, other: object) -> tuple[str, object]:
+            return ("rtruediv", other)
+
+    quantity = Q(2.0, "m")
+    operand = ReflectedArithmetic()
+
+    assert quantity + operand == ("radd", quantity)
+    assert quantity - operand == ("rsub", quantity)
+    assert quantity * operand == ("rmul", quantity)
+    assert quantity / operand == ("rtruediv", quantity)
+
+    unsupported = object()
+    assert cast(Any, quantity).__add__(unsupported) is NotImplemented
+    assert cast(Any, quantity).__sub__(unsupported) is NotImplemented
+    assert cast(Any, quantity).__mul__(unsupported) is NotImplemented
+    assert cast(Any, quantity).__truediv__(unsupported) is NotImplemented
+
+
 def test_compatibility() -> None:
     _ = Q(1) + Q(2)
 
