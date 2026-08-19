@@ -92,7 +92,7 @@ def _resolve_gas_condition(condition: object, name: str) -> GasCondition:
 
     # cast, not an annotation: pyright strict needs the Unknown tuple elements laundered,
     # which only cast() does; ty resolves the same type on its own and calls this redundant
-    condition_tuple = cast("tuple[object, ...]", condition)  # ty: ignore[redundant-cast]
+    condition_tuple = cast("tuple[object, ...]", condition)
     if len(condition_tuple) != 2:
         raise TypeError(f"{name} must be 'N', 'S', or a (pressure, temperature) tuple, got {condition!r}")
 
@@ -272,7 +272,7 @@ def _strip_normal(
     if isinstance_types(volume, Quantity[NormalVolumeFlow, Any]):
         return (volume / _NORMAL).to("m³/h").asdim(VolumeFlow)
 
-    return volume
+    return volume  # ty: ignore[invalid-return-type]
 
 
 @overload

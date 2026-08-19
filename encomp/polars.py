@@ -352,7 +352,7 @@ class QuantityFrame:
             declarations.update(cast("dict[str, Column[Any]]", getattr(base, "_unit_columns", {})))
         declarations.update(
             {
-                attribute: cast("Column[Any]", value)  # pyrefly: ignore[redundant-cast]
+                attribute: cast("Column[Any]", value)
                 for attribute, value in cls.__dict__.items()
                 if isinstance(value, Column)
             }
