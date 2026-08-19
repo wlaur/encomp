@@ -68,7 +68,7 @@ def flatten(container: Iterable[Any], max_depth: int | None = None) -> Iterator[
                 continue
 
             if isinstance(obj, Iterable):
-                yield from _flatten(cast("Iterable[Any]", obj), depth + 1)  # pyrefly: ignore[redundant-cast]  # cast required by pyright
+                yield from _flatten(cast("Iterable[Any]", obj), depth + 1)  # cast required by pyright
                 continue
 
             yield obj

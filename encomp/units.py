@@ -638,7 +638,7 @@ class Quantity(
             and getattr(func, "__name__", "") in self._DIFFERENCE_ARRAY_FUNCTIONS
             and issubclass(self.dt, Temperature)
         ):
-            difference = cast("Quantity[Any, Any]", ret)  # pyrefly: ignore[redundant-cast]  # cast required by pyright
+            difference = cast("Quantity[Any, Any]", ret)  # cast required by pyright
 
             # np.var and friends leave [temperature]**2 -- only re-type an actual temperature
             if difference.dimensionality == Temperature.dimensions:
@@ -963,21 +963,23 @@ class Quantity(
             # is genuinely needed but unavoidably looks redundant to the checker
             return cast("MT", float(val))
         elif isinstance(val, np.ndarray):
-            if len(val.shape) != 1:
-                raise ValueError(f"Only 1-dimensional NumPy arrays can be used as magnitude, got shape {val.shape}")
+            if len(val.shape) != 1:  # ty: ignore[invalid-attribute-access]
+                raise ValueError(
+                    f"Only 1-dimensional NumPy arrays can be used as magnitude, got shape {val.shape}"  # ty: ignore[invalid-attribute-access]
+                )
             return cast("MT", Quantity._cast_array_float(val))
         elif isinstance(val, pl.Series):
             # nulls (the polars missing sentinel) and NaNs are both kept verbatim: the
             # magnitude is the caller's data, and a NaN here is a float value rather than
             # a missing marker. Only values encomp itself computes are normalized to null
             # (see the class docstring, and CoolPropFluid.construct_quantity)
-            if val.dtype == pl.Null:
+            if val.dtype == pl.Null:  # ty: ignore[invalid-attribute-access]
                 return cast("MT", val.cast(pl.Float64))
-            if val.dtype.is_integer():
+            if val.dtype.is_integer():  # ty: ignore[invalid-attribute-access]
                 return cast("MT", val.cast(pl.Float64))
-            if not val.dtype.is_float():
+            if not val.dtype.is_float():  # ty: ignore[invalid-attribute-access]
                 raise TypeError(
-                    f"Polars Series magnitude must have a float or integer dtype, got {val.dtype!r}. "
+                    f"Polars Series magnitude must have a float or integer dtype, got {val.dtype!r}. "  # ty: ignore[invalid-attribute-access]
                     "Boolean, non-numeric, nested, and unit-typed Series are not valid magnitudes."
                 )
             return cast("MT", val)
@@ -1407,7 +1409,7 @@ class Quantity(
         qty = cast("Quantity[DT, MT]", cast(Any, super()).__new__(cls, valid_magnitude, units=valid_unit))
 
         _m = qty._magnitude
-        if isinstance(_m, np.ndarray) and _m.dtype != np.float64:
+        if isinstance(_m, np.ndarray) and _m.dtype != np.float64:  # ty: ignore[invalid-attribute-access]
             qty._magnitude = cast("MT", cls._cast_array_float(_m))
 
         return qty
@@ -1688,8 +1690,11 @@ class Quantity(
         # avoid numpy.core._exceptions.UFuncTypeError (not on all platforms?)
         # convert integer arrays to float(64) (creating a copy)
         _m = self._magnitude
-        if isinstance(_m, np.ndarray) and issubclass(_m.dtype.type, numbers.Integral):
-            self._magnitude = cast("MT", _m.astype(np.float64))  # ty: ignore[no-matching-overload]
+        if isinstance(_m, np.ndarray) and issubclass(
+            _m.dtype.type,  # ty: ignore[invalid-attribute-access]
+            numbers.Integral,
+        ):
+            self._magnitude = cast("MT", _m.astype(np.float64))
 
         try:
             self._pint_super.ito(valid_unit)
@@ -1946,7 +1951,7 @@ class Quantity(
                     "materialize it first"
                 )
             elif isinstance(mag, list):
-                val = [float(x) for x in cast("list[Any]", mag)]  # pyrefly: ignore[redundant-cast]  # cast required by pyright
+                val = [float(x) for x in cast("list[Any]", mag)]  # cast required by pyright
                 magnitude_type = "list"
             else:
                 raise ValueError(f"Unknown magnitude type {type(mag)}: {mag}")
@@ -2289,9 +2294,9 @@ class Quantity(
             )
 
         unit: Unit[Any] = self.u
-        if issubclass(dim, TemperatureDifference):  # ty: ignore[invalid-argument-type]
+        if issubclass(dim, TemperatureDifference):
             unit = self._as_temperature_difference_unit(unit)
-        elif issubclass(dim, Temperature):  # ty: ignore[invalid-argument-type]
+        elif issubclass(dim, Temperature):
             # the reverse reinterpretation: a delta unit moves back onto its absolute scale,
             # so a Quantity[Temperature] never carries a Δ unit (the constructor re-resolves
             # such a pair to TemperatureDifference -- asdim is the deliberate escape hatch)
@@ -2456,7 +2461,7 @@ class Quantity(
             other_is_temp_or_diff_temp = issubclass(other._dimensionality_type, (Temperature, TemperatureDifference))
 
             if self_is_temp_or_diff_temp and other_is_temp_or_diff_temp:
-                return self._temperature_difference_add_sub(other, "add")  # ty: ignore[invalid-argument-type]
+                return self._temperature_difference_add_sub(other, "add")
 
             raise e
 
@@ -2522,7 +2527,7 @@ class Quantity(
             # only Temperature - TemperatureDifference is meaningful here; the
             # reverse (ΔT - T) is not a temperature and stays an error
             if issubclass(self.dt, Temperature) and issubclass(other._dimensionality_type, TemperatureDifference):
-                return self._temperature_difference_add_sub(other, "sub")  # ty: ignore[invalid-argument-type]
+                return self._temperature_difference_add_sub(other, "sub")
 
             raise e
 

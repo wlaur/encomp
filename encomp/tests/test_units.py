@@ -442,14 +442,14 @@ def test_type_eq() -> None:
     # the isinstance check is statically redundant (q is always a Quantity),
     # but the narrowing it produces lets the else branch exercise assert_never
     if isinstance(q, Q):  # pyright: ignore[reportUnnecessaryIsInstance]
-        assert_type(q, Q[Length, float])  # pyrefly: ignore[assert-type]  # ty: ignore[type-assertion-failure]
+        assert_type(q, Q[Length, float])  # pyrefly: ignore[assert-type]
     else:
         assert_never(q)
 
     if isinstance_types(q, Q[Length, Any]):
         assert_type(q, Q[Length, float])  # pyrefly: ignore[assert-type]
     else:
-        assert_never(q)
+        assert_never(q)  # ty: ignore[type-assertion-failure]
 
     if isinstance_types(q, Q[Length, Numpy1DArray]):
         assert_never(q)  # pyrefly: ignore[bad-argument-type]

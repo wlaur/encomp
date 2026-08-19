@@ -764,7 +764,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     @staticmethod
     def _reduce_single_element(x: float | Numpy1DArray | pl.Expr) -> float | Numpy1DArray | pl.Expr:
         if isinstance(x, np.ndarray) and x.size == 1:
-            return float(x[0])  # ty: ignore[invalid-argument-type]
+            return float(x[0])
         return x
 
     def evaluate_single(self, output: CProperty, *points: tuple[CProperty, float]) -> float:
@@ -870,7 +870,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         def expand_scalars(x: float | np.ndarray) -> Numpy1DArray:
             if isinstance(x, np.ndarray):
-                return x  # ty: ignore[invalid-return-type]
+                return x
 
             return np.repeat(x, n).astype(float).reshape(shape)
 
@@ -882,7 +882,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     def _eager_series_output_dtype(self) -> pl.DataType:
         # eager pl.Series output preserves polars precision: Float32 only when every
         # pl.Series input is Float32, else Float64. Scalar (float) inputs are neutral.
-        dtypes = [p[1].m.dtype for p in self.points if isinstance(p[1].m, pl.Series)]
+        dtypes = [p[1].m.dtype for p in self.points if isinstance(p[1].m, pl.Series)]  # ty: ignore[invalid-attribute-access]
         if dtypes and all(dt == pl.Float32 for dt in dtypes):
             return pl.Float32()
         return pl.Float64()
@@ -1180,7 +1180,7 @@ class Fluid(CoolPropFluid[MT]):
             # a NaN row is an invalid state, not a phase, so the phase is judged on the rows that
             # have one. Reducing over the raw array would instead count each NaN as its own
             # distinct phase, since nan != nan
-            finite = cast("Numpy1DArray", phase_idx_val[np.isfinite(phase_idx_val)])  # ty: ignore[invalid-argument-type]
+            finite = cast("Numpy1DArray", phase_idx_val[np.isfinite(phase_idx_val)])
 
             if finite.size == 0:
                 return "N/A"
