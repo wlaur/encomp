@@ -602,7 +602,7 @@ wheels = [
 
 [[package]]
 name = "encomp"
-version = "1.9.5"
+version = "1.9.6"
 source = { editable = "." }
 dependencies = [
     { name = "numpy" },
