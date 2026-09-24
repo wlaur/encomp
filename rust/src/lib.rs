@@ -207,9 +207,7 @@ fn broadcast_len(values: &[Vec<f64>], scalar_mask: &[bool]) -> usize {
     n.unwrap_or_else(|| values.iter().map(Vec::len).max().unwrap_or(0))
 }
 
-/// Materialize a Series as `Vec<f64>` with nulls mapped to NaN. The kernels explicitly
-/// mask every row containing a non-finite input after evaluation: some backends return
-/// finite state-independent constants for a NaN input instead of failing the flash.
+/// Materialize a Series as `Vec<f64>` with nulls mapped to NaN.
 fn to_f64(s: &Series) -> PolarsResult<Vec<f64>> {
     // to_storage: an accepted extension-typed input (validate_extension_input) computes
     // on its storage values; the identity for plain columns
@@ -729,7 +727,7 @@ struct EvalKwargs {
 /// inputs[0], inputs[1] are the two state values already in the canonical order
 /// for `input_pair` (the Python caller orders them with generate_update_pair, so
 /// ARBITRARY input pairs are supported -- PT, PH, PQ, PS, ...). One batched flash
-/// over the whole chunk; Polars runs independent properties concurrently.
+/// over the finite rows; Polars runs independent properties concurrently.
 #[polars_expr(output_type_func_with_kwargs = cp_output)]
 fn cp_evaluate(inputs: &[Series], kwargs: EvalKwargs) -> PolarsResult<Series> {
     validate_input_count("cp_evaluate", inputs.len(), 2)?;
@@ -773,14 +771,48 @@ fn cp_evaluate(inputs: &[Series], kwargs: EvalKwargs) -> PolarsResult<Series> {
         st.specify_phase(ph).map_err(perr)?;
     }
 
-    let mut out = vec![0.0f64; n]; // update_and_1_out fills finite-or-NaN (failed rows -> NaN)
-    st.update_and_1_out(pair, &v1, &v2, okey, &mut out).map_err(perr)?;
-    for ((result, a), b) in out.iter_mut().zip(v1.iter()).zip(v2.iter()) {
-        if !a.is_finite() || !b.is_finite() {
-            *result = f64::NAN;
+    let mut out = vec![f64::NAN; n];
+    evaluate_finite_rows(&v1, &v2, &mut out, |a, b, result| {
+        st.update_and_1_out(pair, a, b, okey, result)
+    })
+    .map_err(perr)?;
+    nan_to_null(out).cast(&out_dtype)
+}
+
+fn evaluate_finite_rows<F>(v1: &[f64], v2: &[f64], out: &mut [f64], evaluate: F) -> Result<(), CpError>
+where
+    F: FnOnce(&[f64], &[f64], &mut [f64]) -> Result<(), CpError>,
+{
+    if v1.len() != out.len() || v2.len() != out.len() {
+        return Err(CpError("evaluate_finite_rows: length mismatch".into()));
+    }
+    let valid_count = v1
+        .iter()
+        .zip(v2)
+        .filter(|(a, b)| a.is_finite() && b.is_finite())
+        .count();
+    if valid_count == 0 {
+        return Ok(());
+    }
+    if valid_count == out.len() {
+        return evaluate(v1, v2, out);
+    }
+    let mut indices = Vec::with_capacity(valid_count);
+    let mut finite_v1 = Vec::with_capacity(valid_count);
+    let mut finite_v2 = Vec::with_capacity(valid_count);
+    for (index, (&a, &b)) in v1.iter().zip(v2).enumerate() {
+        if a.is_finite() && b.is_finite() {
+            indices.push(index);
+            finite_v1.push(a);
+            finite_v2.push(b);
         }
     }
-    nan_to_null(out).cast(&out_dtype)
+    let mut finite_out = vec![f64::NAN; valid_count];
+    evaluate(&finite_v1, &finite_v2, &mut finite_out)?;
+    for (index, value) in indices.into_iter().zip(finite_out) {
+        out[index] = value;
+    }
+    Ok(())
 }
 
 /// Build a Float64 Series whose non-finite entries (failed / out-of-range rows, left
@@ -844,6 +876,44 @@ mod tests {
         assert_eq!(ca.get(1), None);
         assert_eq!(ca.get(2), None);
         assert_eq!(ca.get(3), Some(-2.5));
+    }
+
+    #[test]
+    fn finite_rows_are_compacted_and_scattered() {
+        let first = [f64::NAN, 2.0, 3.0, f64::INFINITY, 5.0];
+        let second = [1.0, 10.0, f64::NEG_INFINITY, 40.0, 50.0];
+        let mut out = [f64::NAN; 5];
+        evaluate_finite_rows(&first, &second, &mut out, |a, b, result| {
+            assert_eq!(a, &[2.0, 5.0]);
+            assert_eq!(b, &[10.0, 50.0]);
+            result.copy_from_slice(&[12.0, f64::NAN]);
+            Ok(())
+        })
+        .unwrap();
+        assert!(out[0].is_nan());
+        assert_eq!(out[1], 12.0);
+        assert!(out[2].is_nan() && out[3].is_nan() && out[4].is_nan());
+    }
+
+    #[test]
+    fn finite_rows_skip_empty_and_pass_through_dense() {
+        let mut empty = [f64::NAN; 2];
+        evaluate_finite_rows(&[f64::NAN, f64::INFINITY], &[1.0, 2.0], &mut empty, |_, _, _| {
+            panic!("empty input reached CoolProp")
+        })
+        .unwrap();
+        assert!(empty.iter().all(|value| value.is_nan()));
+
+        let mut dense = [f64::NAN; 2];
+        evaluate_finite_rows(&[1.0, -1.0], &[3.0, 4.0], &mut dense, |a, b, result| {
+            assert_eq!(a, &[1.0, -1.0]);
+            assert_eq!(b, &[3.0, 4.0]);
+            result.copy_from_slice(&[5.0, f64::NAN]);
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(dense[0], 5.0);
+        assert!(dense[1].is_nan());
     }
 
     #[test]

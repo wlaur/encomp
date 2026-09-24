@@ -301,6 +301,30 @@ def test_null_inputs_become_null() -> None:
     assert w[0] is not None and w[1] is None
 
 
+@pytest.mark.parametrize("name", ["IF97::Water", "HEOS::Water"])
+def test_sparse_inputs_keep_row_alignment(name: str) -> None:
+    frame = pl.DataFrame(
+        {
+            "P": [None, 5e6, float("nan"), 5e6, float("inf"), -1.0, 5e6],
+            "T": [400.0, 400.0, 400.0, None, 400.0, 400.0, 450.0],
+        }
+    )
+    actual = frame.select(cp.fluid("DMASS", "P", "T", name=name)).to_series()
+    expected = CP.PropsSI("DMASS", "P", 5e6, "T", 400.0, name)
+    expected_last = CP.PropsSI("DMASS", "P", 5e6, "T", 450.0, name)
+    assert actual[0] is None
+    assert actual[1] == pytest.approx(expected)
+    assert actual[2:6].null_count() == 4
+    assert actual[6] == pytest.approx(expected_last)
+    assert actual.null_count() == 5
+
+
+def test_all_null_inputs_with_scalar_broadcast() -> None:
+    frame = pl.DataFrame({"P": pl.Series([None, None, None], dtype=pl.Float64)})
+    actual = frame.select(cp.water("DMASS", "P", pl.lit(400.0).alias("T"))).to_series()
+    assert actual.to_list() == [None, None, None]
+
+
 def test_humid_air() -> None:
     df = pl.DataFrame({"P": np.full(3, 101325.0), "T": [293.15, 303.15, 313.15], "R": [0.5, 0.4, 0.3]})
     out = df.select(w=cp.humid_air("W", "P", "T", "R"))
