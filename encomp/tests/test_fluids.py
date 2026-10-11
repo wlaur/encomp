@@ -10,6 +10,7 @@ import pytest
 
 from encomp import coolprop as encomp_coolprop
 
+from .. import fluids as fluids_module
 from .. import utypes as ut
 from ..coolprop import validate_fluid_config
 from ..fluids import (
@@ -779,7 +780,10 @@ def test_eager_plugin_matches_direct_scalar_bridge() -> None:
 
 
 def test_eager_plugin_threshold_is_deprecated_noop(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("encomp.fluids.EAGER_PLUGIN_MIN_SIZE", 1000)
+    assert "EAGER_PLUGIN_MIN_SIZE" not in fluids_module.__all__
+    with pytest.warns(DeprecationWarning, match="EAGER_PLUGIN_MIN_SIZE.*has no effect"):
+        assert fluids_module.EAGER_PLUGIN_MIN_SIZE == 1000
+
     calls = 0
     original_array = CoolPropFluid._evaluate_array
 
@@ -790,9 +794,57 @@ def test_eager_plugin_threshold_is_deprecated_noop(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(CoolPropFluid, "_evaluate_array", spy_rust)
     Water(P=Q(np.full(2, 50e5), "Pa"), T=Q(np.full(2, 400.0), "K")).D.m
-    monkeypatch.setattr("encomp.fluids.EAGER_PLUGIN_MIN_SIZE", 10**18)
+    monkeypatch.setitem(fluids_module.__dict__, "EAGER_PLUGIN_MIN_SIZE", 10**18)
     Water(P=Q(np.full(3, 50e5), "Pa"), T=Q(np.full(3, 400.0), "K")).D.m
     assert calls == 2
+
+
+@pytest.mark.parametrize("dtype", [pl.Float32(), pl.Float64()])
+def test_eager_series_avoids_numpy_and_returns_null(monkeypatch: pytest.MonkeyPatch, dtype: pl.DataType) -> None:
+    assert encomp_coolprop.self_check()
+
+    def fail_to_numpy(_self: pl.Series, *_args: object, **_kwargs: object) -> None:
+        raise AssertionError("Series evaluation must not pass through NumPy")
+
+    monkeypatch.setattr(pl.Series, "to_numpy", fail_to_numpy)
+    temperature = Q(pl.Series([300.0, 50.0, None, float("nan")], dtype=dtype), "K")
+    water = Water[pl.Series](P=Q(50e5, "Pa"), T=temperature)
+    humid_air = HumidAir[pl.Series](P=Q(101325.0, "Pa"), T=temperature, R=Q(0.5, ""))
+    for result in (water.D.m, humid_air.W.m):
+        assert result.dtype == dtype
+        assert result.is_null().to_list() == [False, True, True, True]
+        assert not result.is_nan().any()
+
+
+@pytest.mark.parametrize("size", [0, 1, 3])
+@pytest.mark.parametrize("pressure", [50e5, None])
+def test_eager_series_broadcasts_length_one(size: int, pressure: float | None) -> None:
+    water = Water[pl.Series](
+        P=Q(pl.Series([pressure], dtype=pl.Float64), "Pa"),
+        T=Q(pl.Series([400.0] * size, dtype=pl.Float32), "K"),
+    )
+    result = water.D.m
+    assert len(result) == size
+    assert result.dtype == pl.Float64
+    if pressure is None:
+        assert result.is_null().all()
+    else:
+        assert result.to_list() == approx([939.9062482796301] * size)
+
+
+def test_eager_series_rejects_mismatched_lengths() -> None:
+    water = Water[pl.Series](P=Q(pl.Series([50e5] * 2), "Pa"), T=Q(pl.Series([400.0] * 3), "K"))
+    with pytest.raises(ValueError, match="All inputs must have the same size"):
+        water.D
+
+
+def test_eager_series_state_preserves_dtype_for_numpy_point_overrides() -> None:
+    water = Water[pl.Series](P=Q(50e5, "Pa"), T=Q(pl.Series([400.0], dtype=pl.Float32), "K"))
+    points = cast(Any, [("P", Q(50e5, "Pa")), ("T", Q(np.array([400.0, 50.0]), "K"))])
+    result = water.get("D", points=points).m
+    assert result.dtype == pl.Float32
+    assert result.is_null().to_list() == [False, True]
+    assert not result.is_nan().any()
 
 
 def test_polars_dtype_preservation() -> None:
