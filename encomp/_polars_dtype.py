@@ -21,6 +21,20 @@ _CANONICAL_UNIT_FORMAT = "~P"
 """Fixed Pint format spec for the unit string stored in dtype metadata."""
 
 
+def parse_unit_metadata(text: str) -> Unit[Any]:
+    """Parse extension metadata; malformed unit text raises UndefinedUnitError."""
+    from tokenize import TokenError
+
+    from pint.errors import UndefinedUnitError
+
+    from .units import Quantity, Unit
+
+    try:
+        return Unit(Quantity.correct_unit(text))
+    except (AssertionError, TokenError, ValueError) as e:
+        raise UndefinedUnitError(text) from e
+
+
 def canonical_unit_string(unit: str | Unit[Any]) -> str:
     """Return the fixed canonical rendering stored in extension metadata.
 
@@ -28,21 +42,7 @@ def canonical_unit_string(unit: str | Unit[Any]) -> str:
     is an on-disk, cross-process contract. It normalizes spelling (``"m^3"`` and
     ``"m³"``), not physical equivalence (``"Pa"`` and ``"N/m²"`` remain distinct).
     """
-    from tokenize import TokenError
-
-    from pint.errors import UndefinedUnitError
-
-    from .units import Quantity, Unit
-
-    if isinstance(unit, str):
-        try:
-            parsed = Unit(Quantity.correct_unit(unit))
-        except (AssertionError, TokenError) as e:
-            # Pint's tokenizer uses internal assertions for a few malformed strings.
-            # Do not leak that implementation detail from a public dtype constructor.
-            raise UndefinedUnitError(unit) from e
-    else:
-        parsed = unit
+    parsed = parse_unit_metadata(unit) if isinstance(unit, str) else unit
     return format(parsed, _CANONICAL_UNIT_FORMAT)
 
 
@@ -74,12 +74,10 @@ class UnitDType(pl.BaseExtension):
     @property
     def unit(self) -> Unit[Any]:
         """The column unit parsed from the extension metadata."""
-        from .units import Unit
-
         metadata = self.ext_metadata()
         if metadata is None:
             raise ValueError(f"{EXTENSION_NAME} dtype without a unit string in its metadata: {self!r}")
-        return Unit(metadata)
+        return parse_unit_metadata(metadata)
 
     def _string_repr(self) -> str:
         return f"unit[{self.ext_metadata()}]"
