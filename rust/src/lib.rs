@@ -853,6 +853,61 @@ fn nan_to_null(out: Vec<f64>) -> Series {
     ca.into_series().with_name(PlSmallStr::EMPTY)
 }
 
+#[derive(Deserialize)]
+struct HaKwargs {
+    lib_path: String,
+    output: String,         // HAPropsSI output name, e.g. "W", "Twb", "H"
+    name1: String,          // e.g. "P"
+    name2: String,          // e.g. "T"
+    name3: String,          // e.g. "R"
+    scalar_mask: Vec<bool>, // per-input: true = length-1 literal (neutral for output dtype)
+    // see EvalKwargs.expected_units
+    #[serde(default)]
+    expected_units: Vec<String>,
+}
+
+/// Humid air: inputs[0..3] are the three HAPropsSI values for name1/name2/name3.
+/// Loops the scalar HAPropsSI in Rust (lock-free) so independent humid-air
+/// expressions parallelize too -- humid air is NOT left to the Python path.
+#[polars_expr(output_type_func_with_kwargs = ha_output)]
+fn ha_evaluate(inputs: &[Series], kwargs: HaKwargs) -> PolarsResult<Series> {
+    validate_input_count("ha_evaluate", inputs.len(), 3)?;
+    validate_input_count("ha_evaluate scalar_mask", kwargs.scalar_mask.len(), 3)?;
+    for (i, s) in inputs.iter().enumerate() {
+        validate_extension_input(
+            "ha_evaluate",
+            s.name(),
+            s.dtype(),
+            expected_unit(&kwargs.expected_units, i),
+        )?;
+        validate_numeric_input("ha_evaluate", s.name(), s.dtype())?;
+    }
+    let cp = coolprop(&kwargs.lib_path)?;
+    cp.ensure_warmed_humid_air().map_err(perr)?; // one-time HAPropsSI global init, single-threaded
+    let out_dtype = output_dtype(
+        &inputs.iter().map(|s| s.dtype().clone()).collect::<Vec<_>>(),
+        &kwargs.scalar_mask,
+    );
+    let v: Vec<Vec<f64>> = inputs.iter().take(3).map(to_f64).collect::<PolarsResult<_>>()?;
+    let n = broadcast_len(&v, &kwargs.scalar_mask);
+    let (b0, b1, b2) = (broadcast(&v[0], n)?, broadcast(&v[1], n)?, broadcast(&v[2], n)?);
+    let mut out = vec![f64::NAN; n];
+    evaluate_finite_rows(&[&b0, &b1, &b2], &mut out, |values, result| {
+        cp.ha_props_si_batch(
+            &kwargs.output,
+            &kwargs.name1,
+            values[0],
+            &kwargs.name2,
+            values[1],
+            &kwargs.name3,
+            values[2],
+            result,
+        )
+    })
+    .map_err(perr)?;
+    nan_to_null(out).cast(&out_dtype)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1056,59 +1111,4 @@ mod tests {
         assert!(extract_fractions("CO2[1.2]&O2[-0.2]").is_err());
         assert!(extract_fractions("CO2[abc]&O2[1]").is_err());
     }
-}
-
-#[derive(Deserialize)]
-struct HaKwargs {
-    lib_path: String,
-    output: String,         // HAPropsSI output name, e.g. "W", "Twb", "H"
-    name1: String,          // e.g. "P"
-    name2: String,          // e.g. "T"
-    name3: String,          // e.g. "R"
-    scalar_mask: Vec<bool>, // per-input: true = length-1 literal (neutral for output dtype)
-    // see EvalKwargs.expected_units
-    #[serde(default)]
-    expected_units: Vec<String>,
-}
-
-/// Humid air: inputs[0..3] are the three HAPropsSI values for name1/name2/name3.
-/// Loops the scalar HAPropsSI in Rust (lock-free) so independent humid-air
-/// expressions parallelize too -- humid air is NOT left to the Python path.
-#[polars_expr(output_type_func_with_kwargs = ha_output)]
-fn ha_evaluate(inputs: &[Series], kwargs: HaKwargs) -> PolarsResult<Series> {
-    validate_input_count("ha_evaluate", inputs.len(), 3)?;
-    validate_input_count("ha_evaluate scalar_mask", kwargs.scalar_mask.len(), 3)?;
-    for (i, s) in inputs.iter().enumerate() {
-        validate_extension_input(
-            "ha_evaluate",
-            s.name(),
-            s.dtype(),
-            expected_unit(&kwargs.expected_units, i),
-        )?;
-        validate_numeric_input("ha_evaluate", s.name(), s.dtype())?;
-    }
-    let cp = coolprop(&kwargs.lib_path)?;
-    cp.ensure_warmed_humid_air().map_err(perr)?; // one-time HAPropsSI global init, single-threaded
-    let out_dtype = output_dtype(
-        &inputs.iter().map(|s| s.dtype().clone()).collect::<Vec<_>>(),
-        &kwargs.scalar_mask,
-    );
-    let v: Vec<Vec<f64>> = inputs.iter().take(3).map(to_f64).collect::<PolarsResult<_>>()?;
-    let n = broadcast_len(&v, &kwargs.scalar_mask);
-    let (b0, b1, b2) = (broadcast(&v[0], n)?, broadcast(&v[1], n)?, broadcast(&v[2], n)?);
-    let mut out = vec![f64::NAN; n];
-    evaluate_finite_rows(&[&b0, &b1, &b2], &mut out, |values, result| {
-        cp.ha_props_si_batch(
-            &kwargs.output,
-            &kwargs.name1,
-            values[0],
-            &kwargs.name2,
-            values[1],
-            &kwargs.name3,
-            values[2],
-            result,
-        )
-    })
-    .map_err(perr)?;
-    nan_to_null(out).cast(&out_dtype)
 }

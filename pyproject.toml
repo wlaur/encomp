@@ -1,6 +1,6 @@
 [project]
 name = "encomp"
-version = "1.9.6"
+version = "1.10.0"
 description = "General-purpose library for engineering computations"
 authors = [{ name = "William Laurén", email = "lauren.william.a@gmail.com" }]
 requires-python = ">=3.13"
@@ -132,6 +132,7 @@ lint.select = [
     "UP",
     "ANN",
     "C4",
+    "C90",
     "ISC",
     "ICN",
     "SIM",
@@ -188,7 +189,7 @@ line-length = 120
 target-version = "py313"
 
 [tool.ruff.lint.mccabe]
-max-complexity = 10
+max-complexity = 16
 
 [tool.pytest.ini_options]
 testpaths = ["encomp/tests"]
