@@ -12,10 +12,16 @@ repos:
         types_or: [ python, pyi, jupyter ]
       - id: ruff-format
         types_or: [python, pyi, jupyter]
-  # Rust lint/format for the CoolProp plugin crate (rust/). `language: system` uses
-  # the developer's installed toolchain (rustfmt + clippy ship with stable Rust).
+  # Generated overloads and Rust lint/format for the CoolProp plugin crate (rust/).
+  # `language: system` uses the developer's uv and Rust toolchains.
   - repo: local
     hooks:
+      - id: generated-overloads
+        name: generated dimensional overloads
+        entry: uv run python scripts/generate_overloads.py --check
+        language: system
+        always_run: true
+        pass_filenames: false
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt --manifest-path rust/Cargo.toml -- --check

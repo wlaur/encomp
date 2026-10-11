@@ -23,12 +23,17 @@ mirror of the overloads.
 """
 
 import inspect
+import json
+import shutil
+import subprocess
 import sys
 import typing
+from pathlib import Path
 from typing import Any, NamedTuple
 
 import pytest
 
+from .._dimensional_algebra import replace_generated_blocks
 from ..units import Quantity
 from ..utypes import Dimensionality, Dimensionless, UnknownDimensionality, get_registered_units
 
@@ -125,6 +130,60 @@ _CONCRETE_OVERLOADS: list[_Combo] = _iter_concrete_overloads()
 _SUPPORTED: dict[tuple[str, str, str], str] = {
     (c.op, c.self_dim.__name__, c.other_dim.__name__): c.ret_dim.__name__ for c in _CONCRETE_OVERLOADS
 }
+
+
+def test_generated_block_is_current() -> None:
+    source = Path(inspect.getfile(Quantity)).read_text()
+    assert source == replace_generated_blocks(source), "Run uv run python scripts/generate_overloads.py"
+
+
+_REVEAL_PRODUCTS = """
+from typing import reveal_type
+
+import numpy as np
+import polars as pl
+
+from encomp.units import Quantity as Q
+from encomp.utypes import Numpy1DArray
+
+mass = Q(2.0, "kg/s") * Q(3.0, "s")
+energy = Q(2.0, "N") * Q(3.0, "m")
+values: Numpy1DArray = np.array([2.0], dtype=float)
+volume_flow = Q(values, "kg/s") * Q(3.0, "m³/kg")
+specific_volume = 1.0 / Q(pl.Series([2.0]), "kg/m³")
+
+reveal_type(mass)
+reveal_type(energy)
+reveal_type(volume_flow)
+reveal_type(specific_volume)
+"""
+
+
+def test_generated_overloads_preserve_pyright_inference(tmp_path: Path) -> None:
+    candidate = Path(sys.executable).with_name("pyright")
+    checker = str(candidate) if candidate.exists() else shutil.which("pyright")
+    if checker is None:
+        pytest.skip("pyright not installed")
+    probe = tmp_path / "products.py"
+    probe.write_text(_REVEAL_PRODUCTS)
+    config = tmp_path / "pyrightconfig.json"
+    config.write_text(
+        json.dumps({"include": [str(probe)], "typeCheckingMode": "strict", "enableTypeIgnoreComments": False})
+    )
+    result = subprocess.run(
+        [checker, "--project", str(config), "--pythonpath", sys.executable, "--outputjson"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    diagnostics: list[dict[str, object]] = json.loads(result.stdout)["generalDiagnostics"]
+    assert [item["message"] for item in diagnostics] == [
+        'Type of "mass" is "Quantity[Mass, float]"',
+        'Type of "energy" is "Quantity[Energy, float]"',
+        'Type of "volume_flow" is "Quantity[VolumeFlow, ndarray[tuple[int], dtype[float64]]]"',
+        'Type of "specific_volume" is "Quantity[SpecificVolume, Series]"',
+    ]
 
 
 def test_concrete_overloads_discovered() -> None:
