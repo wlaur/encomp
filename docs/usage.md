@@ -531,6 +531,23 @@ though it converts to `K` by scale alone: {py:class}`encomp.fluids.Fluid` state 
 {py:class}`encomp.units.ExpectedDimensionalityError` rather than flash a difference as an
 absolute state.
 
+```python
+from typing import Any, cast
+
+from encomp.gases import convert_gas_volume
+from encomp.units import ExpectedDimensionalityError
+from encomp.units import Quantity as Q
+
+condition = (Q(1.0, "bar"), Q(5.0, "delta_degC"))
+try:
+    # Deliberately bypass the static rejection to demonstrate the runtime guard.
+    convert_gas_volume(Q(1.0, "m³"), cast(Any, condition), "N", fluid_name="Air")
+except ExpectedDimensionalityError as error:
+    assert "condition_1[1]" in str(error)
+else:
+    raise AssertionError("a temperature difference must not describe an absolute gas state")
+```
+
 NumPy functions type their results the same way the operators do: `np.subtract(a, b)` is
 exactly `a - b`, `np.add(a, b)` is exactly `a + b`, and the functions that return a
 *difference* of their input — `np.diff`, `np.ediff1d`, `np.gradient`, `np.ptp`, `np.std` —

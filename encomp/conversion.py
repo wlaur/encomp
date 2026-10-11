@@ -6,7 +6,7 @@ import numpy as np
 import polars as pl
 
 from .misc import isinstance_types
-from .units import ExpectedDimensionalityError, Quantity
+from .units import ExpectedDimensionalityError, Quantity, require_dimensionality
 from .utypes import MT, Density, Mass, MassFlow, Numpy1DArray, Volume, VolumeFlow
 
 __all__ = ["convert_volume_mass"]
@@ -67,8 +67,7 @@ def convert_volume_mass(
         Calculated volume or mass (or flow)
     """
 
-    if not isinstance_types(rho, Quantity[Density, Any]):
-        raise ExpectedDimensionalityError(f"rho must be a Quantity[Density], passed {rho!r} ({type(rho).__name__})")
+    require_dimensionality(rho, Density, name="rho")
 
     # a NaN density means "missing" for float/numpy data, but a polars result carries null,
     # never NaN -- and a float/ndarray density has no null spelling. A NaN there would flow
