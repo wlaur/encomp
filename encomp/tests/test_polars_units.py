@@ -159,6 +159,71 @@ def test_quantity_frame_refuses_temperature_reinterpretation() -> None:
     assert_type(Difference.value, Column[TemperatureDifference])
 
 
+def test_assignments_refuse_temperature_reinterpretation() -> None:
+    class Absolute(QuantityFrame):
+        value = unit("degC")
+
+    class KelvinAbsolute(QuantityFrame):
+        value = unit("K")
+
+    class RankineAbsolute(QuantityFrame):
+        value = unit("degR")
+
+    class Difference(QuantityFrame):
+        value = unit("delta_degC")
+
+    class ExplicitAbsolute(QuantityFrame):
+        value = unit("K", asdim=Temperature)
+
+    class KelvinDifference(QuantityFrame):
+        value = unit("K", asdim=TemperatureDifference)
+
+    absolute = Q(pl.col("value"), "degC")
+    difference = Q(pl.col("value"), "delta_degC")
+    kelvin = Q(pl.col("value"), "K")
+
+    with raises(DimensionalityTypeError, match="assign to column 'value'"):
+        Difference.value.assign(cast(Any, absolute))
+    with raises(DimensionalityTypeError, match="assign to column 'value'"):
+        Absolute.value.assign(cast(Any, difference))
+    with raises(DimensionalityTypeError, match=r"TemperatureDifference.*Temperature"):
+        KelvinAbsolute.value.assign(cast(Any, difference))
+    with raises(DimensionalityTypeError, match=r"TemperatureDifference.*Temperature"):
+        RankineAbsolute.value.assign(cast(Any, difference))
+
+    frame = pl.DataFrame({"value": [5.0]})
+    absolute_assignment = KelvinAbsolute.value.assign(absolute)
+    assert absolute_assignment.value.u == Unit("K")
+    assert KelvinAbsolute.derive(frame, absolute_assignment).lf.collect()["value"].ext.storage().item() == 278.15
+
+    explicit = ExplicitAbsolute.derive(frame, ExplicitAbsolute.value.assign(cast(Any, difference)))
+    assert explicit.value.dt is Temperature
+    assert explicit.lf.collect()["value"].ext.storage().item() == 5.0
+
+    explicit_difference = KelvinDifference.derive(frame, KelvinDifference.value.assign(cast(Any, kelvin)))
+    assert explicit_difference.value.dt is TemperatureDifference
+    assert explicit_difference.lf.collect()["value"].ext.storage().item() == 5.0
+
+
+@pytest.mark.parametrize("attribute", ["pressure", "renamed"])
+def test_column_declarations_refuse_rebinding(attribute: str) -> None:
+    shared = unit("bar")
+
+    class Original(QuantityFrame):
+        pressure = shared
+
+    class Inherited(Original):
+        pass
+
+    assert Inherited.pressure is Original.pressure
+    with raises((TypeError, RuntimeError)) as excinfo:
+        _ = type("Rebound", (QuantityFrame,), {attribute: shared})
+    error = excinfo.value.__cause__ if isinstance(excinfo.value, RuntimeError) else excinfo.value
+    assert isinstance(error, TypeError)
+    assert "declare a new unit(...) in Rebound" in str(error)
+    assert Original.pressure.name == "pressure"
+
+
 def test_declaring_a_difference_with_an_offset_unit_rewrites_the_stored_unit() -> None:
     # unit(..., asdim=...) goes through Quantity.asdim, which moves an offset unit onto the
     # matching delta scale -- so the persisted metadata can never say "absolute °C" for a
@@ -485,7 +550,7 @@ def test_quantity_frame_derive_validates_assignments() -> None:
         Report.derive(sensors, assignment, assignment)
     with raises(TypeError, match=r"pl\.Expr"):
         Report.power.assign(cast(Any, Q(pl.Series([1.0]), "kW")))
-    with raises(Exception, match="Cannot convert"):
+    with raises(DimensionalityTypeError, match="assign to column"):
         Report.power.assign(cast(Any, sensors.pressure))
 
 
@@ -513,15 +578,19 @@ def test_scan_parquet_survives_predicate_pushdown(tmp_path: Path) -> None:
             pl.scan_parquet(path).filter(pl.col("pressure").ext.storage() > 50.0).collect()
 
 
-def test_units_of_degrades_per_column_for_unparseable_metadata() -> None:
+@pytest.mark.parametrize("metadata", ["totally_bogus", "(", "1 2"])
+def test_units_of_degrades_per_column_for_unparseable_metadata(metadata: str) -> None:
     # EXTENSION_NAME is a cross-process contract: another producer can write metadata pint
     # cannot parse. That must not make the well-formed columns of the frame uninspectable
     good = with_units(pl.DataFrame({"good": [1.0]}), {"good": "bar"})
-    bad_dtype = pl.BaseExtension(EXTENSION_NAME, pl.Float64(), "totally_bogus")
+    bad_dtype = pl.BaseExtension(EXTENSION_NAME, pl.Float64(), metadata)
     frame = good.with_columns(pl.Series("bad", [2.0]).cast(pl.Float64).ext.to(bad_dtype))
 
-    with pytest.warns(UserWarning, match="totally_bogus"):
+    with pytest.warns(UserWarning, match="'bad'"):
         assert units_of(frame) == {"good": Unit("bar")}
+
+    with raises(UndefinedUnitError):
+        UnitDType(metadata)
 
 
 def test_typed_read_errors_name_the_column() -> None:

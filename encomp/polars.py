@@ -71,9 +71,16 @@ class Column[DT: Dimensionality]:
         self._explicit_dimensionality = _explicit_dimensionality
         self._explicit_name = name
         self._attribute_name: str | None = None
+        self._owner: type[object] | None = None
 
     def __set_name__(self, owner: type[object], name: str) -> None:
+        if self._attribute_name is not None and (self._attribute_name != name or self._owner is not owner):
+            raise TypeError(
+                f"column declaration already bound as {self._attribute_name!r}; "
+                f"declare a new unit(...) in {owner.__name__}"
+            )
         self._attribute_name = name
+        self._owner = owner
 
     @property
     def name(self) -> str:
@@ -107,6 +114,32 @@ class Column[DT: Dimensionality]:
         return Assignment(self, value)
 
 
+def _coerce_to_declaration(
+    source: Quantity[Any, pl.Expr], declaration: Column[Any], *, context: str
+) -> Quantity[Any, pl.Expr]:
+    """Convert to the declared unit and enforce its semantic dimensionality."""
+    try:
+        converted = source.to(declaration.unit)
+    except DimensionalityError as e:
+        raise DimensionalityTypeError(f"Cannot {context} carrying {source.u} as {declaration.unit}: {e}") from e
+    if converted.dt is not declaration.dimensionality:
+        if not declaration.dimensionality_is_explicit:
+            raise DimensionalityTypeError(
+                f"Cannot {context} carrying {source.u} (dimensionality {converted.dt.__name__}) as "
+                f"{declaration.unit} (dimensionality {declaration.dimensionality.__name__}); "
+                "use unit(..., asdim=...) to explicitly reinterpret it"
+            )
+        converted = converted.asdim(declaration.dimensionality)
+    return converted
+
+
+def _wrap_declared(lf: pl.LazyFrame, expr: pl.Expr, declaration: Column[Any]) -> pl.Expr:
+    """Wrap a converted expression with the declared unit and its resolved storage dtype."""
+    converted = expr.alias(declaration.name)
+    storage = lf.select(converted).collect_schema()[declaration.name]
+    return converted.ext.to(UnitDType(declaration.unit, storage=storage)).alias(declaration.name)
+
+
 def _validate_assignment_value(value: object) -> None:
     if not isinstance(value, Quantity):
         raise TypeError("quantity-column assignments require a Quantity with a pl.Expr magnitude")
@@ -120,9 +153,11 @@ class Assignment[DT: Dimensionality]:
 
     def __init__(self, column: Column[DT], value: Quantity[DT, pl.Expr]) -> None:
         _validate_assignment_value(value)
-        value.to(column.unit)
         self.column = column
-        self.value = value
+        # The coercion enforces the column's DT while preserving the Expr magnitude.
+        self.value = cast(
+            "Quantity[DT, pl.Expr]", _coerce_to_declaration(value, column, context=f"assign to column {column.name!r}")
+        )
 
 
 @overload
@@ -389,27 +424,10 @@ class QuantityFrame:
             # meaning. Pint permits scale-only conversions such as delta_degC -> K,
             # so compare semantic dimensionality after converting as well.
             source = Quantity(pl.col(declaration.name).ext.storage(), dtype.unit)
-            try:
-                converted_quantity = source.to(declaration.unit)
-            except DimensionalityError as e:
-                # pint's own message names the two units but never the column, which is
-                # the one thing the caller needs to act on in a wide frame
-                raise DimensionalityTypeError(
-                    f"Cannot read column {declaration.name!r} carrying {dtype.unit} as {declaration.unit}: {e}"
-                ) from e
-            if converted_quantity.dt is not declaration.dimensionality:
-                if not declaration.dimensionality_is_explicit:
-                    raise DimensionalityTypeError(
-                        f"Cannot read column {declaration.name!r} carrying {dtype.unit} "
-                        f"(dimensionality {converted_quantity.dt.__name__}) as {declaration.unit} "
-                        f"(dimensionality {declaration.dimensionality.__name__}); use unit(..., asdim=...) "
-                        "to explicitly reinterpret it"
-                    )
-                converted_quantity = converted_quantity.asdim(declaration.dimensionality)
-
-            converted = converted_quantity.m.alias(declaration.name)
-            storage = lf.select(converted).collect_schema()[declaration.name]
-            conversions.append(converted.ext.to(UnitDType(declaration.unit, storage=storage)).alias(declaration.name))
+            converted_quantity = _coerce_to_declaration(
+                source, declaration, context=f"read column {declaration.name!r}"
+            )
+            conversions.append(_wrap_declared(lf, converted_quantity.m, declaration))
 
         self.lf = lf.with_columns(conversions)
 
@@ -476,9 +494,7 @@ class QuantityFrame:
                 raise ValueError(f"column {target.name!r} was assigned more than once")
             seen.add(target.name)
 
-            converted = assignment.value.to(target.unit).m.alias(target.name)
-            storage = lf.select(converted).collect_schema()[target.name]
-            expressions.append(converted.ext.to(UnitDType(target.unit, storage=storage)).alias(target.name))
+            expressions.append(_wrap_declared(lf, assignment.value.m, target))
 
         return cls(lf.with_columns(expressions))
 
