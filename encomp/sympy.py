@@ -859,7 +859,7 @@ def symbols(inp: str, **kwargs: Any) -> list[Symbol]:  # noqa: ANN401
     for n in ret:
         _patch_symbol_class(n)
 
-    return cast(list[Symbol], list(ret))
+    return list(ret)
 
 
 _patch_symbol_class(sp.Symbol)

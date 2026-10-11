@@ -437,6 +437,8 @@ Polars has no extension hook for encomp's multiplication or supertype rules. It 
 
 Parquet and IPC store `ARROW:extension:name = "encomp.unit"` and `ARROW:extension:metadata = <canonical unit>` on each field. The canonical rendering normalizes syntax, not dimensional equivalence: `m^3` and `m³` match, but `Pa` and `N/m²` remain distinct dtype identities. The upstream Polars extension API is unstable, so encomp treats this integration as experimental and pins its required I/O and refusal behavior in tests.
 
+Import `encomp.polars` or `encomp.coolprop` before reading to get `UnitDType`. Without either import, Polars ≥ 2.0 preserves unit metadata as a generic `pl.Extension` dtype; `POLARS_UNKNOWN_EXTENSION_TYPE_BEHAVIOR=load_as_storage` loads plain floats instead. Polars 1.x strips the metadata and loads plain floats unless `POLARS_UNKNOWN_EXTENSION_TYPE_BEHAVIOR=load_as_extension` is set. Polars 2.0 also fixes the Parquet statistics-reader panic on extension dtypes; `QuantityFrame.scan_parquet` keeps its protective identity re-wrap while the runtime floor remains 1.42.
+
 ### Combining quantities
 
 The output of an operation on quantities is always consistent with the input dimensionalities.
@@ -854,7 +856,7 @@ phase_names = Water.PHASES
 
 # when one input is constant (float, int, single element array),
 # it's repeated as an array
-Water(T=Q(np.linspace(25, 500, 10), "°C"), P=Q(5, "bar"))  # ty: ignore[invalid-argument-type]
+Water(T=Q(np.linspace(25, 500, 10), "°C"), P=Q(5, "bar"))
 # <Water (Variable), P=[500 500 500 ...] kPa, T=[25.0 77.8 130.6 ...] °C,
 # D=[997.2 973.4 934.5 ...] kg/m³, V=[0.89 0.36 0.21 ...] cP>
 ```

@@ -859,6 +859,7 @@ def fluid(
         )
     # inputs are passed at their own dtype (the plugin casts to f64 internally); the
     # output dtype preserves the input precision (Float32 in -> Float32 out).
+    # Polars 2 defaults is_deterministic=True; omit the flag for the 1.42 floor.
     return register_plugin_function(
         plugin_path=_plugin_path(),
         function_name="cp_evaluate",
@@ -933,6 +934,7 @@ def humid_air(
         ),
     )
     e1, e2, e3 = _as_expr(input1), _as_expr(input2), _as_expr(input3)
+    # Polars 2 defaults is_deterministic=True; omit the flag for the 1.42 floor.
     return register_plugin_function(
         plugin_path=_plugin_path(),
         function_name="ha_evaluate",

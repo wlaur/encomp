@@ -449,7 +449,7 @@ def test_type_eq() -> None:
     if isinstance_types(q, Q[Length, Any]):
         assert_type(q, Q[Length, float])  # pyrefly: ignore[assert-type]
     else:
-        assert_never(q)  # ty: ignore[type-assertion-failure]
+        assert_never(q)
 
     if isinstance_types(q, Q[Length, Numpy1DArray]):
         assert_never(q)  # pyrefly: ignore[bad-argument-type]
@@ -704,8 +704,8 @@ def test_Q() -> None:
     assert P2.m == approx(2, rel=1e-12)
     # "feet_water" is a runtime Pint unit alias, not a literal overload.
     assert isinstance_types(P2, Q[Pressure])
-    assert_type(Q(Q(2, "feet_water"), Q(2, "kPa").u), Q[Pressure, float])
-    assert_type(
+    assert_type(Q(Q(2, "feet_water"), Q(2, "kPa").u), Q[Pressure, float])  # ty: ignore[type-assertion-failure]
+    assert_type(  # ty: ignore[type-assertion-failure]
         Q(Q(2, "feet_water"), Q(321321, "psi").u).to(Q(123123, "feet_water").asdim(Pressure)),
         Q[Pressure, float],
     )

@@ -371,7 +371,7 @@ def test_Water() -> None:
     assert "V=0.0 cP" not in steam_repr
     assert "V=0.013 cP" in steam_repr
 
-    water_multi = Water(T=Q(np.linspace(25, 50), "°C"), P=Q(5, "bar"))  # ty: ignore[invalid-argument-type]
+    water_multi = Water(T=Q(np.linspace(25, 50), "°C"), P=Q(5, "bar"))
 
     repr(water_multi)
 
@@ -596,9 +596,9 @@ def test_magnitude_type() -> None:
 
 def test_polars_fluids() -> None:
     w_series = Water(P=Q(pl.Series([1, 2, 3]), "bar"), T=Q(pl.Series([150, 250, 350]), "degC"))
-    assert_type(w_series.D, Q[ut.Density, pl.Series])  # pyrefly: ignore[assert-type]
+    assert_type(w_series.D, Q[ut.Density, pl.Series])  # pyrefly: ignore[assert-type]  # ty: ignore[type-assertion-failure]
 
-    w_series_const_T = Water(P=Q(pl.Series([1, 2, 3]), "bar"), T=Q(150, "degC"))  # ty: ignore[invalid-argument-type]
+    w_series_const_T = Water(P=Q(pl.Series([1, 2, 3]), "bar"), T=Q(150, "degC"))
     assert_type(w_series_const_T.D, Q[ut.Density, pl.Series])  # pyrefly: ignore[assert-type]  # ty: ignore[type-assertion-failure]
 
     mixed_container = Water(
@@ -623,7 +623,7 @@ def test_polars_fluids() -> None:
 
     assert D.is_null().all()
 
-    repr(Water(P=Q(pl.lit(5), "bar"), T=Q(50, "degC")))  # ty: ignore[invalid-argument-type]
+    repr(Water(P=Q(pl.lit(5), "bar"), T=Q(50, "degC")))
 
     with pytest.raises(TypeError):
         Water(P=Q(pl.lit(5), "bar"), T=cast(Any, Q([1, 2, 3], "degC"))).D
@@ -1167,7 +1167,7 @@ def test_phase_ignores_invalid_rows_and_is_length_independent() -> None:
 
     # invalid rows are not a phase: the determinate rows decide
     superheated = Water(T=Q(np.array([200.0, 250.0, np.nan]), "degC"), P=Q(np.array([1.0, 1.0, 1.0]), "bar"))
-    assert np.isnan(float(cast(Any, superheated.PHASE.m)[2]))
+    assert np.isnan(float(superheated.PHASE.m[2]))
     assert superheated.phase == "Gas"
 
     # genuine variation is still reported
@@ -1177,12 +1177,12 @@ def test_phase_ignores_invalid_rows_and_is_length_independent() -> None:
 def test_new_typed_fluid_properties() -> None:
     water = Fluid("HEOS::Water", P=Q(1.0, "bar"), T=Q(25.0, "degC"))
 
-    assert_type(water.RHOCRIT, Q[ut.Density, float])  # pyrefly: ignore[assert-type]
-    assert_type(water.CVMASS, Q[ut.SpecificHeatCapacity, float])  # pyrefly: ignore[assert-type]
-    assert_type(water.CPMOLAR, Q[ut.MolarSpecificHeatCapacity, float])  # pyrefly: ignore[assert-type]
-    assert_type(water.CVMOLAR, Q[ut.MolarSpecificHeatCapacity, float])  # pyrefly: ignore[assert-type]
-    assert_type(water.GAS_CONSTANT, Q[ut.MolarSpecificHeatCapacity, float])  # pyrefly: ignore[assert-type]
-    assert_type(water.TAU, Q[ut.Dimensionless, float])  # pyrefly: ignore[assert-type]
+    assert_type(water.RHOCRIT, Q[ut.Density, float])  # pyrefly: ignore[assert-type]  # ty: ignore[type-assertion-failure]
+    assert_type(water.CVMASS, Q[ut.SpecificHeatCapacity, float])  # pyrefly: ignore[assert-type]  # ty: ignore[type-assertion-failure]
+    assert_type(water.CPMOLAR, Q[ut.MolarSpecificHeatCapacity, float])  # pyrefly: ignore[assert-type]  # ty: ignore[type-assertion-failure]
+    assert_type(water.CVMOLAR, Q[ut.MolarSpecificHeatCapacity, float])  # pyrefly: ignore[assert-type]  # ty: ignore[type-assertion-failure]
+    assert_type(water.GAS_CONSTANT, Q[ut.MolarSpecificHeatCapacity, float])  # pyrefly: ignore[assert-type]  # ty: ignore[type-assertion-failure]
+    assert_type(water.TAU, Q[ut.Dimensionless, float])  # pyrefly: ignore[assert-type]  # ty: ignore[type-assertion-failure]
 
     assert water.RHOCRIT.to("kg/m³").m == approx(322.0, rel=1e-3)
     # CoolProp carries its own value of R per equation of state, so compare loosely
@@ -1195,7 +1195,7 @@ def test_new_typed_fluid_properties() -> None:
     # surface tension needs a new dimensionality, [force] / [length]
     saturated = Fluid("HEOS::Water", T=Q(25.0, "degC"), Q=Q(0.0))
 
-    assert_type(saturated.I, Q[ut.SurfaceTension, float])  # pyrefly: ignore[assert-type]
+    assert_type(saturated.I, Q[ut.SurfaceTension, float])  # pyrefly: ignore[assert-type]  # ty: ignore[type-assertion-failure]
     assert saturated.I.to("mN/m").m == approx(72.0, rel=1e-2)
 
 
@@ -1203,8 +1203,8 @@ def test_humid_air_constant_volume_heat_capacity_is_typed() -> None:
     humid_air = HumidAir(T=Q(25.0, "degC"), P=Q(1.0, "bar"), R=Q(0.5))
 
     # CV / CVha now match C / Cha instead of falling back to SpecificHeatCapacity
-    assert_type(humid_air.CV, Q[ut.SpecificHeatPerDryAir, float])  # pyrefly: ignore[assert-type]
-    assert_type(humid_air.CVha, Q[ut.SpecificHeatPerHumidAir, float])  # pyrefly: ignore[assert-type]
+    assert_type(humid_air.CV, Q[ut.SpecificHeatPerDryAir, float])  # pyrefly: ignore[assert-type]  # ty: ignore[type-assertion-failure]
+    assert_type(humid_air.CVha, Q[ut.SpecificHeatPerHumidAir, float])  # pyrefly: ignore[assert-type]  # ty: ignore[type-assertion-failure]
 
     assert type(humid_air.CV).__name__ == type(humid_air.C).__name__
     assert type(humid_air.CVha).__name__ == type(humid_air.Cha).__name__

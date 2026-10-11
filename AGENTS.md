@@ -104,6 +104,8 @@ assert pressure.to("kPa").m == 100.0
 
 - `uv` with a committed lockfile (`uv sync --locked`); `ruff check` + `ruff format`
   (enforced by pre-commit and CI).
+- Only the checker versions in `uv.lock` count; run `uv sync --locked` before
+  running any checker.
 - Mixed Python + Rust project built with maturin. Development checkouts build the
   plugin locally: `python scripts/build_libcoolprop.py` then
   `uv run maturin develop --release` (see `encomp/coolprop/README.md`).

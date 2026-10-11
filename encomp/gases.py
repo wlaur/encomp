@@ -272,7 +272,7 @@ def _strip_normal(
     if isinstance_types(volume, Quantity[NormalVolumeFlow, Any]):
         return (volume / _NORMAL).to("m³/h").asdim(VolumeFlow)
 
-    return volume  # ty: ignore[invalid-return-type]
+    return volume
 
 
 @overload
