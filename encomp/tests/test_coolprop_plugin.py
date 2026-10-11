@@ -335,6 +335,18 @@ def test_humid_air() -> None:
     assert np.allclose(out["w"].to_numpy(), ref, rtol=RTOL)
 
 
+def test_humid_air_sparse_rows_match_dense_evaluation() -> None:
+    frame = pl.DataFrame(
+        {"P": [101325.0] * 5, "T": [293.15, None, 303.15, float("nan"), 313.15], "R": [0.5, 0.4, 0.3, 0.2, 0.1]}
+    )
+    expression = cp.humid_air("W", "P", "T", "R")
+    sparse = frame.select(expression).to_series()
+    dense = frame.filter(pl.col("T").is_finite()).select(expression).to_series()
+    assert sparse.to_list()[1::2] == [None, None]
+    assert sparse.gather([0, 2, 4]).equals(dense)
+    assert not sparse.is_nan().fill_null(False).any()
+
+
 def test_eager_and_lazy_agree() -> None:
     df = pl.DataFrame({"P": np.full(100, 50e5), "T": np.linspace(300.0, 500.0, 100)})
     expr = {"d": cp.water("DMASS", "P", "T"), "h": cp.water("HMASS", "P", "T")}

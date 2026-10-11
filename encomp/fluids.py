@@ -744,13 +744,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         frame = pl.DataFrame({f"__in{i}": a for i, a in enumerate(arrs)})
         plugin_points = tuple((names[i], pl.col(f"__in{i}")) for i in range(len(arrs)))
         expr = self._plugin_expr(output, plugin_points)
-        out = np.array(frame.select(expr)[output].to_numpy(), dtype=float)
-        # Rows with any non-finite input are NaN, and any inf/_HUGE that slipped
-        # through becomes NaN.
-        finite_inputs = np.logical_and.reduce([np.isfinite(a) for a in arrs])
-        out[~finite_inputs] = np.nan
-        out[~np.isfinite(out)] = np.nan
-        return out
+        return np.array(frame.select(expr)[output].to_numpy(), dtype=float)
 
     @staticmethod
     def _reduce_single_element(x: float | Numpy1DArray | pl.Expr) -> float | Numpy1DArray | pl.Expr:
