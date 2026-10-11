@@ -7,7 +7,7 @@ import pickle
 import subprocess
 import sys
 import warnings
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from typing import Any, TypedDict, assert_never, assert_type, cast
 
@@ -1200,6 +1200,9 @@ def test_arithmetic_defers_to_unknown_operand_reflected_methods() -> None:
         def __rtruediv__(self, other: object) -> tuple[str, object]:
             return ("rtruediv", other)
 
+        def __rfloordiv__(self, other: object) -> tuple[str, object]:
+            return ("rfloordiv", other)
+
     quantity = Q(2.0, "m")
     operand = ReflectedArithmetic()
 
@@ -1207,12 +1210,100 @@ def test_arithmetic_defers_to_unknown_operand_reflected_methods() -> None:
     assert quantity - operand == ("rsub", quantity)
     assert quantity * operand == ("rmul", quantity)
     assert quantity / operand == ("rtruediv", quantity)
+    assert cast(Any, quantity) // operand == ("rfloordiv", quantity)
 
     unsupported = object()
     assert cast(Any, quantity).__add__(unsupported) is NotImplemented
     assert cast(Any, quantity).__sub__(unsupported) is NotImplemented
     assert cast(Any, quantity).__mul__(unsupported) is NotImplemented
     assert cast(Any, quantity).__truediv__(unsupported) is NotImplemented
+    assert cast(Any, quantity).__floordiv__(unsupported) is NotImplemented
+    assert cast(Any, quantity).__rtruediv__(unsupported) is NotImplemented
+
+    with pytest.raises(TypeError):
+        _ = cast(Any, quantity) // "x"
+
+
+@pytest.mark.parametrize("magnitude", [1.0, np.array([1.0, 2.0]), pl.Series([1.0, 2.0]), pl.col("x")])
+def test_constructor_and_operator_validation_counts(magnitude: Any, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: ANN401
+    original = Q._validate_magnitude  # pyright: ignore[reportPrivateUsage]
+    calls = 0
+
+    def counted(value: Any) -> Any:  # noqa: ANN401
+        nonlocal calls
+        calls += 1
+        return original(value)
+
+    monkeypatch.setattr(Q, "_validate_magnitude", staticmethod(counted))
+    quantity = cast("Q[Length, Any]", Q(magnitude, "m"))
+    assert calls == 1
+    Q[Mass](magnitude, "m")
+    assert calls == 2
+    Q(quantity)
+    assert calls == 3
+    temperature = cast("Q[Temperature, Any]", Q(magnitude, "degC"))
+    difference = cast("Q[TemperatureDifference, Any]", Q(magnitude, "delta_degC"))
+    assert calls == 5
+
+    operations: tuple[Callable[[], object], ...] = (
+        lambda: quantity + quantity,
+        lambda: quantity - quantity,
+        lambda: quantity * quantity,
+        lambda: quantity / quantity,
+        lambda: quantity // quantity,
+        lambda: 2.0 / quantity,
+        lambda: abs(quantity),
+        lambda: +quantity,
+        lambda: -quantity,
+        lambda: round(quantity),
+        lambda: quantity.to("cm"),
+        lambda: quantity.to_base_units(),
+        lambda: quantity.to_root_units(),
+        lambda: temperature - temperature,
+        lambda: temperature + difference,
+        lambda: difference + temperature,
+        lambda: temperature - difference,
+        lambda: difference - difference,
+    )
+    for operation in operations:
+        calls = 0
+        operation()
+        assert calls == 0
+
+    if isinstance(magnitude, np.ndarray):
+        array_quantity = cast("Q[Length, Numpy1DArray]", quantity)
+        calls = 0
+        list(array_quantity)
+        _ = array_quantity[0]
+        _ = array_quantity[:1]
+        _ = array_quantity[np.array([0])]
+        assert calls == 0
+
+
+@pytest.mark.parametrize(
+    ("spelling", "canonical"),
+    [("liter/min", "L/min"), ("meter/min", "m/min"), ("bar/min", "bar/min"), ("Nm³/min", "normal_cubic_meter/min")],
+)
+def test_unit_correction_preserves_numerators_ending_in_r(spelling: str, canonical: str) -> None:
+    assert Q(1.0, spelling).u == Unit(canonical)
+    assert Q(1.0, "r/min").u == Unit("rpm")
+
+
+def test_pint_results_preserve_symbolic_magnitudes() -> None:
+    import sympy as sp
+
+    quantity = Q[Length](sp.Float(2.0), "m")
+    assert isinstance((-quantity).m, sp.Float)
+    assert isinstance((quantity + quantity).m, sp.Float)
+
+
+@pytest.mark.parametrize("exponent", [float("nan"), float("inf"), float("-inf")])
+def test_pint_results_reject_nonfinite_unit_exponents(exponent: float) -> None:
+    quantity = Q(2.0, "m")
+    with pytest.raises(TypeError):
+        _ = quantity**exponent
+    with pytest.raises(TypeError):
+        _ = quantity ** Q(exponent, "")
 
 
 def test_compatibility() -> None:

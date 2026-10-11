@@ -17,7 +17,7 @@ import numbers
 import re
 import sys
 import warnings
-from collections.abc import Iterable, Iterator, Sequence, Sized
+from collections.abc import Callable, Iterable, Iterator, Sequence, Sized
 from inspect import isclass
 from types import NotImplementedType, UnionType
 from typing import (
@@ -310,8 +310,7 @@ class _LazyRegistry(LazyRegistry[Any, Any]):
 
         setattr(self, "__class__", _UnitRegistry)  # noqa: B010
         cast(Any, self).__init__(*args, **kwargs)
-        assert self._after_init != "raise"
-        self._after_init()
+        cast("Callable[[], None]", self._after_init)()
 
 
 # NOTE: no attribute docstring here: autodoc's signature formatter fails on the
@@ -442,6 +441,12 @@ class Unit(PlainUnit, Generic[DT]):
     pass
 
 
+class _PintResultQuantity(NumpyQuantity[Any], NonMultiplicativeQuantity[Any], MeasurementQuantity[Any]):
+    """Pint's arithmetic implementation for already validated encomp operands."""
+
+    _REGISTRY: ClassVar[UnitRegistry[Any]] = UNIT_REGISTRY
+
+
 class Quantity(
     NumpyQuantity[Any],
     NonMultiplicativeQuantity[Any],
@@ -477,12 +482,16 @@ class Quantity(
 
     # constants
     NORMAL_M3_VARIANTS = ("nm³", "Nm³", "nm3", "Nm3", "nm**3", "Nm**3", "nm^3", "Nm^3")
-    TEMPERATURE_DIFFERENCE_UCS = (
-        Unit("delta_K")._units,
-        Unit("delta_degC")._units,
-        Unit("delta_degF")._units,
-        Unit("delta_degRe")._units,
-    )
+    _TEMPERATURE_SCALE_PAIRS: ClassVar[dict[UnitsContainer, tuple[Unit[Temperature], Unit[TemperatureDifference]]]] = {
+        Unit(absolute)._units: (Unit[Temperature](absolute), Unit[TemperatureDifference](difference))
+        for absolute, difference in (
+            ("K", "delta_K"),
+            ("degC", "delta_degC"),
+            ("degF", "delta_degF"),
+            ("degRe", "delta_degRe"),
+        )
+    }
+    TEMPERATURE_DIFFERENCE_UCS = tuple(difference._units for _, difference in _TEMPERATURE_SCALE_PAIRS.values())
 
     # Tolerance for == / != and the ordering operators, applied identically to every
     # magnitude type: two values are equal when |a - b| <= max(rtol * max(|a|, |b|), atol).
@@ -513,8 +522,6 @@ class Quantity(
 
     _magnitude: MT
     _magnitude_type: type[MT]
-
-    _max_recursion_depth: int = 10
 
     # NOTE: __repr__ is inherited from pint and shows its generic class name
     # (<Quantity(5.0, 'delta_degree_Celsius')>), while type() and __str__ show the
@@ -577,6 +584,45 @@ class Quantity(
         directly in the delegating method.
         """
         return super()
+
+    def _pint_result(self, method: str, *args: object) -> Any:  # noqa: ANN401
+        # Pint builds results with self.__class__(m, u). Give it a private quantity
+        # so those calls do not re-enter the public validator for trusted operands.
+        # Raw operands retain the public path and its magnitude validation rules.
+        if method != "__getitem__" and any(
+            not isinstance(arg, (Quantity, float, int)) and arg is not None for arg in args
+        ):
+            return getattr(self._pint_super, method)(*args)
+        quantity = _PintResultQuantity(self._magnitude, self._units)
+        operands = tuple(
+            _PintResultQuantity(cast("Quantity[Any, Any]", arg)._magnitude, cast("Quantity[Any, Any]", arg)._units)
+            if isinstance(arg, Quantity)
+            else arg
+            for arg in args
+        )
+        result: Any = getattr(quantity, method)(*operands)
+        if isinstance(result, PlainQuantity):
+            magnitude = cast(Any, result).m
+            if (
+                isinstance(magnitude, (int, float, numbers.Real))
+                and not isinstance(magnitude, bool)
+                and not hasattr(magnitude, "is_Atom")
+            ):
+                cast(Any, result)._magnitude = float(magnitude)
+            elif not isinstance(magnitude, (float, np.ndarray, pl.Series, pl.Expr)) or (
+                isinstance(magnitude, np.ndarray) and magnitude.ndim != 1
+            ):
+                cast(Any, result)._magnitude = self._validate_magnitude(cast(Any, magnitude))
+            # The public constructor historically parsed str(UnitsContainer), whose
+            # exponent rendering uses :g. Preserve that rounding without parsing units.
+            units = cast(UnitsContainer, cast(Any, result)._units)
+            if any(isinstance(power, float) and not math.isfinite(power) for power in units.values()):
+                # Non-finite powers do not form parseable units. Retain the public
+                # parser's rejection rather than trusting an invalid Pint result.
+                cast(Any, result)._units = self._validate_unit(units)._units
+            elif any(isinstance(power, float) and float(f"{power:g}") != power for power in units.values()):
+                cast(Any, result)._units = UnitsContainer({name: float(f"{power:g}") for name, power in units.items()})
+        return cast(Any, result)  # ty: ignore[redundant-cast]
 
     # __array__ is numpy's coercion hook: np.asarray(qty) / np.array(qty) call
     # it to obtain the raw magnitude as an ndarray (unit stripped), which is how
@@ -1022,13 +1068,14 @@ class Quantity(
         m: MT | MT_,
         unit: Unit[DT] | Unit[DT_] | UnitsContainer,
     ) -> Quantity[DT, MT]:
-        u = cast(Unit[DT], unit)
+        u = cast(Unit[DT], unit) if isinstance(unit, Unit) else Unit[DT](unit)
         dt = self.dt
 
         mt = self._get_magnitude_type_safe(cast(type[MT], type(m)))
         subcls = self.get_subclass(dt, mt)
 
-        return cast("Quantity[Any, Any]", subcls(cast(MT, m), u))
+        resolved = subcls._resolve_subclass(u, type(m))
+        return cast("Quantity[DT, MT]", resolved._from_validated(m, u))
 
     def __len__(self) -> int:
         # __len__() must return an integer
@@ -1325,13 +1372,11 @@ class Quantity(
         # which is a bug rather than a shorthand. It is rejected here and at runtime;
         # .to() does accept a Quantity, where reusing another quantity's unit is the point
         unit: Unit[Any] | UnitsContainer | dict[str, Any] | str | None = None,
-        _depth: int = 0,
     ) -> Quantity[Any, Any]: ...
     def __new__(
         cls,
         val: Any,
         unit: Any = None,
-        _depth: int = 0,
     ) -> Quantity[Any, Any]:
         if isinstance(unit, Quantity):
             raise TypeError(
@@ -1351,6 +1396,14 @@ class Quantity(
 
         valid_magnitude = cls._validate_magnitude(val)
         valid_unit = cls._validate_unit(unit)
+
+        subcls = cls._resolve_subclass(valid_unit, type(valid_magnitude))
+        return subcls._from_validated(valid_magnitude, valid_unit)
+
+    @classmethod
+    def _resolve_subclass(cls, unit: Unit[Any], magnitude_type: type[Any]) -> type[Quantity[Any, Any]]:
+        """Resolve the dimensionality from a validated unit, preserving compatible hints."""
+        valid_unit = unit
 
         if issubclass(cls._dimensionality_type, TemperatureDifference) and cls._is_offset_temperature_unit(valid_unit):
             raise DimensionalityTypeError(
@@ -1386,25 +1439,19 @@ class Quantity(
             # that use return self.__class__(...)
             # need to be able to change dimensionality (i.e. type) via the __new__ method
 
-            if _depth > cls._max_recursion_depth:
-                raise RecursionError(
-                    f"RecursionError ({_depth=}) when constructing Quantity class with {val=}, {unit=}"
-                )
-
             # special case for temperature difference
             if cls._is_temperature_difference_unit(valid_unit):
-                subcls = cls._get_dimensional_subclass(TemperatureDifference, type(valid_magnitude))
+                return cls._get_dimensional_subclass(TemperatureDifference, magnitude_type)
             else:
                 dim = Dimensionality.get_dimensionality(valid_unit.dimensionality)
-                subcls = cls._get_dimensional_subclass(dim, type(valid_magnitude))
+                return cls._get_dimensional_subclass(dim, magnitude_type)
 
-            return subcls(
-                valid_magnitude,
-                valid_unit,
-                _depth=_depth + 1,
-            )
+        return cls
 
-        qty = cast("Quantity[DT, MT]", cast(Any, super()).__new__(cls, valid_magnitude, units=valid_unit))
+    @classmethod
+    def _from_validated(cls, magnitude: MT, unit: Unit[DT]) -> Quantity[DT, MT]:
+        """Allocate from trusted magnitude/unit pairs; public inputs must use __new__."""
+        qty = cast("Quantity[DT, MT]", cast(Any, super()).__new__(cls, magnitude, units=unit))
 
         _m = qty._magnitude
         if isinstance(_m, np.ndarray) and _m.dtype != np.float64:
@@ -1498,40 +1545,19 @@ class Quantity(
 
     @classmethod
     def _as_absolute_temperature_unit(cls, unit: Unit[Any]) -> Unit[Temperature]:
-        # the mirror of _as_temperature_difference_unit: reinterpreting a difference as an
-        # absolute temperature moves a delta unit back onto its own absolute scale, so the
-        # unit can never contradict the dimensionality (5 Δ°C -> 5 °C, not 5 K)
-        if unit._units == Unit("delta_degC")._units:
-            return Unit("degC")
-
-        if unit._units == Unit("delta_degF")._units:
-            return Unit("degF")
-
-        if unit._units == Unit("delta_degRe")._units:
-            return Unit("degRe")
-
-        if unit._units == Unit("delta_K")._units:
-            return Unit("K")
-
+        for absolute, difference in cls._TEMPERATURE_SCALE_PAIRS.values():
+            if unit._units == difference._units:
+                return absolute
         return cast("Unit[Temperature]", unit)
 
     @classmethod
     def _as_temperature_difference_unit(cls, unit: Unit[Any]) -> Unit[TemperatureDifference]:
-        if unit._units == Unit("delta_K")._units:
-            return Unit("delta_K")
-
-        if unit._units == Unit("degC")._units:
-            return Unit("delta_degC")
-
-        if unit._units == Unit("degF")._units:
-            return Unit("delta_degF")
-
-        if unit._units == Unit("degRe")._units:
-            return Unit("delta_degRe")
-
+        pair = cls._TEMPERATURE_SCALE_PAIRS.get(unit._units)
+        # Multiplicative K stays ambiguous; only offset scales need a delta spelling.
+        if pair is not None and cls._is_offset_temperature_unit(unit):
+            return pair[1]
         if cls._is_offset_temperature_unit(unit):
             raise DimensionalityTypeError(f"Cannot reinterpret offset temperature unit {unit} as TemperatureDifference")
-
         return cast("Unit[TemperatureDifference]", unit)
 
     def _check_temperature_compatibility(self, unit: Unit[DT]) -> None:
@@ -1586,33 +1612,24 @@ class Quantity(
     def to_reduced_units(self) -> Quantity[DT, MT]:
         """Return a copy with units reduced by canceling common factors."""
 
-        ret = cast("Quantity[DT, MT]", self._pint_super.to_reduced_units())
-        return ret
+        ret = self._pint_result("to_reduced_units")
+        return self._call_subclass(ret.m, ret.u)
 
     def to_root_units(self) -> Quantity[DT, MT]:
         """Return a copy converted to Pint root units."""
 
-        ret = cast("Quantity[DT, MT]", super().to_root_units())
-        return ret
+        ret = self._pint_result("to_root_units")
+        return self._call_subclass(ret.m, ret.u)
 
     def to_base_units(self) -> Quantity[DT, MT]:
         """Return a copy converted to base SI units."""
 
         self._check_temperature_compatibility(Unit("kelvin"))
-        ret = super().to_base_units()
-        return cast("Quantity[DT, MT]", ret)
+        ret = self._pint_result("to_base_units")
+        return self._call_subclass(ret.m, ret.u)
 
     def _dimensionalities_match(self, unit: Unit[DT_]) -> bool:
-        src_dim = cast(dict[str, float], dict(self.dimensionality))
-        dst_dim = cast(dict[str, float], dict(unit.dimensionality))
-
-        if set(src_dim.keys()) != set(dst_dim.keys()):
-            return False
-
-        return all(
-            abs(src_dim.get(key, 0.0) - dst_dim.get(key, 0.0)) < 1e-10
-            for key in set(src_dim.keys()) | set(dst_dim.keys())
-        )
+        return self._units_containers_equal(self.dimensionality, unit.dimensionality)
 
     def _check_dimensionality(self, dimensions: UnitsContainer) -> bool:
         return self._units_containers_equal(self.dimensionality, dimensions)
@@ -1648,9 +1665,6 @@ class Quantity(
                 m = cast(Any, base_quantity)._convert_magnitude_not_inplace(valid_unit)
             else:
                 raise e
-
-        if self._is_temperature_difference_unit(valid_unit):
-            return cast("Quantity[Any, Any]", Quantity(m, valid_unit))
 
         converted = self._call_subclass(m, valid_unit)
 
@@ -1796,7 +1810,6 @@ class Quantity(
             # Δ% should maybe be its own unit, but this is not implemented for now
             "Δ%": "%",
             "‰": "permille",
-            "r/min": "rpm",
             # "ΔK" spells a temperature difference in kelvin: K is not an offset scale, so
             # pint has no delta unit for it and encomp defines delta_K itself
             # (defs/units.txt) -- it is how a TemperatureDifference is written in kelvin
@@ -1806,6 +1819,9 @@ class Quantity(
         for old, new in replacements.items():
             if old in unit:
                 unit = unit.replace(old, new)
+
+        if "r/min" in unit:
+            unit = re.sub(r"(?<![A-Za-z])r/min\b", "rpm", unit)
 
         percent_basis = r"(?:mol(?:e)?|kg|g|m(?:3|³|\^3|\*\*3)|vol(?:ume)?|mass|wt|weight)"
         unit = re.sub(rf"(?<![A-Za-z0-9_]){percent_basis}\s*-?\s*%", "%", unit, flags=re.IGNORECASE)
@@ -1933,9 +1949,9 @@ class Quantity(
 
             val: float | int | list[Any]
 
-            if isinstance(mag, float | int):
+            if isinstance(mag, float):
                 val = mag
-                magnitude_type = "int" if isinstance(mag, int) else "float"
+                magnitude_type = "float"
             elif isinstance(mag, np.ndarray):
                 val = mag.tolist()
                 mag_arr = cast(Any, mag)
@@ -1948,9 +1964,6 @@ class Quantity(
                     "Cannot serialize Quantity with pl.Expr magnitude: a Polars expression holds no data; "
                     "materialize it first"
                 )
-            elif isinstance(mag, list):
-                val = [float(x) for x in cast("list[Any]", mag)]  # cast required by pyright
-                magnitude_type = "list"
             else:
                 raise ValueError(f"Unknown magnitude type {type(mag)}: {mag}")
 
@@ -1989,7 +2002,7 @@ class Quantity(
                     "type": "string",
                     "description": (
                         "describes how to reconstruct the magnitude, "
-                        "e.g. 'int', 'float', 'list', "
+                        "e.g. 'float', "
                         "'np.ndarray:<dtype>:<shape>', or 'pl.Series:<dtype>'"
                     ),
                 },
@@ -2024,6 +2037,7 @@ class Quantity(
 
             return pl.Series(val, dtype=cls._pydantic_polars_dtype(dtype_str))
 
+        # Accept legacy payload tags; current serializers only emit canonical magnitudes.
         if magnitude_type == "list":
             return val
 
@@ -2058,7 +2072,7 @@ class Quantity(
         expected = cls._dimensionality_type
         actual = qty._dimensionality_type
 
-        dimensions_match = actual.dimensions == expected.dimensions
+        dimensions_match = cls._units_containers_equal(actual.dimensions, expected.dimensions)
         type_matches = issubclass(actual, expected) or issubclass(expected, actual)
 
         if dimensions_match and type_matches:
@@ -2144,7 +2158,7 @@ class Quantity(
         if issubclass(dim, other_dim) or issubclass(other_dim, dim):
             # verify that the dimensions also match
             # this is also verified in the Dimensionality.__init_subclass__ method
-            if dim.dimensions != other_dim.dimensions:
+            if not self._units_containers_equal(dim.dimensions, other_dim.dimensions):
                 raise DimensionalityTypeError(
                     f"Quantities with inherited dimensionalities do not match: "
                     f"{type(self)} and {type(other)} with dimensions "
@@ -2156,7 +2170,7 @@ class Quantity(
 
         # normal case, check that the types of Quantity is the same
         if type(self) is not type(other):
-            if self.dt.dimensions == other._dimensionality_type.dimensions:
+            if self._units_containers_equal(self.dt.dimensions, other._dimensionality_type.dimensions):
                 raise DimensionalityTypeError(
                     f"Quantities with different dimensionalities are not compatible: "
                     f"{type(self)} and {type(other)}. The dimensions match, "
@@ -2213,7 +2227,9 @@ class Quantity(
         # the arithmetic runs on the degC scale, but the result is an absolute
         # temperature: express it in the temperature operand's original unit
         # (K + ΔT stays in K) instead of normalizing everything to degC
-        result = cast("Quantity[Temperature, MT]", Quantity(val, "degC"))
+        magnitude_type = self._get_magnitude_type_safe(cast("type[MT]", type(val)))
+        subcls = self.get_subclass(Temperature, magnitude_type)
+        result = subcls._from_validated(cast("MT", val), Unit[Temperature]("degC"))
         return result.to(cast("Unit[Temperature]", temperature_unit))
 
     def __round__(self, ndigits: int | None = None) -> Quantity[DT, MT]:
@@ -2223,9 +2239,9 @@ class Quantity(
         m = self.m
 
         if isinstance(m, float):
-            return cast("Quantity[DT, MT]", super().__round__(ndigits))
+            return self._call_subclass(cast("MT", round(m, ndigits)), self.u)
         elif isinstance(m, np.ndarray):
-            return cast("Quantity[DT, MT]", self.__class__(np.round(cast("Numpy1DArray", m), ndigits), self.u))
+            return self._call_subclass(cast("MT", np.round(cast("Numpy1DArray", m), ndigits)), self.u)
         elif isinstance(m, (pl.Series, pl.Expr)):
             # every container rounds: polars spells it as a method on the object rather
             # than through __round__, so route to it explicitly (a negative ndigits is
@@ -2283,7 +2299,7 @@ class Quantity(
         if dim == Dimensionality:
             raise TypeError(f"Cannot convert {self} to base dimensionality {dim}")
 
-        if str(self.dt.dimensions) != str(dim.dimensions):
+        if not self._units_containers_equal(self.dt.dimensions, dim.dimensions):
             raise ExpectedDimensionalityError(
                 f"Cannot convert {self} to dimensionality {dim}, "
                 f"the dimensions do not match: "
@@ -2301,7 +2317,8 @@ class Quantity(
             unit = self._as_absolute_temperature_unit(unit)
 
         subcls = self._get_dimensional_subclass(dim, type(self.m))
-        return cast("Quantity[DT_, MT]", subcls(self.m, unit))
+        resolved = cast("type[Quantity[DT_, MT]]", subcls)
+        return resolved._from_validated(self.m, cast("Unit[DT_]", unit))
 
     def unknown(self) -> Quantity[UnknownDimensionality, MT]:
         """Return this quantity with its dimensionality erased, i.e. ``asdim(UnknownDimensionality)``."""
@@ -2404,7 +2421,7 @@ class Quantity(
     def __pow__(self, other: Quantity[Dimensionless, Any] | float) -> Quantity[Any, Any]:
         if isinstance(other, Quantity):
             self._check_comparable_magnitudes(self.m, other.m, "combine")
-        ret = cast("Quantity[DT, MT]", self._pint_super.__pow__(other))
+        ret = cast("Quantity[DT, MT]", self._pint_result("__pow__", other))
         return self._call_subclass(ret.m, ret.u)
 
     def __ipow__(self, other: Any) -> Any:  # noqa: ANN401
@@ -2463,7 +2480,7 @@ class Quantity(
 
             raise e
 
-        ret = self._pint_super.__add__(other)
+        ret = self._pint_result("__add__", other)
         if ret is NotImplemented:
             return NotImplemented
 
@@ -2478,7 +2495,7 @@ class Quantity(
     @overload
     def __radd__(self, other: float) -> Quantity[Any, Any]: ...
     def __radd__(self, other: float) -> Quantity[Any, Any]:
-        ret = cast("Quantity[DT, MT]", self._pint_super.__radd__(other))
+        ret = cast("Quantity[DT, MT]", self._pint_result("__radd__", other))
 
         return self._call_subclass(ret.m, ret.u)
 
@@ -2529,7 +2546,7 @@ class Quantity(
 
             raise e
 
-        ret = self._pint_super.__sub__(other)
+        ret = self._pint_result("__sub__", other)
         if ret is NotImplemented:
             return NotImplemented
 
@@ -2541,7 +2558,7 @@ class Quantity(
         ):
             _mt = type(ret.m)
             subcls = self._get_dimensional_subclass(TemperatureDifference, _mt)
-            return subcls(ret.m, ret.u)
+            return subcls._from_validated(ret.m, ret.u)
 
         return self._call_subclass(ret.m, ret.u)
 
@@ -2553,7 +2570,7 @@ class Quantity(
     @overload
     def __rsub__(self, other: float) -> Quantity[Any, Any]: ...
     def __rsub__(self, other: float) -> Quantity[Any, Any]:
-        ret = cast("Quantity[DT, MT]", self._pint_super.__rsub__(other))
+        ret = cast("Quantity[DT, MT]", self._pint_result("__rsub__", other))
 
         return self._call_subclass(ret.m, ret.u)
 
@@ -3357,7 +3374,7 @@ class Quantity(
         other = cast("Quantity[Any, Any] | float", other)
         if isinstance(other, Quantity):
             self._check_comparable_magnitudes(self.m, other.m, "combine")
-        ret = self._pint_super.__mul__(other)
+        ret = self._pint_result("__mul__", other)
         if ret is NotImplemented:
             return NotImplemented
 
@@ -3371,7 +3388,7 @@ class Quantity(
         # magnitude-independent and answers identically for every registered unit
         if isinstance(other, Quantity) and self.u.dimensionless:
             subcls = self.get_subclass(other._dimensionality_type, type(ret.m))
-            return subcls(ret)
+            return subcls._resolve_subclass(ret.u, type(ret.m))._from_validated(ret.m, ret.u)
 
         return self._call_subclass(ret.m, ret.u)
 
@@ -3379,7 +3396,7 @@ class Quantity(
         return cast("Quantity[Any, Any]", cast(Any, self).__mul__(other))
 
     def __rmul__(self, other: float) -> Quantity[DT, MT]:
-        ret = cast("Quantity[DT, MT]", self._pint_super.__rmul__(other))
+        ret = cast("Quantity[DT, MT]", self._pint_result("__rmul__", other))
         return self._call_subclass(ret.m, ret.u)
 
     @overload
@@ -3846,7 +3863,7 @@ class Quantity(
         # magnitudes yield IEEE ±inf / nan elementwise (numpy warns, polars is silent).
         # Normalizing either way would mean lying about one container to match the other;
         # pinned by test_division_by_zero_follows_the_container
-        ret = self._pint_super.__truediv__(other)
+        ret = self._pint_result("__truediv__", other)
         if ret is NotImplemented:
             return NotImplemented
 
@@ -3856,7 +3873,7 @@ class Quantity(
         # (see __mul__ for why this is a unit-level check with isinstance first)
         if isinstance(other, Quantity) and self.u.dimensionless:
             subcls = self.get_subclass(other._dimensionality_type, type(ret.m))
-            return subcls(ret)
+            return subcls._resolve_subclass(ret.u, type(ret.m))._from_validated(ret.m, ret.u)
 
         return self._call_subclass(ret.m, ret.u)
 
@@ -3879,8 +3896,12 @@ class Quantity(
     @overload
     def __rtruediv__(self, other: float) -> Quantity[UnknownDimensionality, MT]: ...
 
-    def __rtruediv__(self, other: Any) -> Quantity[Any, Any]:
-        ret = self._pint_super.__rtruediv__(other)
+    def __rtruediv__(self, other: object) -> Quantity[Any, Any] | NotImplementedType:
+        if not self._is_supported_arithmetic_operand(other):
+            return NotImplemented
+        ret = self._pint_result("__rtruediv__", other)
+        if ret is NotImplemented:
+            return NotImplemented
         return cast("Quantity[UnknownDimensionality, MT]", self._call_subclass(ret.m, ret.u))
 
     @overload
@@ -3901,7 +3922,10 @@ class Quantity(
     def __floordiv__(self: Quantity[DT, MT], other: Quantity[Dimensionless, MT]) -> Quantity[DT, MT]: ...
     @overload
     def __floordiv__(self: Quantity[DT, MT], other: float) -> Quantity[DT, MT]: ...
-    def __floordiv__(self, other: Quantity[Any, Any] | float) -> Quantity[Any, Any]:
+    def __floordiv__(self, other: object) -> Quantity[Any, Any] | NotImplementedType:
+        if not self._is_supported_arithmetic_operand(other) or not isinstance(other, (Quantity, float, int)):
+            return NotImplemented
+        other = cast("Quantity[Any, Any] | float", other)
         if isinstance(other, Quantity):
             self._check_comparable_magnitudes(self.m, other.m, "combine")
 
@@ -3914,31 +3938,32 @@ class Quantity(
             magnitude = self._floor_magnitude(self.m / other.to_base_units().m)
             return self._call_subclass(magnitude, self.u)
 
-        ret = self._pint_super.__floordiv__(other)
-        if self.is_compatible_with(other):
-            divisor = other.to(self.u).m
-        else:
+        if not self.is_compatible_with(other):
+            ret = self._pint_result("__floordiv__", other)
+            if ret is NotImplemented:
+                return NotImplemented
             return self._call_subclass(ret.m, ret.u)
+        divisor = other.to(self.u).m
 
         # Floor the quotient rather than using each container's `//` kernel: Python
         # and numpy implement floating floor-division with subtly different rounding
         # from Polars (e.g. 1 m // 1 cm used to be 99 vs 100).
         magnitude = self._floor_magnitude(self.m / divisor)
-        return self._call_subclass(magnitude, ret.u)
+        return self._call_subclass(magnitude, Unit("dimensionless"))
 
     def __ifloordiv__(self, other: Any) -> Any:  # noqa: ANN401
         return cast("Quantity[Any, Any]", cast(Any, self).__floordiv__(other))
 
     def __abs__(self) -> Quantity[DT, MT]:
-        ret = cast("Quantity[DT, MT]", super().__abs__())
+        ret = cast("Quantity[DT, MT]", self._pint_result("__abs__"))
         return self._call_subclass(ret.m, ret.u)
 
     def __pos__(self) -> Quantity[DT, MT]:
-        ret = cast("Quantity[DT, MT]", super().__pos__())
+        ret = cast("Quantity[DT, MT]", self._pint_result("__pos__"))
         return self._call_subclass(ret.m, ret.u)
 
     def __neg__(self) -> Quantity[DT, MT]:
-        ret = cast("Quantity[DT, MT]", super().__neg__())
+        ret = cast("Quantity[DT, MT]", self._pint_result("__neg__"))
         return self._call_subclass(ret.m, ret.u)
 
     # only an ndarray magnitude (the numpy world) is iterable -- it yields
@@ -3963,7 +3988,7 @@ class Quantity(
                 f"Quantity with {self._get_magnitude_type_name(type(mag))} magnitude is not "
                 'iterable; if using with Polars: materialize the magnitude in an explicit unit with ".to(<unit>).m".'
             )
-        return (self._call_subclass(n.m, n.u) for n in super().__iter__())
+        return (self._call_subclass(cast("MT", float(n)), self.u) for n in cast("Numpy1DArray", mag))
 
     @overload
     def __getitem__(self: Quantity[DT, pl.Series], index: int) -> Quantity[DT, float]: ...  # pyrefly: ignore[bad-override]
@@ -3983,11 +4008,11 @@ class Quantity(
     def __getitem__(  # ty: ignore[invalid-method-override]
         self, index: int | slice | Numpy1DBoolArray | Numpy1DIntArray | Sequence[int]
     ) -> Quantity[Any, Any]:
-        ret = cast("Quantity[DT, Any]", self._pint_super.__getitem__(index))
+        ret = cast("Quantity[DT, Any]", self._pint_result("__getitem__", index))
 
         magnitude_type = cast("type[Any]", type(ret.m))  # ty: ignore[redundant-cast]
         subcls = self._get_dimensional_subclass(self.dt, self._get_magnitude_type_safe(magnitude_type))
-        instance = cast(Any, subcls)(ret.m, ret.u)
+        instance = subcls._from_validated(ret.m, ret.u)
 
         return cast("Quantity[Any, Any]", instance)
 
