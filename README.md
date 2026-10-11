@@ -396,7 +396,7 @@ w: Water[pl.Expr] = Water(P=Q(pl.col("P"), "Pa"), T=Q(pl.col("T"), "K"))
 df.select(w.D.m.alias("rho"), w.H.m.alias("h"), w.S.m.alias("s"))
 ```
 
-`encomp` contains one thermodynamic implementation: the bundled CoolProp shared library. Scalars call it through a direct PyO3 bridge with a bounded per-thread state cache; NumPy arrays, `pl.Series`, and `pl.Expr` inputs use the batched Polars plugin path at every size. Both private interfaces live in the same `_internal` artifact and share the same loaded library. The Python `CoolProp` package is not installed or imported. `EAGER_PLUGIN_MIN_SIZE` remains temporarily as a deprecated no-op for compatibility.
+`encomp` contains one thermodynamic implementation: the bundled CoolProp shared library. Scalars call it through a direct PyO3 bridge with a bounded per-thread state cache; NumPy arrays, `pl.Series`, and `pl.Expr` inputs use the batched Polars plugin path at every size. Both private interfaces live in the same `_internal` artifact and share the same loaded library. The Python `CoolProp` package is not installed or imported.
 
 The plugin is also usable directly on any Polars expression, independent of the `Fluid` class (the `encomp.coolprop` package):
 

@@ -2,6 +2,7 @@
 
 import hashlib
 import logging
+import warnings
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Mapping
@@ -66,7 +67,6 @@ from .utypes import (
 _LOGGER = logging.getLogger(__name__)
 
 __all__ = [
-    "EAGER_PLUGIN_MIN_SIZE",
     "CProperty",
     "CoolPropFluid",
     "Fluid",
@@ -181,12 +181,16 @@ class HumidAirState(TypedDict, Generic[MT], total=False):  # noqa: UP046
     psi_w: Quantity[Any, MT] | Quantity[Any, float]
 
 
-EAGER_PLUGIN_MIN_SIZE = 1000
-"""Deprecated compatibility constant; now a no-op.
+def __getattr__(name: str) -> int:
+    if name == "EAGER_PLUGIN_MIN_SIZE":
+        warnings.warn(
+            "EAGER_PLUGIN_MIN_SIZE is deprecated and has no effect; all eager arrays use the native plugin.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return 1000
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-All eager arrays use the native Rust/Polars batch path, regardless of size. Scalars use
-the direct PyO3 bridge, so there is no longer a Python CoolProp cutoff to configure.
-"""
 
 # Caches the CONSTRUCTED pl.Expr per (fluid config, output, input-expr digests), so
 # repeated evaluations of the same property return the IDENTICAL expression object.
@@ -695,7 +699,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         precision-preserving dtype (Float32 in -> Float32 out) with null (not NaN) for
         failed/out-of-range rows.
 
-        Shared by lazy expressions and eager arrays; the latter reads it via
+        Shared by lazy expressions, eager Series and arrays; arrays read it via
         ``to_numpy()``, which maps null back to NaN. Output property names are resolved
         by CoolProp at runtime, so any valid name works regardless of the static
         ``FluidParam`` / ``HumidAirParam`` sets. Raises if the plugin is unavailable
@@ -745,6 +749,33 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         plugin_points = tuple((names[i], pl.col(f"__in{i}")) for i in range(len(arrs)))
         expr = self._plugin_expr(output, plugin_points)
         return np.array(frame.select(expr)[output].to_numpy(), dtype=float)
+
+    def _evaluate_series(self, output: CProperty, points: tuple[tuple[CProperty, float | pl.Series], ...]) -> pl.Series:
+        """Evaluate Series inputs directly, preserving precision and null results."""
+        sizes = [len(value) for _, value in points if isinstance(value, pl.Series) and len(value) != 1]
+        if len(set(sizes)) > 1:
+            raise ValueError(f"All inputs must have the same size, passed {points} with sizes {sizes}")
+        size = sizes[0] if sizes else 1
+
+        columns: dict[str, pl.Series] = {}
+        plugin_points: list[tuple[str, pl.Expr]] = []
+        for index, (name, value) in enumerate(points):
+            if isinstance(value, pl.Series):
+                column = f"__in{index}"
+                # Length-one vectors have always broadcast. Keep their dtype as a
+                # column so they still participate in the output precision rule.
+                if len(value) == 1 and size != 1:
+                    value = pl.repeat(value[0], size, dtype=value.dtype, eager=True)
+                columns[column] = value
+                plugin_points.append((name, pl.col(column)))
+            else:
+                # A float is precision-neutral in the plugin. Repeating it into a
+                # Float64 column would promote Float32 results; casting it to Float32
+                # would instead round the input before CoolProp sees it.
+                plugin_points.append((name, pl.lit(value)))
+
+        expr = self._plugin_expr(output, tuple(plugin_points))
+        return pl.DataFrame(columns).select(expr)[output]
 
     @staticmethod
     def _reduce_single_element(x: float | Numpy1DArray | pl.Expr) -> float | Numpy1DArray | pl.Expr:
@@ -810,8 +841,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         return expr
 
     def evaluate(
-        self, output: CProperty, *points: tuple[CProperty, float | Numpy1DArray | pl.Expr]
-    ) -> float | Numpy1DArray | pl.Expr:
+        self, output: CProperty, *points: tuple[CProperty, float | Numpy1DArray | pl.Series | pl.Expr]
+    ) -> float | Numpy1DArray | pl.Series | pl.Expr:
         """Evaluate ``output`` in CoolProp's own unit, dispatching on the magnitude type of ``points``."""
 
         if all(isinstance(pt[1], float) for pt in points):
@@ -830,9 +861,20 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             ]
             return self.evaluate_expression(output, *expr_points)
 
+        if all(isinstance(value, (float, pl.Series)) for _, value in points):
+            series_points: tuple[tuple[CProperty, float | pl.Series], ...] = tuple(
+                (name, cast("float | pl.Series", value)) for name, value in points
+            )
+            return self._evaluate_series(output, series_points)
+
+        # Preserve the legacy NumPy evaluation of mixed eager containers. The
+        # public conversion still rejects these through _mt, as before.
+        numpy_points = tuple(
+            (name, value.to_numpy() if isinstance(value, pl.Series) else value) for name, value in points
+        )
         reduced_points: tuple[tuple[CProperty, float | Numpy1DArray | pl.Expr], ...] = tuple(
             (p, self._reduce_single_element(v))
-            for p, v in cast("tuple[tuple[CProperty, float | Numpy1DArray]]", points)
+            for p, v in cast("tuple[tuple[CProperty, float | Numpy1DArray]]", numpy_points)
         )
 
         sizes = [v.size for _, v in reduced_points if isinstance(v, np.ndarray)]
@@ -873,7 +915,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         return pl.Float64()
 
     def construct_quantity(
-        self, val: float | Numpy1DArray | pl.Expr, output: CProperty, convert_magnitude: bool = True
+        self, val: float | Numpy1DArray | pl.Series | pl.Expr, output: CProperty, convert_magnitude: bool = True
     ) -> Quantity[Any, MT]:
         """Wrap a raw CoolProp result as a ``Quantity``, converted to the preferred :attr:`RETURN_UNITS`."""
 
@@ -889,20 +931,19 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
             qty.ito(ret_unit)
 
         if convert_magnitude:
-            qty = qty.astype(self._mt)
-
-        if isinstance(qty.m, pl.Series):
-            # A computed polars magnitude carries null for missing, never NaN. astype() above
-            # already translates the sentinel when it converts from the numpy result, so the
-            # fill_nan is belt-and-braces for any future path that arrives here with a Series
-            # magnitude already in hand (convert_magnitude=False); the cast is load-bearing
-            qty.m = qty.m.fill_nan(None).cast(self._eager_series_output_dtype())  # ty: ignore[invalid-assignment]
+            magnitude_type = self._mt
+            if not (isinstance(val, pl.Series) and magnitude_type is pl.Series):
+                qty = qty.astype(magnitude_type)
+                # get(points=...) can evaluate NumPy overrides for a Series state.
+                # astype handles its sentinel; preserve the original state's dtype.
+                if isinstance(qty.m, pl.Series):
+                    qty.m = qty.m.cast(self._eager_series_output_dtype())
 
         return cast("Quantity[Any, MT]", qty)
 
     def to_numeric_correct_unit(
         self, prop: CProperty, qty: Quantity[Any, MT] | Quantity[Any, float]
-    ) -> float | Numpy1DArray | pl.Expr:
+    ) -> float | Numpy1DArray | pl.Series | pl.Expr:
         """Convert a state-input quantity to CoolProp's unit for ``prop`` and return its bare magnitude.
 
         This is where the dimensionality of a state input is validated: a mismatch raises
@@ -933,9 +974,6 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         # a Quantity magnitude is float / ndarray / pl.Series / pl.Expr (a list input is
         # converted to an ndarray at construction, and .to() preserves the container)
-        if isinstance(m, pl.Series):
-            return m.to_numpy()
-
         return m
 
     def get(
@@ -970,7 +1008,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         if points is None:
             points = self.points
 
-        points_numeric: list[tuple[CProperty, float | Numpy1DArray | pl.Expr]] = [
+        points_numeric: list[tuple[CProperty, float | Numpy1DArray | pl.Series | pl.Expr]] = [
             (pt[0], self.to_numeric_correct_unit(*pt)) for pt in points
         ]
         val = self.evaluate(output, *points_numeric)
@@ -1370,25 +1408,11 @@ class Water(Fluid[MT]):
             CoolProp property name.
         """
 
-        # default IF97; use the name "Water" for IAPWS-95
-        self.name = "IF97::Water"
-
-        self.check_inputs(kwargs)
-
-        if len(kwargs) != 2:
-            if set(kwargs) == {"P", "T", "Q"}:
-                raise ValueError(
-                    "Cannot set both P, T and vapor quality Q. Remove one of P, T to get properties of saturated steam."
-                )
-
-            raise ValueError(f"Exactly two fixed points are required, passed {list(kwargs)}")
-
-        points = self._build_points(kwargs)
-
-        self.point_1 = points[0]
-        self.point_2 = points[1]
-
-        self.points = [self.point_1, self.point_2]
+        if set(kwargs) == {"P", "T", "Q"}:
+            raise ValueError(
+                "Cannot set both P, T and vapor quality Q. Remove one of P, T to get properties of saturated steam."
+            )
+        super().__init__("IF97::Water", **kwargs)
 
     def __repr__(self) -> str:
         try:

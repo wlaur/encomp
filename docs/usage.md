@@ -883,7 +883,7 @@ Missing or out-of-range results surface as `NaN` (for a numpy magnitude) or `nul
 ### Parallel evaluation with Polars
 
 {py:class}`encomp.fluids.Fluid` properties also accept `Quantity`-wrapped Polars expressions (`pl.Expr`) and return a `pl.Expr`. Independent property nodes in one `select` / `with_columns` / `collect()` (eager or lazy) are evaluated in parallel by the `encomp.coolprop` plugin -- a native Rust extension over the CoolProp C-API that runs without holding the GIL.
-`encomp` bundles CoolProp once. Scalar inputs use a direct PyO3 bridge with per-thread cached native states; NumPy arrays, `pl.Series`, and `pl.Expr` inputs use the batched plugin at every size (there is no Python `CoolProp` or `map_batches` fallback). `EAGER_PLUGIN_MIN_SIZE` is retained only as a deprecated no-op.
+`encomp` bundles CoolProp once. Scalar inputs use a direct PyO3 bridge with per-thread cached native states; NumPy arrays, `pl.Series`, and `pl.Expr` inputs use the batched plugin at every size (there is no Python `CoolProp` or `map_batches` fallback).
 
 ```python
 import polars as pl
