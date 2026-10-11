@@ -805,43 +805,36 @@ fn evaluate_fluid_chunk(inputs: &[Series], kwargs: EvalKwargs) -> PolarsResult<S
     .map_err(perr)?;
 
     let mut out = vec![f64::NAN; n];
-    evaluate_finite_rows(&v1, &v2, &mut out, |a, b, result| {
-        st.update_and_1_out(pair, a, b, okey, result)
+    evaluate_finite_rows(&[&v1, &v2], &mut out, |values, result| {
+        st.update_and_1_out(pair, values[0], values[1], okey, result)
     })
     .map_err(perr)?;
     nan_to_null(out).cast(&out_dtype)
 }
 
-fn evaluate_finite_rows<F>(v1: &[f64], v2: &[f64], out: &mut [f64], evaluate: F) -> Result<(), CpError>
+fn evaluate_finite_rows<F>(inputs: &[&[f64]], out: &mut [f64], evaluate: F) -> Result<(), CpError>
 where
-    F: FnOnce(&[f64], &[f64], &mut [f64]) -> Result<(), CpError>,
+    F: FnOnce(&[&[f64]], &mut [f64]) -> Result<(), CpError>,
 {
-    if v1.len() != out.len() || v2.len() != out.len() {
+    if inputs.iter().any(|values| values.len() != out.len()) {
         return Err(CpError::runtime("evaluate_finite_rows: length mismatch"));
     }
-    let valid_count = v1
-        .iter()
-        .zip(v2)
-        .filter(|(a, b)| a.is_finite() && b.is_finite())
-        .count();
+    let finite = |index: usize| inputs.iter().all(|values| values[index].is_finite());
+    let valid_count = (0..out.len()).filter(|&index| finite(index)).count();
     if valid_count == 0 {
         return Ok(());
     }
     if valid_count == out.len() {
-        return evaluate(v1, v2, out);
+        return evaluate(inputs, out);
     }
-    let mut indices = Vec::with_capacity(valid_count);
-    let mut finite_v1 = Vec::with_capacity(valid_count);
-    let mut finite_v2 = Vec::with_capacity(valid_count);
-    for (index, (&a, &b)) in v1.iter().zip(v2).enumerate() {
-        if a.is_finite() && b.is_finite() {
-            indices.push(index);
-            finite_v1.push(a);
-            finite_v2.push(b);
-        }
-    }
+    let indices: Vec<usize> = (0..out.len()).filter(|&index| finite(index)).collect();
+    let gathered: Vec<Vec<f64>> = inputs
+        .iter()
+        .map(|values| indices.iter().map(|&index| values[index]).collect())
+        .collect();
+    let finite_inputs: Vec<&[f64]> = gathered.iter().map(Vec::as_slice).collect();
     let mut finite_out = vec![f64::NAN; valid_count];
-    evaluate(&finite_v1, &finite_v2, &mut finite_out)?;
+    evaluate(&finite_inputs, &mut finite_out)?;
     for (index, value) in indices.into_iter().zip(finite_out) {
         out[index] = value;
     }
@@ -976,38 +969,75 @@ mod tests {
     fn finite_rows_are_compacted_and_scattered() {
         let first = [f64::NAN, 2.0, 3.0, f64::INFINITY, 5.0];
         let second = [1.0, 10.0, f64::NEG_INFINITY, 40.0, 50.0];
-        let mut out = [f64::NAN; 5];
-        evaluate_finite_rows(&first, &second, &mut out, |a, b, result| {
-            assert_eq!(a, &[2.0, 5.0]);
-            assert_eq!(b, &[10.0, 50.0]);
-            result.copy_from_slice(&[12.0, f64::NAN]);
-            Ok(())
-        })
-        .unwrap();
-        assert!(out[0].is_nan());
-        assert_eq!(out[1], 12.0);
-        assert!(out[2].is_nan() && out[3].is_nan() && out[4].is_nan());
+        let third = [1.0, 2.0, 3.0, 4.0, 5.0];
+        for count in [2, 3] {
+            let inputs: [&[f64]; 3] = [&first, &second, &third];
+            let mut out = [f64::NAN; 5];
+            evaluate_finite_rows(&inputs[..count], &mut out, |values, result| {
+                assert_eq!(values[0], &[2.0, 5.0]);
+                assert_eq!(values[1], &[10.0, 50.0]);
+                if count == 3 {
+                    assert_eq!(values[2], &[2.0, 5.0]);
+                }
+                result.copy_from_slice(&[12.0, f64::NAN]);
+                Ok(())
+            })
+            .unwrap();
+            assert!(out[0].is_nan());
+            assert_eq!(out[1], 12.0);
+            assert!(out[2].is_nan() && out[3].is_nan() && out[4].is_nan());
+        }
     }
 
     #[test]
     fn finite_rows_skip_empty_and_pass_through_dense() {
         let mut empty = [f64::NAN; 2];
-        evaluate_finite_rows(&[f64::NAN, f64::INFINITY], &[1.0, 2.0], &mut empty, |_, _, _| {
+        evaluate_finite_rows(&[&[f64::NAN, f64::INFINITY], &[1.0, 2.0]], &mut empty, |_, _| {
             panic!("empty input reached CoolProp")
         })
         .unwrap();
         assert!(empty.iter().all(|value| value.is_nan()));
 
-        let mut dense = [f64::NAN; 2];
-        evaluate_finite_rows(&[1.0, -1.0], &[3.0, 4.0], &mut dense, |a, b, result| {
-            assert_eq!(a, &[1.0, -1.0]);
-            assert_eq!(b, &[3.0, 4.0]);
-            result.copy_from_slice(&[5.0, f64::NAN]);
-            Ok(())
-        })
+        for count in [2, 3] {
+            let inputs: [&[f64]; 3] = [&[1.0, -1.0], &[3.0, 4.0], &[5.0, 6.0]];
+            let mut dense = [f64::NAN; 2];
+            evaluate_finite_rows(&inputs[..count], &mut dense, |values, result| {
+                // Dense inputs stay borrowed; no gather or copy is needed.
+                for (actual, original) in values.iter().zip(&inputs[..count]) {
+                    assert!(std::ptr::eq(actual.as_ptr(), original.as_ptr()));
+                }
+                result.copy_from_slice(&[5.0, f64::NAN]);
+                Ok(())
+            })
+            .unwrap();
+            assert_eq!(dense[0], 5.0);
+            assert!(dense[1].is_nan());
+        }
+        evaluate_finite_rows(&[&[], &[], &[]], &mut [], |_, _| panic!("zero rows reached CoolProp")).unwrap();
+    }
+
+    #[test]
+    fn finite_rows_check_every_input_and_preserve_errors() {
+        let mut out = [f64::NAN; 2];
+        evaluate_finite_rows(
+            &[&[1.0, 2.0], &[3.0, 4.0], &[f64::NAN, f64::INFINITY]],
+            &mut out,
+            |_, _| panic!("non-finite third input reached CoolProp"),
+        )
         .unwrap();
-        assert_eq!(dense[0], 5.0);
-        assert!(dense[1].is_nan());
+        let mismatch = evaluate_finite_rows(&[&[1.0, 2.0], &[3.0]], &mut out, |_, _| {
+            panic!("mismatched lengths reached CoolProp")
+        })
+        .unwrap_err();
+        assert_eq!(mismatch.kind, CpErrorKind::Runtime);
+
+        let error = evaluate_finite_rows(&[&[1.0, f64::NAN], &[3.0, 4.0]], &mut out, |_, _| {
+            Err(CpError::evaluation("failed flash"))
+        })
+        .unwrap_err();
+        assert_eq!(error.kind, CpErrorKind::Evaluation);
+        assert_eq!(error.message, "failed flash");
+        assert!(out.iter().all(|value| value.is_nan()));
     }
 
     #[test]
@@ -1066,22 +1096,19 @@ fn ha_evaluate(inputs: &[Series], kwargs: HaKwargs) -> PolarsResult<Series> {
     let v: Vec<Vec<f64>> = inputs.iter().take(3).map(to_f64).collect::<PolarsResult<_>>()?;
     let n = broadcast_len(&v, &kwargs.scalar_mask);
     let (b0, b1, b2) = (broadcast(&v[0], n)?, broadcast(&v[1], n)?, broadcast(&v[2], n)?);
-    let mut out = vec![0.0f64; n];
-    cp.ha_props_si_batch(
-        &kwargs.output,
-        &kwargs.name1,
-        &b0,
-        &kwargs.name2,
-        &b1,
-        &kwargs.name3,
-        &b2,
-        &mut out,
-    )
+    let mut out = vec![f64::NAN; n];
+    evaluate_finite_rows(&[&b0, &b1, &b2], &mut out, |values, result| {
+        cp.ha_props_si_batch(
+            &kwargs.output,
+            &kwargs.name1,
+            values[0],
+            &kwargs.name2,
+            values[1],
+            &kwargs.name3,
+            values[2],
+            result,
+        )
+    })
     .map_err(perr)?;
-    for (((result, a), b), c) in out.iter_mut().zip(b0.iter()).zip(b1.iter()).zip(b2.iter()) {
-        if !a.is_finite() || !b.is_finite() || !c.is_finite() {
-            *result = f64::NAN;
-        }
-    }
     nan_to_null(out).cast(&out_dtype)
 }
