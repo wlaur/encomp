@@ -33,7 +33,7 @@ from .constants import CONSTANTS
 from .conversion import convert_volume_mass
 from .fluids import Fluid
 from .misc import isinstance_types
-from .units import ExpectedDimensionalityError, Quantity
+from .units import ExpectedDimensionalityError, Quantity, require_dimensionality
 from .utypes import (
     MT,
     Density,
@@ -98,12 +98,15 @@ def _resolve_gas_condition(condition: object, name: str) -> GasCondition:
 
     P, T = condition_tuple
 
-    if not isinstance_types(P, Quantity[Pressure, Any]) or not isinstance_types(T, Quantity[Temperature, Any]):
+    if not isinstance_types(P, Quantity[Any, Any]) or not isinstance_types(T, Quantity[Any, Any]):
         raise TypeError(
             f"{name} must be 'N', 'S', or a (pressure, temperature) tuple, got ({type(P).__name__}, {type(T).__name__})"
         )
 
-    return P, T
+    return (
+        require_dimensionality(P, Pressure, name=f"{name}[0]"),
+        require_dimensionality(T, Temperature, name=f"{name}[1]"),
+    )
 
 
 def ideal_gas_density(
@@ -149,6 +152,9 @@ def ideal_gas_density(
             f"T must be an absolute Quantity[Temperature], passed a TemperatureDifference ({T.u}); "
             "use .asdim(Temperature) if the value really is an absolute temperature"
         )
+
+    require_dimensionality(P, Pressure, name="P")
+    require_dimensionality(M, MolarMass, name="M")
 
     # directly from ideal gas law
     # override the inferred type here since it's sure to be Density

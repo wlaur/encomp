@@ -59,7 +59,7 @@ def test_convert_gas_volume() -> None:
     with pytest.raises(TypeError, match=r"condition_2.*pressure, temperature"):
         convert_gas_volume(Q(1, "m3"), "N", cast(Any, (Q(1, "bar"),)), fluid_name="Air")
 
-    with pytest.raises(TypeError, match=r"condition_2.*pressure, temperature"):
+    with pytest.raises(ExpectedDimensionalityError, match=r"condition_2\[0\].*Quantity\[Pressure\]"):
         convert_gas_volume(Q(1, "m3"), "N", cast(Any, (Q(25, "degC"), Q(1, "bar"))), fluid_name="Air")
 
     with pytest.raises(TypeError, match="normal_volume_to_actual_volume"):
@@ -67,6 +67,35 @@ def test_convert_gas_volume() -> None:
 
     with pytest.raises(TypeError, match="normal_volume_to_actual_volume"):
         convert_gas_volume(cast(Any, Q(100.0, "Nm³/h")), "N", (Q(2, "bar"), Q(25, "degC")), fluid_name="Air")
+
+
+@pytest.mark.parametrize(
+    ("condition", "argument"),
+    [
+        ((Q(1.0, "m"), Q(300.0, "K")), r"condition_1\[0\].*Quantity\[Pressure\]"),
+        ((Q(1.0, "bar"), Q(5.0, "delta_degC")), r"condition_1\[1\].*Quantity\[Temperature\]"),
+        ((Q(1.0, "bar"), Q(1.0, "kg")), r"condition_1\[1\].*Quantity\[Temperature\]"),
+    ],
+)
+def test_gas_condition_requires_dimensionality(condition: object, argument: str) -> None:
+    with pytest.raises(ExpectedDimensionalityError, match=argument):
+        convert_gas_volume(Q(1.0, "m³"), cast(Any, condition), "N", fluid_name="Air")
+
+
+@pytest.mark.parametrize("condition", [None, [], (Q(1.0, "bar"),), (1.0, Q(300.0, "K"))])
+def test_malformed_gas_condition_keeps_type_error(condition: object) -> None:
+    with pytest.raises(TypeError, match="pressure, temperature") as excinfo:
+        convert_gas_volume(Q(1.0, "m³"), cast(Any, condition), "N", fluid_name="Air")
+    assert type(excinfo.value) is TypeError
+
+
+def test_ideal_gas_density_requires_pressure_and_molar_mass() -> None:
+    invalid_pressure = cast(Any, Q(1.0, "m"))
+    invalid_molar_mass = cast(Any, Q(29.0, "kg"))
+    with pytest.raises(ExpectedDimensionalityError, match=r"P.*Quantity\[Pressure\]"):
+        ideal_gas_density(invalid_pressure, Q(300.0, "K"), Q(29.0, "g/mol"))
+    with pytest.raises(ExpectedDimensionalityError, match=r"M.*Quantity\[MolarMass\]"):
+        ideal_gas_density(Q(1.0, "bar"), Q(300.0, "K"), invalid_molar_mass)  # pyrefly: ignore[bad-specialization]
 
 
 def test_ideal_gas_density() -> None:

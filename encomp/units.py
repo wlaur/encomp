@@ -160,6 +160,7 @@ __all__ = [
     "Unit",
     "UnitStrippedWarning",
     "define_dimensionality",
+    "require_dimensionality",
     "set_quantity_format",
 ]
 
@@ -254,6 +255,20 @@ class DimensionalityComparisonError(_DimensionalityError):
 
 class DimensionalityRedefinitionError(ValueError):
     """Raised when defining a dimensionality that already exists."""
+
+
+def require_dimensionality[DT: Dimensionality](
+    value: object, dimensionality: type[DT], *, name: str
+) -> Quantity[DT, Any]:
+    """Return a Quantity of the requested dimensionality, or raise ExpectedDimensionalityError."""
+    from .misc import isinstance_types
+
+    # The requested class is a runtime type argument, not a static type expression.
+    if not isinstance_types(value, cast(Any, Quantity)[dimensionality, Any]):
+        raise ExpectedDimensionalityError(
+            f"{name} must be a Quantity[{dimensionality.__name__}], passed {value!r} ({type(value).__name__})"
+        )
+    return cast("Quantity[DT, Any]", value)
 
 
 # NOTE: make sure to list all that are defined in defs/units.txt ("# custom dimensions")

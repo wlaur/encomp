@@ -41,7 +41,7 @@ def test_convert_volume_mass() -> None:
 
     # wrong dimensionality raises a proper unit error naming the argument,
     # not an internal AssertionError
-    with pytest.raises(ExpectedDimensionalityError, match="rho"):
+    with pytest.raises(ExpectedDimensionalityError, match=r"rho must be a Quantity\[Density\]"):
         convert_volume_mass(mf, rho=cast(Any, Q(25, "bar")))
 
     with pytest.raises(ValueError, match="positive"):
