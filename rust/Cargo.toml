@@ -21,9 +21,9 @@ default = ["extension-module"]
 extension-module = ["pyo3/extension-module"]
 
 [dependencies]
-# Versions pinned to match the installed Python polars 1.42.0 (Rust polars 0.54.4).
-# pyo3-polars 0.27.0 -> polars ^0.54.4, pyo3 ^0.28. A plugin's polars-ffi version
-# must match the host polars or it won't load (see README).
+# pyo3-polars 0.27.0 requires Rust polars ^0.54.4 and pyo3 ^0.28. The plugin ABI
+# is bound to the polars-ffi major, not the Python Polars minor; compatibility is
+# tested on the Python Polars 1.42 floor and the locked 2.0.0 (see README).
 # dtype-extension: without it, an extension-typed input column (e.g. encomp's
 # "encomp.unit" dtype) PANICS inside the FFI field import (polars-core
 # from_arrow_field) before any plugin code runs. The small-integer features are

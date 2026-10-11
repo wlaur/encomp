@@ -46,7 +46,7 @@ if not _plugin_built():
     )
 
 
-# both paths produce Float32; this comfortably allows any float-precision diff
+# Outputs preserve Float32/Float64 precision; this allows float-precision differences.
 RTOL = 1e-4
 
 PURE = [

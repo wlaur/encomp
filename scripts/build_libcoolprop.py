@@ -40,7 +40,8 @@ def verify_commit(src: Path) -> None:
     if head != COOLPROP_COMMIT:
         raise RuntimeError(
             f"CoolProp {COOLPROP_VERSION} resolved to commit {head}, expected {COOLPROP_COMMIT}. "
-            "The upstream tag moved; do not build from it until this is understood."
+            "The upstream tag may have moved, or the cached clone may belong to an older pin; "
+            "do not build from it until the mismatch is understood."
         )
 
     print(f"+ verified CoolProp {COOLPROP_VERSION} at {head}", flush=True)
@@ -101,7 +102,7 @@ def main() -> None:
         # only vcruntime140.dll, which ships with every CPython, so it stays on the dynamic CRT.
         cmake_args.append("-DCOOLPROP_MSVC_STATIC=ON")
     run(*cmake_args, cwd=build)
-    run("cmake", "--build", ".", "--config", "Release", "-j", "4", cwd=build)
+    run("cmake", "--build", ".", "--config", "Release", "-j", str(os.cpu_count() or 1), cwd=build)
 
     candidates = ["libCoolProp.dylib", "libCoolProp.so", "CoolProp.dll", "libCoolProp.dll"]
     found = next((p for name in candidates for p in build.rglob(name)), None)

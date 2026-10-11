@@ -587,7 +587,9 @@ impl Drop for State<'_> {
         // SAFETY: frees a handle we own exactly once (Drop runs once); the
         // handle-table write is serialised by `handle_lock` held here.
         unsafe { (self.cp.free)(self.handle, &mut err, msg.as_mut_ptr(), BUFLEN) };
-        self.cp.handles_freed.fetch_add(1, Ordering::Relaxed);
+        if err == 0 {
+            self.cp.handles_freed.fetch_add(1, Ordering::Relaxed);
+        }
     }
 }
 

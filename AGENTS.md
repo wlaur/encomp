@@ -70,6 +70,16 @@ assert pressure.to("kPa").m == 100.0
   instead of raising, which is exactly why it may not be guessed.
 - `bool` magnitudes are rejected at runtime (a bool is always a mistake), `int`
   magnitudes normalize to `float`, and only 1-D arrays are accepted.
+- **Dimensionality errors detected by encomp use encomp's Pint error subclasses.**
+  `ExpectedDimensionalityError` means an argument or column requires a particular
+  dimensionality; `DimensionalityTypeError` means dimensionalities cannot be combined
+  or reinterpreted. Both are `pint.DimensionalityError` and `TypeError` subclasses.
+  Raw Pint dimensionality errors may escape only from unwrapped Pint conversions;
+  malformed gas-condition structures still raise `TypeError`.
+- **Dimensional-algebra overload blocks are generated.** Do not edit the
+  `BEGIN GENERATED` / `END GENERATED` blocks in `units.py` by hand. Change
+  `_dimensional_algebra.py` and `scripts/generate_overloads.py`, then regenerate with
+  `uv run python scripts/generate_overloads.py`; its `--check` mode verifies staleness.
 - `Temperature` and `TemperatureDifference` are distinct dimensionalities with
   deliberate arithmetic (`T - T -> ΔT`, `T ± ΔT -> T`, `ΔT - T` is an error). The
   comparison and pickling overrides on `Quantity` intentionally narrow pint's
@@ -105,7 +115,8 @@ assert pressure.to("kPa").m == 100.0
 - `uv` with a committed lockfile (`uv sync --locked`); `ruff check` + `ruff format`
   (enforced by pre-commit and CI).
 - Only the checker versions in `uv.lock` count; run `uv sync --locked` before
-  running any checker.
+  running any checker. Ignore comments are pinned to those locked
+  pyright/pyrefly/ty versions.
 - Mixed Python + Rust project built with maturin. Development checkouts build the
   plugin locally: `python scripts/build_libcoolprop.py` then
   `uv run maturin develop --release` (see `encomp/coolprop/README.md`).
