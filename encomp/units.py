@@ -616,7 +616,11 @@ class Quantity(
             # The public constructor historically parsed str(UnitsContainer), whose
             # exponent rendering uses :g. Preserve that rounding without parsing units.
             units = cast(UnitsContainer, cast(Any, result)._units)
-            if any(isinstance(power, float) and float(f"{power:g}") != power for power in units.values()):
+            if any(isinstance(power, float) and not math.isfinite(power) for power in units.values()):
+                # Non-finite powers do not form parseable units. Retain the public
+                # parser's rejection rather than trusting an invalid Pint result.
+                cast(Any, result)._units = self._validate_unit(units)._units
+            elif any(isinstance(power, float) and float(f"{power:g}") != power for power in units.values()):
                 cast(Any, result)._units = UnitsContainer({name: float(f"{power:g}") for name, power in units.items()})
         return cast(Any, result)  # ty: ignore[redundant-cast]
 

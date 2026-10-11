@@ -1297,6 +1297,15 @@ def test_pint_results_preserve_symbolic_magnitudes() -> None:
     assert isinstance((quantity + quantity).m, sp.Float)
 
 
+@pytest.mark.parametrize("exponent", [float("nan"), float("inf"), float("-inf")])
+def test_pint_results_reject_nonfinite_unit_exponents(exponent: float) -> None:
+    quantity = Q(2.0, "m")
+    with pytest.raises(TypeError):
+        _ = quantity**exponent
+    with pytest.raises(TypeError):
+        _ = quantity ** Q(exponent, "")
+
+
 def test_compatibility() -> None:
     _ = Q(1) + Q(2)
 
