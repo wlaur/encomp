@@ -51,7 +51,9 @@ class _NativeModule(Protocol):
     def parameter_information(self, name: str, field: str) -> str: ...
     def resolve_input_pair(self, name1: str, name2: str) -> tuple[int, bool]: ...
     def resolve_fluid_name(self, name: str) -> tuple[str, str, list[float] | None]: ...
-    def validate_fluid(self, backend: str, fluid: str, fractions: list[float] | None = None) -> None: ...
+    def validate_fluid(
+        self, backend: str, fluid: str, fractions: list[float] | None = None, phase: str | None = None
+    ) -> None: ...
     def prepare_fluid(
         self,
         backend: str,
@@ -531,7 +533,9 @@ def _resolve_pair(name1: str, name2: str) -> tuple[int, bool]:
 
 
 @cache
-def validate_fluid_config(backend: Backend | str, fluids: str, fractions: tuple[float, ...] | None) -> None:
+def validate_fluid_config(
+    backend: Backend | str, fluids: str, fractions: tuple[float, ...] | None, phase: str | None = None
+) -> None:
     """Raise unless CoolProp can construct an ``AbstractState`` for a resolved fluid spec.
 
     Takes the ``(backend, fluids, fractions)`` triple :func:`resolve_fluid_spec` produces;
@@ -543,7 +547,7 @@ def validate_fluid_config(backend: Backend | str, fluids: str, fractions: tuple[
     ``str``, like :data:`CName`: the Literal is what editors suggest, but CoolProp -- not
     encomp -- is the authority on the name, so an unlisted backend must still pass.
 
-    Cached per triple, so the 1000th ``Fluid("Water", ...)`` pays a dict lookup rather than
+    Cached per fluid specification and phase, so the 1000th ``Fluid("Water", ...)`` pays a dict lookup rather than
     another CoolProp initialization. Only *resolved* names are remembered:
     ``functools.cache`` stores return values, never exceptions, so an invalid name (or a
     transient CoolProp error) is re-checked on the next call instead of being cached as
@@ -554,11 +558,13 @@ def validate_fluid_config(backend: Backend | str, fluids: str, fractions: tuple[
     # microseconds for the usual backends -- and seconds the very first time a tabular
     # backend builds its tables, a cost that would otherwise be paid at the first property
     # access anyway.
-    _native().validate_fluid(backend, fluids, None if fractions is None else list(fractions))
+    _native().validate_fluid(backend, fluids, None if fractions is None else list(fractions), phase)
 
 
-def validate_fluid_name(name: CName, composition: Composition | None = None) -> None:
-    """Raise ``ValueError`` unless ``name`` (+ ``composition``) is a CoolProp fluid.
+def validate_fluid_name(
+    name: CName, composition: Composition | None = None, *, phase: str | None = None
+) -> tuple[str, str, list[float] | None]:
+    """Return the resolved specification, or raise ``ValueError`` for an invalid fluid or phase.
 
     The single eager fluid-name check, shared by :class:`encomp.fluids.Fluid` and the
     expression builders here: a misspelled name must fail where it is written, not at
@@ -568,11 +574,12 @@ def validate_fluid_name(name: CName, composition: Composition | None = None) -> 
     backend, fluids, fractions = resolve_fluid_spec(name, composition)
 
     try:
-        validate_fluid_config(backend, fluids, None if fractions is None else tuple(fractions))
-    except Exception as e:
+        validate_fluid_config(backend, fluids, None if fractions is None else tuple(fractions), phase)
+    except ValueError as e:
         raise ValueError(
             f"Fluid '{name}' could not be initialized, ensure that the name is a valid CoolProp fluid name"
         ) from e
+    return backend, fluids, fractions
 
 
 @cache
@@ -667,7 +674,8 @@ def resolve_fluid_spec(
     and validates a fluid name + composition; :class:`encomp.fluids.Fluid` delegates here.
 
     The backend may be folded into ``name`` (``"IF97::Water"``, ``"HEOS::CO2&O2"``) or, with a
-    ``composition`` dict, passed as the bare backend (``"HEOS"``); no backend defaults to HEOS.
+    ``composition`` dict, passed as the bare backend (``"HEOS"``). A bare species name
+    (``"CO2&O2"``) uses HEOS and must match the composition keys.
 
     ``fractions`` is ``None`` for a pure fluid. Otherwise its basis is FLUID-SPECIFIC (CoolProp's
     ``set_fractions`` selects it, the caller never does):
@@ -688,12 +696,17 @@ def resolve_fluid_spec(
                 "composition= argument; pass only the backend as name (e.g. 'HEOS'), or drop "
                 "composition= and keep the fractions in the name (e.g. 'HEOS::CO2[0.5]&O2[0.5]')"
             )
-        backend = name.split("::", 1)[0] if "::" in name else name
+        if "::" in name:
+            backend, named_species = name.split("::", 1)
+        elif name.upper() in BACKENDS:
+            backend, named_species = name, None
+        else:
+            backend, named_species = "HEOS", name
         if backend.upper() == "IF97":
             raise ValueError("composition= requires a mixture backend such as 'HEOS', not 'IF97'")
         species = list(composition)
-        if "::" in name:
-            name_species = name.split("::", 1)[1].split("&")
+        if named_species is not None:
+            name_species = named_species.split("&")
             if set(name_species) != set(species):
                 raise ValueError(f"species in name ({name_species}) do not match composition keys ({species})")
         fluids = "&".join(species)
@@ -842,9 +855,8 @@ def fluid(
     a, b = (input2, input1) if swap else (input1, input2)  # canonical order
     name_a, name_b = (name2, name1) if swap else (name1, name2)
     a_expr, b_expr = _as_expr(a), _as_expr(b)
-    validate_fluid_name(name, composition)
-    backend, fluids, fractions = resolve_fluid_spec(name, composition)
     phase = _phase_from_assumed(assume_phase) if assume_phase is not None else None
+    backend, fluids, fractions = validate_fluid_name(name, composition, phase=phase)
 
     if phase is not None and backend.upper() in PHASE_IGNORING_BACKENDS:
         # CoolProp accepts specify_phase for a region-explicit backend and then ignores it, so the

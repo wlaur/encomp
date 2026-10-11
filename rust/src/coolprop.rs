@@ -69,11 +69,47 @@ type HAPropsSIFn = unsafe extern "C" fn(
     c_double,
 ) -> c_double;
 
-#[derive(Debug)]
-pub struct CpError(pub String);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CpErrorKind {
+    /// Library load, missing symbol, or poisoned lock.
+    Runtime,
+    /// Invalid fluid, backend, fraction count, phase, or parameter.
+    Config,
+    /// CoolProp failed the state evaluation.
+    Evaluation,
+}
+
+#[derive(Debug, Clone)]
+pub struct CpError {
+    pub kind: CpErrorKind,
+    pub message: String,
+}
+
+impl CpError {
+    pub fn runtime(message: impl Into<String>) -> Self {
+        Self {
+            kind: CpErrorKind::Runtime,
+            message: message.into(),
+        }
+    }
+
+    pub fn config(message: impl Into<String>) -> Self {
+        Self {
+            kind: CpErrorKind::Config,
+            message: message.into(),
+        }
+    }
+
+    pub fn evaluation(message: impl Into<String>) -> Self {
+        Self {
+            kind: CpErrorKind::Evaluation,
+            message: message.into(),
+        }
+    }
+}
 
 fn cstr(s: &str) -> Result<CString, CpError> {
-    CString::new(s).map_err(|_| CpError(format!("interior NUL in {s:?}")))
+    CString::new(s).map_err(|_| CpError::config(format!("interior NUL in {s:?}")))
 }
 
 fn read_msg(buf: &[c_char]) -> String {
@@ -82,17 +118,19 @@ fn read_msg(buf: &[c_char]) -> String {
 }
 
 fn lock_mutex<'a, T>(mutex: &'a Mutex<T>, name: &str) -> Result<MutexGuard<'a, T>, CpError> {
-    mutex.lock().map_err(|_| CpError(format!("{name} lock was poisoned")))
+    mutex
+        .lock()
+        .map_err(|_| CpError::runtime(format!("{name} lock was poisoned")))
 }
 
 fn read_lock<'a, T>(lock: &'a RwLock<T>, name: &str) -> Result<RwLockReadGuard<'a, T>, CpError> {
     lock.read()
-        .map_err(|_| CpError(format!("{name} read lock was poisoned")))
+        .map_err(|_| CpError::runtime(format!("{name} read lock was poisoned")))
 }
 
 fn write_lock<'a, T>(lock: &'a RwLock<T>, name: &str) -> Result<RwLockWriteGuard<'a, T>, CpError> {
     lock.write()
-        .map_err(|_| CpError(format!("{name} write lock was poisoned")))
+        .map_err(|_| CpError::runtime(format!("{name} write lock was poisoned")))
 }
 
 /// A loaded libCoolProp + resolved C-API entry points. Cheap to share (`&`)
@@ -127,12 +165,12 @@ impl CoolProp {
     pub fn load(path: &str) -> Result<Self, CpError> {
         // SAFETY: dlopen'ing an arbitrary path is unsafe -- the caller asserts
         // `path` is a real libCoolProp. A bad path errors here, not later.
-        let lib = unsafe { Library::new(path) }.map_err(|e| CpError(format!("dlopen {path}: {e}")))?;
+        let lib = unsafe { Library::new(path) }.map_err(|e| CpError::runtime(format!("dlopen {path}: {e}")))?;
 
         macro_rules! sym {
             ($t:ty, $name:literal) => {
                 *lib.get::<$t>($name)
-                    .map_err(|e| CpError(format!("missing symbol {}: {e}", String::from_utf8_lossy($name))))?
+                    .map_err(|e| CpError::runtime(format!("missing symbol {}: {e}", String::from_utf8_lossy($name))))?
             };
         }
         // SAFETY: resolving symbols from the freshly-loaded `lib`. Each is looked
@@ -198,7 +236,7 @@ impl CoolProp {
         // SAFETY: `get_param_index` reads a NUL-terminated C string; `c` outlives the call.
         let i = unsafe { (self.get_param_index)(c.as_ptr()) };
         if i < 0 {
-            return Err(CpError(format!("unknown parameter {name:?}")));
+            return Err(CpError::config(format!("unknown parameter {name:?}")));
         }
         Ok(i)
     }
@@ -208,7 +246,7 @@ impl CoolProp {
         // SAFETY: `get_input_pair_index` reads a NUL-terminated C string; `c` outlives the call.
         let i = unsafe { (self.get_input_pair_index)(c.as_ptr()) };
         if i < 0 {
-            return Err(CpError(format!("unknown input pair {name:?}")));
+            return Err(CpError::config(format!("unknown input pair {name:?}")));
         }
         // return the logical index as i64 (matching update_and_1_out / kwargs.input_pair). The
         // c_long -> i64 conversion widens on Windows LLP64 (c_long is i32) and is a no-op on
@@ -229,7 +267,7 @@ impl CoolProp {
         // BUFLEN-byte caller-owned buffer, and BUFLEN fits the C `int` parameter.
         let ok = unsafe { (self.get_global_param_string)(name.as_ptr(), out.as_mut_ptr(), BUFLEN as c_int) };
         if ok != 1 {
-            return Err(CpError("CoolProp global metadata lookup failed".into()));
+            return Err(CpError::config("CoolProp global metadata lookup failed"));
         }
         Ok(read_msg(&out))
     }
@@ -241,7 +279,7 @@ impl CoolProp {
         let mut out = [0 as c_char; BUFLEN as usize];
         let field_bytes = field.as_bytes_with_nul();
         if field_bytes.len() > out.len() {
-            return Err(CpError("CoolProp parameter-information selector is too long".into()));
+            return Err(CpError::config("CoolProp parameter-information selector is too long"));
         }
         for (dest, source) in out.iter_mut().zip(field_bytes) {
             *dest = *source as c_char;
@@ -252,7 +290,7 @@ impl CoolProp {
         // selector and provides BUFLEN writable bytes.
         let ok = unsafe { (self.get_parameter_information_string)(name.as_ptr(), out.as_mut_ptr(), BUFLEN as c_int) };
         if ok != 1 {
-            return Err(CpError(format!(
+            return Err(CpError::config(format!(
                 "unknown parameter {name:?} or information field {field:?}"
             )));
         }
@@ -269,7 +307,7 @@ impl CoolProp {
         let code =
             unsafe { (self.extract_backend)(name.as_ptr(), backend.as_mut_ptr(), BUFLEN, fluid.as_mut_ptr(), BUFLEN) };
         if code != 0 {
-            return Err(CpError("CoolProp backend/fluid name exceeds the native buffer".into()));
+            return Err(CpError::config("CoolProp backend/fluid name exceeds the native buffer"));
         }
         Ok((read_msg(&backend), read_msg(&fluid)))
     }
@@ -345,7 +383,7 @@ impl CoolProp {
     ) -> Result<(), CpError> {
         let n = out.len();
         if v1.len() != n || v2.len() != n || v3.len() != n {
-            return Err(CpError("ha_props_si_batch: length mismatch".into()));
+            return Err(CpError::evaluation("ha_props_si_batch: length mismatch"));
         }
         let (o, a, b, c) = (cstr(output)?, cstr(n1)?, cstr(n2)?, cstr(n3)?);
         for i in 0..n {
@@ -373,7 +411,10 @@ impl CoolProp {
             unsafe { (self.factory)(b.as_ptr(), f.as_ptr(), &mut err, msg.as_mut_ptr(), BUFLEN) }
         };
         if err != 0 {
-            return Err(CpError(format!("factory({backend},{fluid}): {}", read_msg(&msg))));
+            return Err(CpError::config(format!(
+                "factory({backend},{fluid}): {}",
+                read_msg(&msg)
+            )));
         }
         self.handles_created.fetch_add(1, Ordering::Relaxed);
         Ok(State { cp: self, handle })
@@ -410,14 +451,14 @@ impl State<'_> {
         // c_long is i32 on Windows (LLP64); a mixture never has that many species, but the
         // cast is checked rather than truncating
         let n = c_long::try_from(fracs.len())
-            .map_err(|_| CpError("set_fractions: too many species for the C API".to_string()))?;
+            .map_err(|_| CpError::config("set_fractions: too many species for the C API".to_string()))?;
         // SAFETY: `fracs` ptr + len describe the same slice; `self.handle` is a
         // live handle we own; `err`/`msg` are valid stack buffers.
         unsafe {
             (self.cp.set_fractions)(self.handle, fracs.as_ptr(), n, &mut err, msg.as_mut_ptr(), BUFLEN);
         }
         if err != 0 {
-            return Err(CpError(format!("set_fractions: {}", read_msg(&msg))));
+            return Err(CpError::config(format!("set_fractions: {}", read_msg(&msg))));
         }
         Ok(())
     }
@@ -430,7 +471,7 @@ impl State<'_> {
         // SAFETY: `p` is a CString alive across the call; `self.handle` is live; buffers valid.
         unsafe { (self.cp.specify_phase)(self.handle, p.as_ptr(), &mut err, msg.as_mut_ptr(), BUFLEN) };
         if err != 0 {
-            return Err(CpError(format!("specify_phase({phase}): {}", read_msg(&msg))));
+            return Err(CpError::config(format!("specify_phase({phase}): {}", read_msg(&msg))));
         }
         Ok(())
     }
@@ -452,17 +493,17 @@ impl State<'_> {
     ) -> Result<(), CpError> {
         let n = out.len();
         if v1.len() != n || v2.len() != n {
-            return Err(CpError("update_and_1_out: length mismatch".into()));
+            return Err(CpError::evaluation("update_and_1_out: length mismatch"));
         }
         // c_long is i32 on Windows (LLP64), so a chunk longer than i32::MAX would be passed
         // to C truncated (and possibly negative). Refuse rather than read out of bounds.
         let n_c = c_long::try_from(n).map_err(|_| {
-            CpError(format!(
+            CpError::evaluation(format!(
                 "update_and_1_out: chunk of {n} rows exceeds the C API length limit"
             ))
         })?;
         let pair = c_long::try_from(input_pair)
-            .map_err(|_| CpError(format!("input pair {input_pair} exceeds the C API integer range")))?;
+            .map_err(|_| CpError::evaluation(format!("input pair {input_pair} exceeds the C API integer range")))?;
         out.fill(f64::NAN);
         let mut err: c_long = 0;
         let mut msg = [0 as c_char; BUFLEN as usize];
@@ -510,7 +551,7 @@ impl State<'_> {
         }
 
         let pair = c_long::try_from(input_pair)
-            .map_err(|_| CpError(format!("input pair {input_pair} exceeds the C API integer range")))?;
+            .map_err(|_| CpError::evaluation(format!("input pair {input_pair} exceeds the C API integer range")))?;
         let mut err: c_long = 0;
         let mut msg = [0 as c_char; BUFLEN as usize];
         // SAFETY: `self.handle` is live and thread-owned; scalar values are passed by
@@ -519,7 +560,7 @@ impl State<'_> {
             (self.cp.update)(self.handle, pair, value1, value2, &mut err, msg.as_mut_ptr(), BUFLEN);
         }
         if err != 0 {
-            return Err(CpError(read_msg(&msg)));
+            return Err(CpError::evaluation(read_msg(&msg)));
         }
 
         err = 0;
@@ -528,12 +569,12 @@ impl State<'_> {
         // key came from this same library; error buffers are caller-owned.
         let value = unsafe { (self.cp.keyed_output)(self.handle, out_key, &mut err, msg.as_mut_ptr(), BUFLEN) };
         if err != 0 {
-            return Err(CpError(read_msg(&msg)));
+            return Err(CpError::evaluation(read_msg(&msg)));
         }
         if valid_result(value) {
             Ok(value)
         } else {
-            Err(CpError("CoolProp returned a non-finite result".into()))
+            Err(CpError::evaluation("CoolProp returned a non-finite result"))
         }
     }
 }

@@ -10,6 +10,8 @@ from typing import Any, cast
 import pytest
 
 from encomp import coolprop as cp
+from encomp.fluids import Fluid
+from encomp.units import Quantity as Q
 
 
 def test_bare_name_defaults_to_heos() -> None:
@@ -54,6 +56,35 @@ def test_composition_sum_tolerance() -> None:
 
     with pytest.raises(ValueError, match="must sum to 1"):
         cp.resolve_fluid_spec("HEOS", composition={"CO2": 0.7, "O2": 0.9})
+
+
+def test_composition_with_bare_species_uses_heos() -> None:
+    composition = {"CarbonDioxide": 0.5, "Oxygen": 0.5}
+    assert cp.resolve_fluid_spec("CarbonDioxide&Oxygen", composition) == (
+        "HEOS",
+        "CarbonDioxide&Oxygen",
+        [0.5, 0.5],
+    )
+    fluid = Fluid("CarbonDioxide&Oxygen", composition=composition, P=Q(1.0, "bar"), T=Q(300.0, "K"))
+    assert fluid.name == "HEOS::CarbonDioxide&Oxygen"
+    assert fluid.assume_phase("gas").D.m > 0.0
+
+    with pytest.raises(ValueError, match="do not match composition keys"):
+        cp.resolve_fluid_spec("CarbonDioxide&Nitrogen", composition)
+
+
+def test_validation_returns_resolved_specification() -> None:
+    assert cp.validate_fluid_name("Water") == ("HEOS", "Water", None)
+    assert cp.validate_fluid_name("INCOMP::MEG[0.5]") == ("INCOMP", "MEG", [0.5])
+
+
+def test_fluid_validation_preserves_runtime_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail_validation(*_args: object) -> None:
+        raise RuntimeError("native library is unavailable")
+
+    monkeypatch.setattr(cp, "validate_fluid_config", fail_validation)
+    with pytest.raises(RuntimeError, match="native library is unavailable"):
+        cp.validate_fluid_name("Water")
 
 
 def test_incompressible_concentration_is_not_normalised() -> None:
