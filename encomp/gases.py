@@ -358,7 +358,8 @@ def mass_to_actual_volume(
     Returns
     -------
     Quantity[Volume, MT] | Quantity[VolumeFlow, MT]
-        Corresponding actual volume or actual volume flow
+        Corresponding actual volume in m³, or actual volume flow in m³ per
+        input time unit (for example, m³/s for a mass flow in kg/s).
     """
 
     P, T = _resolve_gas_condition(condition, "condition")
@@ -404,7 +405,8 @@ def mass_from_normal_volume(
     Returns
     -------
     Quantity[Mass, MT] | Quantity[MassFlow, MT]
-        Corresponding mass or mass flow
+        Corresponding mass in kg, or mass flow in kg/h for a normal-volume
+        flow. Legacy plain-volume inputs retain their time unit.
     """
 
     rho = Fluid(
@@ -470,20 +472,20 @@ def mass_from_actual_volume(
 
 @overload
 def actual_volume_to_normal_volume(
-    volume: Quantity[Volume, Any],
+    volume: Quantity[Volume, MT],
     condition: GasConditionInput,
     *,
     fluid_name: str,
-) -> Quantity[NormalVolume, Any]: ...
+) -> Quantity[NormalVolume, MT]: ...
 
 
 @overload
 def actual_volume_to_normal_volume(
-    volume: Quantity[VolumeFlow, Any],
+    volume: Quantity[VolumeFlow, MT],
     condition: GasConditionInput,
     *,
     fluid_name: str,
-) -> Quantity[NormalVolumeFlow, Any]: ...
+) -> Quantity[NormalVolumeFlow, MT]: ...
 
 
 def actual_volume_to_normal_volume(
@@ -497,7 +499,7 @@ def actual_volume_to_normal_volume(
 
     Parameters
     ----------
-    volume : Quantity[Volume, Any] | Quantity[VolumeFlow, Any]
+    volume : Quantity[Volume, MT] | Quantity[VolumeFlow, MT]
         Input actual volume or actual volume flow
     condition : tuple[Quantity[Pressure, Any], Quantity[Temperature, Any]] | Literal['N', 'S']
         Condition at which the input volume is evaluated
@@ -506,7 +508,7 @@ def actual_volume_to_normal_volume(
 
     Returns
     -------
-    Quantity[NormalVolume, Any] | Quantity[NormalVolumeFlow, Any]
+    Quantity[NormalVolume, MT] | Quantity[NormalVolumeFlow, MT]
         Corresponding normal volume (Nm³) or normal volume flow (Nm³/h)
     """
 
@@ -517,20 +519,20 @@ def actual_volume_to_normal_volume(
 
 @overload
 def normal_volume_to_actual_volume(
-    volume: Quantity[NormalVolume, Any],
+    volume: Quantity[NormalVolume, MT],
     condition: GasConditionInput,
     *,
     fluid_name: str,
-) -> Quantity[Volume, Any]: ...
+) -> Quantity[Volume, MT]: ...
 
 
 @overload
 def normal_volume_to_actual_volume(
-    volume: Quantity[NormalVolumeFlow, Any],
+    volume: Quantity[NormalVolumeFlow, MT],
     condition: GasConditionInput,
     *,
     fluid_name: str,
-) -> Quantity[VolumeFlow, Any]: ...
+) -> Quantity[VolumeFlow, MT]: ...
 
 
 def normal_volume_to_actual_volume(
@@ -553,7 +555,7 @@ def normal_volume_to_actual_volume(
 
     Parameters
     ----------
-    volume : Quantity[NormalVolume, Any] | Quantity[NormalVolumeFlow, Any]
+    volume : Quantity[NormalVolume, MT] | Quantity[NormalVolumeFlow, MT]
         Input normal volume or normal volume flow
     condition : tuple[Quantity[Pressure, Any], Quantity[Temperature, Any]] | Literal['N', 'S']
         Condition at which to calculate the actual volume
@@ -562,8 +564,9 @@ def normal_volume_to_actual_volume(
 
     Returns
     -------
-    Quantity[Volume, Any] | Quantity[VolumeFlow, Any]
-        Corresponding actual volume or actual volume flow
+    Quantity[Volume, MT] | Quantity[VolumeFlow, MT]
+        Corresponding actual volume in m³ or actual volume flow in m³/h.
+        Legacy plain-volume inputs retain their units.
     """
 
     return convert_gas_volume(_strip_normal(volume), condition_1="N", condition_2=condition, fluid_name=fluid_name)

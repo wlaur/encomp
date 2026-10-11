@@ -27,14 +27,33 @@ from ..units import Quantity as Q
 def test_sympy() -> None:
     x = cast(Symbol, sp.Symbol("x", positive=True))
 
-    x._("n,text")
-    x._("n,text,j")
-    x.__("n,text")
-    x.__("n,text,j")
+    assert str(x._("n,text")) == r"x_{n,\text{text}}"
+    assert str(x._("n,text,j")) == r"x_{n,\text{text},j}"
+    assert str(x.__("n,text")) == r"x^{n,\text{text}}"
+    assert str(x.__("n,text,j")) == r"x^{n,\text{text},j}"
 
-    x._("n").append("text")
-    x.__("n").append("text", where="sup")
-    x.__("A").append("text", where="sub")
+    assert str(x._("n").append("text")) == r"x_{n\text{text}}"
+    assert str(x.__("n").append("text", where="sup")) == r"x^{n\text{text}}"
+    assert str(x.__("A").append("text", where="sub")) == r"x^{\text{A}}_{\text{text}}"
+    assert str(x._("a").__("in")) == r"x_{a}^{\text{in}}"
+
+
+@pytest.mark.parametrize(
+    ("name", "where", "expected"),
+    [
+        ("x_{a}^{b}", "sub", "x_{ac}^{b}"),
+        ("x^{a}_{b}", "sup", "x^{ac}_{b}"),
+        ("x_{a_{b}}", "sub", "x_{a_{b}c}"),
+        ("x^{a^{b}}", "sup", "x^{a^{b}c}"),
+        ("x_{a}^{b}_{d}", "sub", "x_{a}^{b}_{dc}"),
+    ],
+)
+def test_append_preserves_other_and_nested_scripts(name: str, where: str, expected: str) -> None:
+    symbol = cast(Symbol, sp.Symbol(name, positive=True))
+    result = symbol._("c") if where == "sub" else symbol.__("c")
+    assert str(result) == expected
+    # SymPy's assumption map is untyped, like the other assumption checks below.
+    assert cast(Any, result).assumptions0["positive"]
 
 
 def test_to_identifier() -> None:
@@ -229,6 +248,7 @@ def test_typeset() -> None:
 def test_typeset_chemical() -> None:
     assert typeset_chemical("H_2SO_4") == r"\text{H}_2\text{SO}_4"
     assert typeset_chemical("CO_2") == r"\text{CO}_2"
+    assert typeset_chemical("C_12H_22O_11") == r"\text{C}_{12}\text{H}_{22}\text{O}_{11}"
 
 
 def test_simplify_exponents() -> None:
@@ -262,6 +282,15 @@ def test_get_sol_expr() -> None:
 
     # a symbol that does not appear in any equation cannot be solved for
     assert get_sol_expr(equation, sp.Symbol("z")) is None
+
+
+def test_get_sol_expr_respects_avoid_for_single_and_multiple_equations() -> None:
+    x, y, z = sp.symbols("x, y, z")  # pyright: ignore[reportUnknownMemberType]
+    equation: Any = sp.Eq(x, y + 1)
+    equations: Any = [equation, sp.Eq(x, z + 2)]
+    assert get_sol_expr(equation, x, avoid={y}) is None
+    assert get_sol_expr(equation, x, avoid={z}) == y + 1
+    assert get_sol_expr(equations, x, avoid={y}) == z + 2
 
 
 def test_substitute_unknowns() -> None:

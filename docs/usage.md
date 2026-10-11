@@ -922,6 +922,8 @@ The API mirrors {py:class}`encomp.fluids.Fluid`: any CoolProp input pair is supp
 
 ## SymPy functionality
 
+`encomp.sympy` is a legacy module, frozen except for fixes to documented behaviour.
+
 `encomp.sympy` is legacy and soft-deprecated; it is planned for removal in a future major release.
 To load additional methods for the `sympy.Symbol` class, import SymPy via the {py:mod}`encomp.sympy` module.
 

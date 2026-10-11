@@ -152,13 +152,13 @@ def test_gas_conversion() -> None:
     # (assert_type also verifies the runtime type via the monkeypatch above; a
     # narrowing `assert isinstance_types(...)` would poison later inference)
     nv = actual_volume_to_normal_volume(V, (P, T), fluid_name="Air")
-    assert_type(nv, Q[NormalVolume, Any])
+    assert_type(nv, Q[NormalVolume, float])
     assert nv.check(Q(0, "Nm³"))
-    assert_type(actual_volume_to_normal_volume(V, "N", fluid_name="Air"), Q[NormalVolume, Any])
+    assert_type(actual_volume_to_normal_volume(V, "N", fluid_name="Air"), Q[NormalVolume, float])
 
     v_actual = normal_volume_to_actual_volume(nv, (P, T), fluid_name="Air")
-    assert_type(v_actual, Q[Volume, Any])
-    assert_type(normal_volume_to_actual_volume(nv, "S", fluid_name="Air"), Q[Volume, Any])
+    assert_type(v_actual, Q[Volume, float])
+    assert_type(normal_volume_to_actual_volume(nv, "S", fluid_name="Air"), Q[Volume, float])
 
     # round trip recovers the original value
     assert v_actual.to("liter").m == approx(V.m, rel=1e-9)
@@ -184,6 +184,24 @@ def test_mass_normal_volume_round_trip() -> None:
     mf_back = mass_from_normal_volume(nvf, fluid_name="Air")
     assert_type(mf_back, Q[MassFlow, float])
     assert mf_back.to("kg/h").m == approx(mf.m, rel=1e-9)
+
+
+def test_gas_conversion_return_units_and_time_base() -> None:
+    condition = (Q(2.0, "bar"), Q(25.0, "degC"))
+    volume = normal_volume_to_actual_volume(Q(1.0, "Nm³"), condition, fluid_name="Air")
+    flow = normal_volume_to_actual_volume(Q(1.0, "Nm³/s"), condition, fluid_name="Air")
+    assert volume.u == Q.get_unit("m³")
+    assert flow.u == Q.get_unit("m³/h")
+    assert flow.m == approx(volume.m * 3600.0)
+
+    normal_volume = actual_volume_to_normal_volume(Q(1.0, "m³"), condition, fluid_name="Air")
+    normal_flow = actual_volume_to_normal_volume(Q(1.0, "m³/s"), condition, fluid_name="Air")
+    assert normal_volume.u == Q.get_unit("normal_cubic_meter")
+    assert normal_flow.u == Q.get_unit("normal_cubic_meter/h")
+    assert normal_flow.m == approx(normal_volume.m * 3600.0)
+
+    assert mass_from_normal_volume(Q(1.0, "Nm³/s"), fluid_name="Air").u == Q.get_unit("kg/h")
+    assert mass_to_actual_volume(Q(1.0, "kg/s"), condition, fluid_name="Air").u == Q.get_unit("m³/s")
 
 
 def test_normal_volume_legacy_plain_inputs() -> None:

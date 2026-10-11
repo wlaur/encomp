@@ -50,9 +50,11 @@ def divide_chunks(container: Any, N: int) -> Any:
 def flatten(container: Iterable[Any], max_depth: int | None = None) -> Iterator[Any]:
     """Yield nested iterable contents as a flat stream.
 
-    Strings, bytes, dictionaries, ``Quantity`` instances, numpy arrays and
+    Strings, bytes, bytearrays, dictionaries, ``Quantity`` instances, numpy arrays and
     Polars objects are treated as atomic values rather than recursively
     iterated.
+
+    ``max_depth=0`` yields the container itself.
     """
 
     def _flatten(items: Iterable[Any], depth: int) -> Iterator[Any]:
@@ -63,7 +65,9 @@ def flatten(container: Iterable[Any], max_depth: int | None = None) -> Iterator[
         for obj in items:
             # atomic despite being iterable: iterating a dict would silently drop its
             # values (keys only), and bytes would flatten into individual integers
-            if isinstance(obj, (str, bytes, dict, Quantity, np.ndarray, pl.Series, pl.Expr)):
+            if isinstance(
+                obj, (str, bytes, bytearray, dict, Quantity, np.ndarray, pl.Series, pl.Expr, pl.DataFrame, pl.LazyFrame)
+            ):
                 yield obj
                 continue
 

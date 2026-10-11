@@ -1,5 +1,6 @@
 from typing import Any, cast
 
+import polars as pl
 import pytest
 from hypothesis import given
 from hypothesis.strategies import integers, lists
@@ -31,10 +32,10 @@ def test_flatten() -> None:
     assert list(flatten(deep_nested)) == [1]
 
     deep_nested = [[[[[[[[1]]]]]]]]
-    _ = list(flatten(deep_nested, max_depth=5)) == [[[[1]]]]
+    assert list(flatten(deep_nested, max_depth=5)) == [[[[1]]]]
 
     deep_nested = [[[[[[[[1]]], [2]]]]]]
-    _ = list(flatten(deep_nested, max_depth=2)) == [[[[[[[1]]], [2]]]]]
+    assert list(flatten(deep_nested, max_depth=2)) == [[[[[[[1]]], [2]]]]]
 
     recursive: list[Any] = [None]
     recursive[0] = recursive
@@ -88,3 +89,9 @@ def test_flatten_atomic_types() -> None:
     assert list(flatten([d, 3])) == [d, 3]
 
     assert list(flatten([b"ab", "cd"])) == [b"ab", "cd"]
+
+    atoms = [pl.DataFrame({"a": [1], "b": [2]}), pl.LazyFrame({"a": [1]}), bytearray(b"ab")]
+    flat = list(flatten(atoms))
+    assert len(flat) == len(atoms)
+    assert all(actual is expected for actual, expected in zip(flat, atoms, strict=True))
+    assert next(flatten(atoms, max_depth=0)) is atoms
