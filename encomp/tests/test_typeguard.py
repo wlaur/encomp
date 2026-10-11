@@ -348,8 +348,8 @@ def test_nested_and_direct_forms_agree() -> None:
 
     for annotation in annotations:
         direct = isinstance_types(PRESSURE, annotation)
-        in_list = isinstance_types([PRESSURE], list[annotation])
-        in_dict = isinstance_types({"a": PRESSURE}, dict[str, annotation])
-        in_tuple = isinstance_types((PRESSURE,), tuple[annotation, ...])
+        in_list = isinstance_types([PRESSURE], cast(Any, list)[annotation])
+        in_dict = isinstance_types({"a": PRESSURE}, cast(Any, dict)[str, annotation])
+        in_tuple = isinstance_types((PRESSURE,), cast(Any, tuple)[annotation, ...])
 
         assert direct == in_list == in_dict == in_tuple, f"inconsistent nesting for {annotation}"

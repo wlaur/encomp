@@ -931,7 +931,7 @@ class Quantity(
             # compatibility with internal pint API
             return Unit(Quantity._validate_unit(str(unit)))
         elif isinstance(unit, str):
-            return cast("Unit[DT]", Unit(cast(Any, Quantity._REGISTRY.parse_units(Quantity.correct_unit(unit)))))
+            return Unit(cast(Any, Quantity._REGISTRY.parse_units(Quantity.correct_unit(unit))))
         else:
             # e.g. swapped (val, unit) arguments, or a unit object from a foreign
             # pint registry -- fail with the accepted types instead of a bare
@@ -963,23 +963,21 @@ class Quantity(
             # is genuinely needed but unavoidably looks redundant to the checker
             return cast("MT", float(val))
         elif isinstance(val, np.ndarray):
-            if len(val.shape) != 1:  # ty: ignore[invalid-attribute-access]
-                raise ValueError(
-                    f"Only 1-dimensional NumPy arrays can be used as magnitude, got shape {val.shape}"  # ty: ignore[invalid-attribute-access]
-                )
+            if len(val.shape) != 1:
+                raise ValueError(f"Only 1-dimensional NumPy arrays can be used as magnitude, got shape {val.shape}")
             return cast("MT", Quantity._cast_array_float(val))
         elif isinstance(val, pl.Series):
             # nulls (the polars missing sentinel) and NaNs are both kept verbatim: the
             # magnitude is the caller's data, and a NaN here is a float value rather than
             # a missing marker. Only values encomp itself computes are normalized to null
             # (see the class docstring, and CoolPropFluid.construct_quantity)
-            if val.dtype == pl.Null:  # ty: ignore[invalid-attribute-access]
+            if val.dtype == pl.Null:
                 return cast("MT", val.cast(pl.Float64))
-            if val.dtype.is_integer():  # ty: ignore[invalid-attribute-access]
+            if val.dtype.is_integer():
                 return cast("MT", val.cast(pl.Float64))
-            if not val.dtype.is_float():  # ty: ignore[invalid-attribute-access]
+            if not val.dtype.is_float():
                 raise TypeError(
-                    f"Polars Series magnitude must have a float or integer dtype, got {val.dtype!r}. "  # ty: ignore[invalid-attribute-access]
+                    f"Polars Series magnitude must have a float or integer dtype, got {val.dtype!r}. "
                     "Boolean, non-numeric, nested, and unit-typed Series are not valid magnitudes."
                 )
             return cast("MT", val)
@@ -1395,10 +1393,10 @@ class Quantity(
 
             # special case for temperature difference
             if cls._is_temperature_difference_unit(valid_unit):
-                subcls = cls._get_dimensional_subclass(TemperatureDifference, type(valid_magnitude))  # ty: ignore[invalid-argument-type]
+                subcls = cls._get_dimensional_subclass(TemperatureDifference, type(valid_magnitude))
             else:
                 dim = Dimensionality.get_dimensionality(valid_unit.dimensionality)
-                subcls = cls._get_dimensional_subclass(dim, type(valid_magnitude))  # ty: ignore[invalid-argument-type]
+                subcls = cls._get_dimensional_subclass(dim, type(valid_magnitude))
 
             return subcls(
                 valid_magnitude,
@@ -1409,7 +1407,7 @@ class Quantity(
         qty = cast("Quantity[DT, MT]", cast(Any, super()).__new__(cls, valid_magnitude, units=valid_unit))
 
         _m = qty._magnitude
-        if isinstance(_m, np.ndarray) and _m.dtype != np.float64:  # ty: ignore[invalid-attribute-access]
+        if isinstance(_m, np.ndarray) and _m.dtype != np.float64:
             qty._magnitude = cast("MT", cls._cast_array_float(_m))
 
         return qty
@@ -1691,7 +1689,7 @@ class Quantity(
         # convert integer arrays to float(64) (creating a copy)
         _m = self._magnitude
         if isinstance(_m, np.ndarray) and issubclass(
-            _m.dtype.type,  # ty: ignore[invalid-attribute-access]
+            _m.dtype.type,
             numbers.Integral,
         ):
             self._magnitude = cast("MT", _m.astype(np.float64))
@@ -2302,7 +2300,7 @@ class Quantity(
             # such a pair to TemperatureDifference -- asdim is the deliberate escape hatch)
             unit = self._as_absolute_temperature_unit(unit)
 
-        subcls = self._get_dimensional_subclass(dim, type(self.m))  # ty: ignore[invalid-argument-type]
+        subcls = self._get_dimensional_subclass(dim, type(self.m))
         return cast("Quantity[DT_, MT]", subcls(self.m, unit))
 
     def unknown(self) -> Quantity[UnknownDimensionality, MT]:
@@ -2405,7 +2403,7 @@ class Quantity(
     def __pow__(self, other: Quantity[Dimensionless, MT]) -> Quantity[UnknownDimensionality, MT]: ...
     def __pow__(self, other: Quantity[Dimensionless, Any] | float) -> Quantity[Any, Any]:
         if isinstance(other, Quantity):
-            self._check_comparable_magnitudes(self.m, other.m, "combine")  # ty: ignore[invalid-argument-type]
+            self._check_comparable_magnitudes(self.m, other.m, "combine")
         ret = cast("Quantity[DT, MT]", self._pint_super.__pow__(other))
         return self._call_subclass(ret.m, ret.u)
 
@@ -2450,7 +2448,7 @@ class Quantity(
 
         other = cast("Quantity[Any, Any] | float", other)
         if isinstance(other, Quantity):
-            self._check_comparable_magnitudes(self.m, other.m, "combine")  # ty: ignore[invalid-argument-type]
+            self._check_comparable_magnitudes(self.m, other.m, "combine")
         try:
             self.check_compatibility(other)
         except DimensionalityTypeError as e:
@@ -2517,7 +2515,7 @@ class Quantity(
 
         other = cast("Quantity[Any, Any] | float", other)
         if isinstance(other, Quantity):
-            self._check_comparable_magnitudes(self.m, other.m, "combine")  # ty: ignore[invalid-argument-type]
+            self._check_comparable_magnitudes(self.m, other.m, "combine")
         try:
             self.check_compatibility(other)
         except DimensionalityTypeError as e:
@@ -2542,7 +2540,7 @@ class Quantity(
             and issubclass(other._dimensionality_type, Temperature)
         ):
             _mt = type(ret.m)
-            subcls = self._get_dimensional_subclass(TemperatureDifference, _mt)  # ty: ignore[invalid-argument-type]
+            subcls = self._get_dimensional_subclass(TemperatureDifference, _mt)
             return subcls(ret.m, ret.u)
 
         return self._call_subclass(ret.m, ret.u)
@@ -2621,7 +2619,7 @@ class Quantity(
 
         m = self.m
         other_m = cast(float | Numpy1DArray | pl.Series | pl.Expr, cast(Any, other).to(self.u).m)
-        self._check_comparable_magnitudes(m, other_m)  # ty: ignore[invalid-argument-type]
+        self._check_comparable_magnitudes(m, other_m)
 
         if isinstance(m, (float, int, np.ndarray)) and isinstance(other_m, (float, int, np.ndarray)):
             ret = _is_close(cast(Any, m), cast(Any, other_m), self.rtol, self.atol)
@@ -2707,7 +2705,7 @@ class Quantity(
 
         m = self.m
         other_m = cast(float | Numpy1DArray | pl.Series | pl.Expr, cast(Any, other).to(self.u).m)
-        self._check_comparable_magnitudes(m, other_m)  # ty: ignore[invalid-argument-type]
+        self._check_comparable_magnitudes(m, other_m)
 
         if isinstance(m, (float, int, np.ndarray)) and isinstance(other_m, (float, int, np.ndarray)):
             ret = ~_is_close(cast(Any, m), cast(Any, other_m), self.rtol, self.atol)
@@ -2765,7 +2763,7 @@ class Quantity(
             raise DimensionalityComparisonError(f"Cannot compare {self} with {other}") from e
 
         if isinstance(other, Quantity):
-            self._check_comparable_magnitudes(self.m, other.m)  # ty: ignore[invalid-argument-type]
+            self._check_comparable_magnitudes(self.m, other.m)
 
         # only the STRICT pint operator is ever evaluated; a non-strict result is derived
         # from it below. Using pint's raw >= / <= would poison the derivation for NaN:
@@ -3358,7 +3356,7 @@ class Quantity(
 
         other = cast("Quantity[Any, Any] | float", other)
         if isinstance(other, Quantity):
-            self._check_comparable_magnitudes(self.m, other.m, "combine")  # ty: ignore[invalid-argument-type]
+            self._check_comparable_magnitudes(self.m, other.m, "combine")
         ret = self._pint_super.__mul__(other)
         if ret is NotImplemented:
             return NotImplemented
@@ -3840,7 +3838,7 @@ class Quantity(
 
         other = cast("Quantity[Any, Any] | float", other)
         if isinstance(other, Quantity):
-            self._check_comparable_magnitudes(self.m, other.m, "combine")  # ty: ignore[invalid-argument-type]
+            self._check_comparable_magnitudes(self.m, other.m, "combine")
 
         # NOTE: division by zero deliberately follows each container's own semantics rather
         # than being normalized: a float magnitude raises ZeroDivisionError (Python's rule
@@ -3905,7 +3903,7 @@ class Quantity(
     def __floordiv__(self: Quantity[DT, MT], other: float) -> Quantity[DT, MT]: ...
     def __floordiv__(self, other: Quantity[Any, Any] | float) -> Quantity[Any, Any]:
         if isinstance(other, Quantity):
-            self._check_comparable_magnitudes(self.m, other.m, "combine")  # ty: ignore[invalid-argument-type]
+            self._check_comparable_magnitudes(self.m, other.m, "combine")
 
         if isinstance(other, (float, int)):
             return self._call_subclass(cast("MT", self._floor_magnitude(self.m / other)), self.u)
@@ -3988,7 +3986,7 @@ class Quantity(
         ret = cast("Quantity[DT, Any]", self._pint_super.__getitem__(index))
 
         magnitude_type = cast("type[Any]", type(ret.m))  # ty: ignore[redundant-cast]
-        subcls = self._get_dimensional_subclass(self.dt, self._get_magnitude_type_safe(magnitude_type))  # ty: ignore[invalid-argument-type]
+        subcls = self._get_dimensional_subclass(self.dt, self._get_magnitude_type_safe(magnitude_type))
         instance = cast(Any, subcls)(ret.m, ret.u)
 
         return cast("Quantity[Any, Any]", instance)

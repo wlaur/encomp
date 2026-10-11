@@ -444,12 +444,11 @@ class QuantityFrame:
         """Lazily scan a Parquet file and validate its persisted unit schema.
 
         A predicate on a unit-typed column is deliberately *not* pushed into the Parquet
-        scan: polars' Parquet statistics reader panics on any extension dtype
-        (``polars-parquet`` ``statistics.rs``, an upstream limitation, still present in
-        1.43). An identity re-wrap of every unit-typed column shields the scan, at the
-        cost of row-group skipping for those columns. Filtering a bare
-        ``pl.scan_parquet(...)`` on a unit-typed column is what triggers the panic; go
-        through this method, or ``pl.read_parquet``, instead.
+        scan: polars 1.x's Parquet statistics reader panics on extension dtypes
+        (``polars-parquet`` ``statistics.rs``). Polars 2.0 fixes this, but the runtime
+        floor is 1.42. An identity re-wrap of every unit-typed column shields the scan,
+        at the cost of row-group skipping for those columns. On 1.x, filter through
+        this method or ``pl.read_parquet``. Remove the shield when the floor reaches 2.0.
         """
         return cls(_shield_extension_pushdown(pl.scan_parquet(source)))
 

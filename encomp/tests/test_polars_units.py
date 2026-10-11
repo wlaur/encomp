@@ -349,9 +349,24 @@ df = pl.read_parquet({str(path)!r})
 print(df.schema["P"])
 """
 
-    stripped = subprocess.run([sys.executable, "-Wdefault", "-c", script], check=True, capture_output=True, text=True)
-    assert stripped.stdout.strip() == "Float64"
-    assert "not registered" in stripped.stderr
+    env = {key: value for key, value in os.environ.items() if key != "POLARS_UNKNOWN_EXTENSION_TYPE_BEHAVIOR"}
+    default = subprocess.run(
+        [sys.executable, "-Wdefault", "-c", script], check=True, capture_output=True, text=True, env=env
+    )
+    if pl.__version__ >= "2":
+        assert default.stdout.strip() == "Extension('encomp.unit', Float64, 'bar')"
+        assert "not registered" not in default.stderr
+        stripped = subprocess.run(
+            [sys.executable, "-Wdefault", "-c", script],
+            check=True,
+            capture_output=True,
+            text=True,
+            env={**env, "POLARS_UNKNOWN_EXTENSION_TYPE_BEHAVIOR": "load_as_storage"},
+        )
+        assert stripped.stdout.strip() == "Float64"
+    else:
+        assert default.stdout.strip() == "Float64"
+        assert "not registered" in default.stderr
 
     env = {**os.environ, "POLARS_UNKNOWN_EXTENSION_TYPE_BEHAVIOR": "load_as_extension"}
     preserved_script = f"""
@@ -492,10 +507,10 @@ def test_scan_parquet_survives_predicate_pushdown(tmp_path: Path) -> None:
     # is_null() decodes statistics too, and a non-declared unit column is shielded as well
     assert scanned.lf.filter(pl.col("Volume flow").ext.storage().is_null()).collect().height == 0
 
-    # pin the upstream bug itself: when it is fixed, this fails and the shield (and the
-    # note in QuantityFrame.scan_parquet) can be revisited
-    with raises(BaseException, match=r"not yet implemented|statistics"):
-        pl.scan_parquet(path).filter(pl.col("pressure").ext.storage() > 50.0).collect()
+    # Remove the shield and this branch when the polars floor reaches 2.0.
+    if pl.__version__ < "2":
+        with raises(BaseException, match=r"not yet implemented|statistics"):
+            pl.scan_parquet(path).filter(pl.col("pressure").ext.storage() > 50.0).collect()
 
 
 def test_units_of_degrades_per_column_for_unparseable_metadata() -> None:

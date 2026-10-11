@@ -346,5 +346,5 @@ class TestUsageExamples:
         assert isinstance(phases.m, np.ndarray)
 
         # Constant input
-        water_const_p = Water(T=Q(np.linspace(25, 500, 10), "°C"), P=Q(5, "bar"))  # ty: ignore[invalid-argument-type]
+        water_const_p = Water(T=Q(np.linspace(25, 500, 10), "°C"), P=Q(5, "bar"))
         assert isinstance(water_const_p.D.m, np.ndarray)

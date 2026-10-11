@@ -38,7 +38,7 @@ def test_name_assignments() -> None:
 
 
 def test_isinstance_types() -> None:
-    assert isinstance_types((1, 4), tuple)
+    assert isinstance_types((1, 4), cast(Any, tuple))
     assert isinstance_types((1, 4), tuple[int, int])
     assert isinstance_types((1, 4), tuple[int, ...])
 

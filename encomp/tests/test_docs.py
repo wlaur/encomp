@@ -182,7 +182,7 @@ def test_doc_block_typechecks(code: str, tmp_path: Path) -> None:
     block = tmp_path / "block.py"
     block.write_text(_PYRIGHT_PREFIX + code)
     proc = subprocess.run(
-        [_PYRIGHT, "--project", str(ROOT / "pyproject.toml"), str(block)],
+        [_PYRIGHT, "--pythonpath", sys.executable, "--project", str(ROOT / "pyproject.toml"), str(block)],
         capture_output=True,
         text=True,
         cwd=ROOT,  # resolve `encomp` via the project venv
@@ -198,7 +198,15 @@ def test_doc_block_typechecks_pyrefly(code: str, tmp_path: Path) -> None:
     block = tmp_path / "block.py"
     block.write_text(code)
     proc = subprocess.run(
-        [_PYREFLY, "check", "--config", str(ROOT / "pyproject.toml"), str(block)],
+        [
+            _PYREFLY,
+            "check",
+            "--python-interpreter-path",
+            sys.executable,
+            "--config",
+            str(ROOT / "pyproject.toml"),
+            str(block),
+        ],
         capture_output=True,
         text=True,
         cwd=ROOT,
@@ -216,7 +224,7 @@ def test_doc_block_typechecks_ty(code: str, tmp_path: Path) -> None:
     proc = subprocess.run(
         # --project resolves the repo's [tool.ty] config (including its
         # error-on-warning gate) and venv even though the block lives in tmp_path
-        [_TY, "check", "--project", str(ROOT), str(block)],
+        [_TY, "check", "--python", sys.executable, "--project", str(ROOT), str(block)],
         capture_output=True,
         text=True,
         cwd=ROOT,

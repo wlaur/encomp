@@ -882,7 +882,7 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
     def _eager_series_output_dtype(self) -> pl.DataType:
         # eager pl.Series output preserves polars precision: Float32 only when every
         # pl.Series input is Float32, else Float64. Scalar (float) inputs are neutral.
-        dtypes = [p[1].m.dtype for p in self.points if isinstance(p[1].m, pl.Series)]  # ty: ignore[invalid-attribute-access]
+        dtypes = [p[1].m.dtype for p in self.points if isinstance(p[1].m, pl.Series)]
         if dtypes and all(dt == pl.Float32 for dt in dtypes):
             return pl.Float32()
         return pl.Float64()
