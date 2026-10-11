@@ -231,7 +231,9 @@ def get_sol_expr(
     symbol : sp.Symbol
         Symbol to solve for (isolate)
     avoid : set[sp.Symbol] | None, optional
-        Set of symbols to avoid in the substitution expressions, by default None
+        Symbols that must not appear free in the returned expression, by default
+        None. Applies to single equations as well as lists; returns None if no
+        solution remains after filtering.
 
     Returns
     -------
@@ -286,7 +288,10 @@ def get_sol_expr(
     # (quadratic equations might have multiple solutions, etc...)
     # sort with default_sort_key to keep the output consistent
     # SymPy might otherwise order expressions randomly
-    return cast(sp.Basic, sorted(sol.values(), key=default_sort_key)[0])
+    solutions = [expr for expr in sol.values() if not (avoid & expr.free_symbols)]
+    if not solutions:
+        return None
+    return cast(sp.Basic, sorted(solutions, key=default_sort_key)[0])
 
 
 def get_lambda_kwargs(
@@ -592,9 +597,13 @@ def typeset_chemical(s: str) -> str:
 
     parts = []
 
-    for n in re.sub(r"[A-Z]_\d", r"|\g<0>|", s).split("|"):
-        if re.match(r"[A-Z]_\d", n):
-            parts.extend([f"{n[:-2]}", "}", f"_{n[-1]}", "\\text{"])
+    for n in re.sub(r"[A-Z]_\d+", r"|\g<0>|", s).split("|"):
+        if re.match(r"[A-Z]_\d+", n):
+            element, digits = n.split("_", maxsplit=1)
+            # Preserve the documented single-digit spelling; longer subscripts
+            # need braces so every digit belongs to the same LaTeX subscript.
+            subscript = digits if len(digits) == 1 else "{" + digits + "}"
+            parts.extend([element, "}", "_" + subscript, "\\text{"])
         else:
             parts.append(n)
 
@@ -799,23 +808,26 @@ class Symbol(sp.Symbol):
 
         s = typeset(s)
 
-        if delimiter not in symbol:
-            decorated_parts = [symbol, delimiter, "{" + s + "}"]
+        # Assume balanced LaTeX, as before. Only top-level script groups belong
+        # to the symbol; nested groups and the other script must stay intact.
+        depth = 0
+        matching_script = False
+        last_end: int | None = None
+        for index, char in enumerate(symbol):
+            if char == "{":
+                if depth == 0:
+                    matching_script = index > 0 and symbol[index - 1] == delimiter
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0 and matching_script:
+                    last_end = index
+                    matching_script = False
 
+        if last_end is None:
+            decorated_symbol = symbol + delimiter + "{" + s + "}"
         else:
-            *base_symbol, existing_suffix = symbol.split(delimiter)
-
-            base_symbol_str = "".join(base_symbol)
-
-            # assume that the input Latex symbol is correct,
-            # don't deal with unbalanced braces
-            existing_suffix = existing_suffix.removeprefix("{").removesuffix("}")
-
-            existing_suffix += s
-
-            decorated_parts = [base_symbol_str, delimiter, "{" + existing_suffix + "}"]
-
-        decorated_symbol = "".join(decorated_parts)
+            decorated_symbol = symbol[:last_end] + s + symbol[last_end:]
         return self.__class__(decorated_symbol, **self.assumptions0)
 
     def _(self, x: str) -> Self:
@@ -837,7 +849,7 @@ class Symbol(sp.Symbol):
         return self.decorate(prefix="\\Delta")
 
 
-def _patch_symbol_class(dest: type[sp.Symbol] | sp.Symbol) -> None:
+def _patch_symbol_class(dest: type[sp.Symbol]) -> None:
     for n in ["decorate", "append", "delta", "_", "__"]:
         if not hasattr(dest, n):
             method = getattr(Symbol, n)
@@ -856,9 +868,6 @@ def symbols(inp: str, **kwargs: Any) -> list[Symbol]:  # noqa: ANN401
         raise ValueError(
             f"Expected more than one input symbol, use sp.Symbol('{inp}') directly to create a single symbol"
         )
-    for n in ret:
-        _patch_symbol_class(n)
-
     return list(ret)
 
 
