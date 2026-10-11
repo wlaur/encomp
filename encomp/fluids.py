@@ -15,6 +15,7 @@ from .coolprop import (
     ASSUMED_PHASES,
     FLUID_INPUTS,
     HUMID_AIR_INPUTS,
+    PHASE_IGNORING_BACKENDS,
     AssumedPhase,
     CName,
     Composition,
@@ -25,7 +26,6 @@ from .coolprop import (
     _resolve_pair,  # pyright: ignore[reportPrivateUsage]
     is_fluid_param,
     is_humid_air_param,
-    resolve_fluid_spec,
     validate_fluid_name,
 )
 from .settings import SETTINGS
@@ -180,10 +180,6 @@ class HumidAirState(TypedDict, Generic[MT], total=False):  # noqa: UP046
     Y: Quantity[Any, MT] | Quantity[Any, float]
     psi_w: Quantity[Any, MT] | Quantity[Any, float]
 
-
-# backends that ignore AbstractState.specify_phase (region-explicit), so assuming a
-# phase has no effect
-_PHASE_IGNORING_BACKENDS = frozenset({"IF97"})
 
 EAGER_PLUGIN_MIN_SIZE = 1000
 """Deprecated compatibility constant; now a no-op.
@@ -671,9 +667,9 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
         """Classify an evaluation error before the caller yields ``NaN`` for ``prop``.
 
         CoolProp signals both "out of range" and "not implemented" with ``ValueError``;
-        those cases warn (or stay silent) and produce ``NaN``. Fluid initialization
-        errors are rewritten and re-raised; other native evaluation failures warn and
-        produce ``NaN`` because CoolProp does not expose a stable error taxonomy.
+        those cases warn (or stay silent) and produce ``NaN``. Configuration errors
+        are rejected before evaluation; native ``RuntimeError`` failures propagate.
+        CoolProp's evaluation messages still require the heuristics below.
         """
 
         msg = str(e)
@@ -691,11 +687,6 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         if "Output string is invalid" in msg:
             return
-
-        if "Initialize failed for backend" in msg:
-            raise ValueError(
-                f"Fluid '{self.name}' could not be initialized, ensure that the name is a valid CoolProp fluid name"
-            ) from e
 
         self._warn_coolprop_nan(prop, msg)
 
@@ -1070,8 +1061,9 @@ class Fluid(CoolPropFluid[MT]):
         Parameters
         ----------
         name : CName
-            Name of the fluid. With ``composition`` this is the backend only
-            (e.g. ``"HEOS"``); otherwise the full CoolProp name, optionally with
+            Name of the fluid. With ``composition`` this can be the backend only
+            (e.g. ``"HEOS"``) or matching species (e.g. ``"CO2&O2"``, using HEOS);
+            otherwise the full CoolProp name, optionally with
             fixed fractions (e.g. ``"HEOS::CO2[0.5]&O2[0.5]"``).
 
             For an incompressible solution the concentration is part of the name and is
@@ -1097,12 +1089,17 @@ class Fluid(CoolPropFluid[MT]):
         if len(kwargs) != 2:
             raise ValueError(f"Exactly two fixed points are required, passed {list(kwargs)}")
 
+        backend, fluids, fractions = validate_fluid_name(
+            name,
+            self._composition if composition is None else composition,
+            phase=None if self._assumed_phase is None else f"phase_{self._assumed_phase}",
+        )
         if composition is not None:
-            self._init_composition(name, composition)
+            assert fractions is not None  # composition= always resolves to a mixture
+            self.name = f"{backend}::{fluids}"
+            self._composition = dict(zip(fluids.split("&"), fractions, strict=True))
         else:
             self.name = name
-
-        validate_fluid_name(self.name, self._composition)
 
         points = self._build_points(kwargs)
 
@@ -1110,14 +1107,6 @@ class Fluid(CoolPropFluid[MT]):
         self.point_2: tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]] = points[1]
 
         self.points = [self.point_1, self.point_2]
-
-    def _init_composition(self, name: CName, composition: Composition) -> None:
-        # all name + composition parsing/validation lives in resolve_fluid_spec (the single
-        # source); store the canonical name + resolved fractions for both native paths
-        backend, fluids, fractions = resolve_fluid_spec(name, composition)
-        assert fractions is not None  # a composition= dict always resolves to a mixture
-        self.name = f"{backend}::{fluids}"
-        self._composition = dict(zip(fluids.split("&"), fractions, strict=True))
 
     def assume_phase(self, phase: AssumedPhase | None) -> Self:
         """Force the equation of state to assume ``phase``, skipping CoolProp's
@@ -1157,7 +1146,7 @@ class Fluid(CoolPropFluid[MT]):
             raise ValueError(f"unknown phase {phase!r}, expected one of {sorted(ASSUMED_PHASES)} or None")
 
         backend = self.name.split("::", 1)[0] if "::" in self.name else self.name
-        if phase is not None and backend.upper() in _PHASE_IGNORING_BACKENDS:
+        if phase is not None and backend.upper() in PHASE_IGNORING_BACKENDS:
             _LOGGER.warning(
                 f"the {backend} backend is region-explicit and ignores an assumed phase; "
                 f"assume_phase({phase!r}) is a no-op here. "
@@ -1165,6 +1154,7 @@ class Fluid(CoolPropFluid[MT]):
             )
             return self
 
+        validate_fluid_name(self.name, self._composition, phase=None if phase is None else f"phase_{phase}")
         self._assumed_phase = phase
         return self
 

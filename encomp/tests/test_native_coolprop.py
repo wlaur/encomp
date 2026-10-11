@@ -9,7 +9,7 @@ import math
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Literal, cast
+from typing import Any, Literal, cast, get_protocol_members
 
 import numpy as np
 import polars as pl
@@ -76,6 +76,41 @@ def test_committed_golden_cases(case: GoldenCase, mode: Literal["expr", "numpy",
         values = result
     assert values.shape == (2,)
     assert values == approx(np.full(2, case.expected), rel=5e-10)
+
+
+def test_native_module_protocol_matches_binary() -> None:
+    binary = importlib.import_module("encomp.coolprop._internal")
+    assert set(dir(binary)) >= get_protocol_members(cp._NativeModule)
+
+
+def test_native_library_load_failure_is_runtime_error() -> None:
+    code = """
+from encomp.coolprop import _internal
+
+try:
+    _internal.initialize('/nonexistent/libCoolProp')
+except RuntimeError as error:
+    assert 'dlopen' in str(error)
+else:
+    raise AssertionError('a native library load failure must raise RuntimeError')
+"""
+    subprocess.run([sys.executable, "-c", code], check=True)
+
+
+def test_native_phase_is_validated_before_evaluation() -> None:
+    native = cp._native()
+    with raises(ValueError, match="specify_phase"):
+        native.validate_fluid("HEOS", "Water", phase="not_a_phase")
+    with raises(ValueError, match="specify_phase"):
+        native.prepare_fluid("HEOS", "Water", phase="not_a_phase")
+
+    class InvalidPhaseFluid(Fluid[float]):
+        _assumed_phase: str | None = "not_a_phase"
+
+    with raises(ValueError, match="could not be initialized") as excinfo:
+        InvalidPhaseFluid("HEOS::Water", P=Q(1.0, "bar"), T=Q(300.0, "K"))
+    assert isinstance(excinfo.value.__cause__, ValueError)
+    assert "specify_phase" in str(excinfo.value.__cause__)
 
 
 def test_native_metadata_and_pair_resolution() -> None:

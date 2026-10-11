@@ -8,7 +8,7 @@
 
 mod coolprop;
 
-use coolprop::{CoolProp, CpError, State};
+use coolprop::{CoolProp, CpError, CpErrorKind, State};
 use polars::prelude::*;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
@@ -81,7 +81,7 @@ thread_local! {
 }
 
 fn perr(e: CpError) -> PolarsError {
-    PolarsError::ComputeError(e.0.into())
+    PolarsError::ComputeError(format!("{:?}: {}", e.kind, e.message).into())
 }
 
 fn compute_error(msg: impl Into<String>) -> PolarsError {
@@ -89,7 +89,10 @@ fn compute_error(msg: impl Into<String>) -> PolarsError {
 }
 
 fn cp_error(e: CpError) -> PyErr {
-    PyValueError::new_err(e.0)
+    match e.kind {
+        CpErrorKind::Runtime => PyRuntimeError::new_err(e.message),
+        CpErrorKind::Config | CpErrorKind::Evaluation => PyValueError::new_err(e.message),
+    }
 }
 
 fn runtime_error(message: impl Into<String>) -> PyErr {
@@ -225,14 +228,15 @@ fn load_coolprop(lib_path: &str) -> Result<&'static CoolProp, CpError> {
     // (CoolProp::ensure_warmed_*), so an unused backend is never warmed.
     let _guard = INIT
         .lock()
-        .map_err(|_| CpError("CoolProp init lock was poisoned".into()))?;
+        .map_err(|_| CpError::runtime("CoolProp init lock was poisoned"))?;
     if let Some(c) = CP.get() {
         return Ok(c);
     }
     let c = CoolProp::load(lib_path)?;
     CP.set(c)
-        .map_err(|_| CpError("CoolProp was initialized concurrently".into()))?;
-    CP.get().ok_or_else(|| CpError("CoolProp failed to initialize".into()))
+        .map_err(|_| CpError::runtime("CoolProp was initialized concurrently"))?;
+    CP.get()
+        .ok_or_else(|| CpError::runtime("CoolProp failed to initialize"))
 }
 
 fn coolprop(lib_path: &str) -> PolarsResult<&'static CoolProp> {
@@ -241,34 +245,40 @@ fn coolprop(lib_path: &str) -> PolarsResult<&'static CoolProp> {
 
 fn initialized_coolprop() -> Result<&'static CoolProp, CpError> {
     CP.get()
-        .ok_or_else(|| CpError("native CoolProp is not initialized; call initialize(lib_path) first".into()))
+        .ok_or_else(|| CpError::runtime("native CoolProp is not initialized; call initialize(lib_path) first"))
 }
 
 fn get_fluid_config(config_id: usize) -> Result<Arc<FluidConfig>, CpError> {
     FLUID_CONFIGS
         .lock()
-        .map_err(|_| CpError("fluid configuration registry lock was poisoned".into()))?
+        .map_err(|_| CpError::runtime("fluid configuration registry lock was poisoned"))?
         .get(config_id)
         .cloned()
-        .ok_or_else(|| CpError(format!("unknown fluid configuration id {config_id}")))
+        .ok_or_else(|| CpError::config(format!("unknown fluid configuration id {config_id}")))
 }
 
 fn get_humid_air_config(config_id: usize) -> Result<Arc<HumidAirConfig>, CpError> {
     HUMID_AIR_CONFIGS
         .lock()
-        .map_err(|_| CpError("humid-air configuration registry lock was poisoned".into()))?
+        .map_err(|_| CpError::runtime("humid-air configuration registry lock was poisoned"))?
         .get(config_id)
         .cloned()
-        .ok_or_else(|| CpError(format!("unknown humid-air configuration id {config_id}")))
+        .ok_or_else(|| CpError::config(format!("unknown humid-air configuration id {config_id}")))
 }
 
-fn configured_state(cp: &'static CoolProp, config: &FluidConfig) -> Result<State<'static>, CpError> {
-    cp.ensure_warmed_fluid(&config.backend, &config.fluid)?;
-    let mut state = cp.state(&config.backend, &config.fluid)?;
-    if let Some(fractions) = &config.fractions {
+fn configured_state(
+    cp: &'static CoolProp,
+    backend: &str,
+    fluid: &str,
+    fractions: Option<&[f64]>,
+    phase: Option<&str>,
+) -> Result<State<'static>, CpError> {
+    cp.ensure_warmed_fluid(backend, fluid)?;
+    let mut state = cp.state(backend, fluid)?;
+    if let Some(fractions) = fractions {
         state.set_fractions(fractions)?;
     }
-    if let Some(phase) = &config.phase {
+    if let Some(phase) = phase {
         state.specify_phase(phase)?;
     }
     Ok(state)
@@ -290,11 +300,17 @@ fn evaluate_scalar_fluid(
             cache
                 .entries
                 .remove(position)
-                .ok_or_else(|| CpError("scalar state cache entry disappeared".into()))?
+                .ok_or_else(|| CpError::runtime("scalar state cache entry disappeared"))?
         } else {
             cache.misses += 1;
             let config = get_fluid_config(config_id)?;
-            let state = configured_state(cp, &config)?;
+            let state = configured_state(
+                cp,
+                &config.backend,
+                &config.fluid,
+                config.fractions.as_deref(),
+                config.phase.as_deref(),
+            )?;
             if cache.entries.len() == SCALAR_STATE_CACHE_CAPACITY {
                 cache.entries.pop_front();
                 cache.evictions += 1;
@@ -302,7 +318,7 @@ fn evaluate_scalar_fluid(
             (config_id, state)
         };
         let output = std::ffi::c_long::try_from(output)
-            .map_err(|_| CpError(format!("output parameter {output} exceeds the C API integer range")))?;
+            .map_err(|_| CpError::config(format!("output parameter {output} exceeds the C API integer range")))?;
         let value = entry.1.update_and_1_out_scalar(input_pair, value1, value2, output);
         // A failed flash does not invalidate the AbstractState. Return it to the LRU
         // before propagating the error so intermittent bad sensor rows do not turn
@@ -360,7 +376,7 @@ const INPUT_PAIR_NAMES: &[(&str, &str, &str)] = &[
     ("Smolar", "Umolar", "SmolarUmolar_INPUTS"),
 ];
 
-static RESOLVED_INPUT_PAIRS: OnceLock<Result<Vec<ResolvedInputPair>, String>> = OnceLock::new();
+static RESOLVED_INPUT_PAIRS: OnceLock<Result<Vec<ResolvedInputPair>, CpError>> = OnceLock::new();
 
 fn resolved_input_pairs(cp: &CoolProp) -> Result<&[ResolvedInputPair], CpError> {
     RESOLVED_INPUT_PAIRS
@@ -369,15 +385,15 @@ fn resolved_input_pairs(cp: &CoolProp) -> Result<&[ResolvedInputPair], CpError> 
                 .iter()
                 .map(|(first, second, pair)| {
                     Ok(ResolvedInputPair {
-                        first: cp.param_index(first).map_err(|e| e.0)?,
-                        second: cp.param_index(second).map_err(|e| e.0)?,
-                        pair: cp.input_pair_index(pair).map_err(|e| e.0)?,
+                        first: cp.param_index(first)?,
+                        second: cp.param_index(second)?,
+                        pair: cp.input_pair_index(pair)?,
                     })
                 })
                 .collect()
         })
         .as_deref()
-        .map_err(|message| CpError(message.clone()))
+        .map_err(Clone::clone)
 }
 
 fn resolve_pair_native(cp: &CoolProp, name1: &str, name2: &str) -> Result<(i64, bool), CpError> {
@@ -391,7 +407,7 @@ fn resolve_pair_native(cp: &CoolProp, name1: &str, name2: &str) -> Result<(i64, 
             return Ok((resolved.pair, true));
         }
     }
-    Err(CpError(format!(
+    Err(CpError::config(format!(
         "unsupported CoolProp input pair: {name1:?}, {name2:?}"
     )))
 }
@@ -407,20 +423,22 @@ fn extract_fractions(fluid: &str) -> Result<(String, Option<Vec<f64>>), CpError>
         for part in &parts {
             let without_close = part
                 .strip_suffix(']')
-                .ok_or_else(|| CpError(format!("Fluid entry [{part}] must end with ']' character")))?;
+                .ok_or_else(|| CpError::config(format!("Fluid entry [{part}] must end with ']' character")))?;
             let mut pieces = without_close.split('[');
             let name = pieces.next().unwrap_or_default();
             let fraction_text = pieces
                 .next()
-                .ok_or_else(|| CpError(format!("Could not break [{without_close}] into name/fraction")))?;
+                .ok_or_else(|| CpError::config(format!("Could not break [{without_close}] into name/fraction")))?;
             if name.is_empty() || pieces.next().is_some() {
-                return Err(CpError(format!("Could not break [{without_close}] into name/fraction")));
+                return Err(CpError::config(format!(
+                    "Could not break [{without_close}] into name/fraction"
+                )));
             }
             let fraction = fraction_text
                 .parse::<f64>()
-                .map_err(|_| CpError(format!("fraction [{fraction_text}] was not converted fully")))?;
+                .map_err(|_| CpError::config(format!("fraction [{fraction_text}] was not converted fully")))?;
             if !fraction.is_finite() || !(0.0..=1.0).contains(&fraction) {
-                return Err(CpError(format!(
+                return Err(CpError::config(format!(
                     "fraction [{fraction_text}] was not converted to a value between 0 and 1 inclusive"
                 )));
             }
@@ -437,19 +455,19 @@ fn extract_fractions(fluid: &str) -> Result<(String, Option<Vec<f64>>), CpError>
     if fluid.contains('-') && fluid.contains('%') {
         let parts: Vec<&str> = fluid.split('-').collect();
         if parts.len() != 2 || parts[0].is_empty() {
-            return Err(CpError(format!(
+            return Err(CpError::config(format!(
                 "format of incompressible solution {fluid:?} is invalid; expected EG-20%"
             )));
         }
         let fraction_text = parts[1]
             .strip_suffix('%')
-            .ok_or_else(|| CpError(format!("invalid incompressible concentration {fluid:?}")))?;
+            .ok_or_else(|| CpError::config(format!("invalid incompressible concentration {fluid:?}")))?;
         let fraction = fraction_text
             .parse::<f64>()
-            .map_err(|_| CpError(format!("invalid incompressible concentration {fluid:?}")))?
+            .map_err(|_| CpError::config(format!("invalid incompressible concentration {fluid:?}")))?
             * 0.01;
         if !fraction.is_finite() || !(0.0..=1.0).contains(&fraction) {
-            return Err(CpError(format!(
+            return Err(CpError::config(format!(
                 "incompressible concentration {fluid:?} must be between 0% and 100% inclusive"
             )));
         }
@@ -494,22 +512,22 @@ fn py_resolve_fluid_name(name: &str) -> PyResult<(String, String, Option<Vec<f64
     Ok((backend, fluid, fractions))
 }
 
-#[pyfunction(name = "validate_fluid", signature = (backend, fluid, fractions=None))]
-fn py_validate_fluid(py: Python<'_>, backend: String, fluid: String, fractions: Option<Vec<f64>>) -> PyResult<()> {
+#[pyfunction(name = "validate_fluid", signature = (backend, fluid, fractions=None, phase=None))]
+fn py_validate_fluid(
+    py: Python<'_>,
+    backend: String,
+    fluid: String,
+    fractions: Option<Vec<f64>>,
+    phase: Option<String>,
+) -> PyResult<()> {
     let cp = initialized_coolprop().map_err(cp_error)?;
-    py.detach(move || {
-        cp.ensure_warmed_fluid(&backend, &fluid)?;
-        let mut state = cp.state(&backend, &fluid)?;
-        if let Some(fractions) = fractions {
-            state.set_fractions(&fractions)?;
-        }
-        Ok(())
-    })
-    .map_err(cp_error)
+    py.detach(move || configured_state(cp, &backend, &fluid, fractions.as_deref(), phase.as_deref()).map(drop))
+        .map_err(cp_error)
 }
 
 #[pyfunction(name = "prepare_fluid", signature = (backend, fluid, fractions=None, phase=None))]
 fn py_prepare_fluid(
+    py: Python<'_>,
     backend: String,
     fluid: String,
     fractions: Option<Vec<f64>>,
@@ -521,6 +539,18 @@ fn py_prepare_fluid(
         fractions,
         phase,
     };
+    let cp = initialized_coolprop().map_err(cp_error)?;
+    py.detach(|| {
+        configured_state(
+            cp,
+            &candidate.backend,
+            &candidate.fluid,
+            candidate.fractions.as_deref(),
+            candidate.phase.as_deref(),
+        )
+        .map(drop)
+    })
+    .map_err(cp_error)?;
     let mut configs = FLUID_CONFIGS
         .lock()
         .map_err(|_| runtime_error("fluid configuration registry lock was poisoned"))?;
@@ -730,6 +760,10 @@ struct EvalKwargs {
 /// over the finite rows; Polars runs independent properties concurrently.
 #[polars_expr(output_type_func_with_kwargs = cp_output)]
 fn cp_evaluate(inputs: &[Series], kwargs: EvalKwargs) -> PolarsResult<Series> {
+    evaluate_fluid_chunk(inputs, kwargs)
+}
+
+fn evaluate_fluid_chunk(inputs: &[Series], kwargs: EvalKwargs) -> PolarsResult<Series> {
     validate_input_count("cp_evaluate", inputs.len(), 2)?;
     validate_input_count("cp_evaluate scalar_mask", kwargs.scalar_mask.len(), 2)?;
     for (i, s) in inputs.iter().enumerate() {
@@ -742,8 +776,6 @@ fn cp_evaluate(inputs: &[Series], kwargs: EvalKwargs) -> PolarsResult<Series> {
         validate_numeric_input("cp_evaluate", s.name(), s.dtype())?;
     }
     let cp = coolprop(&kwargs.lib_path)?;
-    // warm THIS (backend, fluid) once, single-threaded, before the parallel flash below
-    cp.ensure_warmed_fluid(&kwargs.backend, &kwargs.fluid).map_err(perr)?;
     let pair = kwargs.input_pair;
     let okey = cp.param_index(&kwargs.output).map_err(perr)?;
     // decide the output precision from the original input dtypes (before the f64 cast)
@@ -763,13 +795,14 @@ fn cp_evaluate(inputs: &[Series], kwargs: EvalKwargs) -> PolarsResult<Series> {
 
     // state built once per chunk (handle lock held only here), then a lock-free
     // batched flash -> parallel across the independent property expressions.
-    let mut st = cp.state(&kwargs.backend, &kwargs.fluid).map_err(perr)?;
-    if let Some(fr) = &kwargs.fractions {
-        st.set_fractions(fr).map_err(perr)?;
-    }
-    if let Some(ph) = &kwargs.phase {
-        st.specify_phase(ph).map_err(perr)?;
-    }
+    let mut st = configured_state(
+        cp,
+        &kwargs.backend,
+        &kwargs.fluid,
+        kwargs.fractions.as_deref(),
+        kwargs.phase.as_deref(),
+    )
+    .map_err(perr)?;
 
     let mut out = vec![f64::NAN; n];
     evaluate_finite_rows(&v1, &v2, &mut out, |a, b, result| {
@@ -784,7 +817,7 @@ where
     F: FnOnce(&[f64], &[f64], &mut [f64]) -> Result<(), CpError>,
 {
     if v1.len() != out.len() || v2.len() != out.len() {
-        return Err(CpError("evaluate_finite_rows: length mismatch".into()));
+        return Err(CpError::runtime("evaluate_finite_rows: length mismatch"));
     }
     let valid_count = v1
         .iter()
@@ -830,6 +863,67 @@ fn nan_to_null(out: Vec<f64>) -> Series {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn configured_state_rejects_bad_fractions_in_every_entrypoint() {
+        let filename = if cfg!(target_os = "windows") {
+            "CoolProp.dll"
+        } else if cfg!(target_os = "macos") {
+            "libCoolProp.dylib"
+        } else {
+            "libCoolProp.so"
+        };
+        let lib_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../encomp/coolprop")
+            .join(filename);
+        let cp = load_coolprop(lib_path.to_str().unwrap()).unwrap();
+        let error = configured_state(cp, "HEOS", "CO2&O2", Some(&[1.0]), None)
+            .err()
+            .unwrap();
+        assert_eq!(error.kind, CpErrorKind::Config);
+
+        Python::initialize();
+        Python::attach(|py| {
+            let validation = py_validate_fluid(py, "HEOS".into(), "CO2&O2".into(), Some(vec![1.0]), None).unwrap_err();
+            assert!(validation.is_instance_of::<PyValueError>(py));
+            assert_eq!(validation.to_string(), format!("ValueError: {}", error.message));
+        });
+
+        // Insert a deliberately invalid private config to exercise the scalar builder,
+        // independently of the eager validation on prepare_fluid.
+        let config_id = {
+            let mut configs = FLUID_CONFIGS.lock().unwrap();
+            let id = configs.len();
+            configs.push(Arc::new(FluidConfig {
+                backend: "HEOS".into(),
+                fluid: "CO2&O2".into(),
+                fractions: Some(vec![1.0]),
+                phase: None,
+            }));
+            id
+        };
+        let scalar =
+            evaluate_scalar_fluid(cp, config_id, cp.input_pair_index("PT_INPUTS").unwrap(), 1e5, 300.0, 0).unwrap_err();
+        assert_eq!(scalar.kind, error.kind);
+        assert_eq!(scalar.message, error.message);
+
+        let plugin = evaluate_fluid_chunk(
+            &[Series::new("P".into(), &[1e5]), Series::new("T".into(), &[300.0])],
+            EvalKwargs {
+                lib_path: lib_path.to_str().unwrap().into(),
+                backend: "HEOS".into(),
+                fluid: "CO2&O2".into(),
+                fractions: Some(vec![1.0]),
+                phase: None,
+                output: "DMASS".into(),
+                input_pair: cp.input_pair_index("PT_INPUTS").unwrap(),
+                scalar_mask: vec![false, false],
+                expected_units: vec![],
+            },
+        )
+        .unwrap_err();
+        assert!(plugin.to_string().contains(&format!("Config: {}", error.message)));
+    }
 
     #[test]
     fn broadcast_passthrough_and_scalar() {
