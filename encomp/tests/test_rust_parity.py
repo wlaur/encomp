@@ -69,10 +69,25 @@ def _grid(name: str, kwargs: dict[str, Any]) -> pl.DataFrame:
         pc = CP.PropsSI("Pcrit", base)
     except Exception:
         tc, pc = 600.0, 5e6
-    tr = np.array([0.7, 0.85, 1.0, 1.2, 1.6, 2.5])
+    tr = np.array([0.7, 0.85, 0.999, 1.0, 1.001, 1.2, 1.6, 2.5])
     pr = np.array([0.4, 1.0, 2.0, 5.0])
     tt, pp = np.meshgrid(tr * tc, pr * pc)
-    return pl.DataFrame({"P": pp.ravel(), "T": tt.ravel()})
+    frame = pl.DataFrame({"P": pp.ravel(), "T": tt.ravel()})
+    if kwargs.get("composition") is not None:
+        return frame
+    return frame.filter((pl.col("P") != pc) | (pl.col("T") != tc))
+
+
+@pytest.mark.parametrize("fluid", PURE)
+def test_parity_grid_brackets_the_critical_singularity(fluid: str) -> None:
+    frame = _grid(f"HEOS::{fluid}", {})
+    critical_temperature = float(CP.PropsSI("Tcrit", fluid))
+    critical_pressure = float(CP.PropsSI("Pcrit", fluid))
+    critical_isobar = frame.filter(pl.col("P") == critical_pressure)
+    temperatures = critical_isobar["T"].to_list()
+    assert critical_temperature not in temperatures
+    assert critical_temperature * 0.999 in temperatures
+    assert critical_temperature * 1.001 in temperatures
 
 
 def _evaluate_native(name: str, kwargs: dict[str, Any], prop: str, df: pl.DataFrame) -> np.ndarray:

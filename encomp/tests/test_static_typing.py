@@ -120,6 +120,28 @@ sensors = Sensors.from_untyped(pl.LazyFrame({"pressure": [1.0]}))
 assignment = Report.power.assign(sensors.pressure)
 """
 
+_VALID_THERMAL = """
+from typing import assert_type
+import polars as pl
+from encomp.units import Quantity as Q
+from encomp.thermo import temperature_rise, specific_heat_capacity
+from encomp.utypes import TemperatureDifference, SpecificHeatCapacity
+
+energy = Q(40.0, "kJ/kg")
+capacity = Q(4.0, "kJ/kg/K")
+rise = temperature_rise(energy, capacity)
+assert_type(rise, Q[TemperatureDifference, float])
+assert_type(specific_heat_capacity(energy, rise), Q[SpecificHeatCapacity, float])
+assert_type(rise.with_magnitude(pl.col("rise")), Q[TemperatureDifference, pl.Expr])
+"""
+
+_INVALID_THERMAL = [
+    'specific_heat_capacity(energy, Q(10.0, "K"))',
+    'temperature_rise(energy, Q(4.0, "kg"))',
+    'rise.with_magnitude("10 K")',
+    'rise.with_magnitude(Q(10.0, "K"))',
+]
+
 
 def _repo_root() -> Path | None:
     # the checkers need the project's pyproject.toml for their configuration; an installed
@@ -261,3 +283,21 @@ def test_quantity_frame_assignment_checked_by_ty(tmp_path: Path) -> None:
     assert _TY is not None
     assert _check([_TY, "check"], _VALID_QUANTITY_FRAME, tmp_path) == 0, "control snippet must type-check"
     assert _check([_TY, "check"], _INVALID_QUANTITY_FRAME, tmp_path) != 0, "wrong dimensionality must not type-check"
+
+
+@pytest.mark.skipif(_ROOT is None, reason=_NO_CONFIG)
+@pytest.mark.parametrize("checker", ["pyright", "pyrefly", "ty"])
+def test_thermal_helpers_and_replacements_are_checked(checker: str, tmp_path: Path) -> None:
+    assert _ROOT is not None
+    tool = _tool(checker)
+    if tool is None:
+        pytest.skip(f"{checker} not installed")
+    commands = {
+        "pyright": [tool],
+        "pyrefly": [tool, "check", "--config", str(_ROOT / "pyproject.toml")],
+        "ty": [tool, "check"],
+    }
+    command = commands[checker]
+    assert _check(command, _VALID_THERMAL, tmp_path) == 0, "valid thermal expressions must type-check"
+    for invalid in _INVALID_THERMAL:
+        assert _check(command, _VALID_THERMAL + "\n" + invalid, tmp_path) != 0, invalid
