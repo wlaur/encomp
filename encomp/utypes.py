@@ -770,6 +770,14 @@ class Dimensionality(metaclass=_DimensionalityMeta):
             cls._registry_reversed[cls.dimensions] = cls
 
     @classmethod
+    def get_by_name(cls, name: str) -> type[Dimensionality]:
+        """Resolve a semantic kind already registered in this process, without importing code."""
+        for dim in cls._registry:
+            if dim.__name__ == name:
+                return dim
+        raise ValueError(f"Unknown registered dimensionality: {name!r}")
+
+    @classmethod
     def get_dimensionality(cls, dimensions: UnitsContainer) -> type[Dimensionality]:
         """Return the registered dimensionality for ``dimensions``.
 

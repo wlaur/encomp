@@ -7,6 +7,7 @@ from typing import Any, assert_type, cast
 import numpy as np
 import polars as pl
 import pytest
+from pydantic import TypeAdapter
 
 from encomp import coolprop as encomp_coolprop
 
@@ -1298,3 +1299,26 @@ def test_state_inputs_refuse_a_temperature_difference() -> None:
     # state inputs do, so the guard covers every temperature input including Tdb/Twb
     with pytest.raises(ExpectedDimensionalityError, match="absolute Temperature"):
         HumidAir(Tdb=cast(Any, difference), P=Q(1.0, "bar"), R=Q(0.5)).W
+
+
+@pytest.mark.parametrize("container", ["float", "ndarray", "pl.Series", "pl.Expr"])
+def test_copied_and_replaced_differences_cannot_fix_a_fluid_state(container: str) -> None:
+    difference = Q(300.0, "delta_K")
+    if container == "ndarray":
+        materialized = difference.with_magnitude([300.0])
+    elif container == "pl.Series":
+        materialized = difference.with_magnitude(pl.Series([300.0]))
+    elif container == "pl.Expr":
+        materialized = difference.with_magnitude(pl.lit(300.0))
+    else:
+        materialized = difference
+    copied = Q(materialized.to("K"))
+    temperatures = [materialized, copied]
+    if not isinstance(copied.m, pl.Expr):
+        adapter = TypeAdapter(Q[Any, Any])
+        temperatures.append(adapter.validate_json(adapter.dump_json(copied)))
+    for temperature in temperatures:
+        with pytest.raises(ExpectedDimensionalityError, match="absolute Temperature"):
+            Water(P=Q(1.0, "bar"), T=cast(Any, temperature)).D
+        with pytest.raises(ExpectedDimensionalityError, match="absolute Temperature"):
+            HumidAir(Twb=cast(Any, temperature), P=Q(1.0, "bar"), R=Q(0.5)).W

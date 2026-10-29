@@ -1046,8 +1046,8 @@ class CoolPropFluid(ABC, Generic[MT]):  # noqa: UP046
 
         is_cutoff = max(len(n[1].m) for n in vector_inputs) > self._repr_cutoff
 
-        def _get_cutoff_qty(q: Quantity[Any, Any]) -> Quantity[Any, Any]:
-            return Quantity(q.m[: self._repr_cutoff], q.u)
+        def _get_cutoff_qty(q: Quantity[Any, Numpy1DArray] | Quantity[Any, pl.Series]) -> Quantity[Any, Any]:
+            return q.with_magnitude(q.m[: self._repr_cutoff])
 
         vector_inputs_cutoff: list[tuple[CProperty, Quantity[Any, MT] | Quantity[Any, float]]] = [
             (n[0], _get_cutoff_qty(n[1])) for n in vector_inputs

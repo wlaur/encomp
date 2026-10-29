@@ -91,6 +91,13 @@ differences. Multiplicative units such as `K` and `degR` can express either conc
 but default to absolute `Temperature`; use `.asdim(TemperatureDifference)` when a
 value in one of those units explicitly represents a difference.
 
+Copying with `Q(quantity)` and replacing data with `quantity.with_magnitude(...)`
+preserve its semantic kind, including a difference expressed in `K`. JSON serialization
+also carries that kind. For sensible-heat calculations using conventional `J/kg/K`
+heat capacities, use `encomp.thermo.temperature_rise` and
+`encomp.thermo.specific_heat_capacity`; see the
+[temperature guide](https://encomp.readthedocs.io/en/latest/usage.html#temperature-units).
+
 ```python
 from typing import Any
 

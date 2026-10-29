@@ -455,6 +455,8 @@ from encomp.units import Quantity as Q
 (Q(5, "%") * Q(1, "meter")).to("mm")  # 50.0 mm
 ```
 
+### Temperature units
+
 Temperature units need extra care.
 A temperature *difference* in a degree scale is written with the prefix `delta_` (only needed when defining the difference directly).
 Temperature ({py:class}`encomp.utypes.Temperature`) and temperature difference ({py:class}`encomp.utypes.TemperatureDifference`) are distinct dimensionalities and deliberately not interchangeable: a difference cannot silently be used as an absolute temperature.
@@ -579,6 +581,148 @@ raises `pint.errors.OffsetUnitCalculusError`) but not for the multiplicative one
 returns `600 K`, because `K` is a plain scale that pint cannot object to. Summing absolute
 temperatures is rarely what you want in either spelling — subtract them, or add a difference.
 :::
+
+#### Points, differences, and replacing data
+
+An absolute temperature is a point on a scale; a difference is a displacement on
+that scale. `.to()` converts units while preserving this meaning. `.asdim()` is an
+explicit reinterpretation of the same numerical value, not a physical conversion:
+reinterpreting `20 degC` as a difference gives `20 delta_degC`, not `293.15 delta_K`.
+Fahrenheit differences scale by 5/9 without an offset.
+
+```python
+from math import isclose
+
+from encomp.units import Quantity as Q
+from encomp.utypes import TemperatureDifference
+
+point = Q(20.0, "degC")
+assert isclose(point.to("K").m, 293.15)
+difference = point.asdim(TemperatureDifference)
+assert difference.to("delta_K").m == 20.0
+assert isclose(Q(18.0, "delta_degF").to("K").m, 10.0)
+assert Q(difference.to("K")).dt is TemperatureDifference
+```
+
+`Q(existing_quantity)` preserves the existing dimensionality. To replace measured or
+computed data while retaining its unit and semantic kind, use
+{py:meth}`encomp.units.Quantity.with_magnitude`. It returns a new quantity and allows
+the magnitude container and length to change. Passing `.m` and `.u` to a fresh
+constructor instead cannot convey semantic information beyond the unit itself.
+`with_magnitude` validates the replacement just like the constructor; it does not
+translate missing values. Use `.astype()` when converting the existing data between
+containers, including their NumPy `NaN` and Polars `null` sentinels.
+
+```python
+from typing import assert_type
+
+import numpy as np
+import polars as pl
+
+from encomp.units import Quantity as Q
+from encomp.utypes import Numpy1DArray, TemperatureDifference
+
+rise = Q(10.0, "delta_degC").to("K")
+scalar = rise.with_magnitude(20.0)
+array = rise.with_magnitude([10.0, 20.0])
+series = rise.with_magnitude(pl.Series("rise", [10.0, None]))
+expression = rise.with_magnitude(pl.col("rise") * 2.0)
+assert_type(scalar, Q[TemperatureDifference, float])
+assert_type(array, Q[TemperatureDifference, Numpy1DArray])
+assert_type(series, Q[TemperatureDifference, pl.Series])
+assert_type(expression, Q[TemperatureDifference, pl.Expr])
+assert scalar.to("delta_degF").m == 36.0
+np.testing.assert_allclose(array.to("delta_degF").m, [18.0, 36.0])
+assert series.to("delta_degF").m.to_list() == [18.0, None]
+assert pl.DataFrame({"rise": [10.0, 20.0]}).select(expression.m).to_series().to_list() == [20.0, 40.0]
+```
+
+#### Heat balances
+
+Units alone cannot tell whether division yielding kelvin calculated a temperature
+change or an absolute state. In particular, `PV/(nR)` and `p/(rho R_specific)` are
+absolute temperatures. General multiplication and division therefore continue to
+resolve ambiguous temperature units to `Temperature`. There is no blanket rule
+that turns every algebraic temperature into a difference.
+
+{py:func}`encomp.thermo.temperature_rise` supplies the meaning of a sensible-heat
+balance explicitly: heat added per mass divided by the specified specific heat
+capacity gives a `TemperatureDifference`. Negative heat gives a negative change.
+The inverse {py:func}`encomp.thermo.specific_heat_capacity` requires a difference,
+not an absolute temperature. These helpers assume a constant or interval-averaged
+heat capacity and no phase change, work, or reaction contribution. They support
+matching containers and scalar broadcasting, with no guessed material or heat capacity.
+
+```python
+from math import isclose
+
+import polars as pl
+
+from encomp.constants import CONSTANTS
+from encomp.thermo import specific_heat_capacity, temperature_rise
+from encomp.units import Quantity as Q
+from encomp.utypes import Temperature, TemperatureDifference
+
+heat = Q(41.9, "kJ/kg")
+capacity = Q(4.19, "kJ/kg/K")
+rise = temperature_rise(heat, capacity)
+assert rise.dt is TemperatureDifference
+assert isclose(rise.to("delta_degC").m, 10.0)
+assert isclose((Q(20.0, "degC") + rise).m, 30.0)
+assert isclose(specific_heat_capacity(heat, rise).to("kJ/kg/K").m, 4.19)
+
+series_rise = temperature_rise(heat.with_magnitude(pl.Series([41.9, None])), capacity)
+assert isclose(series_rise.m[0], 10.0)
+assert series_rise.m[1] is None
+expr_rise = temperature_rise(heat.with_magnitude(pl.col("heat")), capacity)
+assert isclose(pl.DataFrame({"heat": [41.9]}).select(expr_rise.m).item(), 10.0)
+
+absolute = (Q(101325.0, "Pa") * Q(0.024, "m³") / (Q(1.0, "mol") * CONSTANTS.R)).asdim(Temperature)
+assert absolute.dt is Temperature
+assert isclose(absolute.to("K").m, 292.478313, rel_tol=1e-8)
+```
+
+#### Preserving semantic kinds in JSON
+
+Pydantic JSON now includes a `dimensionality` name alongside `unit`, `value`, and
+`magnitude_type`. This preserves kinds in a generic field, including a difference in
+`K` and kinds such as `SpecificEntropy` that share physical dimensions with another
+kind. The name is resolved only against dimensionalities already registered in the
+process; payloads cannot cause module imports. Define or import custom
+dimensionalities before loading their JSON. Unknown names, mismatching dimensions,
+and tags contradicting offset or delta units are rejected. Expr magnitudes still
+require materialization before serialization.
+
+```python
+from typing import Any
+
+from pydantic import BaseModel
+
+from encomp.units import Quantity as Q
+from encomp.utypes import SpecificEntropy, TemperatureDifference
+
+
+class Measurements(BaseModel):
+    rise: Q[Any, Any]
+    entropy: Q[Any, Any]
+
+
+source = Measurements(
+    rise=Q(18.0, "delta_degF").to("K"),
+    entropy=Q(2.0, "J/kg/K").asdim(SpecificEntropy),
+)
+restored = Measurements.model_validate_json(source.model_dump_json())
+assert restored.rise.dt is TemperatureDifference
+assert restored.entropy.dt is SpecificEntropy
+assert restored.rise.to("delta_degC").m == 10.0
+```
+
+For migration, update JSON consumers that enforce a fixed payload shape to accept
+`dimensionality`. Untagged input continues to infer its kind from the unit and the
+declared field type; historical generic payloads containing ambiguous units cannot
+recover semantic information that was never stored. Recover that meaning from the
+domain context explicitly with `.asdim()` before writing the new payload. Both ends
+must use a version that understands the tag to preserve this information.
 
 ### Currency units
 

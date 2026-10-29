@@ -1407,7 +1407,7 @@ class Quantity(
             if unit is not None:
                 _input_qty = _input_qty.to(unit)
 
-            val, unit = _input_qty.m, _input_qty.u
+            return _input_qty.with_magnitude(_input_qty.m)  # ty: ignore[no-matching-overload]
 
         valid_magnitude = cls._validate_magnitude(val)
         valid_unit = cls._validate_unit(unit)
@@ -1986,6 +1986,7 @@ class Quantity(
                 "unit": str(qty.u._units),
                 "value": val,
                 "magnitude_type": magnitude_type,
+                "dimensionality": qty.dt.__name__,
             }
 
         ser_schema = core_schema.plain_serializer_function_ser_schema(_serialize, info_arg=True, when_used="json")
@@ -2007,6 +2008,12 @@ class Quantity(
             "type": "object",
             "properties": {
                 "unit": {"type": "string"},
+                "dimensionality": {
+                    "type": "string",
+                    "description": (
+                        "Registered semantic dimensionality name; custom kinds must be registered before loading"
+                    ),
+                },
                 "value": {
                     "anyOf": [
                         {"type": "number"},
@@ -2022,7 +2029,7 @@ class Quantity(
                     ),
                 },
             },
-            "required": ["unit", "value", "magnitude_type"],
+            "required": ["unit", "value", "magnitude_type", "dimensionality"],
         }
 
     @classmethod
@@ -2072,6 +2079,17 @@ class Quantity(
             magnitude_type = cast(str, qty_dict["magnitude_type"])
             magnitude = cls._pydantic_magnitude_from_payload(val, magnitude_type)
             unit = cast(str | None, qty_dict.get("unit"))
+            if "dimensionality" in qty_dict:
+                name: object = qty_dict["dimensionality"]
+                if not isinstance(name, str):
+                    raise ValueError(f"Unknown registered dimensionality: {name!r}")
+                result = Quantity(cast(MT, magnitude), unit=unit)
+                dim = Dimensionality.get_by_name(name)
+                if (issubclass(dim, TemperatureDifference) and cls._is_offset_temperature_unit(result.u)) or (
+                    issubclass(dim, Temperature) and cls._is_temperature_difference_unit(result.u)
+                ):
+                    raise ValueError(f"Dimensionality {name} contradicts temperature unit {unit}")
+                return result.asdim(dim)
             return cast("Quantity[Any, Any]", cls(cast(MT, magnitude), unit=unit))
 
         return cast("Quantity[Any, Any]", qty if isinstance(qty, Quantity) else cls(cast(Any, qty)))
@@ -2341,6 +2359,43 @@ class Quantity(
         return self.asdim(UnknownDimensionality)
 
     @overload
+    def with_magnitude(  # pyrefly: ignore[inconsistent-overload]
+        self, magnitude: Sequence[float]
+    ) -> Quantity[DT, Numpy1DArray]: ...
+
+    @overload
+    def with_magnitude(  # pyrefly: ignore[inconsistent-overload]
+        self, magnitude: np.ndarray[tuple[int, ...], np.dtype[np.generic]]
+    ) -> Quantity[DT, Numpy1DArray]: ...
+
+    @overload
+    def with_magnitude(  # pyrefly: ignore[inconsistent-overload]
+        self, magnitude: float
+    ) -> Quantity[DT, float]: ...
+
+    @overload
+    def with_magnitude(  # pyrefly: ignore[inconsistent-overload]
+        self, magnitude: pl.Series
+    ) -> Quantity[DT, pl.Series]: ...
+
+    @overload
+    def with_magnitude(  # pyrefly: ignore[inconsistent-overload]
+        self, magnitude: pl.Expr
+    ) -> Quantity[DT, pl.Expr]: ...
+
+    def with_magnitude(
+        self,
+        magnitude: float | np.ndarray[tuple[int, ...], np.dtype[np.generic]] | pl.Series | pl.Expr | Sequence[float],
+    ) -> Quantity[DT, float] | Quantity[DT, Numpy1DArray] | Quantity[DT, pl.Series] | Quantity[DT, pl.Expr]:
+        """Return a new quantity with this unit and semantic kind and a validated magnitude.
+
+        The replacement may use a different container or length. No unit conversion or
+        missing-value translation is performed; use :meth:`astype` to convert data
+        between containers instead. Sequences become one-dimensional numpy arrays.
+        """
+        return Quantity(magnitude, self.u).asdim(self.dt)
+
+    @overload
     def astype(self, magnitude_type: Literal["float"]) -> Quantity[DT, float]: ...
 
     @overload
@@ -2372,9 +2427,7 @@ class Quantity(
             magnitude_type = self._get_magnitude_type_from_name(magnitude_type)
 
         magnitude_type_origin = get_origin(magnitude_type)
-        m, u = self.m, self.u
-
-        dt = self.dt
+        m = self.m
 
         if type(m) is magnitude_type or type(m) is magnitude_type_origin:
             return cast("Quantity[DT, Any]", self)
@@ -2383,7 +2436,7 @@ class Quantity(
                 # translate the missing-value sentinel, exactly like the pl.Series branch
                 # below: this crosses into the polars world, where missing is null
                 literal = pl.lit(None, dtype=pl.Float64) if math.isnan(m) else pl.lit(m)
-                return cast("Quantity[DT, Any]", self.get_subclass(dt, pl.Expr)(literal, u))
+                return self.with_magnitude(literal)
 
             raise TypeError(
                 f"Cannot convert magnitude with type {type(m)} to Polars expression, "
@@ -2391,7 +2444,7 @@ class Quantity(
             )
         elif magnitude_type is float:
             if isinstance(m, float):
-                return cast("Quantity[DT, Any]", self.get_subclass(dt, float)(float(cast(Any, m)), u))
+                return self.with_magnitude(float(cast(Any, m)))
 
             raise TypeError(
                 f"Cannot convert magnitude with type {type(m)} to float; "
@@ -2400,7 +2453,7 @@ class Quantity(
         elif magnitude_type is np.ndarray or magnitude_type_origin is np.ndarray:
             _m = [m] if not isinstance(m, Iterable) else m
             vals = np.array(_m)
-            return cast("Quantity[DT, Any]", self.get_subclass(dt, np.ndarray)(vals, u))
+            return self.with_magnitude(vals)
         elif magnitude_type is pl.Series:
             if isinstance(m, pl.Expr):
                 raise TypeError(
@@ -2415,7 +2468,7 @@ class Quantity(
             if vals.dtype.is_float():
                 vals = vals.fill_nan(None)
 
-            return cast("Quantity[DT, Any]", self.get_subclass(dt, pl.Series)(vals, u))
+            return self.with_magnitude(vals)
         else:
             raise TypeError(f"Cannot convert magnitude from type {type(m)} to {magnitude_type}")
 

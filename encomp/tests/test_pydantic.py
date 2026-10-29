@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 from typing import Any, assert_type, cast
 
 import numpy as np
@@ -8,7 +10,15 @@ from pydantic import BaseModel, TypeAdapter, ValidationError
 from pydantic_core import PydanticSerializationError
 
 from ..units import Quantity, set_quantity_format
-from ..utypes import Length, Mass, UnknownDimensionality
+from ..utypes import (
+    Dimensionality,
+    Length,
+    Mass,
+    SpecificEntropy,
+    Temperature,
+    TemperatureDifference,
+    UnknownDimensionality,
+)
 
 
 def _assert_type(val: object, typ: type) -> None:
@@ -80,7 +90,9 @@ def test_model_dump_python_mode_keeps_quantity() -> None:
     model = M(qty=qty)
 
     assert model.model_dump() == {"qty": qty}
-    assert model.model_dump(mode="json") == {"qty": {"unit": "kilogram", "value": 2.0, "magnitude_type": "float"}}
+    assert model.model_dump(mode="json") == {
+        "qty": {"unit": "kilogram", "value": 2.0, "magnitude_type": "float", "dimensionality": "Mass"}
+    }
 
 
 def test_json_unit_serialization_ignores_display_format() -> None:
@@ -155,3 +167,93 @@ def test_unknown_pydantic_field() -> None:
         v: Quantity[UnknownDimensionality, float]
 
     assert_type(A(v=Quantity(2, "kg").asdim(UnknownDimensionality)).v, Quantity[UnknownDimensionality, float])
+
+
+@pytest.mark.parametrize("container", ["float", "ndarray", "pl.Series"])
+@pytest.mark.parametrize("kind", [TemperatureDifference, SpecificEntropy])
+def test_generic_json_preserves_semantic_kind(
+    container: str, kind: type[TemperatureDifference | SpecificEntropy]
+) -> None:
+    class GenericModel(BaseModel):
+        qty: Quantity[Any, Any]
+
+    semantic = (
+        Quantity(18.0, "delta_degF").to("K")
+        if kind is TemperatureDifference
+        else Quantity(2.0, "J/kg/K").asdim(SpecificEntropy)
+    )
+    qty: Quantity[Any, Any] = semantic if container == "float" else semantic.astype("ndarray")
+    if container == "pl.Series":
+        qty = semantic.astype(pl.Series)
+    model = GenericModel(qty=qty)
+    payload = model.model_dump(mode="json")
+    assert payload["qty"]["dimensionality"] == kind.__name__
+    for recovered in (
+        GenericModel.model_validate_json(model.model_dump_json()).qty,
+        GenericModel.model_validate(payload).qty,
+        TypeAdapter(Quantity).validate_json(TypeAdapter(Quantity[Any, Any]).dump_json(qty)),
+    ):
+        assert recovered.dt is kind
+        assert recovered.u == qty.u
+        assert type(recovered.m) is type(qty.m)
+        if kind is TemperatureDifference:
+            assert np.allclose(recovered.astype("ndarray").to("delta_degC").m, [10.0])
+
+
+def test_tagged_difference_does_not_validate_as_absolute_temperature() -> None:
+    difference = Quantity(10.0, "delta_degC").to("K")
+    payload = TypeAdapter(Quantity[Any, Any]).dump_json(difference)
+    assert TypeAdapter(Quantity[TemperatureDifference, float]).validate_json(payload).dt is TemperatureDifference
+    with pytest.raises(ValidationError, match="Quantity dimensionality"):
+        TypeAdapter(Quantity[Temperature, float]).validate_json(payload)
+
+
+@pytest.mark.parametrize(
+    ("unit", "dimensionality"),
+    [
+        ("K", "NoSuchDimensionality"),
+        ("kg", "TemperatureDifference"),
+        ("degC", "TemperatureDifference"),
+        ("delta_degC", "Temperature"),
+        ("K", 42),
+    ],
+)
+def test_json_rejects_invalid_semantic_tags(unit: str, dimensionality: object) -> None:
+    payload = {"unit": unit, "value": 10.0, "magnitude_type": "float", "dimensionality": dimensionality}
+    with pytest.raises(ValidationError):
+        TypeAdapter(Quantity).validate_json(json.dumps(payload))
+
+
+def test_custom_registered_semantics_survive_generic_json() -> None:
+    class MeasuredTemperatureChange(TemperatureDifference):
+        pass
+
+    quantity = Quantity(20.0, "K").asdim(MeasuredTemperatureChange)
+    adapter = TypeAdapter(Quantity[Any, Any])
+    recovered = adapter.validate_json(adapter.dump_json(quantity))
+    assert recovered.dt is MeasuredTemperatureChange
+    assert Quantity(recovered).dt is MeasuredTemperatureChange
+    assert recovered.with_magnitude(pl.Series([30.0])).dt is MeasuredTemperatureChange
+    assert recovered.to("delta_degF").m == pytest.approx(36.0)
+    assert Dimensionality.get_by_name("MeasuredTemperatureChange") is MeasuredTemperatureChange
+
+
+def test_generated_dimensionality_json_loads_in_a_fresh_process() -> None:
+    quantity = Quantity(2.0, "kg**7/m**5")
+    adapter = TypeAdapter(Quantity[Any, Any])
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys; from pydantic import TypeAdapter; from encomp.units import Quantity; "
+                "qty = TypeAdapter(Quantity).validate_json(sys.stdin.read()); "
+                "assert qty.m == 2.0; print(qty.dt.__name__)"
+            ),
+        ],
+        input=adapter.dump_json(quantity).decode(),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.strip() == quantity.dt.__name__
