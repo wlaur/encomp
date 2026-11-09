@@ -16,6 +16,12 @@ repos:
   # `language: system` uses the developer's uv and Rust toolchains.
   - repo: local
     hooks:
+      - id: pyrefly
+        name: pyrefly
+        entry: uv run --no-sync --locked pyrefly check
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: generated-overloads
         name: generated dimensional overloads
         entry: uv run python scripts/generate_overloads.py --check
