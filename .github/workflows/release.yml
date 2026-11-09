@@ -261,7 +261,7 @@ jobs:
 
   build-wheels:
     name: build ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os == 'macos-14' && 'macos-15' || matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -286,7 +286,7 @@ jobs:
   test:
     name: test ${{ matrix.os }} py${{ matrix.python }}
     needs: build-wheels
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os == 'macos-14' && 'macos-15' || matrix.os }}
     strategy:
       fail-fast: false
       matrix:
