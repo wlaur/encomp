@@ -129,3 +129,5 @@ assert pressure.to("kPa").m == 100.0
 - Release: bump the version in `pyproject.toml` *and* `uv.lock`, PR, then tag
   `v<version>`; the workflow publishes to PyPI and creates the GitHub Release. Delete
   merged branches.
+
+- Pre-commit runs Ruff and Pyrefly. Commit with hooks enabled; never bypass them.
